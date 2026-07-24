@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "kind": "species",
+  "species": {
+    "plants": {
+      "fixture_ash_fern": {
+        "layer": "ground_cover",
+        "texture": "res://icon.svg",
+        "tags": ["volcanic_flora"]
+      }
+    },
+    "animals": {
+      "fixture_lava_skink": {
+        "directory": "res://meowa_tiles/animals/fox",
+        "behaviors": [
+          {
+            "type": "fixture_heat_affinity",
+            "required_tag": "hot",
+            "weight": 6.0
+          }
+        ],
+        "allowed_surfaces": ["fixture_basalt_crust"],
+        "max_step_height": 1,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "idle",
+          "duration": 0.8,
+          "move_steps": [1, 2],
+          "step_pause_seconds": [0.1, 0.2]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          }
+        },
+        "tags": ["volcanic_fauna"]
+      }
+    },
+    "ambient": {
+      "fixture_ember_swarm": {
+        "cluster_size": [2, 4],
+        "max_visible": 16,
+        "max_lights": 4,
+        "tags": ["volcanic_ambient"]
+      }
+    }
+  }
+}

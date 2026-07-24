@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "kind": "world",
+      "path": "world/base.json"
+    },
+    {
+      "kind": "species",
+      "path": "species/plants.json"
+    },
+    {
+      "kind": "species",
+      "path": "species/animals.json"
+    },
+    {
+      "kind": "species",
+      "path": "species/ambient.json"
+    },
+    {
+      "kind": "communities",
+      "path": "communities/legacy_bundles.json"
+    },
+    {
+      "kind": "communities",
+      "path": "communities/core.json"
+    },
+    {
+      "kind": "biomes",
+      "path": "biomes/catalog.json"
+    }
+  ]
+}

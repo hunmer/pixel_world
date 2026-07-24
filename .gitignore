@@ -1,0 +1,16 @@
+# Godot generated data and exports
+.godot/
+/android/
+/builds/
+/exports/
+
+# Local editor settings
+.idea/
+.vscode/
+
+# Local scratch files
+/tmp/
+
+# OS metadata
+.DS_Store
+Thumbs.db

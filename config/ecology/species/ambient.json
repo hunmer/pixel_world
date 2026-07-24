@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "kind": "species",
+  "species": {
+    "plants": {},
+    "animals": {},
+    "ambient": {
+      "firefly": {
+        "renderer_script": "res://scripts/ecology/ambient_renderers/firefly_renderer_adapter.gd",
+        "renderer_alias": "night_fireflies",
+        "renderer_profile": {
+          "max_visible": 72,
+          "max_lights": 12
+        },
+        "cluster_size": [
+          2,
+          3
+        ],
+        "max_visible": 72,
+        "max_lights": 12
+      },
+      "bird": {
+        "renderer_script": "res://scripts/ecology/ambient_renderers/bird_renderer.gd",
+        "renderer_profile": {
+          "walk_texture": "res://meowa_tiles/animals/bird/walk.png",
+          "fly_texture": "res://meowa_tiles/animals/bird/fly.png",
+          "walk_fps": 8.0,
+          "fly_fps": 10.0,
+          "ground_visual_offset": [0.0, -11.0],
+          "walk_radius_pixels": [3.0, 6.0],
+          "walk_speed": [0.8, 1.3],
+          "takeoff_radius_cells": 4,
+          "max_grounded": 12,
+          "escape_speed": [110.0, 150.0],
+          "flyover_speed": [105.0, 145.0],
+          "flyover_interval_seconds": [20.0, 45.0],
+          "flyover_group_chance": 0.72,
+          "flyover_group_size": [3, 6],
+          "offscreen_margin": 64.0
+        },
+        "cluster_size": [1, 1],
+        "max_visible": 12,
+        "max_lights": 0,
+        "tags": ["bird", "temperate", "daytime"],
+        "metadata": {
+          "lifecycle": "viewport",
+          "frightened_takeoff": true
+        }
+      }
+    }
+  }
+}

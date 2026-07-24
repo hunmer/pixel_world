@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "cycle_seconds": 480.0,
+  "start_progress": 0.5,
+  "manual_transition_seconds": 0.8,
+  "sunrise_start": 0.18,
+  "sunrise_end": 0.28,
+  "sunset_start": 0.70,
+  "sunset_end": 0.82,
+  "night_overlay_opacity": 0.63
+}

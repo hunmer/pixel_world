@@ -1,0 +1,753 @@
+{
+  "version": 1,
+  "kind": "communities",
+  "communities": [
+    {
+      "id": "desert_water",
+      "kind": "legacy_bundle",
+      "flora": [],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "desert_transition_water",
+      "kind": "legacy_bundle",
+      "flora": [],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "water",
+      "kind": "legacy_bundle",
+      "flora": [
+        {
+          "layer": "ground_cover",
+          "pool_id": "underwater",
+          "selection_seed_key": "underwater",
+          "species": [
+            "underwater_weed_dark",
+            "underwater_weed_bright"
+          ],
+          "chance": 0.1,
+          "placement_seed": 501,
+          "max_water_depth": 2,
+          "placement": "lakebed",
+          "render_priority": 0
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "water",
+          "selection_seed_key": "water",
+          "species": [
+            "lily_pad_stemmed",
+            "lily_pad_cluster",
+            "pink_lotus"
+          ],
+          "chance": 0.06,
+          "placement_seed": 502,
+          "noise_above": 0.0,
+          "placement": "water_surface",
+          "render_priority": 12
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "desert_shore",
+      "kind": "legacy_bundle",
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "desert_oasis_trees",
+          "selection_seed_key": "desert_oasis_trees",
+          "species": [
+            "palm_tree_tall",
+            "palm_tree_small",
+            "palm_tree_tall",
+            "dead_tree",
+            "twisted_dead_tree",
+            "dead_tree_bent",
+            "dead_tree_tall"
+          ],
+          "noise_above": 0.18,
+          "chance": 0.006,
+          "placement_seed": 510
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "desert_oasis_ground_cover",
+          "selection_seed_key": "desert_oasis_ground_cover",
+          "species": [
+            "dry_shrub",
+            "dry_shrub_small",
+            "dry_shrub_small",
+            "dry_brush_patch"
+          ],
+          "noise_above": -0.08,
+          "chance": 0.025,
+          "placement_seed": 710
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_oasis_decorations",
+          "selection_seed_key": "desert_oasis_decorations",
+          "species": [
+            "flowering_cactus",
+            "flowering_prickly_pear_cactus",
+            "flowering_barrel_cactus",
+            "agave",
+            "agave_small",
+            "agave_small"
+          ],
+          "noise_above": 0.02,
+          "chance": 0.015,
+          "placement_seed": 810
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "desert_transition_shore",
+      "kind": "legacy_bundle",
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "desert_transition_shore_trees",
+          "selection_seed_key": "desert_transition_shore_trees",
+          "species": [
+            "dead_tree",
+            "twisted_dead_tree",
+            "dead_tree_bent",
+            "dead_tree_tall"
+          ],
+          "noise_above": 0.22,
+          "chance": 0.004,
+          "placement_seed": 512
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "desert_transition_shore_ground_cover",
+          "selection_seed_key": "desert_transition_shore_ground_cover",
+          "species": [
+            "dry_shrub",
+            "dry_shrub_small",
+            "dry_shrub_small",
+            "dry_brush_patch",
+            "dry_brush_patch"
+          ],
+          "noise_above": -0.06,
+          "chance": 0.025,
+          "placement_seed": 712
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_transition_shore_decorations",
+          "selection_seed_key": "desert_transition_shore_decorations",
+          "species": [
+            "withered_cactus",
+            "flowering_barrel_cactus",
+            "agave_small"
+          ],
+          "noise_above": 0.08,
+          "chance": 0.008,
+          "placement_seed": 812
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "shore",
+      "kind": "legacy_bundle",
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "shore_trees",
+          "selection_seed_key": "shore",
+          "species": [
+            "willow_tree",
+            "willow_tree",
+            "banyan_tree"
+          ],
+          "noise_above": 0.10,
+          "chance": 0.060,
+          "placement_seed": 503
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "shore_grass",
+          "selection_seed_key": "shore_grass",
+          "species": [
+            "grass_tuft_sparse",
+            "grass_tuft_sparse",
+            "grass_tuft_narrow",
+            "grass_tuft_dense",
+            "grass_tuft_lush"
+          ],
+          "noise_above": -0.08,
+          "chance": 0.100,
+          "placement_seed": 703
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "shore_wildflowers",
+          "selection_seed_key": "shore_wildflowers",
+          "species": [
+            "purple_shore_flower",
+            "purple_shore_flower",
+            "wildflower_pink",
+            "wildflower_orange",
+            "wildflower_purple",
+            "wildflower_blue"
+          ],
+          "noise_above": 0.02,
+          "chance": 0.020,
+          "placement_seed": 713
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "shore_decorations",
+          "selection_seed_key": "shore_decorations",
+          "species": [
+            "mossy_boulder_small"
+          ],
+          "noise_above": 0.10,
+          "chance": 0.012,
+          "placement_seed": 803
+        }
+      ],
+      "fauna": [],
+      "ambient": [
+        {
+          "pool_id": "shore_fireflies",
+          "selection_seed_key": "shore_fireflies",
+          "species": [
+            "firefly"
+          ],
+          "chance": 0.10,
+          "placement_seed": 601
+        }
+      ]
+    },
+    {
+      "id": "snow",
+      "kind": "legacy_bundle",
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "snow_trees",
+          "selection_seed_key": "snow",
+          "species": [
+            "snowy_pine_dense",
+            "snowy_pine_tall",
+            "snowy_pine_small",
+            "snowy_pine_round",
+            "snowy_pine_large"
+          ],
+          "noise_above": 0.20,
+          "chance": 0.025,
+          "placement_seed": 504
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "snow_ground_cover",
+          "selection_seed_key": "snow_ground_cover",
+          "species": [
+            "snowy_grass_tuft",
+            "snowy_grass_tuft",
+            "snowy_grass_tuft",
+            "snowy_grass_tuft",
+            "snowy_grass_clump_green",
+            "snowy_grass_clump_round",
+            "snowy_grass_clump_round",
+            "snowy_grass_tuft_silver",
+            "snowy_grass_tuft_green"
+          ],
+          "noise_above": -0.04,
+          "chance": 0.060,
+          "placement_seed": 704
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "snow_decorations",
+          "selection_seed_key": "snow_decorations",
+          "species": [
+            "snowy_tree_stump",
+            "snowy_tree_stump",
+            "snowy_tree_stump_tall"
+          ],
+          "noise_above": 0.08,
+          "chance": 0.004,
+          "placement_seed": 804
+        }
+      ],
+      "fauna": [
+        {
+          "pool_id": "wolf_pack",
+          "selection_seed_key": "wolf_pack",
+          "species": [
+            "wolf"
+          ],
+          "chance": 0.22,
+          "placement_seed": 508,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 36,
+            "anchor_jitter": 0.45,
+            "count": [
+              7,
+              8
+            ],
+            "radius": 4,
+            "same_ecosystem": true,
+            "social_radius": 5,
+            "substitution": {
+              "species": "husky",
+              "chance": 0.35,
+              "max_count": 1
+            }
+          }
+        }
+      ],
+      "ambient": []
+    },
+    {
+      "id": "desert",
+      "kind": "legacy_bundle",
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "desert_trees",
+          "selection_seed_key": "desert_trees",
+          "species": [
+            "dead_tree",
+            "twisted_dead_tree",
+            "twisted_dead_tree",
+            "dead_tree_bent",
+            "dead_tree_tall"
+          ],
+          "noise_above": 0.16,
+          "chance": {
+            "default": 0.010,
+            "mountain_or_rock": 0.003,
+            "swamp": 0.008,
+            "hills": 0.012
+          },
+          "placement_seed": 509
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "desert_ground_cover",
+          "selection_seed_key": "desert_ground_cover",
+          "species": [
+            "dry_shrub",
+            "dry_shrub_small",
+            "dry_shrub_small",
+            "dry_brush_patch"
+          ],
+          "noise_above": 0.00,
+          "chance": {
+            "default": 0.025,
+            "mountain_or_rock": 0.006,
+            "swamp": 0.018,
+            "hills": 0.030
+          },
+          "placement_seed": 709
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_decorations",
+          "selection_seed_key": "desert_decorations",
+          "species": [
+            "cactus",
+            "cactus",
+            "barrel_cactus",
+            "barrel_cactus",
+            "dwarf_cactus",
+            "prickly_pear_cactus",
+            "flowering_cactus",
+            "withered_cactus",
+            "agave",
+            "agave_small",
+            "agave_small",
+            "flowering_prickly_pear_cactus",
+            "saguaro_cactus",
+            "flowering_barrel_cactus"
+          ],
+          "noise_above": 0.05,
+          "chance": {
+            "default": 0.025,
+            "mountain_or_rock": 0.007,
+            "swamp": 0.018,
+            "hills": 0.030
+          },
+          "placement_seed": 809
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_yellow_boulders",
+          "selection_seed_key": "desert_yellow_boulders",
+          "species": [
+            "mossy_boulder_large"
+          ],
+          "noise_above": 0.12,
+          "chance": {
+            "default": 0.006,
+            "mountain_or_rock": 0.010,
+            "swamp": 0.003,
+            "hills": 0.008
+          },
+          "placement_seed": 819
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "desert_transition",
+      "kind": "legacy_bundle",
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "desert_transition_trees",
+          "selection_seed_key": "desert_transition_trees",
+          "species": [
+            "dead_tree",
+            "twisted_dead_tree",
+            "twisted_dead_tree",
+            "dead_tree_bent",
+            "dead_tree_tall"
+          ],
+          "noise_above": 0.22,
+          "chance": {
+            "default": 0.008,
+            "mountain_or_rock": 0.004,
+            "swamp": 0.006,
+            "hills": 0.010
+          },
+          "placement_seed": 511
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "desert_transition_ground_cover",
+          "selection_seed_key": "desert_transition_ground_cover",
+          "species": [
+            "dry_shrub",
+            "dry_shrub_small",
+            "dry_shrub_small",
+            "dry_shrub_small",
+            "dry_brush_patch",
+            "dry_brush_patch"
+          ],
+          "noise_above": -0.05,
+          "chance": {
+            "default": 0.030,
+            "mountain_or_rock": 0.008,
+            "swamp": 0.022,
+            "hills": 0.035
+          },
+          "placement_seed": 711
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_transition_decorations",
+          "selection_seed_key": "desert_transition_decorations",
+          "species": [
+            "withered_cactus",
+            "barrel_cactus",
+            "flowering_prickly_pear_cactus",
+            "flowering_barrel_cactus",
+            "agave_small",
+            "agave_small"
+          ],
+          "noise_above": 0.10,
+          "chance": {
+            "default": 0.015,
+            "mountain_or_rock": 0.006,
+            "swamp": 0.010,
+            "hills": 0.018
+          },
+          "placement_seed": 811
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_transition_yellow_boulders",
+          "selection_seed_key": "desert_transition_yellow_boulders",
+          "species": [
+            "mossy_boulder_large"
+          ],
+          "noise_above": 0.16,
+          "chance": {
+            "default": 0.002,
+            "mountain_or_rock": 0.004,
+            "swamp": 0.001,
+            "hills": 0.003
+          },
+          "placement_seed": 821
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "temperate",
+      "kind": "legacy_bundle",
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "temperate_deciduous_trees",
+          "selection_seed_key": "field",
+          "species": [
+            "broadleaf_tree",
+            "broadleaf_tree",
+            "autumn_maple_tree",
+            "apple_tree",
+            "birch_tree",
+            "birch_tree",
+            "birch_tree_slender",
+            "birch_tree_slender",
+            "cherry_blossom_tree",
+            "cherry_blossom_tree_small"
+          ],
+          "chance": {
+            "default": 0.040,
+            "mountain_or_rock": 0.006,
+            "swamp": 0.050,
+            "hills": 0.030
+          },
+          "placement_seed": 506
+        },
+        {
+          "layer": "tree",
+          "pool_id": "temperate_conifer_trees",
+          "selection_seed_key": "temperate_conifers",
+          "species": [
+            "pine_tree",
+            "pine_tree_dense",
+            "pine_tree_tall",
+            "pine_tree",
+            "blue_spruce_tree",
+            "blue_spruce_tree",
+            "blue_spruce_tree_small",
+            "blue_spruce_tree_small"
+          ],
+          "noise_above": 0.14,
+          "chance": {
+            "default": 0.008,
+            "mountain_or_rock": 0.014,
+            "swamp": 0.001,
+            "hills": 0.012
+          },
+          "placement_seed": 516
+        },
+        {
+          "layer": "tree",
+          "pool_id": "temperate_dead_trees",
+          "selection_seed_key": "temperate_dead_trees",
+          "species": [
+            "dead_tree",
+            "dead_tree_bent",
+            "dead_tree_tall"
+          ],
+          "noise_above": 0.20,
+          "chance": {
+            "default": 0.002,
+            "mountain_or_rock": 0.002,
+            "swamp": 0.006,
+            "hills": 0.002
+          },
+          "placement_seed": 526
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "temperate_meadow_grass",
+          "selection_seed_key": "temperate_meadow_grass",
+          "species": [
+            "grass_tuft_sparse",
+            "grass_tuft_sparse",
+            "grass_tuft_sparse",
+            "grass_tuft_narrow",
+            "grass_tuft_dense",
+            "grass_tuft_dense",
+            "grass_tuft_dense",
+            "grass_tuft_lush"
+          ],
+          "noise_above": -0.08,
+          "chance": {
+            "default": 0.130,
+            "mountain_or_rock": 0.020,
+            "swamp": 0.160,
+            "hills": 0.100
+          },
+          "placement_seed": 706
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "temperate_wet_grass_clumps",
+          "selection_seed_key": "temperate_wet_grass_clumps",
+          "species": [
+            "grass_clump_round",
+            "mushroom_cluster_red",
+            "mushroom_cluster_brown",
+            "mushroom_cluster_red_large",
+            "mushroom_cluster_red",
+            "mushroom_cluster_brown",
+            "mushroom_cluster_red_large",
+            "matsutake_mushroom"
+          ],
+          "noise_above": 0.02,
+          "chance": {
+            "default": 0.008,
+            "mountain_or_rock": 0.001,
+            "swamp": 0.035,
+            "hills": 0.006
+          },
+          "placement_seed": 726
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "temperate_wildflowers",
+          "selection_seed_key": "temperate_wildflowers",
+          "species": [
+            "wildflower_pink",
+            "wildflower_pink",
+            "wildflower_orange",
+            "wildflower_purple",
+            "wildflower_blue",
+            "wildflower_yellow"
+          ],
+          "noise_above": 0.02,
+          "chance": {
+            "default": 0.018,
+            "mountain_or_rock": 0.003,
+            "swamp": 0.028,
+            "hills": 0.012
+          },
+          "placement_seed": 716
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "temperate_decorations",
+          "selection_seed_key": "temperate_decorations",
+          "species": [
+            "mossy_boulder_small"
+          ],
+          "noise_above": 0.10,
+          "chance": {
+            "default": 0.006,
+            "mountain_or_rock": 0.008,
+            "swamp": 0.025,
+            "hills": 0.010
+          },
+          "placement_seed": 806
+        }
+      ],
+      "fauna": [
+        {
+          "pool_id": "dog_solitary",
+          "selection_seed_key": "dog_solitary",
+          "species": [
+            "dog"
+          ],
+          "chance": 0.20,
+          "placement_seed": 507,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 28,
+            "anchor_jitter": 0.60,
+            "count": [
+              1,
+              1
+            ],
+            "radius": 0,
+            "same_ecosystem": true,
+            "social_radius": 0
+          }
+        },
+        {
+          "pool_id": "fox_solitary",
+          "selection_seed_key": "fox_solitary",
+          "species": [
+            "fox"
+          ],
+          "chance": 0.18,
+          "placement_seed": 517,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 32,
+            "anchor_jitter": 0.60,
+            "count": [
+              1,
+              1
+            ],
+            "radius": 0,
+            "same_ecosystem": true,
+            "social_radius": 0
+          }
+        },
+        {
+          "pool_id": "pig_family",
+          "selection_seed_key": "pig_family",
+          "species": [
+            "pig"
+          ],
+          "chance": 0.18,
+          "placement_seed": 527,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 30,
+            "anchor_jitter": 0.55,
+            "count": [
+              2,
+              4
+            ],
+            "radius": 3,
+            "same_ecosystem": true,
+            "social_radius": 3
+          }
+        },
+        {
+          "pool_id": "frog_cluster",
+          "selection_seed_key": "frog_cluster",
+          "species": [
+            "frog"
+          ],
+          "chance": 0.20,
+          "placement_seed": 537,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 24,
+            "anchor_jitter": 0.65,
+            "count": [
+              2,
+              4
+            ],
+            "radius": 2,
+            "same_ecosystem": true,
+            "social_radius": 2,
+            "requires_water_within": 10
+          }
+        }
+      ],
+      "ambient": [
+        {
+          "pool_id": "temperate_fireflies",
+          "selection_seed_key": "temperate_fireflies",
+          "species": [
+            "firefly"
+          ],
+          "chance": {
+            "default": 0.12,
+            "mountain_or_rock": 0.0,
+            "swamp": 0.28,
+            "hills": 0.08
+          },
+          "placement_seed": 602,
+          "requires_ground_flora": true
+        }
+      ]
+    }
+  ]
+}

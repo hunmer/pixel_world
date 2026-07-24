@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "kind": "world",
+      "path": "module_extension_world.json"
+    },
+    {
+      "kind": "species",
+      "path": "module_extension_species.json"
+    },
+    {
+      "kind": "communities",
+      "path": "module_extension_communities.json"
+    },
+    {
+      "kind": "biomes",
+      "path": "module_extension_biomes.json"
+    }
+  ]
+}

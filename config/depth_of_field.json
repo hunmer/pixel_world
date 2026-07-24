@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "enabled_by_default": false,
+  "focus_half_height": 0.13,
+  "focus_feather": 0.27,
+  "max_blur_lod": 2.6,
+  "far_strength": 0.78,
+  "near_strength": 1.08,
+  "vignette_strength": 0.05
+}

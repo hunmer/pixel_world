@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "kind": "world",
+  "world": {
+    "default_biome_id": "fixture_volcanic_caldera",
+    "generation": {
+      "biome_index_order": [
+        "fixture_volcanic_caldera"
+      ],
+      "materials": {
+        "fallback_surface_id": "fixture_ground",
+        "surfaces": {
+          "fixture_ground": {
+            "top_texture": "res://meowa_tiles/terrain/soil.png",
+            "column_texture": "reuse_top",
+            "underwater_texture": "reuse_top",
+            "minimap_color": [0.38, 0.25, 0.18, 1.0],
+            "tags": ["land", "soil"]
+          },
+          "water": {
+            "top_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "column_texture": "reuse_top",
+            "underwater_texture": "reuse_top",
+            "minimap_color": [0.07, 0.32, 0.52, 1.0],
+            "tags": ["water"]
+          },
+          "moist_soil": {
+            "top_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "column_texture": "res://meowa_tiles/terrain/soil.png",
+            "underwater_texture": "reuse_top",
+            "minimap_color": [0.42, 0.31, 0.24, 1.0],
+            "tags": ["land", "shore"]
+          },
+          "grass": {
+            "top_texture": "res://meowa_tiles/terrain/soil_with_grass.png",
+            "column_texture": "res://meowa_tiles/terrain/soil.png",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.35, 0.60, 0.20, 1.0],
+            "tags": ["land", "fertile"]
+          },
+          "rock_grass": {
+            "top_texture": "res://meowa_tiles/terrain/rock_with_grass.png",
+            "column_texture": "res://meowa_tiles/terrain/rock.png",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.40, 0.55, 0.25, 1.0],
+            "tags": ["land", "rocky"]
+          },
+          "rock": {
+            "top_texture": "res://meowa_tiles/terrain/rock.png",
+            "column_texture": "reuse_top",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.31, 0.34, 0.38, 1.0],
+            "tags": ["land", "rocky"]
+          }
+        }
+      },
+      "height": {
+        "levels": 16,
+        "water_max": 2,
+        "water_surface_level": 3,
+        "sea_threshold": 0.1875,
+        "mountain_threshold": 0.65,
+        "terrace_period": 0.3,
+        "rock_grass_level": 8,
+        "rock_level": 12,
+        "peak_extra_levels": 0
+      },
+      "noise": {
+        "type": "perlin",
+        "fractal": "fbm",
+        "octaves": 3,
+        "fields": {
+          "land": {
+            "seed_offset": 11,
+            "frequency": 0.008
+          },
+          "detail": {
+            "seed_offset": 22,
+            "frequency": 0.03
+          },
+          "roughness": {
+            "seed_offset": 33,
+            "frequency": 0.015
+          },
+          "peaks": {
+            "seed_offset": 44,
+            "frequency": 0.022
+          }
+        }
+      },
+      "regions": {
+        "cell_size": 64.0,
+        "jitter": 0.0,
+        "blend_width": 10.0,
+        "default_landform": "fixture_caldera_plateau",
+        "landforms": [
+          {
+            "id": "fixture_caldera_plateau",
+            "name": "Fixture Caldera Plateau",
+            "weight": 1.0,
+            "terrain": {
+              "offset": 0.35,
+              "amplitude": 0.15,
+              "ridge": 0.25,
+              "underwater_steepness": 1.0,
+              "peak": 0.0,
+              "terrace": 0.15
+            }
+          }
+        ]
+      }
+    },
+    "pool_selection": {
+      "dominant_chance": 0.8
+    }
+  }
+}

@@ -1,0 +1,437 @@
+{
+  "version": 1,
+  "kind": "species",
+  "species": {
+    "plants": {},
+    "animals": {
+      "dog": {
+        "directory": "res://meowa_tiles/animals/dog",
+        "behavior": "avoid_snow",
+        "foot_offset_y": 8,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [
+            2,
+            4
+          ],
+          "step_pause_seconds": [
+            0.08,
+            0.16
+          ]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [
+              43,
+              43
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [
+              43,
+              43
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "fox": {
+        "directory": "res://meowa_tiles/animals/fox",
+        "behavior": "avoid_snow",
+        "foot_offset_y": 8,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [
+            2,
+            4
+          ],
+          "step_pause_seconds": [
+            0.08,
+            0.16
+          ]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [
+              43,
+              43
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [
+              43,
+              43
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "frog": {
+        "directory": "res://meowa_tiles/animals/frog",
+        "behavior": "near_water",
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "jump",
+          "duration": 0.8,
+          "sort_switch_progress": 0.5,
+          "move_steps": [
+            1,
+            1
+          ],
+          "step_pause_seconds": [
+            0.0,
+            0.0
+          ]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [
+              51,
+              51
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "jump": {
+            "file": "jump.png",
+            "frame_size": [
+              63,
+              63
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": false
+          }
+        }
+      },
+      "husky": {
+        "directory": "res://meowa_tiles/animals/husky",
+        "behavior": "prefer_snow",
+        "foot_offset_y": 8,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [
+            2,
+            4
+          ],
+          "step_pause_seconds": [
+            0.08,
+            0.16
+          ]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [
+              43,
+              43
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [
+              43,
+              43
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "pig": {
+        "directory": "res://meowa_tiles/animals/pig",
+        "behavior": "avoid_snow",
+        "foot_offset_y": 3,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [
+            2,
+            4
+          ],
+          "step_pause_seconds": [
+            0.08,
+            0.16
+          ]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [
+              32,
+              32
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [
+              32,
+              32
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "wolf": {
+        "directory": "res://meowa_tiles/animals/wolf",
+        "behavior": "prefer_snow",
+        "foot_offset_y": 8,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [
+            2,
+            4
+          ],
+          "step_pause_seconds": [
+            0.08,
+            0.16
+          ]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [
+              43,
+              43
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [
+              43,
+              43
+            ],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "goldfish": {
+        "directory": "res://meowa_tiles/animals/goldfish",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {
+            "type": "water_depth_range",
+            "minimum": 1,
+            "maximum": 3
+          },
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 6.0,
+          "duration": 0.7,
+          "move_steps": [7, 12],
+          "step_pause_seconds": [0.02, 0.07]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 8.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "temperate"],
+        "metadata": {"aquatic": true, "silent": true}
+      },
+      "blue_goldfish": {
+        "directory": "res://meowa_tiles/animals/blue_goldfish",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {
+            "type": "water_depth_range",
+            "minimum": 1,
+            "maximum": 3
+          },
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 6.0,
+          "duration": 0.72,
+          "move_steps": [7, 12],
+          "step_pause_seconds": [0.02, 0.07]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 8.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "temperate"],
+        "metadata": {"aquatic": true, "silent": true}
+      },
+      "calico_goldfish": {
+        "directory": "res://meowa_tiles/animals/calico_goldfish",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {
+            "type": "water_depth_range",
+            "minimum": 1,
+            "maximum": 3
+          },
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 6.0,
+          "duration": 0.68,
+          "move_steps": [7, 12],
+          "step_pause_seconds": [0.02, 0.07]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 8.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "temperate"],
+        "metadata": {"aquatic": true, "silent": true}
+      },
+      "crucian_carp": {
+        "directory": "res://meowa_tiles/animals/crucian_carp",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {
+            "type": "water_depth_range",
+            "minimum": 1,
+            "maximum": 5
+          },
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 7.0,
+          "duration": 0.76,
+          "move_steps": [8, 14],
+          "step_pause_seconds": [0.03, 0.08]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 7.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "temperate"],
+        "metadata": {"aquatic": true, "silent": true}
+      },
+      "salmon": {
+        "directory": "res://meowa_tiles/animals/salmon",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {
+            "type": "water_depth_range",
+            "minimum": 2,
+            "maximum": 5
+          },
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 8.0,
+          "duration": 0.58,
+          "move_steps": [10, 18],
+          "step_pause_seconds": [0.01, 0.05]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 9.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "cold_water"],
+        "metadata": {"aquatic": true, "silent": true}
+      }
+    },
+    "ambient": {}
+  }
+}

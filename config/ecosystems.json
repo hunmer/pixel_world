@@ -1,0 +1,1398 @@
+{
+  "version": 1,
+  "default_ecosystem": "temperate",
+  "generation": {
+    "biome_index_order": ["plains", "desert", "snow", "desert_transition"],
+    "materials": {
+      "fallback_surface_id": "grass",
+      "surfaces": {
+        "water": {
+          "top_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "column_texture": "reuse_top",
+          "underwater_texture": "reuse_top",
+          "minimap_color": [0.07, 0.32, 0.52, 1.0],
+          "tags": ["water"],
+          "biome_overrides": {
+            "desert": {
+              "underwater_texture": "res://meowa_tiles/terrain/sand.png"
+            }
+          }
+        },
+        "soil": {
+          "top_texture": "res://meowa_tiles/terrain/soil.png",
+          "column_texture": "reuse_top",
+          "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "minimap_color": [0.43, 0.29, 0.20, 1.0],
+          "tags": ["land", "soil"]
+        },
+        "moist_soil": {
+          "top_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "column_texture": "res://meowa_tiles/terrain/soil.png",
+          "underwater_texture": "reuse_top",
+          "minimap_color": [0.60, 0.45, 0.30, 1.0],
+          "tags": ["land", "soil", "shore"]
+        },
+        "grass": {
+          "top_texture": "res://meowa_tiles/terrain/soil_with_grass.png",
+          "column_texture": "res://meowa_tiles/terrain/soil.png",
+          "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "minimap_color": [0.35, 0.60, 0.20, 1.0],
+          "tags": ["land", "soil", "fertile"]
+        },
+        "sparse_grass": {
+          "top_texture": "res://meowa_tiles/terrain/soil_with_little_grass.png",
+          "column_texture": "res://meowa_tiles/terrain/soil.png",
+          "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "minimap_color": [0.48, 0.49, 0.23, 1.0],
+          "tags": ["land", "soil", "semi_arid"]
+        },
+        "parched_soil": {
+          "top_texture": "res://meowa_tiles/terrain/parched_soil.png",
+          "column_texture": "res://meowa_tiles/terrain/soil.png",
+          "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "minimap_color": [0.48, 0.34, 0.22, 1.0],
+          "tags": ["land", "soil", "arid"]
+        },
+        "sand": {
+          "top_texture": "res://meowa_tiles/terrain/sand.png",
+          "column_texture": "reuse_top",
+          "underwater_texture": "reuse_top",
+          "minimap_color": [0.85, 0.72, 0.42, 1.0],
+          "tags": ["land", "sand", "arid"]
+        },
+        "rock": {
+          "top_texture": "res://meowa_tiles/terrain/rock.png",
+          "column_texture": "reuse_top",
+          "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "minimap_color": [0.31, 0.34, 0.38, 1.0],
+          "tags": ["land", "rocky"]
+        },
+        "mossy_rock": {
+          "top_texture": "res://meowa_tiles/terrain/rock_with_moss.png",
+          "column_texture": "reuse_top",
+          "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "minimap_color": [0.32, 0.38, 0.31, 1.0],
+          "tags": ["land", "rocky", "mossy"]
+        },
+        "rock_grass": {
+          "top_texture": "res://meowa_tiles/terrain/rock_with_grass.png",
+          "column_texture": "res://meowa_tiles/terrain/soil.png",
+          "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "minimap_color": [0.40, 0.55, 0.25, 1.0],
+          "tags": ["land", "rocky", "fertile"]
+        },
+        "snow": {
+          "top_texture": "res://meowa_tiles/terrain/snow.png",
+          "column_texture": "res://meowa_tiles/terrain/rock.png",
+          "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+          "minimap_color": [0.88, 0.90, 0.95, 1.0],
+          "tags": ["land", "snow", "cold"]
+        }
+      }
+    },
+    "height": {
+      "sea_threshold": 0.375,
+      "mountain_threshold": 0.65,
+      "terrace_period": 0.3,
+      "rock_level": 12,
+      "peak_extra_levels": 10
+    },
+    "noise": {
+      "type": "perlin",
+      "fractal": "fbm",
+      "octaves": 4,
+      "fields": {
+        "detail": { "seed_offset": 0, "frequency": 0.03 },
+        "land": { "seed_offset": 101, "frequency": 0.008 },
+        "roughness": { "seed_offset": 202, "frequency": 0.015 },
+        "temperature": { "seed_offset": 303, "frequency": 0.035 },
+        "humidity": { "seed_offset": 404, "frequency": 0.035 },
+        "peaks": { "seed_offset": 505, "frequency": 0.022 },
+        "tree_placement": { "seed_offset": 606, "frequency": 0.045 },
+        "ground_cover_placement": { "seed_offset": 616, "frequency": 0.085 },
+        "decoration_placement": { "seed_offset": 626, "frequency": 0.032 },
+        "desert_dunes": { "seed_offset": 707, "frequency": 0.018 },
+        "desert_regions": { "seed_offset": 808, "frequency": 0.004, "octaves": 1 },
+        "desert_rocks": { "seed_offset": 909, "frequency": 0.022, "octaves": 2 },
+        "desert_edges": { "seed_offset": 1001, "frequency": 0.018, "octaves": 2 }
+      }
+    },
+    "flora": {
+      "conflict_seed": 640,
+      "layers": {
+        "tree": {
+          "noise_field": "tree_placement",
+          "default_noise_above": 0.10,
+          "dominant_chance": 0.80
+        },
+        "ground_cover": {
+          "noise_field": "ground_cover_placement",
+          "default_noise_above": -0.20,
+          "dominant_chance": 0.15
+        },
+        "decoration": {
+          "noise_field": "decoration_placement",
+          "default_noise_above": 0.05,
+          "dominant_chance": 0.55
+        }
+      }
+    },
+    "regions": {
+      "cell_size": 128.0,
+      "jitter": 0.9,
+      "blend_width": 14.0,
+      "landforms": [
+        {
+          "id": "plains",
+          "name_zh": "平原",
+          "weight": 20.0,
+          "terrain": {
+            "offset": -0.12,
+            "amplitude": 0.5,
+            "ridge": 0.0,
+            "underwater_steepness": 2.2,
+            "peak": 0.05,
+            "terrace": 0.0
+          }
+        },
+        {
+          "id": "hills",
+          "name_zh": "丘陵",
+          "weight": 30.0,
+          "terrain": {
+            "offset": 0.05,
+            "amplitude": 1.6,
+            "ridge": 0.35,
+            "underwater_steepness": 2.2,
+            "peak": 0.3,
+            "terrace": 0.45
+          }
+        },
+        {
+          "id": "swamp",
+          "name_zh": "沼泽",
+          "weight": 15.0,
+          "terrain": {
+            "offset": -0.22,
+            "amplitude": 0.35,
+            "ridge": 0.0,
+            "underwater_steepness": 1.0,
+            "peak": 0.0,
+            "terrace": 0.0
+          }
+        },
+        {
+          "id": "mountain",
+          "name_zh": "高山",
+          "weight": 20.0,
+          "terrain": {
+            "offset": 0.3,
+            "amplitude": 3.5,
+            "ridge": 0.75,
+            "underwater_steepness": 2.2,
+            "peak": 1.0,
+            "terrace": 0.85
+          }
+        },
+        {
+          "id": "ocean",
+          "name_zh": "海洋",
+          "weight": 15.0,
+          "terrain": {
+            "offset": -0.75,
+            "amplitude": 0.5,
+            "ridge": 0.0,
+            "underwater_steepness": 1.3,
+            "peak": 0.05,
+            "terrace": 0.0
+          }
+        }
+      ]
+    },
+    "climate": {
+      "snow": { "base_level": 14, "temperature_level_scale": 3.0 }
+    },
+    "biome_profiles": {
+      "desert": {
+        "region": {
+          "transition_threshold": 0.14,
+          "core_threshold": 0.22,
+          "edge_amplitude": 0.05
+        },
+        "surface": {
+          "transition_grass_fraction": 0.35,
+          "transition_grass_chance": 0.10,
+          "transition_sand_enter": 0.68,
+          "transition_rock_noise_above": 0.40,
+          "rock_noise_above": 0.30,
+          "rock_level": 12
+        },
+        "terrain": {
+          "elevation_bias": 0.14,
+          "relief_scale": 0.55,
+          "dune_amplitude": 0.07,
+          "peak_scale": 0.20
+        }
+      }
+    }
+  },
+  "species": {
+    "plants": {
+      "broadleaf_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/broadleaf_tree.png" },
+      "pine_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/pine_tree.png" },
+      "birch_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/birch_tree.png" },
+      "blue_spruce_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/blue_spruce_tree.png" },
+      "cherry_blossom_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/cherry_blossom_tree.png" },
+      "dead_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/dead_tree.png" },
+      "twisted_dead_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/twisted_dead_tree.png" },
+      "willow_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/willow_tree.png" },
+      "snowy_pine_dense": { "layer": "tree", "texture": "res://meowa_tiles/trees/snowy_pine_dense.png" },
+      "snowy_pine_tall": { "layer": "tree", "texture": "res://meowa_tiles/trees/snowy_pine_tall.png" },
+      "autumn_maple_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/autumn_maple_tree.png" },
+      "pine_tree_dense": { "layer": "tree", "texture": "res://meowa_tiles/trees/pine_tree_dense.png" },
+      "blue_spruce_tree_small": { "layer": "tree", "texture": "res://meowa_tiles/trees/blue_spruce_tree_small.png" },
+      "pine_tree_tall": { "layer": "tree", "texture": "res://meowa_tiles/trees/pine_tree_tall.png" },
+      "palm_tree_small": { "layer": "tree", "texture": "res://meowa_tiles/trees/palm_tree_small.png" },
+      "palm_tree_tall": { "layer": "tree", "texture": "res://meowa_tiles/trees/palm_tree_tall.png" },
+      "banyan_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/banyan_tree.png" },
+      "cherry_blossom_tree_small": { "layer": "tree", "texture": "res://meowa_tiles/trees/cherry_blossom_tree_small.png" },
+      "birch_tree_slender": { "layer": "tree", "texture": "res://meowa_tiles/trees/birch_tree_slender.png" },
+      "apple_tree": { "layer": "tree", "texture": "res://meowa_tiles/trees/apple_tree.png" },
+      "dead_tree_bent": { "layer": "tree", "texture": "res://meowa_tiles/trees/dead_tree_bent.png" },
+      "dead_tree_tall": { "layer": "tree", "texture": "res://meowa_tiles/trees/dead_tree_tall.png" },
+      "snowy_pine_small": { "layer": "tree", "texture": "res://meowa_tiles/trees/snowy_pine_small.png" },
+      "snowy_pine_round": { "layer": "tree", "texture": "res://meowa_tiles/trees/snowy_pine_round.png" },
+      "snowy_pine_large": { "layer": "tree", "texture": "res://meowa_tiles/trees/snowy_pine_large.png" },
+
+      "purple_shore_flower": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/purple_shore_flower.png" },
+      "lily_pad_stemmed": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/lily_pad_stemmed.png" },
+      "lily_pad_cluster": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/lily_pad_cluster.png" },
+      "pink_lotus": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/pink_lotus.png" },
+      "underwater_weed_dark": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/underwater_weed_dark.png" },
+      "underwater_weed_bright": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/underwater_weed_bright.png" },
+      "dry_shrub": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/dry_shrub.png" },
+      "dry_shrub_small": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/dry_shrub_small.png" },
+      "snowy_grass_tuft": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/snowy_grass_tuft.png" },
+      "snowy_grass_clump_green": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/snowy_grass_clump_green.png" },
+      "snowy_grass_clump_round": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/snowy_grass_clump_round.png" },
+      "grass_clump_round": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/grass_clump_round.png" },
+      "grass_tuft_sparse": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/grass_tuft_sparse.png" },
+      "grass_tuft_dense": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/grass_tuft_dense.png" },
+      "wildflower_pink": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/wildflower_pink.png" },
+      "wildflower_orange": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/wildflower_orange.png" },
+      "dry_brush_patch": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/dry_brush_patch.png" },
+      "grass_tuft_narrow": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/grass_tuft_narrow.png" },
+      "grass_tuft_lush": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/grass_tuft_lush.png" },
+      "snowy_grass_tuft_silver": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/snowy_grass_tuft_silver.png" },
+      "snowy_grass_tuft_green": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/snowy_grass_tuft_green.png" },
+      "wildflower_purple": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/wildflower_purple.png" },
+      "wildflower_blue": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/wildflower_blue.png" },
+      "wildflower_yellow": { "layer": "ground_cover", "texture": "res://meowa_tiles/plants/wildflower_yellow.png" },
+      "mushroom_cluster_red": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/mushroom_cluster_red.png",
+        "habitat": {
+          "near_flora_layer": "tree",
+          "radius": 4,
+          "fallback_species": "grass_clump_round"
+        }
+      },
+      "mushroom_cluster_brown": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/mushroom_cluster_brown.png",
+        "habitat": {
+          "near_flora_layer": "tree",
+          "radius": 4,
+          "fallback_species": "grass_clump_round"
+        }
+      },
+      "mushroom_cluster_red_large": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/mushroom_cluster_red_large.png",
+        "habitat": {
+          "near_flora_layer": "tree",
+          "radius": 4,
+          "fallback_species": "grass_clump_round"
+        }
+      },
+      "matsutake_mushroom": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/matsutake_mushroom.png",
+        "habitat": {
+          "near_flora_layer": "tree",
+          "radius": 4,
+          "fallback_species": "grass_clump_round"
+        }
+      },
+
+      "cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/cactus.png" },
+      "barrel_cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/barrel_cactus.png" },
+      "dwarf_cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/dwarf_cactus.png" },
+      "prickly_pear_cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/prickly_pear_cactus.png" },
+      "flowering_cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/flowering_cactus.png" },
+      "withered_cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/withered_cactus.png" },
+      "agave": { "layer": "decoration", "texture": "res://meowa_tiles/plants/agave.png" },
+      "agave_small": { "layer": "decoration", "texture": "res://meowa_tiles/plants/agave_small.png" },
+      "flowering_prickly_pear_cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/flowering_prickly_pear_cactus.png" },
+      "saguaro_cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/saguaro_cactus.png" },
+      "flowering_barrel_cactus": { "layer": "decoration", "texture": "res://meowa_tiles/plants/flowering_barrel_cactus.png" },
+      "snowy_tree_stump": { "layer": "decoration", "texture": "res://meowa_tiles/decorations/snowy_tree_stump.png" },
+      "snowy_tree_stump_tall": { "layer": "decoration", "texture": "res://meowa_tiles/decorations/snowy_tree_stump_tall.png" },
+      "mossy_boulder_large": { "layer": "decoration", "texture": "res://meowa_tiles/decorations/mossy_boulder_large.png" },
+      "mossy_boulder_small": { "layer": "decoration", "texture": "res://meowa_tiles/decorations/mossy_boulder_small.png" }
+    },
+    "animals": {
+      "dog": {
+        "directory": "res://meowa_tiles/animals/dog",
+        "behavior": "avoid_snow",
+        "foot_offset_y": 8,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [2, 4],
+          "step_pause_seconds": [0.08, 0.16]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "fox": {
+        "directory": "res://meowa_tiles/animals/fox",
+        "behavior": "avoid_snow",
+        "foot_offset_y": 8,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [2, 4],
+          "step_pause_seconds": [0.08, 0.16]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "frog": {
+        "directory": "res://meowa_tiles/animals/frog",
+        "behavior": "near_water",
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "jump",
+          "duration": 0.8,
+          "sort_switch_progress": 0.5,
+          "move_steps": [1, 1],
+          "step_pause_seconds": [0.0, 0.0]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [51, 51],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "jump": {
+            "file": "jump.png",
+            "frame_size": [63, 63],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": false
+          }
+        }
+      },
+      "husky": {
+        "directory": "res://meowa_tiles/animals/husky",
+        "behavior": "prefer_snow",
+        "foot_offset_y": 8,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [2, 4],
+          "step_pause_seconds": [0.08, 0.16]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "pig": {
+        "directory": "res://meowa_tiles/animals/pig",
+        "behavior": "avoid_snow",
+        "foot_offset_y": 3,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [2, 4],
+          "step_pause_seconds": [0.08, 0.16]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [32, 32],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [32, 32],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "wolf": {
+        "directory": "res://meowa_tiles/animals/wolf",
+        "behavior": "prefer_snow",
+        "foot_offset_y": 8,
+        "movement": {
+          "idle_action": "idle",
+          "move_action": "walk",
+          "duration": 0.8,
+          "move_steps": [2, 4],
+          "step_pause_seconds": [0.08, 0.16]
+        },
+        "actions": {
+          "idle": {
+            "file": "idle.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 6.0,
+            "loop": true
+          },
+          "walk": {
+            "file": "walk.png",
+            "frame_size": [43, 43],
+            "columns": 3,
+            "frames": 8,
+            "fps": 10.0,
+            "loop": true
+          }
+        }
+      },
+      "goldfish": {
+        "directory": "res://meowa_tiles/animals/goldfish",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {"type": "water_depth_range", "minimum": 1, "maximum": 3},
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 6.0,
+          "duration": 0.7,
+          "move_steps": [7, 12],
+          "step_pause_seconds": [0.02, 0.07]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 8.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "temperate"],
+        "metadata": {"aquatic": true, "silent": true}
+      },
+      "blue_goldfish": {
+        "directory": "res://meowa_tiles/animals/blue_goldfish",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {"type": "water_depth_range", "minimum": 1, "maximum": 3},
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 6.0,
+          "duration": 0.72,
+          "move_steps": [7, 12],
+          "step_pause_seconds": [0.02, 0.07]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 8.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "temperate"],
+        "metadata": {"aquatic": true, "silent": true}
+      },
+      "calico_goldfish": {
+        "directory": "res://meowa_tiles/animals/calico_goldfish",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {"type": "water_depth_range", "minimum": 1, "maximum": 3},
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 6.0,
+          "duration": 0.68,
+          "move_steps": [7, 12],
+          "step_pause_seconds": [0.02, 0.07]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 8.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "temperate"],
+        "metadata": {"aquatic": true, "silent": true}
+      },
+      "crucian_carp": {
+        "directory": "res://meowa_tiles/animals/crucian_carp",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {"type": "water_depth_range", "minimum": 1, "maximum": 5},
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 7.0,
+          "duration": 0.76,
+          "move_steps": [8, 14],
+          "step_pause_seconds": [0.03, 0.08]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 7.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "temperate"],
+        "metadata": {"aquatic": true, "silent": true}
+      },
+      "salmon": {
+        "directory": "res://meowa_tiles/animals/salmon",
+        "allowed_surfaces": ["water"],
+        "max_step_height": 0,
+        "foot_offset_y": 16,
+        "behaviors": [
+          {"type": "water_depth_range", "minimum": 2, "maximum": 5},
+          {"type": "water_clearance", "minimum": 1}
+        ],
+        "movement": {
+          "idle_action": "swim",
+          "move_action": "swim",
+          "source_faces_right": true,
+          "direction_persistence": 8.0,
+          "duration": 0.58,
+          "move_steps": [10, 18],
+          "step_pause_seconds": [0.01, 0.05]
+        },
+        "actions": {
+          "swim": {
+            "file": "swim.png",
+            "frame_size": [32, 32],
+            "columns": 8,
+            "frames": 8,
+            "fps": 9.0,
+            "loop": true
+          }
+        },
+        "tags": ["fish", "freshwater", "cold_water"],
+        "metadata": {"aquatic": true, "silent": true}
+      }
+    },
+    "ambient": {
+      "firefly": {
+        "renderer_script": "res://scripts/ecology/ambient_renderers/firefly_renderer_adapter.gd",
+        "renderer_alias": "night_fireflies",
+        "renderer_profile": {
+          "max_visible": 72,
+          "max_lights": 12
+        },
+        "cluster_size": [2, 3],
+        "max_visible": 72,
+        "max_lights": 12
+      },
+      "bird": {
+        "renderer_script": "res://scripts/ecology/ambient_renderers/bird_renderer.gd",
+        "renderer_profile": {
+          "walk_texture": "res://meowa_tiles/animals/bird/walk.png",
+          "fly_texture": "res://meowa_tiles/animals/bird/fly.png",
+          "walk_fps": 8.0,
+          "fly_fps": 10.0,
+          "ground_visual_offset": [0.0, -11.0],
+          "walk_radius_pixels": [3.0, 6.0],
+          "walk_speed": [0.8, 1.3],
+          "takeoff_radius_cells": 4,
+          "max_grounded": 12,
+          "escape_speed": [110.0, 150.0],
+          "flyover_speed": [105.0, 145.0],
+          "flyover_interval_seconds": [20.0, 45.0],
+          "flyover_group_chance": 0.72,
+          "flyover_group_size": [3, 6],
+          "offscreen_margin": 64.0
+        },
+        "cluster_size": [1, 1],
+        "max_visible": 12,
+        "max_lights": 0,
+        "tags": ["bird", "temperate", "daytime"],
+        "metadata": {
+          "lifecycle": "viewport",
+          "frightened_takeoff": true
+        }
+      }
+    }
+  },
+  "ecosystems": [
+    {
+      "id": "desert_water",
+      "match": { "water": true, "biome": "desert" },
+      "flora": [],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "desert_transition_water",
+      "match": { "water": true, "biome": "desert_transition" },
+      "flora": [],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "water",
+      "match": { "water": true },
+      "flora": [
+        {
+          "layer": "ground_cover",
+          "pool_id": "underwater",
+          "selection_seed_key": "underwater",
+          "species": ["underwater_weed_dark", "underwater_weed_bright"],
+          "chance": 0.1,
+          "placement_seed": 501,
+          "max_water_depth": 2,
+          "placement": "lakebed",
+          "render_priority": 0
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "water",
+          "selection_seed_key": "water",
+          "species": ["lily_pad_stemmed", "lily_pad_cluster", "pink_lotus"],
+          "chance": 0.06,
+          "placement_seed": 502,
+          "noise_above": 0.0,
+          "placement": "water_surface",
+          "render_priority": 12
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "desert_shore",
+      "match": { "shore": true, "biome": "desert" },
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "desert_oasis_trees",
+          "selection_seed_key": "desert_oasis_trees",
+          "species": [
+            "palm_tree_tall",
+            "palm_tree_small",
+            "palm_tree_tall",
+            "dead_tree",
+            "twisted_dead_tree",
+            "dead_tree_bent",
+            "dead_tree_tall"
+          ],
+          "noise_above": 0.18,
+          "chance": 0.006,
+          "placement_seed": 510
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "desert_oasis_ground_cover",
+          "selection_seed_key": "desert_oasis_ground_cover",
+          "species": ["dry_shrub", "dry_shrub_small", "dry_shrub_small", "dry_brush_patch"],
+          "noise_above": -0.08,
+          "chance": 0.025,
+          "placement_seed": 710
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_oasis_decorations",
+          "selection_seed_key": "desert_oasis_decorations",
+          "species": [
+            "flowering_cactus",
+            "flowering_prickly_pear_cactus",
+            "flowering_barrel_cactus",
+            "agave",
+            "agave_small",
+            "agave_small"
+          ],
+          "noise_above": 0.02,
+          "chance": 0.015,
+          "placement_seed": 810
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "desert_transition_shore",
+      "match": { "shore": true, "biome": "desert_transition" },
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "desert_transition_shore_trees",
+          "selection_seed_key": "desert_transition_shore_trees",
+          "species": ["dead_tree", "twisted_dead_tree", "dead_tree_bent", "dead_tree_tall"],
+          "noise_above": 0.22,
+          "chance": 0.004,
+          "placement_seed": 512
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "desert_transition_shore_ground_cover",
+          "selection_seed_key": "desert_transition_shore_ground_cover",
+          "species": [
+            "dry_shrub",
+            "dry_shrub_small",
+            "dry_shrub_small",
+            "dry_brush_patch",
+            "dry_brush_patch"
+          ],
+          "noise_above": -0.06,
+          "chance": 0.025,
+          "placement_seed": 712
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_transition_shore_decorations",
+          "selection_seed_key": "desert_transition_shore_decorations",
+          "species": ["withered_cactus", "flowering_barrel_cactus", "agave_small"],
+          "noise_above": 0.08,
+          "chance": 0.008,
+          "placement_seed": 812
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "shore",
+      "match": { "shore": true },
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "shore_trees",
+          "selection_seed_key": "shore",
+          "species": ["willow_tree", "willow_tree", "banyan_tree"],
+          "noise_above": 0.10,
+          "chance": 0.060,
+          "placement_seed": 503
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "shore_grass",
+          "selection_seed_key": "shore_grass",
+          "species": [
+            "grass_tuft_sparse",
+            "grass_tuft_sparse",
+            "grass_tuft_narrow",
+            "grass_tuft_dense",
+            "grass_tuft_lush"
+          ],
+          "noise_above": -0.08,
+          "chance": 0.100,
+          "placement_seed": 703
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "shore_wildflowers",
+          "selection_seed_key": "shore_wildflowers",
+          "species": [
+            "purple_shore_flower",
+            "purple_shore_flower",
+            "wildflower_pink",
+            "wildflower_orange",
+            "wildflower_purple",
+            "wildflower_blue"
+          ],
+          "noise_above": 0.02,
+          "chance": 0.020,
+          "placement_seed": 713
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "shore_decorations",
+          "selection_seed_key": "shore_decorations",
+          "species": ["mossy_boulder_small"],
+          "noise_above": 0.10,
+          "chance": 0.012,
+          "placement_seed": 803
+        }
+      ],
+      "fauna": [],
+      "ambient": [
+        {
+          "pool_id": "shore_fireflies",
+          "selection_seed_key": "shore_fireflies",
+          "species": ["firefly"],
+          "chance": 0.10,
+          "placement_seed": 601
+        }
+      ]
+    },
+    {
+      "id": "snow",
+      "match": { "biome": "snow" },
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "snow_trees",
+          "selection_seed_key": "snow",
+          "species": [
+            "snowy_pine_dense",
+            "snowy_pine_tall",
+            "snowy_pine_small",
+            "snowy_pine_round",
+            "snowy_pine_large"
+          ],
+          "noise_above": 0.20,
+          "chance": 0.025,
+          "placement_seed": 504
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "snow_ground_cover",
+          "selection_seed_key": "snow_ground_cover",
+          "species": [
+            "snowy_grass_tuft",
+            "snowy_grass_tuft",
+            "snowy_grass_tuft",
+            "snowy_grass_tuft",
+            "snowy_grass_clump_green",
+            "snowy_grass_clump_round",
+            "snowy_grass_clump_round",
+            "snowy_grass_tuft_silver",
+            "snowy_grass_tuft_green"
+          ],
+          "noise_above": -0.04,
+          "chance": 0.060,
+          "placement_seed": 704
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "snow_decorations",
+          "selection_seed_key": "snow_decorations",
+          "species": ["snowy_tree_stump", "snowy_tree_stump", "snowy_tree_stump_tall"],
+          "noise_above": 0.08,
+          "chance": 0.004,
+          "placement_seed": 804
+        }
+      ],
+      "fauna": [
+        {
+          "pool_id": "wolf_pack",
+          "selection_seed_key": "wolf_pack",
+          "species": ["wolf"],
+          "chance": 0.22,
+          "placement_seed": 508,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 36,
+            "anchor_jitter": 0.45,
+            "count": [7, 8],
+            "radius": 4,
+            "same_ecosystem": true,
+            "social_radius": 5,
+            "substitution": {
+              "species": "husky",
+              "chance": 0.35,
+              "max_count": 1
+            }
+          }
+        }
+      ],
+      "ambient": []
+    },
+    {
+      "id": "desert",
+      "match": { "biome": "desert" },
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "desert_trees",
+          "selection_seed_key": "desert_trees",
+          "species": [
+            "dead_tree",
+            "twisted_dead_tree",
+            "twisted_dead_tree",
+            "dead_tree_bent",
+            "dead_tree_tall"
+          ],
+          "noise_above": 0.16,
+          "chance": {
+            "default": 0.010,
+            "mountain_or_rock": 0.003,
+            "swamp": 0.008,
+            "hills": 0.012
+          },
+          "placement_seed": 509
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "desert_ground_cover",
+          "selection_seed_key": "desert_ground_cover",
+          "species": ["dry_shrub", "dry_shrub_small", "dry_shrub_small", "dry_brush_patch"],
+          "noise_above": 0.00,
+          "chance": {
+            "default": 0.025,
+            "mountain_or_rock": 0.006,
+            "swamp": 0.018,
+            "hills": 0.030
+          },
+          "placement_seed": 709
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_decorations",
+          "selection_seed_key": "desert_decorations",
+          "species": [
+            "cactus",
+            "cactus",
+            "barrel_cactus",
+            "barrel_cactus",
+            "dwarf_cactus",
+            "prickly_pear_cactus",
+            "flowering_cactus",
+            "withered_cactus",
+            "agave",
+            "agave_small",
+            "agave_small",
+            "flowering_prickly_pear_cactus",
+            "saguaro_cactus",
+            "flowering_barrel_cactus"
+          ],
+          "noise_above": 0.05,
+          "chance": {
+            "default": 0.025,
+            "mountain_or_rock": 0.007,
+            "swamp": 0.018,
+            "hills": 0.030
+          },
+          "placement_seed": 809
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_yellow_boulders",
+          "selection_seed_key": "desert_yellow_boulders",
+          "species": ["mossy_boulder_large"],
+          "noise_above": 0.12,
+          "chance": {
+            "default": 0.006,
+            "mountain_or_rock": 0.010,
+            "swamp": 0.003,
+            "hills": 0.008
+          },
+          "placement_seed": 819
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "desert_transition",
+      "match": { "biome": "desert_transition" },
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "desert_transition_trees",
+          "selection_seed_key": "desert_transition_trees",
+          "species": [
+            "dead_tree",
+            "twisted_dead_tree",
+            "twisted_dead_tree",
+            "dead_tree_bent",
+            "dead_tree_tall"
+          ],
+          "noise_above": 0.22,
+          "chance": {
+            "default": 0.008,
+            "mountain_or_rock": 0.004,
+            "swamp": 0.006,
+            "hills": 0.010
+          },
+          "placement_seed": 511
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "desert_transition_ground_cover",
+          "selection_seed_key": "desert_transition_ground_cover",
+          "species": [
+            "dry_shrub",
+            "dry_shrub_small",
+            "dry_shrub_small",
+            "dry_shrub_small",
+            "dry_brush_patch",
+            "dry_brush_patch"
+          ],
+          "noise_above": -0.05,
+          "chance": {
+            "default": 0.030,
+            "mountain_or_rock": 0.008,
+            "swamp": 0.022,
+            "hills": 0.035
+          },
+          "placement_seed": 711
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_transition_decorations",
+          "selection_seed_key": "desert_transition_decorations",
+          "species": [
+            "withered_cactus",
+            "barrel_cactus",
+            "flowering_prickly_pear_cactus",
+            "flowering_barrel_cactus",
+            "agave_small",
+            "agave_small"
+          ],
+          "noise_above": 0.10,
+          "chance": {
+            "default": 0.015,
+            "mountain_or_rock": 0.006,
+            "swamp": 0.010,
+            "hills": 0.018
+          },
+          "placement_seed": 811
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "desert_transition_yellow_boulders",
+          "selection_seed_key": "desert_transition_yellow_boulders",
+          "species": ["mossy_boulder_large"],
+          "noise_above": 0.16,
+          "chance": {
+            "default": 0.002,
+            "mountain_or_rock": 0.004,
+            "swamp": 0.001,
+            "hills": 0.003
+          },
+          "placement_seed": 821
+        }
+      ],
+      "fauna": [],
+      "ambient": []
+    },
+    {
+      "id": "temperate",
+      "match": { "biome": "plains" },
+      "flora": [
+        {
+          "layer": "tree",
+          "pool_id": "temperate_deciduous_trees",
+          "selection_seed_key": "field",
+          "species": [
+            "broadleaf_tree",
+            "broadleaf_tree",
+            "autumn_maple_tree",
+            "apple_tree",
+            "birch_tree",
+            "birch_tree",
+            "birch_tree_slender",
+            "birch_tree_slender",
+            "cherry_blossom_tree",
+            "cherry_blossom_tree_small"
+          ],
+          "chance": {
+            "default": 0.040,
+            "mountain_or_rock": 0.006,
+            "swamp": 0.050,
+            "hills": 0.030
+          },
+          "placement_seed": 506
+        },
+        {
+          "layer": "tree",
+          "pool_id": "temperate_conifer_trees",
+          "selection_seed_key": "temperate_conifers",
+          "species": [
+            "pine_tree",
+            "pine_tree_dense",
+            "pine_tree_tall",
+            "pine_tree",
+            "blue_spruce_tree",
+            "blue_spruce_tree",
+            "blue_spruce_tree_small",
+            "blue_spruce_tree_small"
+          ],
+          "noise_above": 0.14,
+          "chance": {
+            "default": 0.008,
+            "mountain_or_rock": 0.014,
+            "swamp": 0.001,
+            "hills": 0.012
+          },
+          "placement_seed": 516
+        },
+        {
+          "layer": "tree",
+          "pool_id": "temperate_dead_trees",
+          "selection_seed_key": "temperate_dead_trees",
+          "species": ["dead_tree", "dead_tree_bent", "dead_tree_tall"],
+          "noise_above": 0.20,
+          "chance": {
+            "default": 0.002,
+            "mountain_or_rock": 0.002,
+            "swamp": 0.006,
+            "hills": 0.002
+          },
+          "placement_seed": 526
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "temperate_meadow_grass",
+          "selection_seed_key": "temperate_meadow_grass",
+          "species": [
+            "grass_tuft_sparse",
+            "grass_tuft_sparse",
+            "grass_tuft_sparse",
+            "grass_tuft_narrow",
+            "grass_tuft_dense",
+            "grass_tuft_dense",
+            "grass_tuft_dense",
+            "grass_tuft_lush"
+          ],
+          "noise_above": -0.08,
+          "chance": {
+            "default": 0.130,
+            "mountain_or_rock": 0.020,
+            "swamp": 0.160,
+            "hills": 0.100
+          },
+          "placement_seed": 706
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "temperate_wet_grass_clumps",
+          "selection_seed_key": "temperate_wet_grass_clumps",
+          "species": [
+            "grass_clump_round",
+            "mushroom_cluster_red",
+            "mushroom_cluster_brown",
+            "mushroom_cluster_red_large",
+            "mushroom_cluster_red",
+            "mushroom_cluster_brown",
+            "mushroom_cluster_red_large",
+            "matsutake_mushroom"
+          ],
+          "noise_above": 0.02,
+          "chance": {
+            "default": 0.008,
+            "mountain_or_rock": 0.001,
+            "swamp": 0.035,
+            "hills": 0.006
+          },
+          "placement_seed": 726
+        },
+        {
+          "layer": "ground_cover",
+          "pool_id": "temperate_wildflowers",
+          "selection_seed_key": "temperate_wildflowers",
+          "species": [
+            "wildflower_pink",
+            "wildflower_pink",
+            "wildflower_orange",
+            "wildflower_purple",
+            "wildflower_blue",
+            "wildflower_yellow"
+          ],
+          "noise_above": 0.02,
+          "chance": {
+            "default": 0.018,
+            "mountain_or_rock": 0.003,
+            "swamp": 0.028,
+            "hills": 0.012
+          },
+          "placement_seed": 716
+        },
+        {
+          "layer": "decoration",
+          "pool_id": "temperate_decorations",
+          "selection_seed_key": "temperate_decorations",
+          "species": ["mossy_boulder_small"],
+          "noise_above": 0.10,
+          "chance": {
+            "default": 0.006,
+            "mountain_or_rock": 0.008,
+            "swamp": 0.025,
+            "hills": 0.010
+          },
+          "placement_seed": 806
+        }
+      ],
+      "fauna": [
+        {
+          "pool_id": "dog_solitary",
+          "selection_seed_key": "dog_solitary",
+          "species": ["dog"],
+          "chance": 0.20,
+          "placement_seed": 507,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 28,
+            "anchor_jitter": 0.60,
+            "count": [1, 1],
+            "radius": 0,
+            "same_ecosystem": true,
+            "social_radius": 0
+          }
+        },
+        {
+          "pool_id": "fox_solitary",
+          "selection_seed_key": "fox_solitary",
+          "species": ["fox"],
+          "chance": 0.18,
+          "placement_seed": 517,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 32,
+            "anchor_jitter": 0.60,
+            "count": [1, 1],
+            "radius": 0,
+            "same_ecosystem": true,
+            "social_radius": 0
+          }
+        },
+        {
+          "pool_id": "pig_family",
+          "selection_seed_key": "pig_family",
+          "species": ["pig"],
+          "chance": 0.18,
+          "placement_seed": 527,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 30,
+            "anchor_jitter": 0.55,
+            "count": [2, 4],
+            "radius": 3,
+            "same_ecosystem": true,
+            "social_radius": 3
+          }
+        },
+        {
+          "pool_id": "frog_cluster",
+          "selection_seed_key": "frog_cluster",
+          "species": ["frog"],
+          "chance": 0.20,
+          "placement_seed": 537,
+          "only_if_flora_missed": true,
+          "distribution": {
+            "anchor_spacing": 24,
+            "anchor_jitter": 0.65,
+            "count": [2, 4],
+            "radius": 2,
+            "same_ecosystem": true,
+            "social_radius": 2,
+            "requires_water_within": 10
+          }
+        }
+      ],
+      "ambient": [
+        {
+          "pool_id": "temperate_fireflies",
+          "selection_seed_key": "temperate_fireflies",
+          "species": ["firefly"],
+          "chance": {
+            "default": 0.12,
+            "mountain_or_rock": 0.0,
+            "swamp": 0.28,
+            "hills": 0.08
+          },
+          "placement_seed": 602,
+          "requires_ground_flora": true
+        }
+      ]
+    }
+  ],
+  "pool_selection": { "dominant_chance": 0.8 }
+}

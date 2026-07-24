@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "kind": "communities",
+  "communities": [
+    {
+      "id": "fixture_ash_fern_patch",
+      "kind": "flora",
+      "stream_key": "fixture/volcanic/ash_fern",
+      "habitat": {
+        "required_tags": ["volcanic", "rocky"],
+        "excluded_tags": ["water"]
+      },
+      "distribution": {
+        "strategy": "scatter",
+        "chance": 0.28
+      },
+      "members": [
+        {
+          "species_id": "fixture_ash_fern",
+          "category": "plant",
+          "weight": 1.0
+        }
+      ]
+    },
+    {
+      "id": "fixture_ember_cloud",
+      "kind": "ambient",
+      "stream_key": "fixture/volcanic/embers",
+      "habitat": {
+        "required_tags": ["volcanic", "hot"],
+        "excluded_tags": ["water"]
+      },
+      "distribution": {
+        "strategy": "cluster",
+        "chance": 0.42
+      },
+      "members": [
+        {
+          "species_id": "fixture_ember_swarm",
+          "category": "ambient",
+          "weight": 1.0
+        }
+      ]
+    },
+    {
+      "id": "fixture_lava_skink_colony",
+      "kind": "fauna",
+      "stream_key": "fixture/volcanic/lava_skink",
+      "habitat": {
+        "required_tags": ["volcanic", "geothermal"],
+        "excluded_tags": ["water"],
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "social_group",
+        "anchor_spacing": 30,
+        "anchor_jitter": 0.5,
+        "chance": 0.18,
+        "count": [2, 4],
+        "radius": 3,
+        "social_radius": 3
+      },
+      "members": [
+        {
+          "species_id": "fixture_lava_skink",
+          "category": "animal",
+          "role": "colony_member",
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ]
+    }
+  ]
+}

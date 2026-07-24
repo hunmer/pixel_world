@@ -1,0 +1,229 @@
+{
+  "version": 1,
+  "kind": "biomes",
+  "biomes": [
+    {
+      "id": "desert_water",
+      "match": {
+        "water": true,
+        "biome": "desert"
+      },
+      "community_refs": [
+        "desert_water"
+      ],
+      "attachments": [],
+      "enabled": false
+    },
+    {
+      "id": "desert_transition_water",
+      "match": {
+        "water": true,
+        "biome": "desert_transition"
+      },
+      "community_refs": [
+        "desert_transition_water"
+      ],
+      "attachments": [],
+      "enabled": false
+    },
+    {
+      "id": "water",
+      "match": {
+        "water": true
+      },
+      "community_refs": [
+        "water"
+      ],
+      "attachments": [
+        {
+          "community_id": "pond_lilies",
+          "enabled": true
+        },
+        {
+          "community_id": "temperate_goldfish_school",
+          "enabled": true
+        },
+        {
+          "community_id": "temperate_carp_school",
+          "enabled": true
+        },
+        {
+          "community_id": "cold_salmon_school",
+          "enabled": true
+        }
+      ],
+      "enabled": false
+    },
+    {
+      "id": "desert_shore",
+      "match": {
+        "shore": true,
+        "biome": "desert"
+      },
+      "community_refs": [
+        "desert_shore"
+      ],
+      "attachments": [],
+      "enabled": false
+    },
+    {
+      "id": "desert_transition_shore",
+      "match": {
+        "shore": true,
+        "biome": "desert_transition"
+      },
+      "community_refs": [
+        "desert_transition_shore"
+      ],
+      "attachments": [],
+      "enabled": false
+    },
+    {
+      "id": "shore",
+      "match": {
+        "shore": true
+      },
+      "community_refs": [
+        "shore"
+      ],
+      "attachments": [],
+      "enabled": false
+    },
+    {
+      "id": "snow",
+      "match": {
+        "biome": "snow"
+      },
+      "community_refs": [
+        "snow"
+      ],
+      "attachments": [
+        {
+          "community_id": "wolf_pack",
+          "enabled": true
+        }
+      ],
+      "script": "res://scripts/world/biomes/snow_biome.gd",
+      "priority": 200,
+      "profile": {
+        "snow": {
+          "base_level": 14,
+          "temperature_level_scale": 3.0
+        }
+      },
+      "tags": [
+        "snow",
+        "cold",
+        "high_altitude"
+      ],
+      "weather_tags": [
+        "cold",
+        "snow_capable"
+      ]
+    },
+    {
+      "id": "desert",
+      "match": {
+        "biome": "desert"
+      },
+      "community_refs": [
+        "desert"
+      ],
+      "attachments": [],
+      "script": "res://scripts/world/biomes/desert_biome.gd",
+      "priority": 300,
+      "transition_id": "desert_transition",
+      "profile": {
+        "region": {
+          "transition_threshold": 0.14,
+          "core_threshold": 0.22,
+          "edge_amplitude": 0.05
+        },
+        "surface": {
+          "transition_grass_fraction": 0.35,
+          "transition_grass_chance": 0.10,
+          "transition_sand_enter": 0.68,
+          "transition_rock_noise_above": 0.40,
+          "rock_noise_above": 0.30,
+          "rock_level": 12
+        },
+        "terrain": {
+          "elevation_bias": 0.14,
+          "relief_scale": 0.55,
+          "dune_amplitude": 0.07,
+          "peak_scale": 0.20
+        }
+      },
+      "tags": [
+        "desert",
+        "arid"
+      ],
+      "transition_tags": [
+        "desert_transition",
+        "semi_arid"
+      ],
+      "weather_tags": [
+        "dry"
+      ],
+      "transition_weather_tags": [
+        "semi_dry"
+      ]
+    },
+    {
+      "id": "desert_transition",
+      "match": {
+        "biome": "desert_transition"
+      },
+      "community_refs": [
+        "desert_transition"
+      ],
+      "attachments": [],
+      "enabled": false
+    },
+    {
+      "id": "temperate",
+      "match": {
+        "biome": "plains"
+      },
+      "community_refs": [
+        "temperate"
+      ],
+      "attachments": [
+        {
+          "community_id": "dog_solitary",
+          "enabled": true
+        },
+        {
+          "community_id": "fox_solitary",
+          "enabled": true
+        },
+        {
+          "community_id": "pig_family",
+          "enabled": true
+        },
+        {
+          "community_id": "frog_cluster",
+          "enabled": true
+        },
+        {
+          "community_id": "temperate_ground_birds",
+          "enabled": true
+        }
+      ],
+      "script": "res://scripts/world/biomes/temperate_biome.gd",
+      "priority": -100,
+      "aliases": [
+        "plains"
+      ],
+      "classification_id": "plains",
+      "tags": [
+        "temperate",
+        "mild"
+      ],
+      "weather_tags": [
+        "mild",
+        "rain_capable"
+      ]
+    }
+  ]
+}

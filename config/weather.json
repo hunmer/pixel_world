@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "auto_interval_seconds": 60.0,
+  "transition_seconds": 6.0,
+  "manual_transition_seconds": 0.8,
+  "rain_start_chance": 0.33,
+  "rain_continue_chance": 0.20,
+  "snow_exit_hysteresis_levels": 2,
+  "rain_impact_attempts_per_second": 24.0,
+  "snow_impact_attempts_per_second": 12.0
+}

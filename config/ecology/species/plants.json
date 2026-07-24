@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "kind": "species",
+  "species": {
+    "plants": {
+      "broadleaf_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/broadleaf_tree.png"
+      },
+      "pine_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/pine_tree.png"
+      },
+      "birch_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/birch_tree.png"
+      },
+      "blue_spruce_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/blue_spruce_tree.png"
+      },
+      "cherry_blossom_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/cherry_blossom_tree.png"
+      },
+      "dead_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/dead_tree.png"
+      },
+      "twisted_dead_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/twisted_dead_tree.png"
+      },
+      "willow_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/willow_tree.png"
+      },
+      "snowy_pine_dense": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/snowy_pine_dense.png"
+      },
+      "snowy_pine_tall": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/snowy_pine_tall.png"
+      },
+      "autumn_maple_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/autumn_maple_tree.png"
+      },
+      "pine_tree_dense": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/pine_tree_dense.png"
+      },
+      "blue_spruce_tree_small": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/blue_spruce_tree_small.png"
+      },
+      "pine_tree_tall": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/pine_tree_tall.png"
+      },
+      "palm_tree_small": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/palm_tree_small.png"
+      },
+      "palm_tree_tall": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/palm_tree_tall.png"
+      },
+      "banyan_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/banyan_tree.png"
+      },
+      "cherry_blossom_tree_small": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/cherry_blossom_tree_small.png"
+      },
+      "birch_tree_slender": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/birch_tree_slender.png"
+      },
+      "apple_tree": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/apple_tree.png"
+      },
+      "dead_tree_bent": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/dead_tree_bent.png"
+      },
+      "dead_tree_tall": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/dead_tree_tall.png"
+      },
+      "snowy_pine_small": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/snowy_pine_small.png"
+      },
+      "snowy_pine_round": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/snowy_pine_round.png"
+      },
+      "snowy_pine_large": {
+        "layer": "tree",
+        "texture": "res://meowa_tiles/trees/snowy_pine_large.png"
+      },
+      "purple_shore_flower": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/purple_shore_flower.png"
+      },
+      "lily_pad_stemmed": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/lily_pad_stemmed.png"
+      },
+      "lily_pad_cluster": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/lily_pad_cluster.png"
+      },
+      "pink_lotus": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/pink_lotus.png"
+      },
+      "underwater_weed_dark": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/underwater_weed_dark.png"
+      },
+      "underwater_weed_bright": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/underwater_weed_bright.png"
+      },
+      "dry_shrub": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/dry_shrub.png"
+      },
+      "dry_shrub_small": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/dry_shrub_small.png"
+      },
+      "snowy_grass_tuft": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/snowy_grass_tuft.png"
+      },
+      "snowy_grass_clump_green": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/snowy_grass_clump_green.png"
+      },
+      "snowy_grass_clump_round": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/snowy_grass_clump_round.png"
+      },
+      "grass_clump_round": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/grass_clump_round.png"
+      },
+      "grass_tuft_sparse": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/grass_tuft_sparse.png"
+      },
+      "grass_tuft_dense": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/grass_tuft_dense.png"
+      },
+      "wildflower_pink": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/wildflower_pink.png"
+      },
+      "wildflower_orange": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/wildflower_orange.png"
+      },
+      "dry_brush_patch": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/dry_brush_patch.png"
+      },
+      "grass_tuft_narrow": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/grass_tuft_narrow.png"
+      },
+      "grass_tuft_lush": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/grass_tuft_lush.png"
+      },
+      "snowy_grass_tuft_silver": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/snowy_grass_tuft_silver.png"
+      },
+      "snowy_grass_tuft_green": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/snowy_grass_tuft_green.png"
+      },
+      "wildflower_purple": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/wildflower_purple.png"
+      },
+      "wildflower_blue": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/wildflower_blue.png"
+      },
+      "wildflower_yellow": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/wildflower_yellow.png"
+      },
+      "mushroom_cluster_red": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/mushroom_cluster_red.png",
+        "habitat": {
+          "near_flora_layer": "tree",
+          "radius": 4,
+          "fallback_species": "grass_clump_round"
+        }
+      },
+      "mushroom_cluster_brown": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/mushroom_cluster_brown.png",
+        "habitat": {
+          "near_flora_layer": "tree",
+          "radius": 4,
+          "fallback_species": "grass_clump_round"
+        }
+      },
+      "mushroom_cluster_red_large": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/mushroom_cluster_red_large.png",
+        "habitat": {
+          "near_flora_layer": "tree",
+          "radius": 4,
+          "fallback_species": "grass_clump_round"
+        }
+      },
+      "matsutake_mushroom": {
+        "layer": "ground_cover",
+        "texture": "res://meowa_tiles/plants/matsutake_mushroom.png",
+        "habitat": {
+          "near_flora_layer": "tree",
+          "radius": 4,
+          "fallback_species": "grass_clump_round"
+        }
+      },
+      "cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/cactus.png"
+      },
+      "barrel_cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/barrel_cactus.png"
+      },
+      "dwarf_cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/dwarf_cactus.png"
+      },
+      "prickly_pear_cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/prickly_pear_cactus.png"
+      },
+      "flowering_cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/flowering_cactus.png"
+      },
+      "withered_cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/withered_cactus.png"
+      },
+      "agave": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/agave.png"
+      },
+      "agave_small": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/agave_small.png"
+      },
+      "flowering_prickly_pear_cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/flowering_prickly_pear_cactus.png"
+      },
+      "saguaro_cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/saguaro_cactus.png"
+      },
+      "flowering_barrel_cactus": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/plants/flowering_barrel_cactus.png"
+      },
+      "snowy_tree_stump": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/decorations/snowy_tree_stump.png"
+      },
+      "snowy_tree_stump_tall": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/decorations/snowy_tree_stump_tall.png"
+      },
+      "mossy_boulder_large": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/decorations/mossy_boulder_large.png"
+      },
+      "mossy_boulder_small": {
+        "layer": "decoration",
+        "texture": "res://meowa_tiles/decorations/mossy_boulder_small.png"
+      }
+    },
+    "animals": {},
+    "ambient": {}
+  }
+}

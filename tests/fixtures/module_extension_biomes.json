@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "kind": "biomes",
+  "biomes": [
+    {
+      "id": "fixture_volcanic_caldera",
+      "classification_id": "fixture_volcanic_caldera",
+      "script": "res://tests/fixtures/module_extension_volcanic_biome.gd",
+      "priority": 1000,
+      "match": {
+        "biome": "fixture_volcanic_caldera"
+      },
+      "profile": {
+        "heat_noise_field": "fixture_caldera_heat",
+        "minimum_heat": -1.0,
+        "minimum_level": 0,
+        "height_bias": 0.04,
+        "peak_scale": 1.15,
+        "surface_id": "fixture_basalt_crust"
+      },
+      "noise_defaults": {
+        "type": "simplex_smooth",
+        "fractal": "fbm",
+        "octaves": 2
+      },
+      "noise_fields": {
+        "fixture_caldera_heat": {
+          "seed_offset": 2201,
+          "frequency": 0.009
+        }
+      },
+      "generation": {
+        "materials": {
+          "surfaces": {
+            "fixture_basalt_crust": {
+              "top_texture": "res://meowa_tiles/terrain/rock.png",
+              "column_texture": "reuse_top",
+              "underwater_texture": "reuse_top",
+              "minimap_color": [0.12, 0.07, 0.08, 1.0],
+              "tags": ["land", "rocky", "igneous", "hot"],
+              "traits": {
+                "movement_cost": 1.35,
+                "emits_heat": true
+              }
+            }
+          }
+        }
+      },
+      "community_refs": [],
+      "attachments": [
+        {
+          "community_id": "fixture_ash_fern_patch",
+          "enabled": true
+        },
+        {
+          "community_id": "fixture_ember_cloud",
+          "enabled": true
+        },
+        {
+          "community_id": "fixture_lava_skink_colony",
+          "enabled": true
+        }
+      ],
+      "tags": ["volcanic", "hot", "geothermal"],
+      "weather_tags": ["ash_capable"],
+      "minimap_color": [0.15, 0.08, 0.07, 1.0]
+    }
+  ]
+}

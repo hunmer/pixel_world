@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "music": {
+    "day_stream": "res://music/normal.mp3",
+    "night_stream": "res://music/night.mp3",
+    "volume_db": -24.0,
+    "crossfade_seconds": 4.0
+  },
+  "weather_ambience": {
+    "rain": {
+      "stream": "res://sound_effect/持续雨声环境音.mp3",
+      "volume_db": -26.0,
+      "fade_seconds": 2.5
+    }
+  },
+  "animal_sounds": {
+    "max_simultaneous": 5,
+    "global_interval_seconds": [6.0, 12.0],
+    "defaults": {
+      "trigger_radius": 6,
+      "approach_call": true,
+      "chase_interval_seconds": [1.0, 1.0],
+      "interval_seconds": [20.0, 45.0],
+      "volume_db": -16.0,
+      "pitch_scale": [0.96, 1.04],
+      "max_distance_pixels": 320.0,
+      "attenuation": 1.35,
+      "polyphony_group": "general",
+      "polyphony_limit": 1
+    },
+    "species": {
+      "dog": {
+        "stream": "res://sound_effect/狗叫声.mp3"
+      },
+      "fox": {
+        "stream": "res://sound_effect/狐狸叫声.mp3",
+        "volume_db": -18.0,
+        "interval_seconds": [24.0, 48.0]
+      },
+      "frog": {
+        "stream": "res://sound_effect/蛙鸣声.mp3",
+        "volume_db": -12.0
+      },
+      "husky": {
+        "stream": "res://sound_effect/狗叫声.mp3"
+      },
+      "pig": {
+        "stream": "res://sound_effect/猪哼声.mp3"
+      },
+      "wolf": {
+        "stream": "res://sound_effect/狼嚎声.mp3",
+        "volume_db": -20.0,
+        "polyphony_group": "wolf_pack",
+        "polyphony_limit": 4
+      }
+    }
+  }
+}

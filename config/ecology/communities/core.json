@@ -1,0 +1,360 @@
+{
+  "version": 1,
+  "kind": "communities",
+  "communities": [
+    {
+      "id": "pond_lilies",
+      "kind": "flora",
+      "stream_key": "water",
+      "habitat": {
+        "required_tags": ["water", "shallow_water"],
+        "maximum_water_depth": 2,
+        "placement": "water_surface"
+      },
+      "distribution": {
+        "strategy": "patch",
+        "anchor_spacing": 9,
+        "anchor_jitter": 0.7,
+        "chance": 0.06,
+        "count": [3, 8],
+        "radius": 3
+      },
+      "members": [
+        {
+          "species_id": "lily_pad_stemmed",
+          "category": "plant",
+          "weight": 3.0,
+          "placement": "water_surface"
+        },
+        {
+          "species_id": "lily_pad_cluster",
+          "category": "plant",
+          "weight": 4.0,
+          "placement": "water_surface"
+        },
+        {
+          "species_id": "pink_lotus",
+          "category": "plant",
+          "role": "flower",
+          "weight": 1.0,
+          "placement": "water_surface"
+        }
+      ],
+      "metadata": {
+        "legacy_pool_id": "water",
+        "legacy_placement_seed": 502
+      }
+    },
+    {
+      "id": "wolf_pack",
+      "kind": "fauna",
+      "stream_key": "wolf_pack",
+      "habitat": {
+        "required_tags": ["snow"],
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "social_group",
+        "anchor_spacing": 36,
+        "anchor_jitter": 0.45,
+        "chance": 0.22,
+        "count": [7, 8],
+        "radius": 4,
+        "social_radius": 5
+      },
+      "members": [
+        {
+          "species_id": "wolf",
+          "category": "animal",
+          "role": "pack_member",
+          "weight": 1.0,
+          "fill_remaining": true,
+          "consumes_population": true
+        },
+        {
+          "species_id": "husky",
+          "category": "animal",
+          "role": "companion",
+          "count": 1,
+          "chance": 0.35,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "legacy_pool_id": "wolf_pack",
+        "legacy_placement_seed": 508
+      }
+    },
+    {
+      "id": "temperate_goldfish_school",
+      "kind": "fauna",
+      "stream_key": "fish/temperate_goldfish_school",
+      "habitat": {
+        "required_tags": ["water", "temperate"],
+        "minimum_water_depth": 1,
+        "maximum_water_depth": 3,
+        "minimum_water_clearance": 1,
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "social_group",
+        "single_species": true,
+        "anchor_spacing": 20,
+        "anchor_search_radius": 1,
+        "anchor_jitter": 0.6,
+        "chance": 0.65,
+        "count": [2, 3],
+        "radius": 3,
+        "social_radius": 4
+      },
+      "members": [
+        {
+          "species_id": "goldfish",
+          "category": "animal",
+          "role": "school_member",
+          "weight": 5.0,
+          "fill_remaining": true,
+          "consumes_population": true
+        },
+        {
+          "species_id": "blue_goldfish",
+          "category": "animal",
+          "role": "school_member",
+          "weight": 2.0,
+          "fill_remaining": true,
+          "consumes_population": true
+        },
+        {
+          "species_id": "calico_goldfish",
+          "category": "animal",
+          "role": "school_member",
+          "weight": 2.0,
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "allow_water": true,
+        "only_if_flora_missed": false
+      }
+    },
+    {
+      "id": "temperate_carp_school",
+      "kind": "fauna",
+      "stream_key": "fish/temperate_carp_school",
+      "habitat": {
+        "required_tags": ["water", "temperate"],
+        "minimum_water_depth": 1,
+        "maximum_water_depth": 5,
+        "minimum_water_clearance": 1,
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "social_group",
+        "anchor_spacing": 30,
+        "anchor_search_radius": 1,
+        "anchor_jitter": 0.55,
+        "chance": 0.22,
+        "count": [2, 3],
+        "radius": 4,
+        "social_radius": 5
+      },
+      "members": [
+        {
+          "species_id": "crucian_carp",
+          "category": "animal",
+          "role": "school_member",
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "allow_water": true,
+        "only_if_flora_missed": false
+      }
+    },
+    {
+      "id": "cold_salmon_school",
+      "kind": "fauna",
+      "stream_key": "fish/cold_salmon_school",
+      "habitat": {
+        "required_tags": ["water", "cold"],
+        "minimum_water_depth": 2,
+        "maximum_water_depth": 5,
+        "minimum_water_clearance": 1,
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "social_group",
+        "anchor_spacing": 28,
+        "anchor_search_radius": 2,
+        "anchor_jitter": 0.5,
+        "chance": 0.45,
+        "count": [2, 4],
+        "radius": 4,
+        "social_radius": 5
+      },
+      "members": [
+        {
+          "species_id": "salmon",
+          "category": "animal",
+          "role": "school_member",
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "allow_water": true,
+        "only_if_flora_missed": false
+      }
+    },
+    {
+      "id": "dog_solitary",
+      "kind": "fauna",
+      "stream_key": "dog_solitary",
+      "habitat": {
+        "required_tags": ["temperate"],
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "solitary",
+        "anchor_spacing": 28,
+        "anchor_jitter": 0.6,
+        "chance": 0.2,
+        "count": [1, 1],
+        "radius": 0,
+        "social_radius": 0
+      },
+      "members": [
+        {
+          "species_id": "dog",
+          "category": "animal",
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "legacy_pool_id": "dog_solitary",
+        "legacy_placement_seed": 507
+      }
+    },
+    {
+      "id": "fox_solitary",
+      "kind": "fauna",
+      "stream_key": "fox_solitary",
+      "habitat": {
+        "required_tags": ["temperate"],
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "solitary",
+        "anchor_spacing": 32,
+        "anchor_jitter": 0.6,
+        "chance": 0.18,
+        "count": [1, 1],
+        "radius": 0,
+        "social_radius": 0
+      },
+      "members": [
+        {
+          "species_id": "fox",
+          "category": "animal",
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "legacy_pool_id": "fox_solitary",
+        "legacy_placement_seed": 517
+      }
+    },
+    {
+      "id": "pig_family",
+      "kind": "fauna",
+      "stream_key": "pig_family",
+      "habitat": {
+        "required_tags": ["temperate"],
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "social_group",
+        "anchor_spacing": 30,
+        "anchor_jitter": 0.55,
+        "chance": 0.18,
+        "count": [2, 4],
+        "radius": 3,
+        "social_radius": 3
+      },
+      "members": [
+        {
+          "species_id": "pig",
+          "category": "animal",
+          "role": "family_member",
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "legacy_pool_id": "pig_family",
+        "legacy_placement_seed": 527
+      }
+    },
+    {
+      "id": "frog_cluster",
+      "kind": "fauna",
+      "stream_key": "frog_cluster",
+      "habitat": {
+        "required_tags": ["temperate"],
+        "near_tag": "water",
+        "near_tag_radius": 10,
+        "same_biome": true
+      },
+      "distribution": {
+        "strategy": "social_group",
+        "anchor_spacing": 24,
+        "anchor_jitter": 0.65,
+        "chance": 0.2,
+        "count": [2, 4],
+        "radius": 2,
+        "social_radius": 2
+      },
+      "members": [
+        {
+          "species_id": "frog",
+          "category": "animal",
+          "role": "cluster_member",
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "legacy_pool_id": "frog_cluster",
+        "legacy_placement_seed": 537
+      }
+    },
+    {
+      "id": "temperate_ground_birds",
+      "kind": "ambient",
+      "stream_key": "ambient/temperate_ground_birds",
+      "habitat": {
+        "required_tags": ["temperate"],
+        "excluded_tags": ["water", "snow", "desert"]
+      },
+      "distribution": {
+        "strategy": "sparse",
+        "chance": 0.0022
+      },
+      "members": [
+        {
+          "species_id": "bird",
+          "category": "ambient",
+          "fill_remaining": true,
+          "consumes_population": true
+        }
+      ],
+      "metadata": {
+        "requires_ground_flora": false
+      }
+    }
+  ]
+}

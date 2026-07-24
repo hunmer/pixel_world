@@ -1,0 +1,295 @@
+{
+  "version": 1,
+  "kind": "world",
+  "world": {
+    "default_biome_id": "temperate",
+    "generation": {
+      "biome_index_order": [
+        "plains",
+        "desert",
+        "snow",
+        "desert_transition"
+      ],
+      "materials": {
+        "fallback_surface_id": "grass",
+        "surfaces": {
+          "water": {
+            "top_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "column_texture": "reuse_top",
+            "underwater_texture": "reuse_top",
+            "minimap_color": [0.07, 0.32, 0.52, 1.0],
+            "tags": ["water"],
+            "biome_overrides": {
+              "desert": {
+                "underwater_texture": "res://meowa_tiles/terrain/sand.png"
+              }
+            }
+          },
+          "soil": {
+            "top_texture": "res://meowa_tiles/terrain/soil.png",
+            "column_texture": "reuse_top",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.43, 0.29, 0.20, 1.0],
+            "tags": ["land", "soil"]
+          },
+          "moist_soil": {
+            "top_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "column_texture": "res://meowa_tiles/terrain/soil.png",
+            "underwater_texture": "reuse_top",
+            "minimap_color": [0.60, 0.45, 0.30, 1.0],
+            "tags": ["land", "soil", "shore"]
+          },
+          "grass": {
+            "top_texture": "res://meowa_tiles/terrain/soil_with_grass.png",
+            "column_texture": "res://meowa_tiles/terrain/soil.png",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.35, 0.60, 0.20, 1.0],
+            "tags": ["land", "soil", "fertile"]
+          },
+          "sparse_grass": {
+            "top_texture": "res://meowa_tiles/terrain/soil_with_little_grass.png",
+            "column_texture": "res://meowa_tiles/terrain/soil.png",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.48, 0.49, 0.23, 1.0],
+            "tags": ["land", "soil", "semi_arid"]
+          },
+          "parched_soil": {
+            "top_texture": "res://meowa_tiles/terrain/parched_soil.png",
+            "column_texture": "res://meowa_tiles/terrain/soil.png",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.48, 0.34, 0.22, 1.0],
+            "tags": ["land", "soil", "arid"]
+          },
+          "sand": {
+            "top_texture": "res://meowa_tiles/terrain/sand.png",
+            "column_texture": "reuse_top",
+            "underwater_texture": "reuse_top",
+            "minimap_color": [0.85, 0.72, 0.42, 1.0],
+            "tags": ["land", "sand", "arid"]
+          },
+          "rock": {
+            "top_texture": "res://meowa_tiles/terrain/rock.png",
+            "column_texture": "reuse_top",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.31, 0.34, 0.38, 1.0],
+            "tags": ["land", "rocky"]
+          },
+          "mossy_rock": {
+            "top_texture": "res://meowa_tiles/terrain/rock_with_moss.png",
+            "column_texture": "reuse_top",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.32, 0.38, 0.31, 1.0],
+            "tags": ["land", "rocky", "mossy"]
+          },
+          "rock_grass": {
+            "top_texture": "res://meowa_tiles/terrain/rock_with_grass.png",
+            "column_texture": "res://meowa_tiles/terrain/soil.png",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.40, 0.55, 0.25, 1.0],
+            "tags": ["land", "rocky", "fertile"]
+          },
+          "snow": {
+            "top_texture": "res://meowa_tiles/terrain/snow.png",
+            "column_texture": "res://meowa_tiles/terrain/rock.png",
+            "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+            "minimap_color": [0.88, 0.90, 0.95, 1.0],
+            "tags": ["land", "snow", "cold"]
+          }
+        }
+      },
+      "height": {
+        "sea_threshold": 0.375,
+        "mountain_threshold": 0.65,
+        "terrace_period": 0.3,
+        "rock_level": 12,
+        "peak_extra_levels": 10
+      },
+      "noise": {
+        "type": "perlin",
+        "fractal": "fbm",
+        "octaves": 4,
+        "fields": {
+          "detail": {
+            "seed_offset": 0,
+            "frequency": 0.03
+          },
+          "land": {
+            "seed_offset": 101,
+            "frequency": 0.008
+          },
+          "roughness": {
+            "seed_offset": 202,
+            "frequency": 0.015
+          },
+          "temperature": {
+            "seed_offset": 303,
+            "frequency": 0.035
+          },
+          "humidity": {
+            "seed_offset": 404,
+            "frequency": 0.035
+          },
+          "peaks": {
+            "seed_offset": 505,
+            "frequency": 0.022
+          },
+          "tree_placement": {
+            "seed_offset": 606,
+            "frequency": 0.045
+          },
+          "ground_cover_placement": {
+            "seed_offset": 616,
+            "frequency": 0.085
+          },
+          "decoration_placement": {
+            "seed_offset": 626,
+            "frequency": 0.032
+          },
+          "desert_dunes": {
+            "seed_offset": 707,
+            "frequency": 0.018
+          },
+          "desert_regions": {
+            "seed_offset": 808,
+            "frequency": 0.004,
+            "octaves": 1
+          },
+          "desert_rocks": {
+            "seed_offset": 909,
+            "frequency": 0.022,
+            "octaves": 2
+          },
+          "desert_edges": {
+            "seed_offset": 1001,
+            "frequency": 0.018,
+            "octaves": 2
+          }
+        }
+      },
+      "flora": {
+        "conflict_seed": 640,
+        "layers": {
+          "tree": {
+            "noise_field": "tree_placement",
+            "default_noise_above": 0.10,
+            "dominant_chance": 0.80
+          },
+          "ground_cover": {
+            "noise_field": "ground_cover_placement",
+            "default_noise_above": -0.20,
+            "dominant_chance": 0.15
+          },
+          "decoration": {
+            "noise_field": "decoration_placement",
+            "default_noise_above": 0.05,
+            "dominant_chance": 0.55
+          }
+        }
+      },
+      "regions": {
+        "cell_size": 128.0,
+        "jitter": 0.9,
+        "blend_width": 14.0,
+        "landforms": [
+          {
+            "id": "plains",
+            "name_zh": "平原",
+            "weight": 20.0,
+            "terrain": {
+              "offset": -0.12,
+              "amplitude": 0.5,
+              "ridge": 0.0,
+              "underwater_steepness": 2.2,
+              "peak": 0.05,
+              "terrace": 0.0
+            }
+          },
+          {
+            "id": "hills",
+            "name_zh": "丘陵",
+            "weight": 30.0,
+            "terrain": {
+              "offset": 0.05,
+              "amplitude": 1.6,
+              "ridge": 0.35,
+              "underwater_steepness": 2.2,
+              "peak": 0.3,
+              "terrace": 0.45
+            }
+          },
+          {
+            "id": "swamp",
+            "name_zh": "沼泽",
+            "weight": 15.0,
+            "terrain": {
+              "offset": -0.22,
+              "amplitude": 0.35,
+              "ridge": 0.0,
+              "underwater_steepness": 1.0,
+              "peak": 0.0,
+              "terrace": 0.0
+            }
+          },
+          {
+            "id": "mountain",
+            "name_zh": "高山",
+            "weight": 20.0,
+            "terrain": {
+              "offset": 0.3,
+              "amplitude": 3.5,
+              "ridge": 0.75,
+              "underwater_steepness": 2.2,
+              "peak": 1.0,
+              "terrace": 0.85
+            }
+          },
+          {
+            "id": "ocean",
+            "name_zh": "海洋",
+            "weight": 15.0,
+            "terrain": {
+              "offset": -0.75,
+              "amplitude": 0.5,
+              "ridge": 0.0,
+              "underwater_steepness": 1.3,
+              "peak": 0.05,
+              "terrace": 0.0
+            }
+          }
+        ]
+      },
+      "climate": {
+        "snow": {
+          "base_level": 14,
+          "temperature_level_scale": 3.0
+        }
+      },
+      "biome_profiles": {
+        "desert": {
+          "region": {
+            "transition_threshold": 0.14,
+            "core_threshold": 0.22,
+            "edge_amplitude": 0.05
+          },
+          "surface": {
+            "transition_grass_fraction": 0.35,
+            "transition_grass_chance": 0.10,
+            "transition_sand_enter": 0.68,
+            "transition_rock_noise_above": 0.40,
+            "rock_noise_above": 0.30,
+            "rock_level": 12
+          },
+          "terrain": {
+            "elevation_bias": 0.14,
+            "relief_scale": 0.55,
+            "dune_amplitude": 0.07,
+            "peak_scale": 0.20
+          }
+        }
+      }
+    },
+    "pool_selection": {
+      "dominant_chance": 0.8
+    }
+  }
+}

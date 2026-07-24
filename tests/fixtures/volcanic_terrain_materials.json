@@ -1,0 +1,46 @@
+{
+  "fallback_surface_id": "temperate_soil",
+  "surfaces": {
+    "temperate_soil": {
+      "top_texture": "res://meowa_tiles/terrain/soil.png",
+      "column_texture": "reuse_top",
+      "underwater_texture": "res://meowa_tiles/terrain/moist_soil.png",
+      "minimap_color": [0.43, 0.29, 0.20, 1.0],
+      "tags": ["land", "soil"],
+      "traits": {
+        "movement_cost": 1.0,
+        "fertility": 0.7
+      }
+    },
+    "volcanic_basalt": {
+      "top_texture": "res://meowa_tiles/terrain/rock.png",
+      "column_texture": {
+        "reuse": "top"
+      },
+      "underwater_texture": "reuse_column",
+      "minimap_color": "#302b31",
+      "tags": ["land", "rocky"],
+      "traits": {
+        "movement_cost": 1.35,
+        "fertility": 0.05
+      },
+      "biome_overrides": {
+        "volcanic": {
+          "minimap_color": [0.12, 0.07, 0.08, 1.0],
+          "tags": ["hot", "igneous"],
+          "traits": {
+            "emits_heat": true,
+            "temperature": 0.95
+          }
+        },
+        "ice_volcano": {
+          "tags": ["cold"],
+          "traits": {
+            "emits_heat": false,
+            "temperature": 0.2
+          }
+        }
+      }
+    }
+  }
+}
