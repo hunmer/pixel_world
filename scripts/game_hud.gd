@@ -64,6 +64,64 @@ func _build_ui() -> void:
 	_add_hint("SHIFT + T / N", "恢复自动")
 	_add_hint("F", "复位")
 	_add_hint("R", "新世界")
+	_add_hint("P", "进入战棋")
+
+	# 右上角「设置」按钮
+	var settings_btn := Button.new()
+	settings_btn.name = "SettingsBtn"
+	settings_btn.text = "⚙ 设置"
+	settings_btn.position = Vector2(get_viewport().get_visible_rect().size.x - MINIMAP_RESERVE - 100, 10)
+	settings_btn.size = Vector2(90, 32)
+	settings_btn.add_theme_font_size_override("font_size", 12)
+	settings_btn.pressed.connect(_open_settings)
+	root.add_child(settings_btn)
+
+
+## 设置面板：战斗模式切换（就地/独立场景）
+func _open_settings() -> void:
+	# 如果已打开，先移除
+	var old := get_node_or_null("HUDRoot/SettingsPanel")
+	if old != null:
+		old.queue_free()
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var panel := PanelContainer.new()
+	panel.name = "SettingsPanel"
+	panel.custom_minimum_size = Vector2(280, 120)
+	panel.position = (vp - panel.custom_minimum_size) / 2.0
+	panel.add_theme_stylebox_override("panel", _panel_style())
+	$"HUDRoot".add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.offset_left = 12; vbox.offset_top = 8
+	vbox.offset_right = -12; vbox.offset_bottom = -8
+	vbox.add_theme_constant_override("separation", 8)
+	panel.add_child(vbox)
+	# 标题
+	var title := _label("设置", 14, ACCENT)
+	vbox.add_child(title)
+	# 战斗模式选项
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	vbox.add_child(row)
+	var lbl := _label("战斗模式", 12, TEXT_SECONDARY)
+	row.add_child(lbl)
+	var opt := OptionButton.new()
+	opt.add_item("就地（B1）", 0)
+	opt.add_item("独立场景（B2）", 1)
+	opt.select(0 if Settings.battle_inline_mode else 1)
+	opt.custom_minimum_size = Vector2(140, 0)
+	opt.item_selected.connect(func(idx: int):
+		Settings.set_battle_inline_mode(idx == 0)
+	)
+	row.add_child(opt)
+	# 关闭按钮
+	var close_btn := Button.new()
+	close_btn.text = "关闭"
+	close_btn.pressed.connect(func():
+		var p := get_node_or_null("HUDRoot/SettingsPanel")
+		if p != null: p.queue_free()
+	)
+	vbox.add_child(close_btn)
 
 
 func _add_hint(key_text: String, action_text: String) -> void:

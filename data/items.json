@@ -1,0 +1,96 @@
+{
+  "defaultItem": "hpPotion",
+  "items": [
+    {
+      "id": "hpPotion",
+      "name": "生命药剂",
+      "desc": "恢复使用者或友方 20 点生命",
+      "type": "consumable",
+      "target": "ally",
+      "effect": "heal_hp",
+      "power": 20,
+      "range": [0, 1],
+      "uses": 3
+    },
+    {
+      "id": "mpPotion",
+      "name": "法力药剂",
+      "desc": "恢复 10 点法力",
+      "type": "consumable",
+      "target": "ally",
+      "effect": "heal_mp",
+      "power": 10,
+      "range": [0, 1],
+      "uses": 2
+    },
+    {
+      "id": "antidote",
+      "name": "解毒药",
+      "desc": "清除自身减益状态",
+      "type": "consumable",
+      "target": "self",
+      "effect": "cleanse",
+      "power": 0,
+      "range": [0, 0],
+      "uses": 2
+    },
+    {
+      "id": "shuriken",
+      "name": "手里剑",
+      "desc": "投掷造成固定伤害",
+      "type": "throwable",
+      "target": "enemy",
+      "effect": "damage",
+      "power": 8,
+      "range": [1, 3],
+      "uses": 4
+    },
+    {
+      "id": "bomb",
+      "name": "炸弹",
+      "desc": "投掷对范围内所有敌人造成伤害",
+      "type": "throwable",
+      "target": "aoe_enemy",
+      "effect": "damage",
+      "power": 10,
+      "range": [1, 2],
+      "uses": 2
+    },
+    {
+      "id": "armorRing",
+      "name": "守护之戒",
+      "desc": "装备后防御 +4",
+      "type": "equip",
+      "target": "self",
+      "effect": "equip",
+      "equipStat": "def",
+      "equipValue": 4,
+      "uses": 1
+    },
+    {
+      "id": "powerRing",
+      "name": "力量之戒",
+      "desc": "装备后力量 +3",
+      "type": "equip",
+      "target": "self",
+      "effect": "equip",
+      "equipStat": "str",
+      "equipValue": 3,
+      "uses": 1
+    },
+    {
+      "id": "mightPotion",
+      "name": "力量药水",
+      "desc": "使用后力量提升，持续3回合",
+      "type": "buff",
+      "target": "self",
+      "effect": "buff",
+      "power": 0,
+      "stat": "str",
+      "buffValue": 5,
+      "buffTurns": 3,
+      "range": [0, 0],
+      "uses": 2
+    }
+  ]
+}

@@ -192,6 +192,17 @@ var _zoom_index := DEFAULT_ZOOM_INDEX
 var _pinch_factor := 1.0
 var _camera_smooth_position := Vector2.ZERO
 
+# ---- B1 就地战斗模式字段（_battle_active=false 时全部不影响原行为）----
+var _battle_active := false            # 战斗模式开关（照搬 is_world_map_open 范式）
+var _battle_system: Node2D = null      # BattleSystem 实例（battle.gd 作为子节点）
+var _battle_focus_world_pos := Vector2.ZERO  # 战斗时相机聚焦的世界坐标
+# 进入战斗时备份的相机/玩家状态，退出时恢复
+var _cam_pos_backup := Vector2.ZERO
+var _zoom_index_backup := 0
+var _player_visible_backup := true
+# BattleSystem 脚本预加载
+const _BattleScript := preload("res://scripts/scenes/battle.gd")
+
 var _player: Sprite2D
 var _player_cell := Vector2i.ZERO
 var _move_from_cell := Vector2i.ZERO
@@ -970,6 +981,8 @@ func _ready() -> void:
 
 
 func _regenerate(new_seed: int) -> void:
+	if _battle_active:
+		return  # 战斗中禁止重生成（避免战场 cell 被 free）
 	if _world_map != null:
 		_world_map.close_map()
 	_current_seed = new_seed if new_seed != 0 else (randi() & 0x7FFFFFFF)
@@ -1251,6 +1264,8 @@ var _stream_center := Vector2i.ZERO
 
 
 func _update_streaming() -> void:
+	if _battle_active:
+		return  # 战斗中冻结流式（战场 cell 不被释放/生成）
 	# Habitat 邻近查询只在一次流式批次内复用，避免无限世界探索时缓存无界增长。
 	_ecology_near_tag_cache.clear()
 	_spatial_flora_plan_cache.clear()
@@ -3283,16 +3298,20 @@ func _process(delta: float) -> void:
 	_update_animals(delta)
 	if _audio != null:
 		_audio.update_animal_sounds(_animals.values(), _player_cell, delta)
-	# 逻辑状态不做像素取整，避免从已量化的 Camera2D.position 反复积分
-	# 而丢失亚像素进度；仅最终渲染位置按当前 zoom 对齐像素网格。
-	var camera_blend := 1.0 - exp(
-		-camera_smoothing_speed * maxf(delta, 0.0)
-	)
-	_camera_smooth_position = _camera_smooth_position.lerp(
-		_player_visual_position,
-		camera_blend
-	)
-	_set_camera_position(_camera_smooth_position)
+	# 战斗模式：相机固定聚焦战场，跳过跟随玩家的 lerp
+	if _battle_active:
+		_set_camera_position(_battle_focus_world_pos)
+	else:
+		# 逻辑状态不做像素取整，避免从已量化的 Camera2D.position 反复积分
+		# 而丢失亚像素进度；仅最终渲染位置按当前 zoom 对齐像素网格。
+		var camera_blend := 1.0 - exp(
+			-camera_smoothing_speed * maxf(delta, 0.0)
+		)
+		_camera_smooth_position = _camera_smooth_position.lerp(
+			_player_visual_position,
+			camera_blend
+		)
+		_set_camera_position(_camera_smooth_position)
 	_sync_depth_of_field_focus()
 	if _ambient_registry != null:
 		var viewport_size := get_viewport_rect().size
@@ -3459,6 +3478,10 @@ func _handle_world_map_input(event: InputEvent) -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# B1 就地战斗模式：整体短路，事件转发给 BattleSystem（照搬 world_map 模态范式）
+	if _battle_active and _handle_battle_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	if _handle_world_map_input(event):
 		# 地图是模态 UI；鼠标缩放、触控手势和背景快捷键都不应穿透。
 		get_viewport().set_input_as_handled()
@@ -3494,6 +3517,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_day_night.toggle_manual_night()
 		elif event.physical_keycode == KEY_B and _depth_of_field != null:
 			_depth_of_field.toggle()
+		elif event.physical_keycode == KEY_P or event.keycode == KEY_P:
+			# 进入战棋（融合进 pixel_world 的战术 RPG 系统）
+			# P = Play battle；physical_keycode 和 keycode 都匹配，确保注入输入也能触发
+			_enter_battle()
 		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
 			_zoom_step(1)
 		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
@@ -3755,3 +3782,105 @@ func _shot_and_quit() -> void:
 	if save_error != OK:
 		push_error("自动截图保存失败: %s (%d)" % [output_path, save_error])
 	get_tree().quit()
+
+
+# ============================================================
+# 战棋入口（融合自 phaserjs 战术 RPG）
+# ============================================================
+## 按 P 键进入战棋：从玩家周围真实地形采样 21×21 战场，切到 Battle.tscn。
+## SceneArgs 是 autoload 单例（见 project.godot [autoload]），负责跨场景传参。
+func _enter_battle() -> void:
+	# L1 埋点：战棋入口被触发（按 AGENTS.md 调试埋点强制原则）
+	print("[world] 进入战棋（按 P）→ 中心=%s 模式=%s" % [
+		str(_player_cell), "就地" if Settings.battle_inline_mode else "独立场景"])
+	var chapter := WorldToChapter.world_to_chapter(_terrain_sampler, _player_cell, 10, _current_seed)
+	if Settings.battle_inline_mode:
+		# B1 就地模式：不切场景，在 main.gd 下挂战斗层
+		_enter_battle_inline(chapter)
+		return
+	# B2 独立场景模式：切到 Battle.tscn
+	SceneArgs.battle_args = {
+		"chapter": chapter,
+		"return_to": "res://main.tscn",
+		"hosting": false,
+	}
+	get_tree().change_scene_to_file("res://scenes/Battle.tscn")
+
+
+# ============================================================
+# B1 就地战斗模式（与 B2 切场景模式并存，由 Settings.battle_inline_mode 切换）
+# ============================================================
+
+## 进入就地战斗：备份相机/玩家状态 → 实例化 BattleSystem → 聚焦战场
+func _enter_battle_inline(chapter: Dictionary) -> void:
+	# 1. 备份世界探索状态
+	_cam_pos_backup = _camera_smooth_position
+	_zoom_index_backup = _zoom_index
+	_player_visible_backup = _player.visible
+	# 2. 隐藏世界玩家红点（用战棋 UnitSprite 替代）
+	_player.visible = false
+	# 3. 相机聚焦战场中心（玩家位置 ≈ 战场中心），固定 zoom=2.0x
+	_zoom_index = DEFAULT_ZOOM_INDEX  # 2 → 2.0x
+	_apply_zoom()
+	var center_world_cell := _player_cell
+	_battle_focus_world_pos = _grid_to_screen(center_world_cell, _stand_level(_quantize(center_world_cell.x, center_world_cell.y)))
+	_snap_camera_position(_battle_focus_world_pos)
+	# 4. 实例化 BattleSystem 并注入 main.gd 引用
+	SceneArgs.battle_args = {
+		"chapter": chapter,
+		"world": self,                  # B1 标记：main.gd 引用
+		"hosting": false,
+	}
+	_battle_system = _BattleScript.new()
+	_battle_system.name = "BattleSystem"
+	_battle_system.battle_finished.connect(_exit_battle)
+	add_child(_battle_system)
+	# 5. 开启战斗模式（最后一步，避免 _ready 期间触发拦截）
+	_battle_active = true
+
+
+## 退出就地战斗：恢复世界探索状态
+func _exit_battle(result: StringName) -> void:
+	print("[world] 战斗结束（%s）→ 恢复世界探索" % String(result))
+	_battle_active = false
+	if _battle_system != null and is_instance_valid(_battle_system):
+		_battle_system.queue_free()
+	_battle_system = null
+	# 恢复相机/玩家
+	_player.visible = _player_visible_backup
+	_zoom_index = _zoom_index_backup
+	_apply_zoom()
+	_camera_smooth_position = _cam_pos_backup
+	_set_camera_position(_cam_pos_backup)
+
+
+## 战斗输入分发：把世界探索的输入事件转发给 BattleSystem。
+## 返回 true = 消费事件（不让世界探索处理）；false = 放行给世界。
+func _handle_battle_input(event: InputEvent) -> bool:
+	if not _battle_active or _battle_system == null or not is_instance_valid(_battle_system):
+		return false
+	# 战斗期间禁用 P 键（避免重复触发）
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == KEY_P or event.keycode == KEY_P:
+			return true  # 吞掉，不转发
+	# 把事件转发给 BattleSystem（它有自己的 _unhandled_input / _input）
+	# Godot 的 _unhandled_input 是自动调度的，但 BattleSystem 是子节点，
+	# 它的 _unhandled_input 会自动收到未处理的事件。这里返回 false 让事件继续传播。
+	# 但我们想确保 BattleSystem 拿到鼠标事件 —— 用 _input（GUI 前层）转发。
+	# 实际上 BattleSystem 作为子 Node2D，其 _unhandled_input 会自动被 Godot 调度。
+	# 这里只需阻止世界探索处理它。
+	return true  # 战斗模式下所有事件都由 BattleSystem 处理，世界探索不介入
+
+
+## 公开查询：世界 cell → 站立层号（供战棋 UnitSprite 算高度）
+func cell_stand_level(cell: Vector2i) -> int:
+	return _stand_level(_quantize(cell.x, cell.y))
+
+
+## 公开查询：屏幕坐标 → 世界 cell（供战棋 cell 拾取用）
+func screen_to_cell(screen_pos: Vector2) -> Vector2i:
+	# 屏幕 → 世界坐标（除 zoom 加 cam 位置）
+	var zoom := _cam.zoom.x if _cam != null else 1.0
+	var cam_pos := _cam.position if _cam != null else Vector2.ZERO
+	var world_pos := screen_pos / zoom + cam_pos
+	return IsoCoords.to_cell(world_pos)

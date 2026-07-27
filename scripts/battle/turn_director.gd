@@ -1,0 +1,263 @@
+## battle/turn_director.gd — 敌方 AI 回合 + 玩家方托管的回合编排（从 scenes/battle.gd 抽出）
+##
+## 职责：
+##   - 敌方回合串行驱动每个 enemy 单位（_run_enemy_phase / _enemy_act）
+##   - 玩家方托管：整方统一开关，自动移动+攻击+技能+物品（_run_player_auto_phase / _player_auto_act）
+##   - 托管偏好数据 hosting_active / _auto_prefs / _hosting_running
+##   - 单位沿路径 tween 移动（_tween_move）
+##
+## 设计：从 battle.gd 抽出的 Node（仿 TurnManager 是 Node 的先例 —— async 编排器需要
+## get_tree() / create_tween()，所以必须是 Node 而非 RefCounted）。不持有父场景引用；
+## grid/turn/chapter/unit_sprites 由 battle.gd 在 setup() 注入；战斗演出 / 胜负 / mode
+## 修改通过 Callable 回交 battle.gd（保持状态机核心不外移）。
+##
+## 公开 API（battle.gd 调用）：
+##   setup(grid, turn, chapter, unit_sprites)
+##   is_hosting() / set_hosting(active)
+##   get_prefs() / get_pref(unit_id) / set_pref(unit_id, key, value)
+##   start_enemy_phase()
+##   start_player_auto_phase()
+##   toggle_hosting(can_start_now: bool)   # can_start_now = (玩家回合 IDLE 态时)
+##   update_host_btn_text()
+##
+## Callable 注入面（battle.gd _ready 时赋值）：
+##   on_resolve_combat(attacker, defender, on_done_cb)
+##   on_resolve_skill(caster, targets, skill_id)
+##   on_resolve_item(user, targets, entry)
+##   on_resolve_combat_sync(attacker, defender)
+##   on_check_battle_end()
+##   on_clear_range_highlight()
+##   on_clear_selection()           # 托管/切开关时清 selected_unit
+##   on_set_mode(m: int)            # 设 battle.gd 的 mode
+class_name TurnDirector
+extends Node
+
+# ---- 注入的只读引用（setup 时由 battle.gd 设置）----
+var grid: GridSystem
+var turn: TurnManager
+var chapter: Dictionary
+var unit_sprites: Dictionary   # { unitId -> UnitSprite3D }
+
+# ---- Callable 注入面 ----
+var on_resolve_combat: Callable
+var on_resolve_skill: Callable
+var on_resolve_item: Callable
+var on_resolve_combat_sync: Callable
+var on_check_battle_end: Callable
+var on_clear_range_highlight: Callable
+var on_clear_selection: Callable
+var on_set_mode: Callable
+
+# ---- 托管状态（原 battle.gd 的 hosting_active / _auto_prefs / _hosting_running）----
+# hosting_active=true 时玩家回合自动跑 start_player_auto_phase，手动输入路径被锁。
+# 仅本场战斗有效，偏好存 _auto_prefs（key=unitId → {priorityTargetId, strategy}）。
+var hosting_active: bool = false
+var _auto_prefs: Dictionary = {}
+var _hosting_running: bool = false  # 防止 start_player_auto_phase 重入
+
+# battle.gd 的 Mode 枚举镜像（on_set_mode 传 int；这里只用作常量便于阅读）
+# 注意：必须与 battle.gd 的 enum Mode 保持一致。
+const MODE_IDLE := 0
+const MODE_ENEMY_TURN := 4
+const MODE_ANIMATING := 5
+
+
+func setup(p_grid: GridSystem, p_turn: TurnManager, p_chapter: Dictionary, p_unit_sprites: Dictionary) -> void:
+	grid = p_grid
+	turn = p_turn
+	chapter = p_chapter
+	unit_sprites = p_unit_sprites
+
+
+# ============================================================
+# 托管开关 + 偏好访问
+# ============================================================
+func is_hosting() -> bool:
+	return hosting_active
+
+
+## SceneArgs.hosting=true 调试入口用：直接置位（不触发立即启动，由 _on_player_phase 驱动）。
+func set_hosting(active: bool) -> void:
+	hosting_active = active
+
+
+func get_prefs() -> Dictionary:
+	return _auto_prefs
+
+
+func get_pref(unit_id) -> Dictionary:
+	return _auto_prefs.get(unit_id, PlayerAI.default_pref())
+
+
+func set_pref(unit_id, key: StringName, value) -> void:
+	var p: Dictionary = _auto_prefs.get(unit_id, PlayerAI.default_pref())
+	p[key] = value
+	_auto_prefs[unit_id] = p
+
+
+## 切换托管开关。can_start_now 由 battle.gd 判断（玩家回合 + IDLE 态 + 未在跑）后传入；
+## 切到 true 且 can_start_now 时立即启动自动回合。
+func toggle_hosting(can_start_now: bool) -> void:
+	hosting_active = not hosting_active
+	update_host_btn_text()
+	if hosting_active and not _hosting_running and turn.phase == &"player" and can_start_now:
+		on_clear_range_highlight.call()
+		on_clear_selection.call()
+		start_player_auto_phase()
+
+
+func update_host_btn_text() -> void:
+	# host_btn 由 BattleUI 持有；battle.gd 在注入时会把这个 Callable 也接上，
+	# 但为兼容「host_btn 还没建好」的早期调用，这里通过 on_update_host_btn 注入。
+	# 简化：host_btn 引用由 battle.gd 在 setup 后用 set_host_btn 传入。
+	if _host_btn != null:
+		_host_btn.text = "关闭托管" if hosting_active else "开启托管"
+
+
+var _host_btn: Button = null
+func set_host_btn(btn: Button) -> void:
+	_host_btn = btn
+
+
+# ============================================================
+# 玩家方托管（autoplay）—— 镜像敌方 AI 回合的结构
+# ============================================================
+## 玩家回合开始时（_on_player_phase）若 hosting_active 则调用：
+## 串行 await 每个未行动的 player 单位自动移动+攻击，结束后检查胜负并结束回合。
+func start_player_auto_phase() -> void:
+	if _hosting_running:
+		return
+	_hosting_running = true
+	var units: Array = []
+	for u in grid.units.values():
+		if u.faction == &"player" and not u.isDead:
+			units.append(u)
+	for u in units:
+		if u.isDead or u.hasActed:
+			continue
+		await _player_auto_act(u)
+		# 每次行动后查胜负，若已分胜负则停止托管循环
+		var vr := turn.check_victory(chapter.enemyUnits)
+		if vr == &"win" or vr == &"lose":
+			on_check_battle_end.call()
+			_hosting_running = false
+			return
+	await get_tree().create_timer(0.3).timeout
+	_hosting_running = false
+	if turn.phase == &"player":
+		turn.end_turn()
+
+
+## 单个玩家单位的自动行动（镜像 _enemy_act）。攻击走 on_resolve_combat（含经验结算）。
+func _player_auto_act(u: Dictionary) -> void:
+	var enemies: Array = []
+	for e in grid.units.values():
+		if e.faction != &"player" and not e.isDead:
+			enemies.append(e)
+	if enemies.is_empty():
+		# 无敌人可打：标记已行动，跳过
+		u.hasMoved = true
+		u.hasActed = true
+		return
+	var pref: Dictionary = _auto_prefs.get(u.id, PlayerAI.default_pref())
+	var decision := PlayerAI.decide(u, grid, enemies, pref)
+	var us: UnitSprite3D = unit_sprites.get(u.id)
+	if us == null:
+		u.hasActed = true
+		return
+	var move_target = decision.moveTarget
+	if move_target != null and (move_target as Vector2i) != u.position:
+		var path := grid.find_path(u.position, move_target, u.moveType, u.stats.mov)
+		if not path.is_empty():
+			await _tween_move(us, path.slice(1))
+			grid.place_unit(u, (move_target as Vector2i).x, (move_target as Vector2i).y)
+			u.hasMoved = true
+			us.update_state()
+			await get_tree().create_timer(0.2).timeout
+	# 按 action.type 分发：普攻 / 技能 / 物品
+	var act: Dictionary = decision.get(&"action", { &"type": &"normal" })
+	var act_type: StringName = act.get(&"type", &"normal")
+	var tgts: Array = act.get(&"targets", [])
+	var acted := false
+	if act_type == &"skill" and act.has(&"skillId"):
+		await on_resolve_skill.call(u, tgts, act[&"skillId"])
+		acted = true
+	elif act_type == &"item" and act.has(&"itemId"):
+		await on_resolve_item.call(u, tgts, act.get(&"entry", {}))
+		acted = true
+	elif not decision.attackTarget.is_empty() and not decision.attackTarget.isDead:
+		# 玩家方攻击走 async 版 on_resolve_combat（含经验 + hasActed 设置）
+		await on_resolve_combat.call(u, decision.attackTarget, func():
+			on_set_mode.call(MODE_IDLE)
+			on_check_battle_end.call()
+		)
+		acted = true
+	if not acted:
+		# 没攻击/技能/物品：手动标记已行动（移动也算消耗本回合行动）
+		u.hasActed = true
+
+
+# ============================================================
+# 敌方 AI 回合
+# ============================================================
+func start_enemy_phase() -> void:
+	var enemies: Array = []
+	for u in grid.units.values():
+		if u.faction == &"enemy" and not u.isDead:
+			enemies.append(u)
+	for enemy in enemies:
+		if enemy.isDead:
+			continue
+		await _enemy_act(enemy)
+	await get_tree().create_timer(0.4).timeout
+	on_check_battle_end.call()
+	if turn.phase == &"enemy":
+		turn.end_turn()
+
+
+func _enemy_act(enemy: Dictionary) -> void:
+	var players: Array = []
+	for u in grid.units.values():
+		if u.faction == &"player" and not u.isDead:
+			players.append(u)
+	if players.is_empty():
+		return
+	var decision := EnemyAI.decide(enemy, grid, players)
+	var us: UnitSprite3D = unit_sprites[enemy.id]
+	if us == null:
+		return
+	var move_target = decision.moveTarget
+	if move_target != null and (move_target as Vector2i) != enemy.position:
+		var path := grid.find_path(enemy.position, move_target, enemy.moveType, enemy.stats.mov)
+		if not path.is_empty():
+			await _tween_move(us, path.slice(1))
+			grid.place_unit(enemy, (move_target as Vector2i).x, (move_target as Vector2i).y)
+			us.update_state()
+			await get_tree().create_timer(0.2).timeout
+	# 按 action.type 分发：普攻 / 技能 / 物品
+	var act: Dictionary = decision.get(&"action", { &"type": &"normal" })
+	var act_type: StringName = act.get(&"type", &"normal")
+	var tgts: Array = act.get(&"targets", [])
+	if act_type == &"skill" and act.has(&"skillId"):
+		# 移动到目标射程内后施法（若需移动）；这里假设决策已选好位置，直接施法
+		await on_resolve_skill.call(enemy, tgts, act[&"skillId"])
+		await get_tree().create_timer(0.9).timeout
+	elif act_type == &"item" and act.has(&"itemId"):
+		await on_resolve_item.call(enemy, tgts, act.get(&"entry", {}))
+		await get_tree().create_timer(0.7).timeout
+	elif not decision.attackTarget.is_empty() and not decision.attackTarget.isDead:
+		on_resolve_combat_sync.call(enemy, decision.attackTarget)
+		await get_tree().create_timer(0.9).timeout
+
+
+# ============================================================
+# 单位沿路径 tween 移动（2D 版：tween Node2D.global_position）
+# ============================================================
+## us 类型从 Node3D 改为 Node2D（UnitSprite3D 现在继承 Node2D）。
+## IsoCoords.to_screen 返回 Vector2，直接赋给 Node2D.global_position。
+func _tween_move(us: Node2D, path: Array) -> void:
+	for cell in path:
+		var w := IsoCoords.to_screen(cell.x, cell.y)
+		var tw := create_tween()
+		tw.tween_property(us, "global_position", w, 0.15)
+		await tw.finished
