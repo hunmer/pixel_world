@@ -125,7 +125,8 @@ func _setup_b1_render() -> void:
 	# 注入坐标/sort 转换函数（闭包捕获 _world / _world_origin）
 	var coord_fn := Callable(self, "_b1_cell_to_screen")
 	var sort_fn := Callable(self, "_b1_cell_to_sort_y")
-	range_overlay.setup_world(_world, grid, block_titles, coord_fn, sort_fn)
+	var level_fn := Callable(self, "_b1_cell_level")
+	range_overlay.setup_world(_world, grid, block_titles, coord_fn, sort_fn, level_fn)
 	# B1 不画 terrain fallback（main.gd 已有真实地形）
 
 
@@ -140,6 +141,11 @@ func _b1_cell_to_screen(x: int, y: int) -> Vector2:
 func _b1_cell_to_sort_y(x: int, y: int) -> float:
 	var world_cell: Vector2i = _world_origin + Vector2i(x, y)
 	return _world._column_sort_y(world_cell)
+
+
+func _b1_cell_level(x: int, y: int) -> int:
+	var world_cell: Vector2i = _world_origin + Vector2i(x, y)
+	return _world.cell_stand_level(world_cell)
 
 
 ## 把 battle.gd 自己的方法注入 turn_director（让它能回交战斗演出 / 胜负 / 状态机修改，
@@ -359,6 +365,21 @@ func _unhandled_input(event: InputEvent) -> void:
 					_on_tile_click_at_screen(mb.position)
 				_panning = false
 				_dragged = false
+		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
+			# 右键：查看单位详情面板（任意阵营，不干扰左键的选中/攻击）
+			if battle_ui.is_over_ui(mb.position):
+				return
+			var detail_cell: Vector2i
+			if _b1_mode:
+				detail_cell = _screen_to_battle_cell(mb.position)
+			else:
+				detail_cell = board.pick_cell(mb.position, get_viewport().get_visible_rect().size)
+			if detail_cell.x >= 0 and detail_cell.x < grid.width \
+					and detail_cell.y >= 0 and detail_cell.y < grid.height:
+				var du := grid.unit_at(detail_cell.x, detail_cell.y)
+				if not du.is_empty():
+					battle_ui.open_unit_detail(du)
+
 		elif mb.button_index == MOUSE_BUTTON_MIDDLE and not _b1_mode:
 			if mb.pressed:
 				_panning = true
@@ -378,22 +399,30 @@ func _unhandled_input(event: InputEvent) -> void:
 					and not battle_ui.has_open_menu() and not battle_ui.is_over_ui(mm.position):
 				var hover_cell: Vector2i
 				if _b1_mode:
-					hover_cell = _screen_to_battle_cell(mm.position)
+					hover_cell = _screen_to_battle_cell_unbounded(mm.position)
 				else:
 					hover_cell = board.pick_cell(mm.position, get_viewport().get_visible_rect().size)
-				if hover_cell.x >= 0 and hover_cell.x < grid.width \
-						and hover_cell.y >= 0 and hover_cell.y < grid.height \
-						and hover_cell != cursor_pos:
+				if hover_cell != cursor_pos:
 					cursor_pos = hover_cell
 					cursor_visible = true
 					range_overlay.update_cursor_particles(hover_cell.x, hover_cell.y, true)
-					battle_ui.show_info_at(hover_cell.x, hover_cell.y)
-					_update_hover_path(hover_cell)
+					if grid.in_bounds(hover_cell.x, hover_cell.y):
+						battle_ui.show_info_at(hover_cell.x, hover_cell.y)
+						_update_hover_path(hover_cell)
 
 
 ## B1 模式：屏幕坐标 → 战场局部 cell（经 main.gd.screen_to_cell 拿世界 cell，再减 origin）
-func _screen_to_battle_cell(screen_pos: Vector2) -> Vector2i:
+func _screen_to_battle_cell_unbounded(screen_pos: Vector2) -> Vector2i:
 	var world_cell: Vector2i = _world.screen_to_cell(screen_pos)
+	return world_cell - _world_origin
+
+
+func _screen_to_battle_cell(screen_pos: Vector2) -> Vector2i:
+	var world_cell: Vector2i = _world.screen_to_cell_in_rect(
+		screen_pos,
+		_world_origin,
+		Vector2i(grid.width, grid.height)
+	)
 	return world_cell - _world_origin
 
 
@@ -405,6 +434,10 @@ func _on_tile_click_at_screen(screen_pos: Vector2) -> void:
 	if mode == Mode.ENEMY_TURN or mode == Mode.ANIMATING:
 		return
 	if battle_ui.has_open_menu():
+		return
+	# 详情面板打开时，左键先关闭它（详情是临时查看，不与操作混用）
+	if battle_ui.is_unit_detail_open():
+		battle_ui.close_unit_detail()
 		return
 	var cell: Vector2i
 	if _b1_mode:
@@ -436,11 +469,17 @@ func _move_cursor(dx: int, dy: int) -> void:
 func _on_confirm() -> void:
 	if turn_director.is_hosting():
 		return
+	if not grid.in_bounds(cursor_pos.x, cursor_pos.y):
+		return
 	_on_tile_click(cursor_pos.x, cursor_pos.y)
 
 
 func _on_cancel() -> void:
 	if turn_director.is_hosting():
+		return
+	# 详情面板打开时，ESC 优先关闭它
+	if battle_ui.is_unit_detail_open():
+		battle_ui.close_unit_detail()
 		return
 	if battle_ui.has_open_menu():
 		# 移动完成后的菜单：ESC = 取消移动，把单位送回原位并重新选中。

@@ -196,6 +196,10 @@ var _camera_smooth_position := Vector2.ZERO
 var _battle_active := false            # 战斗模式开关（照搬 is_world_map_open 范式）
 var _battle_system: Node2D = null      # BattleSystem 实例（battle.gd 作为子节点）
 var _battle_focus_world_pos := Vector2.ZERO  # 战斗时相机聚焦的世界坐标
+# 战场相机操控：B1 下相机归 main.gd，战场中心 + offset 即相机位置。
+var _battle_cam_offset := Vector2.ZERO   # 平移偏移（相对战场中心）
+var _battle_pan_active := false          # 拖拽平移中（中键 / 空格+左键）
+var _battle_pan_last := Vector2.ZERO     # 上次拖拽鼠标位置
 # 进入战斗时备份的相机/玩家状态，退出时恢复
 var _cam_pos_backup := Vector2.ZERO
 var _zoom_index_backup := 0
@@ -3298,9 +3302,10 @@ func _process(delta: float) -> void:
 	_update_animals(delta)
 	if _audio != null:
 		_audio.update_animal_sounds(_animals.values(), _player_cell, delta)
-	# 战斗模式：相机固定聚焦战场，跳过跟随玩家的 lerp
+	# 战斗模式：相机聚焦战场（中心 + 平移偏移），跳过跟随玩家的 lerp
 	if _battle_active:
-		_set_camera_position(_battle_focus_world_pos)
+		_update_battle_edge_pan(delta)  # 边缘滚屏：鼠标在视口边缘时累加偏移
+		_set_camera_position(_battle_focus_world_pos + _battle_cam_offset)
 	else:
 		# 逻辑状态不做像素取整，避免从已量化的 Camera2D.position 反复积分
 		# 而丢失亚像素进度；仅最终渲染位置按当前 zoom 对齐像素网格。
@@ -3478,6 +3483,11 @@ func _handle_world_map_input(event: InputEvent) -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# B1 就地战斗模式：先处理拖拽平移（中键/空格+左键），再走整体短路
+	if _battle_active:
+		if _handle_battle_camera_input(event):
+			get_viewport().set_input_as_handled()
+			return
 	# B1 就地战斗模式：整体短路，事件转发给 BattleSystem（照搬 world_map 模态范式）
 	if _battle_active and _handle_battle_input(event):
 		get_viewport().set_input_as_handled()
@@ -3817,6 +3827,9 @@ func _enter_battle_inline(chapter: Dictionary) -> void:
 	_cam_pos_backup = _camera_smooth_position
 	_zoom_index_backup = _zoom_index
 	_player_visible_backup = _player.visible
+	# 复位战场相机偏移（防止上次战斗残留）
+	_battle_cam_offset = Vector2.ZERO
+	_battle_pan_active = false
 	# 2. 隐藏世界玩家红点（用战棋 UnitSprite 替代）
 	_player.visible = false
 	# 3. 相机聚焦战场中心（玩家位置 ≈ 战场中心），固定 zoom=2.0x
@@ -3846,6 +3859,9 @@ func _exit_battle(result: StringName) -> void:
 	if _battle_system != null and is_instance_valid(_battle_system):
 		_battle_system.queue_free()
 	_battle_system = null
+	# 复位战场相机偏移/平移状态
+	_battle_cam_offset = Vector2.ZERO
+	_battle_pan_active = false
 	# 恢复相机/玩家
 	_player.visible = _player_visible_backup
 	_zoom_index = _zoom_index_backup
@@ -3863,13 +3879,98 @@ func _handle_battle_input(event: InputEvent) -> bool:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_P or event.keycode == KEY_P:
 			return true  # 吞掉，不转发
-	# 把事件转发给 BattleSystem（它有自己的 _unhandled_input / _input）
-	# Godot 的 _unhandled_input 是自动调度的，但 BattleSystem 是子节点，
-	# 它的 _unhandled_input 会自动收到未处理的事件。这里返回 false 让事件继续传播。
-	# 但我们想确保 BattleSystem 拿到鼠标事件 —— 用 _input（GUI 前层）转发。
-	# 实际上 BattleSystem 作为子 Node2D，其 _unhandled_input 会自动被 Godot 调度。
-	# 这里只需阻止世界探索处理它。
-	return true  # 战斗模式下所有事件都由 BattleSystem 处理，世界探索不介入
+	return false
+
+
+## B1 战场拖拽平移：中键 / 空格+左键 拖拽时累加 _battle_cam_offset。
+## 在 _unhandled_input 的 B1 分支调用（缩放键已由 _handle_battle_input 放行）。
+func _handle_battle_camera_input(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		# 中键拖拽；或按住空格时左键拖拽（与编辑器平移范式一致）
+		var is_pan_button := mb.button_index == MOUSE_BUTTON_MIDDLE \
+				or (mb.button_index == MOUSE_BUTTON_LEFT \
+					and (Input.is_physical_key_pressed(KEY_SPACE) or _battle_pan_active))
+		if not is_pan_button:
+			return false
+		if mb.pressed:
+			# 起手若在 UI 上则不平移（避免误触按钮）
+			if _is_battle_mouse_over_ui(mb.position):
+				return false
+			_battle_pan_active = true
+			_battle_pan_last = mb.position
+		else:
+			_battle_pan_active = false
+		return true
+	elif event is InputEventMouseMotion and _battle_pan_active:
+		var mm := event as InputEventMouseMotion
+		var zoom := _cam.zoom.x if _cam != null else 1.0
+		# 屏幕拖拽反方向施加到相机（与 iso_board.pan 语义一致）
+		_battle_cam_offset -= (mm.position - _battle_pan_last) / zoom
+		_battle_pan_last = mm.position
+		_clamp_battle_cam_offset()
+		return true
+	return false
+
+
+## B1 战场边缘滚屏：鼠标距视口边缘 < 阈值时按方向累加 _battle_cam_offset。
+## 拖拽中 / 鼠标在 UI 上时不触发。在 _process 的 B1 分支调用。
+const _BATTLE_EDGE_PAN_MARGIN := 24.0   # 触发边缘滚屏的边距（像素）
+const _BATTLE_EDGE_PAN_SPEED := 420.0   # 边缘滚屏速度（屏幕像素/秒 → 除以 zoom 转世界）
+func _update_battle_edge_pan(delta: float) -> void:
+	if _battle_pan_active or _cam == null:
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var mouse := vp.get_mouse_position()
+	var size := vp.get_visible_rect().size
+	# 鼠标在窗口外 / 在 UI 上 → 不滚屏
+	if mouse.x < 0 or mouse.y < 0 or mouse.x > size.x or mouse.y > size.y:
+		return
+	if _is_battle_mouse_over_ui(mouse):
+		return
+	var dir := Vector2.ZERO
+	if mouse.x < _BATTLE_EDGE_PAN_MARGIN:
+		dir.x -= 1.0
+	elif mouse.x > size.x - _BATTLE_EDGE_PAN_MARGIN:
+		dir.x += 1.0
+	if mouse.y < _BATTLE_EDGE_PAN_MARGIN:
+		dir.y -= 1.0
+	elif mouse.y > size.y - _BATTLE_EDGE_PAN_MARGIN:
+		dir.y += 1.0
+	if dir == Vector2.ZERO:
+		return
+	var zoom := _cam.zoom.x
+	# 边缘滚屏 = 相机往鼠标指向方向走（同向）：鼠标在右边缘 → 相机右移 → 看到右侧内容。
+	# （与拖拽平移相反：拖拽是抓地图反方向拖，用 -=）
+	_battle_cam_offset += dir * (_BATTLE_EDGE_PAN_SPEED / zoom) * delta
+	_clamp_battle_cam_offset()
+
+
+## 把 _battle_cam_offset 钳制在战场范围内（中心 ± radius 格的屏幕距离），
+## 防止平移到未流式加载的空洞区域。radius=10 → 21×21 战场，留 1 格边距。
+func _clamp_battle_cam_offset() -> void:
+	const _BATTLE_RADIUS := 10
+	# 战场对角方向的屏幕半径（x+y 方向最远）：radius 格 × (TILE_W/2) 的等距投影
+	var max_dx := float(_BATTLE_RADIUS) * TILE_W * 0.5
+	var max_dy := float(_BATTLE_RADIUS) * TILE_H * 0.5
+	# 偏移允许范围放宽到对角（等距下 x、y 偏移耦合），用各自菱形半径的 1.5 倍作软上限
+	_battle_cam_offset.x = clampf(_battle_cam_offset.x, -max_dx * 1.5, max_dx * 1.5)
+	_battle_cam_offset.y = clampf(_battle_cam_offset.y, -max_dy * 1.5, max_dy * 1.5)
+
+
+## 鼠标位置是否落在战场 UI（按钮/菜单）上。battle_ui 可能为空（B2 或未建好）。
+func _is_battle_mouse_over_ui(screen_pos: Vector2) -> bool:
+	if _battle_system == null or not is_instance_valid(_battle_system):
+		return false
+	var ui = _battle_system.get("battle_ui")
+	if ui == null:
+		return false
+	return ui.is_over_ui(screen_pos)
+
+
+
 
 
 ## 公开查询：世界 cell → 站立层号（供战棋 UnitSprite 算高度）
@@ -3879,8 +3980,45 @@ func cell_stand_level(cell: Vector2i) -> int:
 
 ## 公开查询：屏幕坐标 → 世界 cell（供战棋 cell 拾取用）
 func screen_to_cell(screen_pos: Vector2) -> Vector2i:
-	# 屏幕 → 世界坐标（除 zoom 加 cam 位置）
+	var world_pos := _screen_to_world_pos(screen_pos)
+	var best_cell := IsoCoords.to_cell(world_pos)
+	var best_score := INF
+	var seen := {}
+	for guess_level in range(WATER_SURFACE_LEVEL, LEVELS * 3):
+		var base := IsoCoords.to_cell(world_pos + Vector2(0.0, guess_level * LEVEL_H))
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var cell := base + Vector2i(dx, dy)
+				if seen.has(cell):
+					continue
+				seen[cell] = true
+				var lvl := _stand_level(_quantize(cell.x, cell.y))
+				var local := world_pos - _grid_to_screen(cell, float(lvl))
+				var score := absf(local.x) / (TILE_W * 0.5) + absf(local.y) / (TILE_H * 0.5)
+				if score < best_score:
+					best_score = score
+					best_cell = cell
+	return best_cell
+
+
+func screen_to_cell_in_rect(screen_pos: Vector2, origin: Vector2i, size: Vector2i) -> Vector2i:
+	var world_pos := _screen_to_world_pos(screen_pos)
+	var best_cell := origin
+	var best_score := INF
+	for y in range(origin.y, origin.y + size.y):
+		for x in range(origin.x, origin.x + size.x):
+			var cell := Vector2i(x, y)
+			var lvl := _stand_level(_quantize(cell.x, cell.y))
+			var local := world_pos - _grid_to_screen(cell, float(lvl))
+			var score := absf(local.x) / (TILE_W * 0.5) + absf(local.y) / (TILE_H * 0.5)
+			if score < best_score:
+				best_score = score
+				best_cell = cell
+	return best_cell
+
+
+func _screen_to_world_pos(screen_pos: Vector2) -> Vector2:
 	var zoom := _cam.zoom.x if _cam != null else 1.0
 	var cam_pos := _cam.position if _cam != null else Vector2.ZERO
-	var world_pos := screen_pos / zoom + cam_pos
-	return IsoCoords.to_cell(world_pos)
+	var viewport_center := get_viewport_rect().size * 0.5
+	return (screen_pos - viewport_center) / zoom + cam_pos

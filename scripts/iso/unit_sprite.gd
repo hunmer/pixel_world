@@ -14,8 +14,9 @@ class_name UnitSprite3D
 extends Node2D
 
 ## 兼容旧类名（外部代码引用 UnitSprite3D）。
-## 2D 下立绘显示的目标像素高度。
-const UNIT_VISUAL_PX := 64.0
+## 2D 下立绘显示的目标像素高度。地块整块 32×26（顶面菱形 16px + 侧壁 10px），
+## 立绘缩到约 1 格高，避免越界到相邻格。
+const UNIT_VISUAL_PX := 32.0
 
 var unit: Dictionary
 var portrait: Sprite2D           # 职业立绘

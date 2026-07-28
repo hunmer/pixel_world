@@ -21,6 +21,7 @@ var block_titles: Array = []
 var _parent: Node2D = null              # marker 挂哪（B1=main.gd；B2=null→用 board）
 var _coord_fn := Callable()            # (x, y) -> Vector2 屏幕坐标（B1=main._grid_to_screen；B2=空→IsoCoords.to_screen）
 var _sort_fn := Callable()             # (x, y) -> float sort_y（B1=main._column_sort_y；B2=空→固定 0）
+var _level_fn := Callable()            # (x, y) -> int，高度层（B1 用于范围描边透明度）
 
 # ---- 内部状态 ----
 var _fallback_cells: Dictionary = {}   # { "x,y" -> _ColorBlock(Node2D) }
@@ -55,12 +56,13 @@ func setup(p_board: IsoBoard, p_grid: GridSystem, p_block_titles: Array) -> void
 ## p_coord_fn：(x: int, y: int) -> Vector2，cell 局部坐标 → 屏幕坐标
 ## p_sort_fn：(x: int, y: int) -> float，cell 局部坐标 → sort_y（参与父节点 y_sort）
 func setup_world(p_parent: Node2D, p_grid: GridSystem, p_block_titles: Array,
-		p_coord_fn: Callable, p_sort_fn: Callable) -> void:
+		p_coord_fn: Callable, p_sort_fn: Callable, p_level_fn := Callable()) -> void:
 	_parent = p_parent
 	grid = p_grid
 	block_titles = p_block_titles
 	_coord_fn = p_coord_fn
 	_sort_fn = p_sort_fn
+	_level_fn = p_level_fn
 
 
 ## 当前模式：true=B1 就地（有 _parent），false=B2 切场景（有 board）
@@ -88,6 +90,12 @@ func _cell_to_sort_y(x: int, y: int) -> float:
 	if _sort_fn.is_valid():
 		return _sort_fn.call(x, y)
 	return 0.0
+
+
+func _cell_level(x: int, y: int) -> int:
+	if _level_fn.is_valid():
+		return int(_level_fn.call(x, y))
+	return 0
 
 
 ## 在 cell(x,y) 画实心菱形（替代 board.make_cell_quad，自带工厂）
@@ -194,6 +202,7 @@ func highlight_range(move_range: Dictionary, attack_tiles: Dictionary, selected_
 		var x: int = info["x"]
 		var y: int = info["y"]
 		var col: Color = info["color"]
+		col.a *= _range_alpha_for_cell(x, y, selected_unit)
 		var marker := _make_outline_block(x, y, col, 2.0)
 		_attach(marker)
 		_range_markers.append(marker)
@@ -201,7 +210,7 @@ func highlight_range(move_range: Dictionary, attack_tiles: Dictionary, selected_
 		if bool(info["attack"]):
 			var tw := create_tween()
 			tw.set_loops(0)
-			tw.tween_property(marker, "modulate:a", 0.4, 0.5)
+			tw.tween_property(marker, "modulate:a", 0.45, 0.5)
 			tw.tween_property(marker, "modulate:a", 1.0, 0.5)
 			_range_tweens.append(tw)
 
@@ -213,6 +222,27 @@ func _has_visible_cell(x: int, y: int) -> bool:
 		return false
 	var row: Array = block_titles[y]
 	return x >= 0 and x < row.size() and row[x] != null
+
+
+func _range_alpha_for_cell(x: int, y: int, selected_unit: Dictionary) -> float:
+	if not _level_fn.is_valid() or selected_unit.is_empty():
+		return 1.0
+	var level := _cell_level(x, y)
+	var selected_pos: Vector2i = selected_unit.position
+	var selected_level := _cell_level(selected_pos.x, selected_pos.y)
+	var lower_penalty := clampf(float(selected_level - level) * 0.07, 0.0, 0.32)
+	var occlusion_penalty := float(_higher_neighbor_count(x, y, level)) * 0.08
+	return clampf(1.0 - lower_penalty - occlusion_penalty, 0.28, 1.0)
+
+
+func _higher_neighbor_count(x: int, y: int, level: int) -> int:
+	var count := 0
+	for dir in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]:
+		var nx: int = x + dir.x
+		var ny: int = y + dir.y
+		if grid.in_bounds(nx, ny) and _cell_level(nx, ny) > level:
+			count += 1
+	return count
 
 
 func clear_range_highlight() -> void:

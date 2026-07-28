@@ -66,10 +66,25 @@ var end_turn_btn: Button
 var info_label: Label
 var menu_container: Control
 var preview_container: Control
+# 单位详情面板（右键查看任意单位完整信息；与行动菜单 menu_container 独立）
+var _unit_detail_panel: Control = null
 
 # battle.gd 的 Mode 枚举镜像（on_set_mode 传 int；与 battle.gd enum Mode 保持一致）
 const MODE_IDLE := 0
 const MODE_MENU := 3
+# 阵营 → 显示名 / 颜色（与 unit_sprite.gd 保持一致，详情面板标题用）
+const FACTION_NAME := {
+	player = "我方",
+	enemy = "敌方",
+	ally = "友军",
+	other = "中立",
+}
+const FACTION_COLOR := {
+	player = Color(0.376, 0.647, 0.980),
+	enemy = Color(0.973, 0.443, 0.443),
+	ally = Color(0.290, 0.867, 0.502),
+	other = Color(0.984, 0.749, 0.141),
+}
 
 
 func setup(p_board: IsoBoard, p_grid: GridSystem, p_unit_sprites: Dictionary, p_turn: TurnManager) -> void:
@@ -236,8 +251,133 @@ func show_info_at(x: int, y: int) -> void:
 
 
 # ============================================================
-# 单位菜单（攻击/技能/物品/等待）
+# 单位详情面板（右键查看任意单位完整信息）
 # ============================================================
+## 打开单位详情面板：居中弹出，展示阵营/等级/HP/MP/全部属性/技能/背包/buff/武器。
+## 与行动菜单（menu_container）独立，不改变 mode；ESC 或关闭按钮关。
+func open_unit_detail(u: Dictionary) -> void:
+	close_unit_detail()
+	var s: Dictionary = u.stats
+	var viewport_size := get_viewport().get_visible_rect().size
+	# 详情面板挂在 preview_container（屏幕空间，FULL_RECT）
+	var panel := PanelContainer.new()
+	panel.name = "UnitDetailPanel"
+	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.position = (viewport_size - Vector2(360, 420)) * 0.5
+	panel.custom_minimum_size = Vector2(360, 0)
+	panel.size = Vector2(360, 420)
+	preview_container.add_child(panel)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size = Vector2(340, 380)
+	panel.add_child(scroll)
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 4)
+	scroll.add_child(vbox)
+
+	var faction_text: String = FACTION_NAME.get(u.faction, "")
+	# 标题：阵营色 + 名字 + 职业 + 等级
+	var title := _detail_label(
+		"%s · %s [%s] Lv.%d" % [faction_text, String(u.name),
+			ProfessionData.profession_name(u.classId), int(u.level)],
+		18, FACTION_COLOR.get(u.faction, Color.WHITE))
+	vbox.add_child(title)
+
+	# 状态行：HP/MP/经验
+	vbox.add_child(_detail_label(
+		"HP %d / %d    MP %d / %d    EXP %d" % [
+			int(u.hp), int(s.hp), int(u.get(&"mp", 0)), int(s.get(&"mp", 0)),
+			int(u.get(&"exp", 0))], 14, Color(0.92, 0.95, 0.98)))
+
+	# 全部基础属性
+	vbox.add_child(_detail_label(
+		("力 %d   魔 %d   技 %d   速 %d\n" +
+		 "防 %d   魔防 %d   运 %d   移动 %d") % [
+			int(s.get(&"str", 0)), int(s.get(&"mag", 0)), int(s.get(&"skl", 0)), int(s.spd),
+			int(s.def), int(s.res), int(s.get(&"luk", 0)), int(s.get(&"mov", 0))],
+		14, Color(0.88, 0.93, 0.96)))
+
+	# 攻击范围
+	vbox.add_child(_detail_label(
+		"攻击射程 %s" % str(ProfessionData.unit_attack_range(u)),
+		14, Color(0.88, 0.93, 0.96)))
+
+	# 武器
+	var weapon = u.get(&"weapon", null)
+	if weapon is Dictionary and not (weapon as Dictionary).is_empty():
+		var wd: Dictionary = weapon
+		vbox.add_child(_detail_label(
+			"武器：%s" % String(wd.get(&"name", String(wd.get(&"id", &"")))),
+			14, Color(0.96, 0.84, 0.40)))
+
+	# 技能列表（含冷却 + 描述）
+	var skills: Array = u.get(&"skills", [])
+	if not skills.is_empty():
+		var cd: Dictionary = u.get(&"skillCooldowns", {})
+		var skill_lines: Array = []
+		for sid in skills:
+			var sn := SkillData.skill_name(sid)
+			var c: int = int(cd.get(sid, 0))
+			if c > 0:
+				skill_lines.append("  • %s（冷却 %d）" % [sn, c])
+			else:
+				skill_lines.append("  • %s" % sn)
+		vbox.add_child(_detail_label("技能：", 14, Color(0.75, 0.92, 0.78)))
+		vbox.add_child(_detail_label("\n".join(skill_lines), 13, Color(0.82, 0.90, 0.84)))
+
+	# 背包（含 uses）
+	var items: Array = u.get(&"items", [])
+	if not items.is_empty():
+		var item_lines: Array = []
+		for ie in items:
+			var iname := ItemData.item_name(ie.get(&"id", &""))
+			item_lines.append("  • %s ×%d" % [iname, int(ie.get(&"uses", 0))])
+		vbox.add_child(_detail_label("背包：", 14, Color(0.74, 0.84, 0.96)))
+		vbox.add_child(_detail_label("\n".join(item_lines), 13, Color(0.80, 0.88, 0.95)))
+
+	# buff 状态
+	var buffs: Array = u.get(&"buffs", [])
+	if not buffs.is_empty():
+		var buff_lines: Array = []
+		for b in buffs:
+			buff_lines.append("  • %s %+d（%d 回合）" % [
+				String(b.get(&"stat", &"")), int(b.get(&"value", 0)), int(b.get(&"turns", 0))])
+		vbox.add_child(_detail_label("状态：", 14, Color(0.98, 0.84, 0.30)))
+		vbox.add_child(_detail_label("\n".join(buff_lines), 13, Color(0.95, 0.86, 0.50)))
+
+	# 关闭按钮
+	var close_btn := Button.new()
+	close_btn.text = "关闭 (ESC)"
+	close_btn.pressed.connect(close_unit_detail)
+	vbox.add_child(close_btn)
+
+	_unit_detail_panel = panel
+
+
+func close_unit_detail() -> void:
+	if _unit_detail_panel != null and is_instance_valid(_unit_detail_panel):
+		_unit_detail_panel.queue_free()
+	_unit_detail_panel = null
+
+
+func is_unit_detail_open() -> bool:
+	return _unit_detail_panel != null and is_instance_valid(_unit_detail_panel)
+
+
+## 详情面板用的小 Label 工厂（带描边，可指定颜色/字号）。
+func _detail_label(text_value: String, font_size: int, color: Color) -> Label:
+	var lbl := Label.new()
+	lbl.text = text_value
+	lbl.add_theme_font_size_override("font_size", font_size)
+	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 3)
+	return lbl
+
+
+
 func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> void:
 	on_set_mode.call(MODE_MENU)
 	# 记录可撤销移动：菜单期间按 ESC 取消时，把单位送回 from_pos。
