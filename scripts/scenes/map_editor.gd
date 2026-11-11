@@ -191,8 +191,9 @@ func _build_ui() -> void:
 		tb.tooltip_text = "%s（%s）" % [BattlefieldDocScript.TERRAIN_CN[t], BattlefieldDocScript.TERRAIN_GLYPH[t]]
 		tb.set_meta("terrain", t)
 		var prev := TilePreviewScript.new(t)
-		prev.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		tb.add_child(prev)
+		# Button 不是 Container：手动按按钮最小尺寸居中（anchors 在无父时会烤错）。
+		prev.position = (tb.custom_minimum_size - prev.size) * 0.5
 		tgrid.add_child(tb)
 		_terrain_buttons[t] = tb
 	_terrain_buttons[current_terrain].button_pressed = true
