@@ -14,6 +14,7 @@
 - **等距方块渲染重做（2026-11-11）**：B2 战场与编辑器画布均改为像素 Minecraft 式等距方块渲染（`BattlefieldRenderer`，复用世界渲染管线 ColumnBatch + TerrainMaterialRegistry 贴图 + 程序化水面），平面色块代码已删（`render_terrain_fallback`、`iso_board` 的块池/网格绘制）。
 - 编辑器修复+图片调色板（同日）：画笔/橡皮单格刷新 bug 修复（`EditorCanvas._refresh_cell` 现先同步 renderer 的 GridSystem 再重建柱——此前模型更新但渲染网格还是旧地形导致视觉无变化）；地形调色板改为**图片缩略图**（`TilePreview` 画 `BattlefieldRenderer.preview_blocks(terrain)` 的等距方块柱，4 列 GridContainer，无文字，tooltip=地形名+图例）。
 - Breakpoint MCP 编辑器桥可用（addon 1.23.0，`editor_ping`→pong；运行时桥端口 9081）。
+- PankuConsole 运行时调试控制台已 vendored（上游 v1.7.9，`addons/panku_console/`，上游目录名即 panku_console 无需改名）：autoload `Panku`，游戏内按 `~` 呼出表达式 REPL；autoload 单例与当前场景根（`current`）自动注册，项目命令集 `scripts/debug_console_commands.gd`（`dbg.help()`）。
 
 ## 需求入口索引
 
@@ -33,6 +34,7 @@
 | 世界地形转战旗 chapter | `scripts/core/world_to_chapter.gd` | `world_to_chapter()`, `cell_context_to_terrain()`, `_find_standable_near()` | 21x21 战场，`world_origin` 是局部 `(0,0)` 对应世界 cell |
 | 天气/昼夜/景深快捷键 | `main.gd` | `_unhandled_input()` key 分支 (`T`/`N`/`B`/`O`/`E`) | 战旗期间 `_handle_battle_input()` 只吞 `P`，其余放行 |
 | 技能/物品/buff | `scripts/systems/*_system.gd`, `scripts/battle/battle_ui.gd` | `SkillSystem`, `ItemSystem`, `BuffSystem`, UI picker 方法 | 纯逻辑优先用 `res://scenes/SkillTest.tscn` |
+| 调试控制台（Panku，`~` 键） | `scripts/debug_console_commands.gd`, `addons/panku_console/` | `dbg.*`：`help/list_battlefields/battlefield/editor/enter_battle/battle_mode/player/time_scale` | 表达式 REPL：autoload 单例与场景根 `current` 自动可用；新命令=对象公共方法+`_HELP_方法名` 常量，新对象用 `Panku.gd_exprenv.register_env(name, obj)` 注册 |
 
 ## 本轮新增内容（2026-11-11）
 
@@ -40,6 +42,7 @@
 - 地图编辑器：`scripts/editor/battlefield_doc.gd`（模型/种子生成/JSON 往返/quick_validate/save_model 保存即回读校验）+ `scripts/editor/editor_canvas.gd`（等距方块画布：内嵌 BattlefieldRenderer+多高度拾取+右键平移+滚轮缩放）+ `scripts/scenes/map_editor.gd` + `scenes/MapEditor.tscn` + HUD「🛠 打开地图编辑器」按钮 + `main.gd` `KEY_E`。
 - 等距渲染重做：`scripts/iso/battlefield_renderer.gd`（新，核心渲染器）+ `scripts/iso/unit_sprite.gd`（B2 高度感知站位）+ `scripts/iso/iso_board.gd`（重写为纯相机/坐标转换）+ `battle.gd`/`battle_ui.gd`/`range_overlay.gd` 接线 + 删平面渲染（`render_terrain_fallback` 等）。
 - 契约测试：`tests/battlefields_contract.gd`、`tests/map_editor_contract.gd`、`tests/battlefield_render_contract.gd`（均通过，见下方命令）。
+- PankuConsole 全局调试控制台：vendor `addons/panku_console/`（GitHub 直连克隆，v1.7.9，无 `.uid` 文件）+ `project.godot` autoload `Panku` + 插件启用 + `main.tscn` 挂 `DebugConsoleCommands` 节点 + `scripts/debug_console_commands.gd`（8 条 `dbg.*` 命令，只转发 main.gd 既有入口 `_enter_battlefield/_open_map_editor/_enter_battle` 与 `Settings`，`main.gd` 零改动）。
 
 ## 最短验证命令
 

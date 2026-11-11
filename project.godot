@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 SceneArgs="*res://scripts/scenes/scene_args.gd"
 Settings="*res://scripts/settings.gd"
 BreakpointRuntimeBridge="*uid://37hq7s0ufjxo"
+Panku="*res://addons/panku_console/console.tscn"
 
 [display]
 
@@ -31,7 +32,7 @@ window/stretch/mode="canvas_items"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/breakpoint_mcp/plugin.cfg")
+enabled=PackedStringArray("res://addons/breakpoint_mcp/plugin.cfg", "res://addons/panku_console/plugin.cfg")
 
 [input]
 
