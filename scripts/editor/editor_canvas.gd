@@ -3,12 +3,14 @@
 ## 复用 BattlefieldRenderer（ColumnBatch 等距方块柱 + 世界同款贴图）渲染地形，
 ## 与战斗内观感完全一致。左键按下/拖动发出 cell 信号，由 map_editor.gd 按工具解释。
 ## 右键拖拽或按住空格+左键拖拽平移、滚轮缩放（无相机，直接变换 world 节点）。
+## 已放置单位显示职业头像+阵营色环+等级徽标（缺图回退阵营色圆点+职业字，原视觉）。
 
 class_name EditorCanvas
 extends Control
 
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
+const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 
 signal cell_pressed(cell: Vector2i)
 signal cell_dragged(cell: Vector2i)
@@ -50,6 +52,8 @@ func _ready() -> void:
 	_hover_marker.color = HOVER_COLOR
 	_hover_marker.visible = false
 	_world.add_child(_hover_marker)
+	# 容器化布局：尺寸由父容器分配（首帧 0→实际值），变化时重居中地图
+	resized.connect(_on_canvas_resized)
 
 
 func _rebuild() -> void:
@@ -95,6 +99,12 @@ func _center_map() -> void:
 	var zoom := _world.scale.x if _world.scale != Vector2.ZERO else DEFAULT_ZOOM
 	_world.scale = Vector2(zoom, zoom)
 	_world.position = size * 0.5 - _renderer.map_center() * zoom
+
+
+## 容器尺寸变化（含首次布局 0→实际值）→ 按当前缩放重居中，保持地图可见
+func _on_canvas_resized() -> void:
+	if _renderer != null and _renderer.grid != null:
+		_center_map()
 
 
 # ============================================================
@@ -184,8 +194,12 @@ func _rebuild_unit_markers() -> void:
 	_clear_unit_markers()
 	for u in model.units:
 		var marker := _UnitMark.new()
+		var cid := StringName(String(u.get("class", "swordsman")))
+		if ProfessionVisualScript.portrait_exists(cid):
+			marker.portrait = load(ProfessionVisualScript.portrait_path(cid))
 		marker.faction_color = ENEMY_COLOR if String(u.get("faction", "player")) == "enemy" else PLAYER_COLOR
 		marker.tag = "%s%d" % [String(u.get("tag", "?")), int(u.get("level", 1))]
+		marker.level = int(u.get("level", 1))
 		marker.position = _renderer.coord_for(int(u.x), int(u.y))
 		marker.z_index = 15
 		_world.add_child(marker)
@@ -204,15 +218,40 @@ func _clear_unit_markers() -> void:
 	_unit_markers.clear()
 
 
-## 阵营色圆 + 职业首字/等级文本（自绘，随 world 缩放）
+## 阵营色环 + 职业圆形头像 + 等级徽标（自绘，随 world 缩放）；缺图回退阵营色圆点+职业字
 class _UnitMark:
 	extends Node2D
+	const R := 14.0  # 头像半径（缺图回退圆点维持原 r=9 视觉）
 	var faction_color: Color = Color.WHITE
 	var tag := "?"
+	var level := 1
+	var portrait: Texture2D = null
+
 	func _draw() -> void:
-		var r := 9.0
-		draw_circle(Vector2.ZERO, r, Color(faction_color, 0.85))
-		draw_arc(Vector2.ZERO, r, 0, TAU, 24, Color(0, 0, 0, 0.6), 2.0)
 		var font := ThemeDB.fallback_font
-		draw_string(font, Vector2(-7, 4), tag,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.95))
+		if portrait != null:
+			# 圆形头像：draw_polygon UV 映射把方形立绘贴进圆
+			var seg := 40
+			var pts := PackedVector2Array()
+			var uvs := PackedVector2Array()
+			var cols := PackedColorArray()
+			for i in range(seg):
+				var a := TAU * float(i) / float(seg)
+				pts.append(Vector2(cos(a), sin(a)) * R)
+				uvs.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
+				cols.append(Color.WHITE)
+			draw_polygon(pts, cols, uvs, portrait)
+			draw_arc(Vector2.ZERO, R + 1.5, 0, TAU, 40, Color(faction_color, 0.95), 3.0)
+			draw_arc(Vector2.ZERO, R + 3.0, 0, TAU, 40, Color(0, 0, 0, 0.5), 1.5)
+			var lv := "Lv%d" % level
+			draw_string(font, Vector2(-R + 1, R + 12), lv,
+				HORIZONTAL_ALIGNMENT_CENTER, R * 2.0, 9, Color(0, 0, 0, 0.8))
+			draw_string(font, Vector2(-R, R + 11), lv,
+				HORIZONTAL_ALIGNMENT_CENTER, R * 2.0, 9, Color(1, 1, 1, 0.95))
+		else:
+			# 缺图回退：阵营色圆 + 职业首字/等级文本（原视觉不变）
+			var r := 9.0
+			draw_circle(Vector2.ZERO, r, Color(faction_color, 0.85))
+			draw_arc(Vector2.ZERO, r, 0, TAU, 24, Color(0, 0, 0, 0.6), 2.0)
+			draw_string(font, Vector2(-7, 4), tag,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.95))
