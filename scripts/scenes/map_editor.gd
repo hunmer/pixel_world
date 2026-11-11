@@ -1,17 +1,19 @@
 ## scenes/map_editor.gd — 战场地图编辑器（JSON 战场调试工具）
 ##
 ## 三大能力（用户需求）：
-##   1. 更换地图种子：seed 输入 + 🌱 生成 → BattlefieldDoc.generate 确定性地形
+##   1. 更换地图种子：seed 输入 + 生成（骰子随机种子） -> BattlefieldDoc.generate 确定性地形
 ##   2. 添加地图实体：地形调色板（数据驱动遍历 TERRAIN_GLYPH，W1 扩链后自动
 ##      含沙地/雪地/草原/碎石地共 11 种）+ 画笔/填充/橡皮
 ##   3. 添加阵营角色：阵营（我方/敌方）+ 8 职业头像网格（48×48，缺图回退职业
 ##      首字）+ 等级 + 姓名放置，左键放置/再点删除
 ## 布局容器化（根 VBox 锚点全矩形：顶栏1/顶栏2/主体(侧栏+画布)/状态栏），
-## 1280×800 与 1024×640 自适应；侧栏内容超高走 ScrollContainer 滚动。
-## 保存为 res://data/battlefields/<id>.json（loader schema，保存即回读校验），
-## 战场列表（O 键 / ⚔ 按钮）立即可见可开战。
+## 1280×800 与 1024×640 自适应；侧栏内容超高走 ScrollContainer 滚动；
+## 三大分区（工具/地形/角色放置）可折叠，角色放置默认收起降低拥挤。
+## 图标：at-icons 矢量 SVG（res://addons/at-icons/control/，16×16），加载失败
+## 自动回退文字标签。保存为 res://data/battlefields/<id>.json（loader schema，
+## 保存即回读校验），战场列表（O 键）立即可见可开战。
 ##
-## 入口：世界内 E 键 / 战场面板「🛠 打开编辑器」按钮；返回 → res://main.tscn。
+## 入口：世界内 E 键 / 战场面板「打开编辑器」按钮；返回 -> res://main.tscn。
 
 extends Control
 
@@ -39,6 +41,8 @@ const CLASS_IDS: Array[String] = [
 	"swordsman", "knight", "archer", "mage", "berserker", "assassin", "lancer", "priest",
 ]
 const PORTRAIT_BTN_SIZE := Vector2(48, 48)
+## at-icons 矢量图标（16×16 SVG，control 绿色系）；加载失败调用方回退文字
+const ICON_DIR := "res://addons/at-icons/control/"
 
 var model: Dictionary = {}
 var current_tool: int = Tool.PAINT
@@ -54,7 +58,6 @@ var _seed_edit: LineEdit
 var _width_box: SpinBox
 var _height_box: SpinBox
 var _hosting_check: CheckButton
-var _faction_box: OptionButton
 var _level_box: SpinBox
 var _unit_name_edit: LineEdit
 var _load_box: OptionButton
@@ -103,8 +106,21 @@ func _build_ui() -> void:
 	bar1.add_theme_constant_override("separation", 6)
 	bar1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	root.add_child(bar1)
-	var title := _label("🛠 战场编辑器", 16, ACCENT)
-	bar1.add_child(title)
+	# 标题：at-icons 扳手图标 + 文字（图标缺失只显示文字）
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 6)
+	var wrench: Texture2D = _icon("wrench")
+	if wrench != null:
+		var tw := TextureRect.new()
+		tw.texture = wrench
+		tw.custom_minimum_size = Vector2(18, 18)
+		tw.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tw.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		tw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title_row.add_child(tw)
+	title_row.add_child(_label("战场编辑器", 16, ACCENT))
+	bar1.add_child(title_row)
 	bar1.add_child(_label("id:", 11, TEXT_DIM))
 	_id_edit = LineEdit.new()
 	_id_edit.text = "custom_map"
@@ -124,12 +140,11 @@ func _build_ui() -> void:
 	_load_box.custom_minimum_size = Vector2(170, 28)
 	_refresh_load_box()
 	bar1.add_child(_load_box)
-	var load_btn := _action_btn("📂 读取", _load_selected)
+	var load_btn := _action_btn("读取", _load_selected, "folder_open")
 	bar1.add_child(load_btn)
-	var save_btn := _action_btn("💾 保存", _save)
-	save_btn.custom_minimum_size = Vector2(96, 30)
+	var save_btn := _action_btn("保存", _save, "floppy_disk")
 	bar1.add_child(save_btn)
-	var back_btn := _action_btn("✕ 返回(Esc)", _back_to_world)
+	var back_btn := _action_btn("返回(Esc)", _back_to_world, "doorway_exit")
 	bar1.add_child(back_btn)
 	_center_row(bar1)
 
@@ -145,9 +160,9 @@ func _build_ui() -> void:
 	_seed_edit.custom_minimum_size = Vector2(130, 28)
 	_seed_edit.placeholder_text = "任意文本，同种子同地图"
 	bar2.add_child(_seed_edit)
-	var dice_btn := _action_btn("🎲", func():
+	var dice_btn := _action_btn("随机种子", func():
 		_seed_edit.text = str(Time.get_unix_time_from_system()).sha1_text().substr(0, 8)
-		_generate())
+		_generate(), "dice")
 	bar2.add_child(dice_btn)
 	bar2.add_child(_label("宽:", 11, TEXT_DIM))
 	_width_box = SpinBox.new()
@@ -163,13 +178,12 @@ func _build_ui() -> void:
 	_height_box.value = model.height
 	_height_box.value_changed.connect(func(_v: float): _on_resize())
 	bar2.add_child(_height_box)
-	var gen_btn := _action_btn("🌱 生成", _generate)
-	gen_btn.custom_minimum_size = Vector2(90, 30)
+	var gen_btn := _action_btn("生成", _generate, "sprout")
 	bar2.add_child(gen_btn)
-	var clear_btn := _action_btn("🧹 清空地形", func():
+	var clear_btn := _action_btn("清空地形", func():
 		model.rows = BattlefieldDocScript.create_empty(model.width, model.height).rows
 		_refresh_canvas()
-		_status("地形已清空（单位保留）"))
+		_status("地形已清空（单位保留）"), "trash_can")
 	bar2.add_child(clear_btn)
 	_center_row(bar2)
 
@@ -187,7 +201,7 @@ func _build_ui() -> void:
 	side.add_theme_stylebox_override("panel", _panel_style())
 	body.add_child(side)
 
-	# 11 种地形缩略图 × 3 行 96px 必然超出一屏 → 侧栏整体套 ScrollContainer（只纵向滚）
+	# 11 种地形缩略图 x 3 行 96px 必然超出一屏 -> 侧栏整体套 ScrollContainer（只纵向滚）
 	var scroll := ScrollContainer.new()
 	scroll.name = "SideScroll"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -201,21 +215,20 @@ func _build_ui() -> void:
 	sv.add_theme_constant_override("separation", 6)
 	scroll.add_child(sv)
 
-	# ---- 工具组 ----
-	sv.add_child(_section_label("工具"))
+	# ---- 三大可折叠分组：工具 / 地形 / 角色放置（角色放置默认收起降拥挤） ----
+	var sec_tools := _fold_section(sv, "工具", "wrench", true)
 	var tool_group := ButtonGroup.new()
 	tool_group.pressed.connect(func(btn: Button):
 		current_tool = btn.get_meta("tool")
 		_on_tool_changed())
-	_add_tool_btn(sv, tool_group, Tool.PAINT, "🖌 画笔")
-	_add_tool_btn(sv, tool_group, Tool.FILL, "🪣 填充")
-	_add_tool_btn(sv, tool_group, Tool.ERASE, "🧽 橡皮")
-	_add_tool_btn(sv, tool_group, Tool.UNIT, "👤 角色")
+	_add_tool_btn(sec_tools, tool_group, Tool.PAINT, "画笔", "paintbrush")
+	_add_tool_btn(sec_tools, tool_group, Tool.FILL, "填充", "bucket_fill")
+	_add_tool_btn(sec_tools, tool_group, Tool.ERASE, "橡皮", "eraser")
+	_add_tool_btn(sec_tools, tool_group, Tool.UNIT, "角色", "person")
 	_tool_buttons[Tool.PAINT].button_pressed = true
 
 	# ---- 地形调色板：数据驱动遍历 TERRAIN_GLYPH（W1 扩链自动生效，11 种） ----
-	sv.add_child(HSeparator.new())
-	sv.add_child(_section_label("地形（画笔/填充）"))
+	var sec_terrain := _fold_section(sv, "地形（画笔/填充）", "sprout", true)
 	var terrain_group := ButtonGroup.new()
 	terrain_group.pressed.connect(func(btn: Button):
 		current_terrain = btn.get_meta("terrain"))
@@ -223,7 +236,7 @@ func _build_ui() -> void:
 	tgrid.columns = 4
 	tgrid.add_theme_constant_override("h_separation", 2)
 	tgrid.add_theme_constant_override("v_separation", 2)
-	sv.add_child(tgrid)
+	sec_terrain.add_child(tgrid)
 	# 图片调色板：每格一等距方块柱缩略图（无文字），悬停提示地形名
 	for t: StringName in BattlefieldDocScript.TERRAIN_GLYPH:
 		var tb := _terrain_btn(t, terrain_group)
@@ -231,15 +244,16 @@ func _build_ui() -> void:
 		_terrain_buttons[t] = tb
 	_terrain_buttons[current_terrain].button_pressed = true
 
-	# ---- 角色放置：阵营 + 8 职业头像网格 + 等级/姓名 ----
-	sv.add_child(HSeparator.new())
-	sv.add_child(_section_label("角色放置（角色工具）"))
-	_faction_box = OptionButton.new()
-	_faction_box.add_item("🔵 我方 player")
-	_faction_box.add_item("🔴 敌方 enemy")
-	_faction_box.item_selected.connect(func(idx: int):
-		selected_faction = "player" if idx == 0 else "enemy")
-	sv.add_child(_faction_box)
+	# ---- 角色放置：阵营 + 8 职业头像网格 + 等级/姓名（默认收起） ----
+	var sec_unit := _fold_section(sv, "角色放置（角色工具）", "person", false)
+	var faction_row := HBoxContainer.new()
+	faction_row.add_theme_constant_override("separation", 4)
+	var faction_group := ButtonGroup.new()
+	faction_group.pressed.connect(func(btn: Button):
+		selected_faction = btn.get_meta("faction"))
+	faction_row.add_child(_faction_btn("player", "我方", "shield", faction_group))
+	faction_row.add_child(_faction_btn("enemy", "敌方", "skull", faction_group))
+	sec_unit.add_child(faction_row)
 	var class_group := ButtonGroup.new()
 	class_group.pressed.connect(func(btn: Button):
 		selected_class = btn.get_meta("class"))
@@ -248,7 +262,7 @@ func _build_ui() -> void:
 	pgrid.columns = 4
 	pgrid.add_theme_constant_override("h_separation", 4)
 	pgrid.add_theme_constant_override("v_separation", 4)
-	sv.add_child(pgrid)
+	sec_unit.add_child(pgrid)
 	# 头像网格：8 职业 4×2、48×48（ProfessionVisual.portrait_path，缺图回退职业首字）
 	for cid: String in CLASS_IDS:
 		var pb := _class_btn(cid, class_group)
@@ -267,7 +281,7 @@ func _build_ui() -> void:
 	_unit_name_edit.custom_minimum_size = Vector2(80, 26)
 	_unit_name_edit.placeholder_text = "自动"
 	lv_row.add_child(_unit_name_edit)
-	sv.add_child(lv_row)
+	sec_unit.add_child(lv_row)
 	_center_row(lv_row)
 
 	# ---- 画布（等距方块渲染，内部自带平移/缩放；尺寸由 BodyRow 容器分配） ----
@@ -321,22 +335,115 @@ func _btn_styles(b: Button) -> void:
 	b.add_theme_font_size_override("font_size", 12)
 
 
-func _add_tool_btn(parent: Node, group: ButtonGroup, tool: int, text: String) -> void:
+func _add_tool_btn(parent: Node, group: ButtonGroup, tool: int, text: String, icon_name := "") -> void:
 	var b := Button.new()
 	b.toggle_mode = true
 	b.button_group = group
 	b.text = text
+	var icon: Texture2D = null
+	if icon_name != "":
+		icon = _icon(icon_name)
+	if icon != null:
+		b.icon = icon
+	b.tooltip_text = "%s工具" % text
 	b.set_meta("tool", tool)
 	_btn_styles(b)
 	parent.add_child(b)
 	_tool_buttons[tool] = b
 
 
-func _action_btn(text: String, cb: Callable) -> Button:
+## 动作按钮；icon_name 提供时为纯图标紧凑形态（tooltip=完整文字），图标缺失回退文字
+func _action_btn(text: String, cb: Callable, icon_name := "") -> Button:
 	var b := Button.new()
 	b.text = text
+	var icon: Texture2D = null
+	if icon_name != "":
+		icon = _icon(icon_name)
+	if icon != null:
+		b.icon = icon
+		b.text = ""
+		b.tooltip_text = text
 	_btn_styles(b)
 	b.pressed.connect(cb)
+	return b
+
+
+## at-icons 图标加载（16×16 SVG，control 绿色系）；不存在/失败返回 null，调用方回退文字
+func _icon(name: String) -> Texture2D:
+	var path := ICON_DIR + name + ".svg"
+	if not ResourceLoader.exists(path):
+		return null
+	var tex: Texture2D = load(path)
+	return tex
+
+
+## 可折叠分组：头部按钮（图标+标题+右缘三角箭头）点击切换 body 显隐；返回 body
+## body 仍由调用方填充内容；箭头用 resized 回调贴右缘（Button 非 Container）
+func _fold_section(parent: Node, title: String, icon_name: String, default_open: bool) -> VBoxContainer:
+	var wrap := VBoxContainer.new()
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wrap.add_theme_constant_override("separation", 2)
+	parent.add_child(wrap)
+	var header := Button.new()
+	header.text = title
+	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var icon: Texture2D = null
+	if icon_name != "":
+		icon = _icon(icon_name)
+	if icon != null:
+		header.icon = icon
+	header.tooltip_text = "点击展开/折叠"
+	_btn_styles(header)
+	header.add_theme_font_size_override("font_size", 12)
+	header.add_theme_color_override("font_color", ACCENT)
+	header.add_theme_color_override("font_hover_color", ACCENT)
+	header.add_theme_color_override("font_pressed_color", ACCENT)
+	header.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	wrap.add_child(header)
+	var body := VBoxContainer.new()
+	body.visible = default_open
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 6)
+	wrap.add_child(body)
+	var arrow := TextureRect.new()
+	var tri: Texture2D = _icon("triangle")
+	if tri != null:
+		arrow.texture = tri
+		arrow.custom_minimum_size = Vector2(10, 10)
+		arrow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		arrow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		arrow.size = Vector2(10, 10)
+		arrow.pivot_offset = Vector2(5, 5)
+		arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		arrow.rotation = PI if default_open else PI * 0.5  # 下=展开 右=收起（triangle 默认朝上）
+		header.add_child(arrow)
+		var place := func() -> void:
+			arrow.position = Vector2(header.size.x - arrow.size.x - 8.0, (header.size.y - arrow.size.y) * 0.5)
+		header.resized.connect(place)
+		place.call()
+	header.pressed.connect(func():
+		body.visible = not body.visible
+		arrow.rotation = PI if body.visible else PI * 0.5)
+	return body
+
+
+## 阵营切换按钮（盾=我方 / 骷髅=敌方，ButtonGroup 单选；缺图回退纯文字）
+func _faction_btn(faction: String, label: String, icon_name: String, group: ButtonGroup) -> Button:
+	var b := Button.new()
+	b.toggle_mode = true
+	b.button_group = group
+	b.set_meta("faction", faction)
+	b.tooltip_text = "%s %s" % [label, faction]
+	b.custom_minimum_size = Vector2(104, 30)
+	var icon: Texture2D = null
+	if icon_name != "":
+		icon = _icon(icon_name)
+	if icon != null:
+		b.icon = icon
+	b.text = label
+	_btn_styles(b)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.button_pressed = faction == selected_faction
 	return b
 
 
@@ -447,7 +554,7 @@ func _set_glyph(cell: Vector2i, glyph: String) -> void:
 	_canvas._refresh_cell(cell)
 
 
-## 洪水填充：同图例连通区域 → 目标地形
+## 洪水填充：同图例连通区域 -> 目标地形
 func fill_cell(cell: Vector2i, terrain: StringName) -> void:
 	if cell.x < 0 or cell.y < 0 or cell.x >= model.width or cell.y >= model.height:
 		return
@@ -616,7 +723,7 @@ func load_path(path: String) -> Dictionary:
 func _save() -> void:
 	var result := save_current()
 	if bool(result.get("ok", false)):
-		_status("已保存 → %s（战场列表立即可用）" % result.get("path", ""))
+		_status("已保存 -> %s（战场列表立即可用）" % result.get("path", ""))
 		_refresh_load_box()
 	else:
 		_status("保存失败：%s" % result.get("error", ""), true)

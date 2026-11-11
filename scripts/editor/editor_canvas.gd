@@ -52,7 +52,7 @@ func _ready() -> void:
 	_hover_marker.color = HOVER_COLOR
 	_hover_marker.visible = false
 	_world.add_child(_hover_marker)
-	# 容器化布局：尺寸由父容器分配（首帧 0→实际值），变化时重居中地图
+	# 容器化布局：尺寸由父容器分配（首帧 0->实际值），变化时重居中地图
 	resized.connect(_on_canvas_resized)
 
 
@@ -69,7 +69,7 @@ func _rebuild() -> void:
 	_center_map()
 
 
-## 模型 rows（图例字符画）→ GridSystem（全名地形矩阵）
+## 模型 rows（图例字符画）-> GridSystem（全名地形矩阵）
 func _build_grid() -> GridSystem:
 	var rows: Array = model.rows
 	var map: Array = []
@@ -101,7 +101,7 @@ func _center_map() -> void:
 	_world.position = size * 0.5 - _renderer.map_center() * zoom
 
 
-## 容器尺寸变化（含首次布局 0→实际值）→ 按当前缩放重居中，保持地图可见
+## 容器尺寸变化（含首次布局 0->实际值）-> 按当前缩放重居中，保持地图可见
 func _on_canvas_resized() -> void:
 	if _renderer != null and _renderer.grid != null:
 		_center_map()
@@ -162,7 +162,7 @@ func _zoom_at(cursor: Vector2, factor: float) -> void:
 	_world.scale = Vector2(new_zoom, new_zoom)
 
 
-## 画布局部坐标 → cell（多高度感知拾取）
+## 画布局部坐标 -> cell（多高度感知拾取）
 func _pick(local_pos: Vector2) -> Vector2i:
 	if _renderer == null or _renderer.grid == null:
 		return Vector2i(-1, -1)
@@ -206,7 +206,7 @@ func _rebuild_unit_markers() -> void:
 		_unit_markers.append(marker)
 
 
-## 单格地形变了可能影响站立层 → 该格上的标记位置重算
+## 单格地形变了可能影响站立层 -> 该格上的标记位置重算
 func _refresh_markers_at(_cell: Vector2i) -> void:
 	_rebuild_unit_markers()
 

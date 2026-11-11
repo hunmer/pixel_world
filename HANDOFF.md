@@ -99,3 +99,13 @@
 
 - 编辑器桥调试（本仓库 `addons/breakpoint_mcp`）：会话开头 `mcp__godot__editor_ping`；详见 `AGENTS.md` 的 MCP 调试规范与 `rules/mcp-debugging.md`。
 - 契约测试模板：`extends SceneTree` + `_initialize` → `call_deferred("_run")` + `_expect(cond,msg)` + 末尾 `print("XXX_CONTRACT_OK")`，参考 `tests/battlefields_contract.gd`。
+
+## W5 编辑器 UI 分组折叠 + 图标化（2026-11-11，ui-dev）
+
+- **at-icons 图标库 vendored**：`addons/at-icons/`（上游 Voxybuns/at-icons v1.6.0 release zip，sha256 `45480c25...cbb5f5` 校验通过，MIT）。700+ 图标 x node/node2d/node3d/control/animation/mesh 色系目录，16x16 SVG 单色（control 色=#8eef97 绿）。**必须用 release zip 安装**（git 仓库含 web picker 源码不可直接用）；zip 根的 `@icons picker.html` 别解进项目根；MSYS unzip 的 `'addons/*'` 通配符会静默不匹配，需全量解压再删杂散文件。
+- **map_editor.gd 图标化**：新增 `const ICON_DIR` + `_icon(name)`（ResourceLoader.exists 守卫，失败返回 null 回退文字）；`_action_btn(text, cb, icon_name)` 图标命中时转纯图标紧凑按钮（tooltip=完整文字）；`_add_tool_btn(..., icon_name)` 带 icon。图标位：wrench=标题 / folder_open=读取 / floppy_disk=保存 / doorway_exit=返回 / dice=随机种子 / sprout=生成 / trash_can=清空 / paintbrush=画笔 / bucket_fill=填充 / eraser=橡皮 / person=角色工具与角色分组 / shield=我方 / skull=敌方 / triangle=折叠箭头（默认朝上，展开=rotation PI 即向下，收起=PI/2 即向右）。
+- **侧栏三区可折叠**：`_fold_section(parent, title, icon_name, default_open) -> body VBox`——头部按钮（图标+标题+右缘三角箭头）点击切换 body.visible；箭头靠 `header.resized` 回调贴右缘（Button 非 Container，anchors 不可靠）。工具/地形默认展开，**角色放置默认收起**（降拥挤）。
+- **阵营选择改双 toggle**：原 `_faction_box` OptionButton 删除，改 shield/skull 两 ButtonGroup 按钮，`selected_faction` 状态位不变（place_unit 冻结面零影响）。
+- **emoji 全清**：map_editor.gd 与 editor_canvas.gd grep emoji/几何符号区间计数 0（注释里的 →/× 一并规范成 ASCII）。
+- **坑**：SVG 图标 `load()` 前需 import（release zip 自带 .import 元数据，首次跑场景引擎自动导入；`_icon` 的 exists+null 双守卫保证未导入时不崩）。
+- **导出建议**：打正式包时在 Export Mode 的排除/过滤清单里考虑 `addons/at-icons/node*/`、`animation/`、`mesh/` 等未用色系目录（编辑器 UI 只用 `control/` 一组），可显著瘦身；`plugin.cfg` 未启用，无运行时副作用。
