@@ -33,10 +33,10 @@ const TERRAIN_STYLES := {
 	&"fort":     {"top": &"mossy_rock", "column": &"rock",      "height": 3},
 	&"village":  {"top": &"parched_soil", "column": &"soil",    "height": 2},
 	&"wall":     {"top": &"rock",       "column": &"rock",      "height": 4},
-	&"sand":    {"top": &"sand",       "column": &"parched_soil", "height": 2},
-	&"snow":    {"top": &"snow",       "column": &"rock",      "height": 2},
-	&"grass":   {"top": &"rock_grass", "column": &"soil",      "height": 2},
-	&"rocky":   {"top": &"rock",       "column": &"soil",      "height": 2},
+	&"sand":    {"top": &"sand",         "column": &"sand",   "height": 2},
+	&"snow":    {"top": &"snow",         "column": &"snow",   "height": 2},
+	&"grass":   {"top": &"sparse_grass", "column": &"soil",   "height": 2},
+	&"rocky":   {"top": &"rock_grass",   "column": &"rock",   "height": 3},
 }
 
 ## 装饰物（level=相对柱顶的附加层，此处全部贴柱顶；offset_y 由贴图高度自适应）
@@ -48,15 +48,10 @@ const TERRAIN_PROPS := {
 	],
 	&"village": ["res://meowa_tiles/trees/apple_tree.png"],
 	&"fort":    ["res://meowa_tiles/decorations/mossy_boulder_large.png"],
-	&"sand":    [
-		"res://meowa_tiles/trees/palm_tree_small.png",
-		"res://meowa_tiles/trees/palm_tree_tall.png",
-	],
 	&"snow":    [
-		"res://meowa_tiles/trees/snowy_pine_small.png",
-		"res://meowa_tiles/trees/snowy_pine_round.png",
+		"res://meowa_tiles/decorations/snowy_tree_stump.png",
+		"res://meowa_tiles/decorations/snowy_tree_stump_tall.png",
 	],
-	&"rocky":   ["res://meowa_tiles/decorations/mossy_boulder_small.png"],
 }
 
 ## 柱顶贴图的绘制高度（32×32 补齐后顶面菱形底部距中心 13px，见 _pad_texture_to_32）
@@ -347,7 +342,7 @@ static func _ensure_shared_textures() -> void:
 	)
 	for surface_id in [
 		&"grass", &"soil", &"rock", &"mossy_rock", &"moist_soil", &"parched_soil",
-		&"sand", &"snow", &"rock_grass",
+		&"sand", &"snow", &"sparse_grass", &"rock_grass",
 	]:
 		var entry := {}
 		for role in [&"top", &"column", &"underwater"]:

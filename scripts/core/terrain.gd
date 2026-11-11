@@ -19,9 +19,9 @@ static func _static_init() -> void:
 		&"fort":     _mk(&"fort",     3, 20, {&"foot": 1, &"armor": 1, &"cavalry": 1, &"flying": 1}, true),
 		&"village":  _mk(&"village",  0, 0,  {&"foot": 1, &"armor": 1, &"cavalry": 1, &"flying": 1}, true),
 		&"wall":     _mk(&"wall",     0, 0,  {&"foot": 99, &"armor": 99, &"cavalry": 99, &"flying": 99}, false),
-		&"sand":    _mk(&"sand",    0, 0,  {&"foot": 2, &"armor": 2, &"cavalry": 3, &"flying": 1}, true),
-		&"snow":    _mk(&"snow",    0, 10, {&"foot": 2, &"armor": 2, &"cavalry": 3, &"flying": 1}, true),
-		&"grass":   _mk(&"grass",   0, 10, {&"foot": 1, &"armor": 1, &"cavalry": 1, &"flying": 1}, true),
+		&"sand":    _mk(&"sand",    0, 0,  {&"foot": 1, &"armor": 1, &"cavalry": 1, &"flying": 1}, true),
+		&"snow":    _mk(&"snow",    0, 0,  {&"foot": 2, &"armor": 2, &"cavalry": 2, &"flying": 1}, true),
+		&"grass":   _mk(&"grass",   0, 0,  {&"foot": 1, &"armor": 1, &"cavalry": 1, &"flying": 1}, true),
 		&"rocky":   _mk(&"rocky",   1, 10, {&"foot": 2, &"armor": 2, &"cavalry": 3, &"flying": 1}, true),
 	}
 

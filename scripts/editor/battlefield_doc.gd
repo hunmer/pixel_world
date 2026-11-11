@@ -44,8 +44,8 @@ const TERRAIN_CN := {
 	&"wall": "城墙",
 	&"sand": "沙地",
 	&"snow": "雪地",
-	&"grass": "草原",
-	&"rocky": "碎石地",
+	&"grass": "草地",
+	&"rocky": "岩坡",
 }
 
 ## 图例 -> 地形（懒缓存 DEFAULT_LEGEND 拷贝）
