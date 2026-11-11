@@ -10,6 +10,7 @@
 - 默认战斗模式：B1 就地战旗，按 `P` 从世界进入。
 - B2 切场景模式仍保留：`res://scenes/Battle.tscn`，由 `Settings.battle_inline_mode=false` 切换；**JSON 战场固定走 B2**（自带地形与世界无关）。
 - 新功能（2026-11-11 两个 feature commit）：按 `O` 打开 JSON 战场列表；按 `E` 打开战场地图编辑器。
+- HUD 布局（同日调整）：战场/设置改为**左侧竖排图标按钮**（`HUDRoot/LeftBar`，无文字 42×42，悬停提示）；操作提示条移到**右下角**（`HUDRoot/BottomArea`，含 `SPACE+拖拽 平移地图` 提示）。战场 B1/B2 与编辑器画布均支持按住空格+左键拖拽平移（编辑器还支持右键拖拽）。
 - **等距方块渲染重做（2026-11-11）**：B2 战场与编辑器画布均改为像素 Minecraft 式等距方块渲染（`BattlefieldRenderer`，复用世界渲染管线 ColumnBatch + TerrainMaterialRegistry 贴图 + 程序化水面），平面色块代码已删（`render_terrain_fallback`、`iso_board` 的块池/网格绘制）。
 - Breakpoint MCP 编辑器桥可用（addon 1.23.0，`editor_ping`→pong；运行时桥端口 9081）。
 

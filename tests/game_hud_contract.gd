@@ -28,20 +28,20 @@ func _run() -> void:
 	var hud = GameHudScript.new()
 	root.add_child(hud)
 	await process_frame
-	var top_area := hud.get_node("HUDRoot/TopArea") as VBoxContainer
+	var bottom_area := hud.get_node("HUDRoot/BottomArea") as VBoxContainer
 	var help_flow := hud.get_node(
-		"HUDRoot/TopArea/HelpPanel/HelpFlow"
+		"HUDRoot/BottomArea/HelpPanel/HelpFlow"
 	) as HFlowContainer
-	_expect(top_area != null, "HUD 缺少顶部安全区")
+	_expect(bottom_area != null, "HUD 缺少底部提示区")
 	_expect(help_flow != null, "HUD 操作提示没有使用响应式 FlowContainer")
 	_expect(
-		hud.get_node_or_null("HUDRoot/TopArea/StatusPanel") == null,
+		hud.get_node_or_null("HUDRoot/BottomArea/StatusPanel") == null,
 		"HUD 不应继续显示世界、天气或景深状态栏"
 	)
-	if top_area != null:
-		_expect(top_area.anchor_right == 1.0, "HUD 顶部没有随视口宽度伸展")
-		_expect(top_area.offset_right <= -140.0, "HUD 没有为右上角小地图预留空间")
-	_expect(help_flow.get_child_count() >= 11, "HUD 快捷键提示不完整")
+	if bottom_area != null:
+		_expect(bottom_area.anchor_right == 1.0, "HUD 提示区没有随视口宽度伸展")
+		_expect(bottom_area.anchor_bottom == 1.0, "HUD 提示区没有锚定在底部")
+	_expect(help_flow.get_child_count() >= 12, "HUD 快捷键提示不完整")
 	var has_map_hint := false
 	for child in help_flow.get_children():
 		var key_label := child.get_node_or_null("Keycap/Key")

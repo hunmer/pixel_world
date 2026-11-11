@@ -1,6 +1,6 @@
 extends CanvasLayer
 ## 战场选择面板（调试）：列出 data/battlefields/*.json，点选后由 main.gd 以 B2 独立场景加载。
-## 屏幕顶部只保留操作提示；面板为右上角小地图预留空间且不拦截输入。
+## 左侧竖排图标按钮（战场列表/设置）；操作提示移到右下角；面板不拦截输入。
 
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 
@@ -16,9 +16,8 @@ const TEXT_SECONDARY := Color(0.56, 0.68, 0.71)
 const ACCENT := Color(0.40, 0.86, 0.76)
 const KEY_COLOR := Color(1.0, 0.78, 0.34)
 const ERROR_COLOR := Color(1.0, 0.45, 0.42)
-const MINIMAP_RESERVE := 150.0
 
-var _top_area: VBoxContainer
+var _bottom_area: VBoxContainer
 var _help_flow: HFlowContainer
 ## 战场选择面板（懒创建；null = 关闭）
 var _battlefield_panel: Control = null
@@ -37,23 +36,23 @@ func _build_ui() -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
 
-	_top_area = VBoxContainer.new()
-	_top_area.name = "TopArea"
-	_top_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_top_area.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_top_area.offset_left = 12.0
-	_top_area.offset_top = 10.0
-	_top_area.offset_right = -MINIMAP_RESERVE
-	_top_area.offset_bottom = 48.0
-	root.add_child(_top_area)
+	_bottom_area = VBoxContainer.new()
+	_bottom_area.name = "BottomArea"
+	_bottom_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bottom_area.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_bottom_area.offset_left = 12.0
+	_bottom_area.offset_top = -56.0
+	_bottom_area.offset_right = -12.0
+	_bottom_area.offset_bottom = -10.0
+	root.add_child(_bottom_area)
 
 	var help_panel := PanelContainer.new()
 	help_panel.name = "HelpPanel"
 	help_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	help_panel.custom_minimum_size = Vector2(800.0, 32.0)
-	help_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	help_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
 	help_panel.add_theme_stylebox_override("panel", _panel_style())
-	_top_area.add_child(help_panel)
+	_bottom_area.add_child(help_panel)
 
 	_help_flow = HFlowContainer.new()
 	_help_flow.name = "HelpFlow"
@@ -69,6 +68,7 @@ func _build_ui() -> void:
 	_add_hint("WASD / 方向键", "移动")
 	_add_hint("SHIFT", "加速")
 	_add_hint("滚轮 / + −", "缩放")
+	_add_hint("SPACE+拖拽", "平移地图")
 	_add_hint("M", "地图")
 	_add_hint("T", "天气")
 	_add_hint("N", "昼夜")
@@ -80,25 +80,32 @@ func _build_ui() -> void:
 	_add_hint("O", "战场列表")
 	_add_hint("E", "地图编辑器")
 
-	# 右上角「战场」按钮（JSON 战场加载列表，调试入口）
+	# 左侧竖排图标按钮栏：战场列表 + 设置（无文字，悬停显示提示）
+	var left_bar := VBoxContainer.new()
+	left_bar.name = "LeftBar"
+	left_bar.position = Vector2(10.0, 10.0)
+	left_bar.add_theme_constant_override("separation", 8)
+	root.add_child(left_bar)
+
+	# 「战场」按钮（JSON 战场加载列表，调试入口）
 	var battlefield_btn := Button.new()
 	battlefield_btn.name = "BattlefieldBtn"
-	battlefield_btn.text = "⚔ 战场"
-	battlefield_btn.position = Vector2(get_viewport().get_visible_rect().size.x - MINIMAP_RESERVE - 210, 10)
-	battlefield_btn.size = Vector2(100, 32)
-	battlefield_btn.add_theme_font_size_override("font_size", 12)
+	battlefield_btn.text = "⚔"
+	battlefield_btn.tooltip_text = "战场列表（O）"
+	battlefield_btn.custom_minimum_size = Vector2(42.0, 42.0)
+	battlefield_btn.add_theme_font_size_override("font_size", 18)
 	battlefield_btn.pressed.connect(toggle_battlefield_panel)
-	root.add_child(battlefield_btn)
+	left_bar.add_child(battlefield_btn)
 
-	# 右上角「设置」按钮
+	# 「设置」按钮
 	var settings_btn := Button.new()
 	settings_btn.name = "SettingsBtn"
-	settings_btn.text = "⚙ 设置"
-	settings_btn.position = Vector2(get_viewport().get_visible_rect().size.x - MINIMAP_RESERVE - 100, 10)
-	settings_btn.size = Vector2(90, 32)
-	settings_btn.add_theme_font_size_override("font_size", 12)
+	settings_btn.text = "⚙"
+	settings_btn.tooltip_text = "设置"
+	settings_btn.custom_minimum_size = Vector2(42.0, 42.0)
+	settings_btn.add_theme_font_size_override("font_size", 18)
 	settings_btn.pressed.connect(_open_settings)
-	root.add_child(settings_btn)
+	left_bar.add_child(settings_btn)
 
 
 ## 设置面板：战斗模式切换（就地/独立场景）

@@ -2,7 +2,7 @@
 ##
 ## 复用 BattlefieldRenderer（ColumnBatch 等距方块柱 + 世界同款贴图）渲染地形，
 ## 与战斗内观感完全一致。左键按下/拖动发出 cell 信号，由 map_editor.gd 按工具解释。
-## 右键拖拽平移、滚轮缩放（无相机，直接变换 world 节点）。
+## 右键拖拽或按住空格+左键拖拽平移、滚轮缩放（无相机，直接变换 world 节点）。
 
 class_name EditorCanvas
 extends Control
@@ -92,7 +92,7 @@ func _center_map() -> void:
 
 
 # ============================================================
-# 输入：左键=工具操作，右键拖拽=平移，滚轮=缩放
+# 输入：左键=工具操作，右键拖拽或空格+左键拖拽=平移，滚轮=缩放
 # ============================================================
 
 func _gui_input(event: InputEvent) -> void:
@@ -113,6 +113,11 @@ func _gui_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
+				if Input.is_key_pressed(KEY_SPACE):
+					# 按住空格 + 左键拖拽 = 平移（与 B1/B2 战场一致）
+					_panning = true
+					accept_event()
+					return
 				var c := _pick(mb.position)
 				if c.x >= 0:
 					_dragging = true
@@ -120,6 +125,7 @@ func _gui_input(event: InputEvent) -> void:
 					accept_event()
 			else:
 				_dragging = false
+				_panning = false
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
 			_panning = mb.pressed
 			accept_event()
