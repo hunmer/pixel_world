@@ -14,6 +14,7 @@ extends Control
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const EditorCanvasScript = preload("res://scripts/editor/editor_canvas.gd")
+const TilePreviewScript = preload("res://scripts/editor/tile_preview.gd")
 const ProfessionDataScript = preload("res://scripts/core/professions.gd")
 
 const Tool = { PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3 }
@@ -177,17 +178,21 @@ func _build_ui() -> void:
 	terrain_group.pressed.connect(func(btn: Button):
 		current_terrain = btn.get_meta("terrain"))
 	var tgrid := GridContainer.new()
-	tgrid.columns = 2
-	tgrid.add_theme_constant_override("h_separation", 4)
-	tgrid.add_theme_constant_override("v_separation", 4)
+	tgrid.columns = 4
+	tgrid.add_theme_constant_override("h_separation", 2)
+	tgrid.add_theme_constant_override("v_separation", 2)
 	sv.add_child(tgrid)
+	# 图片调色板：每格一等距方块柱缩略图（无文字），悬停提示地形名
 	for t in [&"plain", &"forest", &"mountain", &"water", &"fort", &"village", &"wall"]:
 		var tb := Button.new()
 		tb.toggle_mode = true
 		tb.button_group = terrain_group
-		tb.custom_minimum_size = Vector2(96, 30)
-		tb.text = BattlefieldDocScript.TERRAIN_CN[t]
+		tb.custom_minimum_size = Vector2(46, 96)
+		tb.tooltip_text = "%s（%s）" % [BattlefieldDocScript.TERRAIN_CN[t], BattlefieldDocScript.TERRAIN_GLYPH[t]]
 		tb.set_meta("terrain", t)
+		var prev := TilePreviewScript.new(t)
+		prev.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		tb.add_child(prev)
 		tgrid.add_child(tb)
 		_terrain_buttons[t] = tb
 	_terrain_buttons[current_terrain].button_pressed = true

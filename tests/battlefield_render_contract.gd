@@ -113,13 +113,13 @@ func _run() -> void:
 
 	# 7. 装饰物确定性：forest 格含 prop block，occluder_class=prop，重建后贴图一致
 	var forest_col: Node = renderer._columns[Vector2i(2, 4)]
-	var has_prop := false
+	var prev_has_prop := false
 	var prop_tex: Texture2D = null
 	for b in (forest_col as Node)._blocks:
 		if b.get("occluder_class", &"") == &"prop":
-			has_prop = true
+			prev_has_prop = true
 			prop_tex = b["texture"]
-	_expect(has_prop, "森林格有装饰物 block")
+	_expect(prev_has_prop, "森林格有装饰物 block")
 	_expect(prop_tex != null and prop_tex.get_size().x > 0, "装饰物贴图有效（%s）" % str(prop_tex.get_size() if prop_tex else Vector2i.ZERO))
 	var blocks_before: int = (forest_col as Node)._blocks.size()
 	renderer.refresh_cell(2, 4)
@@ -148,6 +148,27 @@ func _run() -> void:
 	# 9. setup(null) 安全（编辑器空模型路径）
 	renderer.setup(null)
 	_expect(renderer.column_count() == 0 and renderer.grid == null, "setup(null) 清空且不崩")
+
+	# 10. 调色板预览 blocks（编辑器 tile_preview 用）
+	var expect_counts := {&"plain": 2, &"forest": 3, &"mountain": 5, &"water": 2, &"fort": 4, &"village": 3, &"wall": 4}
+	for t in expect_counts.keys():
+		var pblocks: Array = RendererScript.preview_blocks(t)
+		var prev_all_tex := true
+		for b in pblocks:
+			if b.get("texture", null) == null:
+				prev_all_tex = false
+		_expect(pblocks.size() == int(expect_counts[t]), "preview %s 块数=%d（期望 %d）" % [t, pblocks.size(), int(expect_counts[t])])
+		_expect(prev_all_tex, "preview %s 贴图全非空" % t)
+	var water_preview: Array = RendererScript.preview_blocks(&"water")
+	_expect(abs(float(water_preview[1]["modulate"].a) - 0.38) < 0.001, "水面预览 alpha=0.38")
+	var wall_preview: Array = RendererScript.preview_blocks(&"wall")
+	_expect(abs(float(wall_preview[0]["modulate"].r) - 0.58) < 0.001, "墙体预览 tint r=0.58")
+	var forest_preview: Array = RendererScript.preview_blocks(&"forest")
+	var palette_has_prop := false
+	for b in forest_preview:
+		if b.get("occluder_class", &"") == &"prop":
+			palette_has_prop = true
+	_expect(palette_has_prop, "森林预览含装饰物")
 
 	if failures == 0:
 		print("BATTLEFIELD_RENDER_CONTRACT_OK")

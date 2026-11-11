@@ -377,3 +377,56 @@ static func _make_water_face_texture(face: StringName) -> ImageTexture:
 			if inside:
 				img.set_pixel(x, y, WATER_COLOR)
 	return ImageTexture.create_from_image(img)
+
+
+# ============================================================
+# 编辑器调色板预览（静态：无网格依赖）
+# ============================================================
+
+## 给定地形生成单柱预览 blocks（tile_preview.gd 调色板缩略图用）。
+## 水面不带岸线/侧壁；装饰物固定取该地形的第一个候选（无网格坐标可做确定性选取）。
+static func preview_blocks(terrain: StringName) -> Array:
+	_ensure_shared_textures()
+	var style: Dictionary = TERRAIN_STYLES.get(terrain, TERRAIN_STYLES[&"plain"])
+	var height := int(style["height"])
+	var blocks: Array = []
+	if terrain == &"water":
+		blocks.append(_preview_block(_shared_tex(&"moist_soil", &"top"), 0, Color.WHITE))
+		var surf := _preview_block(_shared_water.get(&"surface", null), 1, Color(1.0, 1.0, 1.0, WATER_SURFACE_ALPHA))
+		surf["water_part"] = &"surface"
+		blocks.append(surf)
+	else:
+		var top_tex: Texture2D = _shared_tex(style["top"], &"top")
+		var col_tex: Texture2D = _shared_tex(style["column"], &"column")
+		var tint := Color(0.58, 0.58, 0.62, 1.0) if terrain == &"wall" else Color.WHITE
+		for lvl in range(height):
+			blocks.append(_preview_block(top_tex if lvl == height - 1 else col_tex, lvl, tint))
+		var candidates: Array = TERRAIN_PROPS.get(terrain, [])
+		if not candidates.is_empty():
+			var tex: Texture2D = load(String(candidates[0]))
+			if tex != null:
+				var lift := (tex.get_size().y - TOP_TEXTURE_BASE) * 0.5
+				var prop := _preview_block(tex, height, Color.WHITE)
+				prop["render_offset"] = Vector2(0.0, -lift)
+				prop["occluder_class"] = &"prop"
+				blocks.append(prop)
+	return blocks
+
+
+static func _shared_tex(surface_id: StringName, role: StringName) -> Texture2D:
+	var entry: Dictionary = _shared_textures.get(surface_id, {})
+	var tex: Texture2D = entry.get(role, null)
+	if tex == null:
+		tex = entry.get(&"top", null)
+	return tex
+
+
+static func _preview_block(tex: Texture2D, level: int, modulate: Color) -> Dictionary:
+	return {
+		"level": level,
+		"texture": tex,
+		"modulate": modulate,
+		"render_priority": 0,
+		"render_offset": Vector2.ZERO,
+		"occluder_class": &"terrain",
+	}

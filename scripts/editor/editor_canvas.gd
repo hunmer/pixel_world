@@ -41,6 +41,7 @@ func _ready() -> void:
 	clip_contents = true
 	_world = Node2D.new()
 	_world.name = "EditorWorld"
+	_world.scale = Vector2(DEFAULT_ZOOM, DEFAULT_ZOOM)
 	add_child(_world)
 	_renderer = BattlefieldRendererScript.new()
 	_world.add_child(_renderer)
@@ -81,6 +82,11 @@ func _build_grid() -> GridSystem:
 func _refresh_cell(cell: Vector2i) -> void:
 	if _renderer == null or _renderer.grid == null:
 		return
+	if cell.x < 0 or cell.y < 0 or cell.x >= model.width or cell.y >= model.height:
+		return
+	# rows 是权威源：先把该格地形同步进渲染器网格，再重建柱（否则画笔无视觉效果）
+	var terrain: StringName = BattlefieldDocScript.glyph_to_terrain((model.rows[cell.y] as String).substr(cell.x, 1))
+	(_renderer.grid.tiles[cell.y][cell.x] as Dictionary)["type"] = terrain
 	_renderer.refresh_cell(cell.x, cell.y)
 	_refresh_markers_at(cell)
 

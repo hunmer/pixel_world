@@ -12,6 +12,7 @@
 - 新功能（2026-11-11 两个 feature commit）：按 `O` 打开 JSON 战场列表；按 `E` 打开战场地图编辑器。
 - HUD 布局（同日调整）：战场/设置改为**左侧竖排图标按钮**（`HUDRoot/LeftBar`，无文字 42×42，悬停提示）；操作提示条移到**右下角**（`HUDRoot/BottomArea`，含 `SPACE+拖拽 平移地图` 提示）。战场 B1/B2 与编辑器画布均支持按住空格+左键拖拽平移（编辑器还支持右键拖拽）。
 - **等距方块渲染重做（2026-11-11）**：B2 战场与编辑器画布均改为像素 Minecraft 式等距方块渲染（`BattlefieldRenderer`，复用世界渲染管线 ColumnBatch + TerrainMaterialRegistry 贴图 + 程序化水面），平面色块代码已删（`render_terrain_fallback`、`iso_board` 的块池/网格绘制）。
+- 编辑器修复+图片调色板（同日）：画笔/橡皮单格刷新 bug 修复（`EditorCanvas._refresh_cell` 现先同步 renderer 的 GridSystem 再重建柱——此前模型更新但渲染网格还是旧地形导致视觉无变化）；地形调色板改为**图片缩略图**（`TilePreview` 画 `BattlefieldRenderer.preview_blocks(terrain)` 的等距方块柱，4 列 GridContainer，无文字，tooltip=地形名+图例）。
 - Breakpoint MCP 编辑器桥可用（addon 1.23.0，`editor_ping`→pong；运行时桥端口 9081）。
 
 ## 需求入口索引
