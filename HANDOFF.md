@@ -1,83 +1,88 @@
 # HANDOFF — pixel_world 快速入口目录
 
-> 更新于 2026-07-28。目标：下个 agent 接新需求时先按本目录跳入口，少重读代码库。
-> 当前工作区已有未提交改动；不要回滚用户/前序 agent 改动。
+> 更新于 2026-11-11。目标：下个 agent 接新需求时先按本目录跳入口，少重读代码库。
+> 当前工作区已有未提交改动（`addons/breakpoint_mcp/*`、`.zcode/plans/*` 删除）；不要回滚用户/前序 agent 改动。
 
 ## 当前状态
 
-- Godot 工程：`G:/pixel_world`
-- 主场景：`res://main.tscn`
+- Godot 工程目录：`E:/pixel_world`（**已从 G:/ 迁移**）；主场景 `res://main.tscn`
+- Godot exe：`D:/Godot/Godot_v4.7.2-stable_win64_console.exe`（不在 PATH；用 `wmic process where "name like '%godot%'" get ExecutablePath,CommandLine` 查）
 - 默认战斗模式：B1 就地战旗，按 `P` 从世界进入。
-- B2 切场景模式仍保留：`res://scenes/Battle.tscn`，由 `Settings.battle_inline_mode=false` 切换。
-- 最近验证：
-  - `& "C:/Program Files/Godot/Godot.exe" --headless --path "G:/pixel_world" --script "res://tests/battle_screen_pick_contract.gd"`
-  - `& "C:/Program Files/Godot/Godot.exe" --headless --path "G:/pixel_world" --quit-after 1`
-- 已知环境警告：Breakpoint MCP runtime 端口 `9081` 可能占用；不是脚本编译错误。
+- B2 切场景模式仍保留：`res://scenes/Battle.tscn`，由 `Settings.battle_inline_mode=false` 切换；**JSON 战场固定走 B2**（自带地形与世界无关）。
+- 新功能（2026-11-11 两个 feature commit）：按 `O` 打开 JSON 战场列表；按 `E` 打开战场地图编辑器。
+- Breakpoint MCP 编辑器桥可用（addon 1.23.0，`editor_ping`→pong；运行时桥端口 9081）。
 
 ## 需求入口索引
 
 | 新需求/问题 | 先看文件 | 入口函数/字段 | 说明 |
 |---|---|---|---|
 | 按 `P` 进入战旗 / 退出恢复 | `main.gd` | `_enter_battle()` / `_enter_battle_inline()` / `_exit_battle()` | B1 实例化 `scripts/scenes/battle.gd` 为子节点；退出恢复相机/玩家 |
+| JSON 战场列表（`O` 键） | `scripts/core/battlefield_loader.gd`, `scripts/game_hud.gd` | `BattlefieldLoader.list_battlefields()/load_battlefield()`, HUD `toggle_battlefield_panel()`, main `_enter_battlefield(path)` | 扫 `res://data/battlefields/` + `user://battlefields/`（res 优先、同名跳过）；坏 JSON 条目置灰显示 error |
+| JSON 战场文件格式 | `data/battlefields/*.json` | 顶层 `rows`(图例字符画)/`map`(全名)+`legend`+`playerUnits`/`enemyUnits`+`hosting` | **rows 是顶层字段，不嵌在 terrain 下**；校验在 loader（地形名/行宽/职业/界内/standable/不重叠/双阵营≥1） |
+| 地图编辑器（`E` 键） | `scripts/scenes/map_editor.gd`, `scripts/editor/battlefield_doc.gd`, `scripts/editor/editor_canvas.gd` | `apply_generate()/load_path()/save_current()/place_unit()`, `BattlefieldDoc.generate/resize/to_json_dict` | 种子确定性生成（水域/山脊/森林/村庄/要塞）；画笔/填充/橡皮/角色四工具；保存产出同 schema 且立即进 `O` 列表 |
 | B1/B2 模式切换 | `scripts/settings.gd`, `scripts/game_hud.gd` | `Settings.battle_inline_mode` | HUD 设置面板切换；默认 B1 |
 | 战旗相机拖拽/边缘滚屏/缩放 | `main.gd` | `_battle_cam_offset`, `_handle_battle_camera_input()`, `_update_battle_edge_pan()`, `_handle_battle_input()` | B1 相机归 `main.gd`；拖拽是中键或 `Space`+左键 |
 | 鼠标拾取/高地光标偏移 | `main.gd`, `scripts/scenes/battle.gd` | `screen_to_cell()`, `screen_to_cell_in_rect()`, `_screen_to_battle_cell_unbounded()`, `_screen_to_battle_cell()` | hover 用全局拾取，可显示战场矩形外；点击/确认用矩形内拾取 |
-| 黄色光标显示 | `scripts/battle/range_overlay.gd`, `scripts/scenes/battle.gd` | `create_cursor_particles()`, `update_cursor_particles()`, `_unhandled_input()` mouse motion 分支 | 矩形外只显示光标，不跑格子信息/路径 |
 | 移动/攻击范围描边 | `scripts/battle/range_overlay.gd`, `scripts/scenes/battle.gd` | `highlight_range()`, `_range_alpha_for_cell()`, `_higher_neighbor_count()`, `_b1_cell_level()` | B1 按高度层和四邻更高格降低 alpha；B2 无高度函数时保持原样 |
 | 选中/移动/攻击逻辑 | `scripts/scenes/battle.gd`, `scripts/systems/grid_system.gd` | `_on_tile_click()`, `_select_unit()`, `_perform_move()`, `_perform_attack_from_current()` | 战斗规则在 `grid_system`/`combat_system`，不要放到渲染层 |
-| 右键单位详情 | `scripts/scenes/battle.gd`, `scripts/battle/battle_ui.gd` | 右键分支, `open_unit_detail()`, `close_unit_detail()`, `is_unit_detail_open()` | ESC/左键地图先关闭详情 |
-| 单位立绘尺寸/定位 | `scripts/iso/unit_sprite.gd`, `scripts/scenes/battle.gd` | `UNIT_VISUAL_PX`, `setup_world()`, `_apply_render_proxy()`, `_spawn_unit_sprite()` | 当前 `UNIT_VISUAL_PX=32.0` |
 | 世界地形转战旗 chapter | `scripts/core/world_to_chapter.gd` | `world_to_chapter()`, `cell_context_to_terrain()`, `_find_standable_near()` | 21x21 战场，`world_origin` 是局部 `(0,0)` 对应世界 cell |
-| 天气/昼夜/景深快捷键 | `main.gd` | `_unhandled_input()` key 分支 (`T`/`N`/`B`) | 战旗期间 `_handle_battle_input()` 只吞 `P`，其余放行 |
+| 天气/昼夜/景深快捷键 | `main.gd` | `_unhandled_input()` key 分支 (`T`/`N`/`B`/`O`/`E`) | 战旗期间 `_handle_battle_input()` 只吞 `P`，其余放行 |
 | 技能/物品/buff | `scripts/systems/*_system.gd`, `scripts/battle/battle_ui.gd` | `SkillSystem`, `ItemSystem`, `BuffSystem`, UI picker 方法 | 纯逻辑优先用 `res://scenes/SkillTest.tscn` |
 
-## 最近已修复内容
+## 本轮新增内容（2026-11-11）
 
-- `scripts/iso/unit_sprite.gd`：缩小 hero 立绘，`UNIT_VISUAL_PX` 从 64 改为 32。
-- `main.gd`：B1 相机支持滚轮/`+`/`-`/`F`、中键拖拽、`Space`+左键拖拽、边缘滚屏。
-- `main.gd`：`screen_to_cell()` 改为多高度候选拾取，修复高地 Y 偏移。
-- `main.gd`：新增 `screen_to_cell_in_rect()`，点击/确认限制在 21x21 战场内。
-- `scripts/scenes/battle.gd`：hover 改用全局拾取，战场矩形外也能显示黄色光标。
-- `scripts/battle/range_overlay.gd`：移动/攻击范围描边按高度和邻近遮挡降低透明度。
-- `scripts/scenes/battle.gd` + `scripts/battle/battle_ui.gd`：右键查看单位详情面板。
-- `tests/battle_screen_pick_contract.gd`：新增坐标拾取合约，覆盖高地中心和 rect 内拾取。
+- JSON 战场系统：`scripts/core/battlefield_loader.gd`（加载/校验/双目录扫描）+ 4 个示例（`arena_1v1`/`plains_skirmish`/`river_crossing`/`mountain_pass`）+ HUD `O` 面板（`scripts/game_hud.gd` `BattlefieldPanel`）+ `main.gd` `_enter_battlefield()` 固定 B2 + `scripts/core/professions.gd` `has_profession()`。
+- 地图编辑器：`scripts/editor/battlefield_doc.gd`（模型/种子生成/JSON 往返/quick_validate/save_model 保存即回读校验）+ `scripts/editor/editor_canvas.gd`（Control 自绘）+ `scripts/scenes/map_editor.gd` + `scenes/MapEditor.tscn` + HUD「🛠 打开地图编辑器」按钮 + `main.gd` `KEY_E`。
+- 契约测试：`tests/battlefields_contract.gd`、`tests/map_editor_contract.gd`（均通过，见下方命令）。
 
 ## 最短验证命令
 
 ```powershell
-& "C:/Program Files/Godot/Godot.exe" --headless --path "G:/pixel_world" --script "res://tests/battle_screen_pick_contract.gd"
-& "C:/Program Files/Godot/Godot.exe" --headless --path "G:/pixel_world" --quit-after 1
+& "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/pixel_world" --script "res://tests/battlefields_contract.gd"
+& "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/pixel_world" --script "res://tests/map_editor_contract.gd"
+& "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/pixel_world" --script "res://tests/battle_screen_pick_contract.gd"
 ```
+
+（console exe 的 stdout 全缓冲：管道里无输出≠没输出，用 `timeout N` 包裹重跑即可见。）
 
 手动验收：
 
-1. 运行 `main.tscn`，按 `P` 进战旗。
-2. 高地 hover/点击：黄色光标应贴鼠标格，不随高度 Y 偏移。
-3. `Space`+左键拖拽：相机移动，松手不误点击。
-4. 拖到战场边缘外：黄色光标仍跟随；点击/确认不越界触发战斗。
-5. 选中单位：移动/攻击范围描边在低处、四邻有更高地形处更透明。
-6. 按 `T` 切天气，`+`/`-`/`F` 缩放/复位。
+1. 运行 `main.tscn`，按 `O` 出战场列表（含 4 个示例），点「竞技场单挑」进 B2 战斗，回合/单位正确。
+2. 按 `E` 进编辑器：🌱 生成（同种子同图）→ 画地形 → 选阵营+职业放角色 → 保存 → 回世界按 `O`，新图已在列表。
+3. 按 `P` 进 B1 战旗（世界地形），旧验收项（高地光标/相机拖拽/范围描边）不受影响。
 
 ## 调试规则摘录
 
-- 会话开头优先 `mcp__godot_breakpoint.editor_ping()`；当前可能失败，失败时用 headless 命令验证编译。
-- `dbg_launch` 必须传 scene：`res://main.tscn`。
-- 默认不用截图；能用脚本/断言就不用 `runtime_screenshot`。
-- 本地图片查看禁用 `view_image`。
-- CodeGraph 当前未初始化；查结构用 `rg`。
+- 会话开头先 `mcp__godot__editor_ping()`（当前可用）；`dbg_launch` 必须传 scene。
+- 验证优先 `runtime_assert_scene_structure/screen_text/await_condition`（屏幕文本 samples 还能反查控件真实路径）；`runtime_get_tree` 对世界场景是灾难（4235 子节点），先 `max_depth` 限制。
+- 默认不用截图；能用脚本/断言就不用 `runtime_screenshot`。本地图片查看禁用 `view_image`。
+- DAP 抓运行时异常很有效：`runtime_*` 超时提示 stopped at breakpoint → `dbg_continue` 看异常信息。
+- git-bash（ops_bash）里 PowerShell `$_` 和 cmd `/PID` 会被吃掉：查进程用 `wmic`，杀进程用 `cmd //c "taskkill /PID xxx /F"`。
+- dbg_launch 启动的游戏进程 `godot_stop` 管不了，用 wmic 找 `--scene` 的 PID 后 taskkill。
 
 ## 不要踩的坑
 
 - B1 下 `battle.gd.board == null`，相机/缩放/平移必须在 `main.gd` 处理。
 - hover 可以越出战场矩形；点击、确认、路径、信息面板必须继续 `grid.in_bounds()`。
-- `screen_to_cell()` 是世界全局拾取；战斗操作要用 `screen_to_cell_in_rect()`。
 - `RangeOverlay` 是渲染层，只改显示，不改移动/攻击规则。
-- GDScript strict 推断敏感；`Variant.get()`、动态 `Callable.call()` 结果尽量显式标类型。
-- 现有 `.zcode/`、`AGENTS.md`、`CLAUDE.md`、`addons/breakpoint_mcp/CLAUDE.md` 等未跟踪文件不是本轮创建，不要清理。
+- battlefield JSON：`rows` 是**顶层**字段；loader 是唯一权威校验点（编辑器 save_model 靠回读它校验）。
+- `Dictionary.merge(meta)` 默认 overwrite=false；要覆盖显式传 `true`。
+- 程序化同步多个 SpinBox 会触发 `value_changed` 竞态（读到另一半旧值）：用 `_syncing_boxes` 标志挂起回调（`map_editor.gd` 已有）。
+- 切场景（change_scene 释放自身）前先 `set_input_as_handled()`：之后 `get_viewport()` 为 null。
+- GDScript strict 推断敏感：`Variant.get()`、`rows.map().max()`、untyped Array 元素取子串等要显式标类型（`as int`/`as String`）。
+- **`tests/game_hud_contract.gd` 在 HEAD 上本来就是坏的**（`--script` 模式无 autoload，`game_hud.gd` 引 `Settings` 编译错；已 git stash 验证非本轮引入），修它需先解决 HUD 的 autoload 依赖。
+- 4.7 无 `DirAccess.remove_recursive*`；删目录=逐文件 `dir.remove(f)`。
+- 现有 `.zcode/`、`.dsh/`、`AGENTS.md`、`CLAUDE.md`、`addons/breakpoint_mcp/*` 的未提交改动等不是本轮创建/修改，不要清理。
 
 ## 继续工作建议
 
+- JSON 战场/编辑器 bug：先跑两个 contract 测试，再读 `battlefield_loader.gd`（校验）/`battlefield_doc.gd`（模型）/`map_editor.gd`（交互）。
+- 编辑器 UI 扩展（撤销/重做、多选、复制粘贴单位）：参考 phaserjs 版 `D:/phaserjs/godot/scripts/scenes/map_editor.gd`（5 工具/历史/撤销，Node3D+IsoBoard，较重）。
 - 交互 bug：先看 `main.gd` 输入分发，再看 `scripts/scenes/battle.gd` `_unhandled_input()`。
 - 坐标 bug：先跑 `tests/battle_screen_pick_contract.gd`，再改 `screen_to_cell*`。
-- 视觉层级 bug：优先改 `range_overlay.gd` 或 `unit_sprite.gd`，不要碰 `GridSystem`。
 - 规则 bug：优先改 `scripts/systems/*`，不要把规则塞进 UI/渲染层。
+
+## Suggested skills
+
+- 编辑器桥调试（本仓库 `addons/breakpoint_mcp`）：会话开头 `mcp__godot__editor_ping`；详见 `AGENTS.md` 的 MCP 调试规范与 `rules/mcp-debugging.md`。
+- 契约测试模板：`extends SceneTree` + `_initialize` → `call_deferred("_run")` + `_expect(cond,msg)` + 末尾 `print("XXX_CONTRACT_OK")`，参考 `tests/battlefields_contract.gd`。
