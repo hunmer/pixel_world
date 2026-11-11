@@ -10,6 +10,7 @@
 - 默认战斗模式：B1 就地战旗，按 `P` 从世界进入。
 - B2 切场景模式仍保留：`res://scenes/Battle.tscn`，由 `Settings.battle_inline_mode=false` 切换；**JSON 战场固定走 B2**（自带地形与世界无关）。
 - 新功能（2026-11-11 两个 feature commit）：按 `O` 打开 JSON 战场列表；按 `E` 打开战场地图编辑器。
+- **等距方块渲染重做（2026-11-11）**：B2 战场与编辑器画布均改为像素 Minecraft 式等距方块渲染（`BattlefieldRenderer`，复用世界渲染管线 ColumnBatch + TerrainMaterialRegistry 贴图 + 程序化水面），平面色块代码已删（`render_terrain_fallback`、`iso_board` 的块池/网格绘制）。
 - Breakpoint MCP 编辑器桥可用（addon 1.23.0，`editor_ping`→pong；运行时桥端口 9081）。
 
 ## 需求入口索引
@@ -20,10 +21,12 @@
 | JSON 战场列表（`O` 键） | `scripts/core/battlefield_loader.gd`, `scripts/game_hud.gd` | `BattlefieldLoader.list_battlefields()/load_battlefield()`, HUD `toggle_battlefield_panel()`, main `_enter_battlefield(path)` | 扫 `res://data/battlefields/` + `user://battlefields/`（res 优先、同名跳过）；坏 JSON 条目置灰显示 error |
 | JSON 战场文件格式 | `data/battlefields/*.json` | 顶层 `rows`(图例字符画)/`map`(全名)+`legend`+`playerUnits`/`enemyUnits`+`hosting` | **rows 是顶层字段，不嵌在 terrain 下**；校验在 loader（地形名/行宽/职业/界内/standable/不重叠/双阵营≥1） |
 | 地图编辑器（`E` 键） | `scripts/scenes/map_editor.gd`, `scripts/editor/battlefield_doc.gd`, `scripts/editor/editor_canvas.gd` | `apply_generate()/load_path()/save_current()/place_unit()`, `BattlefieldDoc.generate/resize/to_json_dict` | 种子确定性生成（水域/山脊/森林/村庄/要塞）；画笔/填充/橡皮/角色四工具；保存产出同 schema 且立即进 `O` 列表 |
+| 等距方块地形渲染（B2+编辑器共用） | `scripts/iso/battlefield_renderer.gd` | `setup(grid)`, `stand_level(x,y)`, `coord_for(x,y)`, `sort_for(x,y)`, `pick_world(global_pos)`, `refresh_cell(x,y)` | plain/forest h2、water h1、village h2、fort h3、wall h4、mountain h5；贴图静态加载自 `config/ecology/world/base.json` 的 materials；`pick_world` 入参是**全局 canvas 坐标**（内部做 `global_transform.affine_inverse()`），走 `EditorCanvas._pick(canvas局部)` |
+| 战场/编辑器单位站位高度 | `scripts/iso/unit_sprite.gd`, `scripts/scenes/battle.gd`, `scripts/battle/battle_ui.gd` | `us.setup(u, board, Callable(renderer,"stand_level"))`, `battle_ui.level_fn` | 单位站在 `to_screen(x,y,stand_level)`；菜单定位也用 level_fn；`_debug_print_unit_alignment` 已按 stand_level 对齐 |
 | B1/B2 模式切换 | `scripts/settings.gd`, `scripts/game_hud.gd` | `Settings.battle_inline_mode` | HUD 设置面板切换；默认 B1 |
 | 战旗相机拖拽/边缘滚屏/缩放 | `main.gd` | `_battle_cam_offset`, `_handle_battle_camera_input()`, `_update_battle_edge_pan()`, `_handle_battle_input()` | B1 相机归 `main.gd`；拖拽是中键或 `Space`+左键 |
 | 鼠标拾取/高地光标偏移 | `main.gd`, `scripts/scenes/battle.gd` | `screen_to_cell()`, `screen_to_cell_in_rect()`, `_screen_to_battle_cell_unbounded()`, `_screen_to_battle_cell()` | hover 用全局拾取，可显示战场矩形外；点击/确认用矩形内拾取 |
-| 移动/攻击范围描边 | `scripts/battle/range_overlay.gd`, `scripts/scenes/battle.gd` | `highlight_range()`, `_range_alpha_for_cell()`, `_higher_neighbor_count()`, `_b1_cell_level()` | B1 按高度层和四邻更高格降低 alpha；B2 无高度函数时保持原样 |
+| 移动/攻击范围描边 | `scripts/battle/range_overlay.gd`, `scripts/scenes/battle.gd` | `highlight_range()`, `_range_alpha_for_cell()`, `_higher_neighbor_count()`, `_b1_cell_level()` | B1/B2 均走 `setup_world()` 注入 coord/sort/level 三 fn（B2 由 BattlefieldRenderer 提供）；地形渲染不再归 range_overlay |
 | 选中/移动/攻击逻辑 | `scripts/scenes/battle.gd`, `scripts/systems/grid_system.gd` | `_on_tile_click()`, `_select_unit()`, `_perform_move()`, `_perform_attack_from_current()` | 战斗规则在 `grid_system`/`combat_system`，不要放到渲染层 |
 | 世界地形转战旗 chapter | `scripts/core/world_to_chapter.gd` | `world_to_chapter()`, `cell_context_to_terrain()`, `_find_standable_near()` | 21x21 战场，`world_origin` 是局部 `(0,0)` 对应世界 cell |
 | 天气/昼夜/景深快捷键 | `main.gd` | `_unhandled_input()` key 分支 (`T`/`N`/`B`/`O`/`E`) | 战旗期间 `_handle_battle_input()` 只吞 `P`，其余放行 |
@@ -32,8 +35,9 @@
 ## 本轮新增内容（2026-11-11）
 
 - JSON 战场系统：`scripts/core/battlefield_loader.gd`（加载/校验/双目录扫描）+ 4 个示例（`arena_1v1`/`plains_skirmish`/`river_crossing`/`mountain_pass`）+ HUD `O` 面板（`scripts/game_hud.gd` `BattlefieldPanel`）+ `main.gd` `_enter_battlefield()` 固定 B2 + `scripts/core/professions.gd` `has_profession()`。
-- 地图编辑器：`scripts/editor/battlefield_doc.gd`（模型/种子生成/JSON 往返/quick_validate/save_model 保存即回读校验）+ `scripts/editor/editor_canvas.gd`（Control 自绘）+ `scripts/scenes/map_editor.gd` + `scenes/MapEditor.tscn` + HUD「🛠 打开地图编辑器」按钮 + `main.gd` `KEY_E`。
-- 契约测试：`tests/battlefields_contract.gd`、`tests/map_editor_contract.gd`（均通过，见下方命令）。
+- 地图编辑器：`scripts/editor/battlefield_doc.gd`（模型/种子生成/JSON 往返/quick_validate/save_model 保存即回读校验）+ `scripts/editor/editor_canvas.gd`（等距方块画布：内嵌 BattlefieldRenderer+多高度拾取+右键平移+滚轮缩放）+ `scripts/scenes/map_editor.gd` + `scenes/MapEditor.tscn` + HUD「🛠 打开地图编辑器」按钮 + `main.gd` `KEY_E`。
+- 等距渲染重做：`scripts/iso/battlefield_renderer.gd`（新，核心渲染器）+ `scripts/iso/unit_sprite.gd`（B2 高度感知站位）+ `scripts/iso/iso_board.gd`（重写为纯相机/坐标转换）+ `battle.gd`/`battle_ui.gd`/`range_overlay.gd` 接线 + 删平面渲染（`render_terrain_fallback` 等）。
+- 契约测试：`tests/battlefields_contract.gd`、`tests/map_editor_contract.gd`、`tests/battlefield_render_contract.gd`（均通过，见下方命令）。
 
 ## 最短验证命令
 
@@ -41,6 +45,7 @@
 & "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/pixel_world" --script "res://tests/battlefields_contract.gd"
 & "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/pixel_world" --script "res://tests/map_editor_contract.gd"
 & "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/pixel_world" --script "res://tests/battle_screen_pick_contract.gd"
+& "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/pixel_world" --script "res://tests/battlefield_render_contract.gd"
 ```
 
 （console exe 的 stdout 全缓冲：管道里无输出≠没输出，用 `timeout N` 包裹重跑即可见。）
@@ -69,7 +74,10 @@
 - `Dictionary.merge(meta)` 默认 overwrite=false；要覆盖显式传 `true`。
 - 程序化同步多个 SpinBox 会触发 `value_changed` 竞态（读到另一半旧值）：用 `_syncing_boxes` 标志挂起回调（`map_editor.gd` 已有）。
 - 切场景（change_scene 释放自身）前先 `set_input_as_handled()`：之后 `get_viewport()` 为 null。
-- GDScript strict 推断敏感：`Variant.get()`、`rows.map().max()`、untyped Array 元素取子串等要显式标类型（`as int`/`as String`）。
+- GDScript strict 推断敏感：`Variant.get()`、`rows.map().max()`、untyped Array 元素取子串等要显式标类型（`as int`/`as String`）；**Node2D 动态调用同理**（`var c := _renderer.coord_for(...)` 报 Parse Error，要 `var c: Vector2 = ...`）。
+- `TerrainMaterialRegistry.set_texture_processor` 回调是**两参** `(raw_texture, texture_path)`；漏第二参会全部贴图 null → ColumnBatch 当场 `get_size()` 崩。
+- `IsoCoords.to_cell` 用 **roundi**（非 floor），写 pick 相关契约/断言时按四舍五入推演。
+- runtime 桥 9081 单实例：console exe 直跑场景与 dbg 游戏并存时后者报 `could not listen (error 22)`；抓 Parse Error 用 `console exe --path . res://场景.tscn` + timeout 包裹（`--script` 模式不加载场景测不出场景脚本编译错）。
 - **`tests/game_hud_contract.gd` 在 HEAD 上本来就是坏的**（`--script` 模式无 autoload，`game_hud.gd` 引 `Settings` 编译错；已 git stash 验证非本轮引入），修它需先解决 HUD 的 autoload 依赖。
 - 4.7 无 `DirAccess.remove_recursive*`；删目录=逐文件 `dir.remove(f)`。
 - 现有 `.zcode/`、`.dsh/`、`AGENTS.md`、`CLAUDE.md`、`addons/breakpoint_mcp/*` 的未提交改动等不是本轮创建/修改，不要清理。
