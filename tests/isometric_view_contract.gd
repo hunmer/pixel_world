@@ -39,39 +39,47 @@ func _test_controller() -> void:
 			"深度键没有使用旋转后的投影 y"
 		)
 
+	_expect(
+		IsometricViewScript.SUPPORTED_ANGLES == [0.0, 90.0, 180.0, 270.0],
+		"支持角度必须只包含已验收的四个正交视角"
+	)
 	view.set_view_angle(0.0)
 	view.advance(0.25, 1)
-	_expect(_close(view.get_target_degrees(), 45.0), "按住旋转没有按 delta 累积角度")
-	_expect(view.get_view_degrees() > 0.0 and view.get_view_degrees() < 45.0, "连续旋转没有平滑插值")
-	view.advance(0.25, -1)
-	_expect(_close(view.get_target_degrees(), 0.0), "反向连续旋转没有抵消目标角度")
+	_expect(_close(view.get_target_degrees(), 0.0), "连续旋转输入仍能改变目标角")
+	_expect(_close(view.get_view_degrees(), 0.0), "连续旋转输入仍能改变当前角")
 
-	view.set_view_angle(0.0)
 	view.rotate_step(1)
-	_expect(_close(view.get_target_degrees(), 45.0), "离散顺时针步进不是 45°")
+	_expect(_close(view.get_target_degrees(), 90.0), "离散顺时针步进不是 90°")
+	_expect(_close(view.get_view_degrees(), 0.0), "目标角在 advance 前不同步")
+	_expect(view.advance(0.001), "离散目标角没有触发投影刷新")
+	_expect(_close(view.get_view_degrees(), 90.0), "离散步进仍在平滑插值")
+	_expect(not view.advance(1.0), "稳定离散视角重复触发刷新")
 	view.rotate_step(-1)
-	_expect(_close(view.get_target_degrees(), 0.0), "离散逆时针步进不是 45°")
+	view.advance(0.001)
+	_expect(_close(view.get_view_degrees(), 0.0), "离散逆时针步进没有回到 0°")
+
 	view.drag_by(90.0)
-	_expect(_close(view.get_target_degrees(), 45.0), "鼠标拖拽灵敏度不是 0.5°/px")
+	_expect(_close(view.get_target_degrees(), 0.0), "拖拽不足一个档位就改变了视角")
+	view.drag_by(90.0)
+	_expect(_close(view.get_target_degrees(), 90.0), "拖拽累积 180px 没有切换 90°")
+	view.advance(0.001)
 	view.reset_rotation()
 	_expect(_close(view.get_target_degrees(), 0.0), "一键复位没有归零目标角")
-	for i in 120:
-		view.advance(1.0 / 60.0)
-	_expect(_close(view.get_view_degrees(), 0.0), "复位后没有平滑收敛到默认角")
+	view.advance(0.001)
+	_expect(_close(view.get_view_degrees(), 0.0), "复位后当前角没有立即同步")
 	view.snap_to_angle(123.0)
-	_expect(_close(view.get_view_degrees(), 123.0), "snap_to_angle 没有立即生效")
+	_expect(_close(view.get_view_degrees(), 90.0), "snap_to_angle 没有吸附到最近支持角")
+	view.snap_to_angle(191.0)
+	_expect(_close(view.get_target_degrees(), 180.0), "目标角与吸附后的当前角不同步")
+	view.set_view_angle(270.0)
+	view.rotate_step(1)
+	view.advance(0.001)
+	_expect(_close(view.get_view_degrees(), 0.0), "离散视角没有从 270° 环绕到 0°")
 
-	var single = IsometricViewScript.new()
-	var stepped = IsometricViewScript.new()
-	single.rotate_step(1)
-	stepped.rotate_step(1)
-	single.advance(1.0)
-	for i in 60:
-		stepped.advance(1.0 / 60.0)
-	_expect(
-		_close(single.get_view_degrees(), stepped.get_view_degrees(), 0.01),
-		"平滑插值受帧率影响"
-	)
+	for angle in IsometricViewScript.SUPPORTED_ANGLES:
+		view.snap_to_angle(angle)
+		_expect(_close(view.get_view_degrees(), angle), "支持角无法立即生效: %.0f" % angle)
+		_expect(_close(view.get_target_degrees(), angle), "支持角目标状态不同步: %.0f" % angle)
 
 
 func _key_event(code: Key, pressed: bool, ctrl := false) -> InputEventKey:
@@ -124,7 +132,7 @@ func _test_world() -> void:
 
 	world._iso_view.set_view_angle(0.0)
 	world._unhandled_input(_key_event(KEY_X, true))
-	_expect(_close(world._iso_view.get_target_degrees(), 45.0), "世界 X 键没有步进旋转")
+	_expect(_close(world._iso_view.get_target_degrees(), 90.0), "世界 X 键没有步进旋转")
 	world._unhandled_input(_key_event(KEY_Z, true))
 	_expect(_close(world._iso_view.get_target_degrees(), 0.0), "世界 Z 键没有反向步进")
 	world._unhandled_input(_key_event(KEY_X, true))
@@ -139,7 +147,11 @@ func _test_world() -> void:
 	var motion := InputEventMouseMotion.new()
 	motion.position = Vector2(190.0, 0.0)
 	world._unhandled_input(motion)
-	_expect(_close(world._iso_view.get_target_degrees(), 45.0), "世界中键拖拽没有旋转")
+	_expect(_close(world._iso_view.get_target_degrees(), 0.0), "世界拖拽不足一档就旋转")
+	motion = InputEventMouseMotion.new()
+	motion.position = Vector2(280.0, 0.0)
+	world._unhandled_input(motion)
+	_expect(_close(world._iso_view.get_target_degrees(), 90.0), "世界中键拖拽没有按档位旋转")
 	var release := InputEventMouseButton.new()
 	release.button_index = MOUSE_BUTTON_MIDDLE
 	release.pressed = false
@@ -147,16 +159,15 @@ func _test_world() -> void:
 	world._unhandled_input(release)
 	_expect(not world._view_dragging, "中键释放后仍在拖拽")
 
-	Input.parse_input_event(_key_event(KEY_E, true))
-	await process_frame
-	_expect(world._continuous_view_rotation() == 1, "按住 E 没有进入连续顺时针旋转")
-	Input.parse_input_event(_key_event(KEY_E, false))
-	Input.parse_input_event(_key_event(KEY_Q, true))
-	await process_frame
-	_expect(world._continuous_view_rotation() == -1, "按住 Q 没有进入连续逆时针旋转")
-	Input.parse_input_event(_key_event(KEY_Q, false))
-	await process_frame
-	_expect(world._continuous_view_rotation() == 0, "旋转键释放后仍持续旋转")
+	world._iso_view.set_view_angle(0.0)
+	world._unhandled_input(_key_event(KEY_Q, true))
+	_expect(_close(world._iso_view.get_target_degrees(), 270.0), "Q 没有离散逆时针切换")
+	world._unhandled_input(_key_event(KEY_E, true))
+	_expect(_close(world._iso_view.get_target_degrees(), 0.0), "E 没有离散顺时针切换")
+	world._unhandled_input(_key_event(KEY_RIGHT, true))
+	_expect(_close(world._iso_view.get_target_degrees(), 90.0), "右方向键没有离散切换")
+	world._unhandled_input(_key_event(KEY_LEFT, true))
+	_expect(_close(world._iso_view.get_target_degrees(), 0.0), "左方向键没有离散切换")
 
 	world.queue_free()
 	await process_frame

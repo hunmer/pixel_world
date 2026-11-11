@@ -1,5 +1,8 @@
 extends RefCounted
-## isometric_view.gd — 可旋转等距投影、反投影与帧率无关的旋转控制器。
+## isometric_view.gd — 可旋转等距投影、反投影与离散视角控制器。
+
+## 现有素材逐角度验收仅通过四个正交视角；其余角度会出现地形拼缝。
+const SUPPORTED_ANGLES: Array[float] = [0.0, 90.0, 180.0, 270.0]
 
 var _tile_w := 32.0
 var _tile_h := 16.0
@@ -9,11 +12,9 @@ var _view_angle := 0.0
 var _target_angle := 0.0
 var _basis_x := Vector2.ZERO
 var _basis_y := Vector2.ZERO
+var _drag_accumulator := 0.0
 
-## 以下参数可直接调整：连续旋转速度、插值速度、步进角度、拖拽灵敏度。
-var _rotation_speed := 180.0
-var _smooth_speed := 8.0
-var _step_angle := 45.0
+## 拖拽每累积 180px 切换一个 90° 档位，不产生中间视角。
 var _drag_sensitivity := 0.5
 
 
@@ -27,44 +28,59 @@ func _init(tile_width := 32.0, tile_height := 16.0, level_height := 10.0) -> voi
 func set_view_angle(degrees: float) -> void:
 	_view_angle = deg_to_rad(degrees)
 	_target_angle = _view_angle
+	_drag_accumulator = 0.0
 	_update_basis()
 
 
 func snap_to_angle(degrees: float) -> void:
-	set_view_angle(degrees)
+	var index := _nearest_supported_index(deg_to_rad(degrees))
+	set_view_angle(SUPPORTED_ANGLES[index])
 
 
 func rotate_step(direction: int) -> void:
-	_target_angle += deg_to_rad(_step_angle * signi(direction))
+	if direction == 0:
+		return
+	var current := _nearest_supported_index(_target_angle)
+	var count := SUPPORTED_ANGLES.size()
+	var step := 1 if direction > 0 else -1
+	var next := posmod(current + step, count)
+	_target_angle = deg_to_rad(SUPPORTED_ANGLES[next])
 
 
 func drag_by(pixel_delta_x: float) -> void:
-	_target_angle += deg_to_rad(pixel_delta_x * _drag_sensitivity)
+	if _drag_sensitivity <= 0.0:
+		return
+	_drag_accumulator += pixel_delta_x
+	var pixels_per_step := 90.0 / _drag_sensitivity
+	while absf(_drag_accumulator) >= pixels_per_step:
+		var direction := 1 if _drag_accumulator > 0.0 else -1
+		rotate_step(direction)
+		_drag_accumulator -= pixels_per_step * direction
 
 
 func reset_rotation() -> void:
 	_target_angle = 0.0
+	_drag_accumulator = 0.0
 
 
-## continuous_direction：-1 逆时针、0 不连续旋转、1 顺时针。
+func _nearest_supported_index(angle: float) -> int:
+	var degrees := rad_to_deg(angle)
+	var best := 0
+	var best_distance := INF
+	for index in SUPPORTED_ANGLES.size():
+		var distance := absf(wrapf(degrees - SUPPORTED_ANGLES[index], -180.0, 180.0))
+		if distance < best_distance:
+			best = index
+			best_distance = distance
+	return best
+
+
+## 保留旧参数以兼容调用方；连续旋转输入不再改变角度，目标角在下一帧立即生效。
 ## 返回本帧投影是否变化，调用方据此刷新地图渲染代理。
-func advance(delta: float, continuous_direction := 0) -> bool:
-	var safe_delta := maxf(delta, 0.0)
-	if continuous_direction != 0:
-		_target_angle += (
-			deg_to_rad(_rotation_speed * signi(continuous_direction)) * safe_delta
-		)
-	var difference := wrapf(_target_angle - _view_angle, -PI, PI)
-	if absf(difference) <= 0.0001:
-		if not is_equal_approx(_view_angle, _target_angle):
-			_view_angle = _target_angle
-			_update_basis()
-			return true
+func advance(_delta: float, _continuous_direction := 0) -> bool:
+	if is_equal_approx(_view_angle, _target_angle):
 		return false
-	var blend := 1.0 - exp(-maxf(_smooth_speed, 0.0) * safe_delta)
-	_view_angle = lerp_angle(_view_angle, _target_angle, blend)
-	if absf(wrapf(_target_angle - _view_angle, -PI, PI)) <= 0.0001:
-		_view_angle = _target_angle
+	_view_angle = _target_angle
 	_update_basis()
 	return true
 

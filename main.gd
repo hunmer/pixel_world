@@ -1329,20 +1329,6 @@ func _column_sort_y(cell: Vector2i) -> float:
 	return depth * SORT_DEPTH_SCALE + tie_break
 
 
-func _continuous_view_rotation() -> int:
-	if _battle_active or is_world_map_open():
-		return 0
-	var counterclockwise := (
-		Input.is_physical_key_pressed(KEY_Q)
-		or Input.is_physical_key_pressed(KEY_LEFT)
-	)
-	var clockwise := (
-		Input.is_physical_key_pressed(KEY_E)
-		or Input.is_physical_key_pressed(KEY_RIGHT)
-	)
-	return int(clockwise) - int(counterclockwise)
-
-
 ## 角度变化只改变表现层坐标；地形采样、生态状态和确定性随机流保持不动。
 func _refresh_view_projection() -> void:
 	var previous_player_position := _player_visual_position
@@ -3359,7 +3345,7 @@ func _cell_feet_pos(cell: Vector2i) -> Vector2:
 	return _grid_to_screen(cell, _stand_level(q))
 
 
-## WASD 与上下方向键移动；左右方向键保留给视角连续旋转。
+## WASD 与上下方向键移动；左右方向键用于离散视角切换。
 func _input_dir() -> Vector2i:
 	if is_world_map_open():
 		return Vector2i.ZERO
@@ -3395,7 +3381,7 @@ func _try_move(d: Vector2i) -> void:
 
 
 func _process(delta: float) -> void:
-	if _iso_view.advance(delta, _continuous_view_rotation()):
+	if _iso_view.advance(delta):
 		_refresh_view_projection()
 	else:
 		if _view_rotation_culling:
@@ -3646,9 +3632,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_regenerate(0)
 		elif event.physical_keycode == KEY_R:
 			_iso_view.reset_rotation()
-		elif event.physical_keycode == KEY_Z:
+		elif event.physical_keycode in [KEY_Z, KEY_Q, KEY_LEFT]:
 			_iso_view.rotate_step(-1)
-		elif event.physical_keycode == KEY_X:
+		elif event.physical_keycode in [KEY_X, KEY_RIGHT]:
 			_iso_view.rotate_step(1)
 		elif event.physical_keycode == KEY_T and _weather != null:
 			if event.shift_pressed:
@@ -3676,9 +3662,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			and event.ctrl_pressed
 			and not _battle_active
 		):
-			# Ctrl+E 打开地图编辑器；单独 E 用于连续顺时针旋转。
+			# Ctrl+E 打开地图编辑器；单独 E 用于离散顺时针切换。
 			if not is_world_map_open():
 				_open_map_editor()
+		elif event.physical_keycode == KEY_E:
+			_iso_view.rotate_step(1)
 		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
 			_zoom_step(1)
 		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
