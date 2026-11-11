@@ -1,109 +1,206 @@
-## editor/editor_canvas.gd — 编辑器画布：自绘地形格 + 单位标记 + 悬停高亮
+## editor/editor_canvas.gd — 编辑器画布（等距方块版）
 ##
-## 单 Control 节点（_draw 自绘），左键按下/拖动发出 cell 信号，由 map_editor.gd 按工具解释。
-## 地形配色复用战棋 range_overlay.render_terrain_fallback 的色板，与战斗内观感一致。
+## 复用 BattlefieldRenderer（ColumnBatch 等距方块柱 + 世界同款贴图）渲染地形，
+## 与战斗内观感完全一致。左键按下/拖动发出 cell 信号，由 map_editor.gd 按工具解释。
+## 右键拖拽平移、滚轮缩放（无相机，直接变换 world 节点）。
 
 class_name EditorCanvas
 extends Control
 
+const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 
 signal cell_pressed(cell: Vector2i)
 signal cell_dragged(cell: Vector2i)
 
-const CELL := 30.0
-const LINE := Color(0, 0, 0, 0.25)
-const HOVER := Color(1.0, 0.85, 0.3, 0.45)
 const PLAYER_COLOR := Color(0.376, 0.647, 0.980)
 const ENEMY_COLOR := Color(0.973, 0.443, 0.443)
+const HOVER_COLOR := Color(1.0, 0.85, 0.3, 0.55)
+const ZOOM_MIN := 0.5
+const ZOOM_MAX := 4.0
+const ZOOM_STEP := 1.15
+const DEFAULT_ZOOM := 1.6
 
-const TERRAIN_COLORS := {
-	&"plain": Color(0.29, 0.48, 0.16),
-	&"forest": Color(0.10, 0.35, 0.10),
-	&"mountain": Color(0.35, 0.29, 0.23),
-	&"water": Color(0.16, 0.35, 0.60),
-	&"fort": Color(0.40, 0.40, 0.40),
-	&"village": Color(0.53, 0.42, 0.23),
-	&"wall": Color(0.13, 0.13, 0.13),
-}
-
-## 编辑器模型引用（BattlefieldDoc 模型 dict；由 map_editor.gd 维护并触发 redraw）
+## 编辑器模型引用（BattlefieldDoc 模型 dict；由 map_editor.gd 维护并触发重建）
 var model: Dictionary = {}:
 	set(v):
 		model = v
-		_recompute_size()
-		queue_redraw()
+		_rebuild()
 
 var hover_cell := Vector2i(-1, -1)
+var _world: Node2D = null
+var _renderer: Node2D = null
+var _hover_marker: Polygon2D = null
+var _unit_markers: Array[Node2D] = []
 var _dragging := false
+var _panning := false
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(320, 240)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	_recompute_size()
+	clip_contents = true
+	_world = Node2D.new()
+	_world.name = "EditorWorld"
+	add_child(_world)
+	_renderer = BattlefieldRendererScript.new()
+	_world.add_child(_renderer)
+	_hover_marker = Polygon2D.new()
+	_hover_marker.z_index = 20
+	_hover_marker.color = HOVER_COLOR
+	_hover_marker.visible = false
+	_world.add_child(_hover_marker)
 
 
-func _recompute_size() -> void:
+func _rebuild() -> void:
+	if _world == null:
+		return  # _ready 未跑（未进树）
+	_clear_unit_markers()
 	if model.is_empty():
+		_renderer.setup(null)
+		_hover_marker.visible = false
 		return
-	custom_minimum_size = Vector2(model.width * CELL, model.height * CELL)
-	size = custom_minimum_size
+	_renderer.setup(_build_grid())
+	_rebuild_unit_markers()
+	_center_map()
 
+
+## 模型 rows（图例字符画）→ GridSystem（全名地形矩阵）
+func _build_grid() -> GridSystem:
+	var rows: Array = model.rows
+	var map: Array = []
+	for y in range(model.height):
+		var row: String = rows[y]
+		var line: Array = []
+		for x in range(model.width):
+			line.append(BattlefieldDocScript.glyph_to_terrain(row.substr(x, 1)))
+		map.append(line)
+	return GridSystem.new(model.width, model.height, map)
+
+
+## 单格重建（画笔/填充/橡皮后由 map_editor.gd 调 _refresh_cell）
+func _refresh_cell(cell: Vector2i) -> void:
+	if _renderer == null or _renderer.grid == null:
+		return
+	_renderer.refresh_cell(cell.x, cell.y)
+	_refresh_markers_at(cell)
+
+
+func _center_map() -> void:
+	var zoom := _world.scale.x if _world.scale != Vector2.ZERO else DEFAULT_ZOOM
+	_world.scale = Vector2(zoom, zoom)
+	_world.position = size * 0.5 - _renderer.map_center() * zoom
+
+
+# ============================================================
+# 输入：左键=工具操作，右键拖拽=平移，滚轮=缩放
+# ============================================================
 
 func _gui_input(event: InputEvent) -> void:
-	if model.is_empty():
-		return
 	if event is InputEventMouseMotion:
-		var c := _cell_at(event.position)
+		var mm := event as InputEventMouseMotion
+		if _panning:
+			_world.position += mm.relative
+			accept_event()
+			return
+		var c := _pick(mm.position)
 		if c != hover_cell:
 			hover_cell = c
-			queue_redraw()
+			_update_hover_marker()
 		if _dragging and c.x >= 0:
 			cell_dragged.emit(c)
 			accept_event()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		var c := _cell_at(event.position)
-		if event.pressed:
-			_dragging = true
-			if c.x >= 0:
-				cell_pressed.emit(c)
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				var c := _pick(mb.position)
+				if c.x >= 0:
+					_dragging = true
+					cell_pressed.emit(c)
+					accept_event()
+			else:
+				_dragging = false
+		elif mb.button_index == MOUSE_BUTTON_RIGHT:
+			_panning = mb.pressed
 			accept_event()
-		else:
-			_dragging = false
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+			_zoom_at(mb.position, ZOOM_STEP)
+			accept_event()
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+			_zoom_at(mb.position, 1.0 / ZOOM_STEP)
+			accept_event()
 
 
-func _cell_at(pos: Vector2) -> Vector2i:
-	var c := Vector2i(floori(pos.x / CELL), floori(pos.y / CELL))
-	if model.is_empty() or c.x < 0 or c.y < 0 or c.x >= model.width or c.y >= model.height:
-		return Vector2i(-1, -1)
-	return c
-
-
-func _draw() -> void:
-	if model.is_empty():
+func _zoom_at(cursor: Vector2, factor: float) -> void:
+	var old_zoom := _world.scale.x
+	var new_zoom := clampf(old_zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	if is_equal_approx(new_zoom, old_zoom):
 		return
-	var rows: Array = model.rows
-	for y in range(model.height):
-		var row: String = rows[y]
-		for x in range(model.width):
-			var t := BattlefieldDocScript.glyph_to_terrain(row.substr(x, 1))
-			draw_rect(Rect2(x * CELL, y * CELL, CELL, CELL), TERRAIN_COLORS.get(t, TERRAIN_COLORS[&"plain"]))
-			draw_rect(Rect2(x * CELL, y * CELL, CELL, 1), LINE)
-			draw_rect(Rect2(x * CELL, y * CELL, 1, CELL), LINE)
-	# 网格外框
-	draw_rect(Rect2(0, 0, model.width * CELL, model.height * CELL), LINE, false, 1.5)
-	# 单位标记：阵营色圆 + 职业+等级 文本
-	var font := ThemeDB.fallback_font
+	_world.position = cursor - (cursor - _world.position) * (new_zoom / old_zoom)
+	_world.scale = Vector2(new_zoom, new_zoom)
+
+
+## 画布局部坐标 → cell（多高度感知拾取）
+func _pick(local_pos: Vector2) -> Vector2i:
+	if _renderer == null or _renderer.grid == null:
+		return Vector2i(-1, -1)
+	var global_pos: Vector2 = get_global_transform() * local_pos
+	return _renderer.pick_world(global_pos)
+
+
+func _update_hover_marker() -> void:
+	if hover_cell.x < 0:
+		_hover_marker.visible = false
+		return
+	var c: Vector2 = _renderer.coord_for(hover_cell.x, hover_cell.y)
+	var hw := 16.0
+	var hh := 8.0
+	_hover_marker.polygon = PackedVector2Array([
+		c + Vector2(0, -hh),
+		c + Vector2(hw, 0),
+		c + Vector2(0, hh),
+		c + Vector2(-hw, 0),
+	])
+	_hover_marker.visible = true
+
+
+# ============================================================
+# 单位标记
+# ============================================================
+
+func _rebuild_unit_markers() -> void:
+	_clear_unit_markers()
 	for u in model.units:
-		var cx := (int(u.x) + 0.5) * CELL
-		var cy := (int(u.y) + 0.5) * CELL
-		var color := ENEMY_COLOR if String(u.get("faction", "player")) == "enemy" else PLAYER_COLOR
-		draw_circle(Vector2(cx, cy), CELL * 0.36, Color(color, 0.85))
-		draw_circle(Vector2(cx, cy), CELL * 0.36, Color(0, 0, 0, 0.6), false, 2.0)
-		var tag := "%s%d" % [String(u.get("tag", "?")), int(u.get("level", 1))]
-		draw_string(font, Vector2(cx - CELL * 0.30, cy + CELL * 0.14), tag,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
-	# 悬停高亮
-	if hover_cell.x >= 0:
-		draw_rect(Rect2(hover_cell.x * CELL, hover_cell.y * CELL, CELL, CELL), HOVER)
+		var marker := _UnitMark.new()
+		marker.faction_color = ENEMY_COLOR if String(u.get("faction", "player")) == "enemy" else PLAYER_COLOR
+		marker.tag = "%s%d" % [String(u.get("tag", "?")), int(u.get("level", 1))]
+		marker.position = _renderer.coord_for(int(u.x), int(u.y))
+		marker.z_index = 15
+		_world.add_child(marker)
+		_unit_markers.append(marker)
+
+
+## 单格地形变了可能影响站立层 → 该格上的标记位置重算
+func _refresh_markers_at(_cell: Vector2i) -> void:
+	_rebuild_unit_markers()
+
+
+func _clear_unit_markers() -> void:
+	for marker in _unit_markers:
+		if is_instance_valid(marker):
+			marker.queue_free()
+	_unit_markers.clear()
+
+
+## 阵营色圆 + 职业首字/等级文本（自绘，随 world 缩放）
+class _UnitMark:
+	extends Node2D
+	var faction_color: Color = Color.WHITE
+	var tag := "?"
+	func _draw() -> void:
+		var r := 9.0
+		draw_circle(Vector2.ZERO, r, Color(faction_color, 0.85))
+		draw_arc(Vector2.ZERO, r, 0, TAU, 24, Color(0, 0, 0, 0.6), 2.0)
+		var font := ThemeDB.fallback_font
+		draw_string(font, Vector2(-7, 4), tag,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.95))

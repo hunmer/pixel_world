@@ -1,8 +1,9 @@
 ## battle/range_overlay.gd — 战场范围/光标可视化层（从 phaserjs 的 Node3D 版重写为 Node2D）
 ##
 ## pixel_world 是 2D 项目，所有 mesh（.obj + CylinderMesh）改为 Line2D + 自绘 _draw。
-## **保留原 API 签名**（setup/render_terrain_fallback/highlight_range/clear_range_highlight/
+## **保留原 API 签名**（setup/highlight_range/clear_range_highlight/
 ## create_cursor_particles/update_cursor_particles/show_path/clear_path），让 battle.gd 不用改。
+## 地形渲染由 BattlefieldRenderer 负责（等距方块柱），本类只画范围/光标/路径标记。
 ##
 ## 视觉风格：扁平贴地菱形描边（不用 3D 高墙）。
 ##   - 光标框（金色）：上下浮动
@@ -18,13 +19,12 @@ var board: IsoBoard                     # B2 模式：IsoBoard 实例（保留�
 var grid: GridSystem
 var block_titles: Array = []
 # B1 就地模式注入：marker 挂载点 + 坐标/sort 转换函数（B2 时为 null，走 board 路径）
-var _parent: Node2D = null              # marker 挂哪（B1=main.gd；B2=null→用 board）
+var _parent: Node2D = null              # marker 挂哪（B1=main.gd；B2=注入 renderer 坐标时=board）
 var _coord_fn := Callable()            # (x, y) -> Vector2 屏幕坐标（B1=main._grid_to_screen；B2=空→IsoCoords.to_screen）
 var _sort_fn := Callable()             # (x, y) -> float sort_y（B1=main._column_sort_y；B2=空→固定 0）
-var _level_fn := Callable()            # (x, y) -> int，高度层（B1 用于范围描边透明度）
+var _level_fn := Callable()            # (x, y) -> int，高度层（B1/等距方块模式用于范围描边透明度）
 
 # ---- 内部状态 ----
-var _fallback_cells: Dictionary = {}   # { "x,y" -> _ColorBlock(Node2D) }
 var _cursor_marker: Node2D = null
 var _cursor_float_root: Node2D = null
 var _cursor_float_tween: Tween = null
@@ -134,32 +134,6 @@ func _make_outline_block(x: int, y: int, color: Color, line_width: float = 2.0) 
 	if is_world_mode():
 		node.z_index = 5
 	return node
-
-
-# ============================================================
-# 渲染：chapter_1 无 blockTitles 时的退化（纯色菱形铺底）
-# ============================================================
-func render_terrain_fallback() -> void:
-	var colors := {
-		&"plain": Color(0.29, 0.48, 0.16),
-		&"forest": Color(0.10, 0.35, 0.10),
-		&"mountain": Color(0.35, 0.29, 0.23),
-		&"water": Color(0.16, 0.35, 0.60),
-		&"fort": Color(0.40, 0.40, 0.40),
-		&"village": Color(0.53, 0.42, 0.23),
-		&"wall": Color(0.13, 0.13, 0.13),
-	}
-	for y in range(grid.height):
-		for x in range(grid.width):
-			var tile: Dictionary = grid.tiles[y][x]
-			var c: Color = colors.get(tile.type, colors[&"plain"])
-			_add_cell_quad(x, y, c)
-
-
-func _add_cell_quad(x: int, y: int, color: Color) -> void:
-	var node := _make_color_block(x, y, color)
-	_attach(node)
-	_fallback_cells["%d,%d" % [x, y]] = node
 
 
 # ============================================================

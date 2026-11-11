@@ -220,17 +220,14 @@ func _build_ui() -> void:
 	lv_row.add_child(_unit_name_edit)
 	sv.add_child(lv_row)
 
-	# ---- 画布 ----
-	var scroll := ScrollContainer.new()
-	scroll.name = "EditorScroll"
-	scroll.position = Vector2(236, 80)
-	scroll.size = Vector2(vp.x - 244, vp.y - 118)
-	add_child(scroll)
+	# ---- 画布（等距方块渲染，内部自带平移/缩放） ----
 	_canvas = EditorCanvasScript.new()
 	_canvas.name = "EditorCanvas"
 	_canvas.cell_pressed.connect(_on_cell_pressed)
 	_canvas.cell_dragged.connect(_on_cell_dragged)
-	scroll.add_child(_canvas)
+	_canvas.position = Vector2(236, 80)
+	_canvas.size = Vector2(vp.x - 244, vp.y - 118)
+	add_child(_canvas)
 	_refresh_canvas()
 
 	# ---- 状态栏 ----
@@ -320,7 +317,7 @@ func _set_glyph(cell: Vector2i, glyph: String) -> void:
 	if row.substr(cell.x, 1) == glyph:
 		return
 	rows[cell.y] = row.substr(0, cell.x) + glyph + row.substr(cell.x + 1)
-	_canvas.queue_redraw()
+	_canvas._refresh_cell(cell)
 
 
 ## 洪水填充：同图例连通区域 → 目标地形
@@ -344,7 +341,7 @@ func fill_cell(cell: Vector2i, terrain: StringName) -> void:
 			if (rows[n.y] as String).substr(n.x, 1) == from:
 				seen[n] = true
 				stack.append(n)
-	_canvas.queue_redraw()
+	_refresh_canvas()
 	_status("填充 %s ×%d 格" % [BattlefieldDocScript.TERRAIN_CN[terrain], seen.size()])
 
 
@@ -373,7 +370,7 @@ func place_unit(cell: Vector2i, faction: String, class_id: String, level: int, u
 		"tag": cn.substr(0, 1),
 	}
 	(model.units as Array).append(unit)
-	_canvas.queue_redraw()
+	_canvas._refresh_cell(cell)
 	_status("放置 %s·%s Lv%d @(%d,%d)" % [cn, unit.name, unit.level, cell.x, cell.y])
 	return true
 
@@ -384,7 +381,7 @@ func _remove_unit_at(cell: Vector2i) -> bool:
 		var u: Dictionary = model.units[i]
 		if int(u.x) == cell.x and int(u.y) == cell.y:
 			model.units.remove_at(i)
-			_canvas.queue_redraw()
+			_canvas._refresh_cell(cell)
 			_status("移除 %s @(%d,%d)" % [u.name, cell.x, cell.y])
 			return true
 	return false

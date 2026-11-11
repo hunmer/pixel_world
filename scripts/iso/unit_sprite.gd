@@ -31,6 +31,8 @@ var _stand_level: int = 0        # 单位当前 cell 的站立层（来自 CellC
 var _world_origin: Vector2i = Vector2i.ZERO  # 战场 (0,0) 对应的世界 cell
 # 单位内部视觉位置（B1 双轨用：position.y=sort_y, offset 补偿到 _visual_pos）
 var _visual_pos: Vector2 = Vector2.ZERO
+# B2 等距方块模式：注入 BattlefieldRenderer.stand_level（缺省无效 = 平面 level 0）
+var _level_fn: Callable = Callable()
 
 
 ## 当前模式：true=B1 就地（有 _world），false=B2 切场景（有 _board）
@@ -60,10 +62,21 @@ const _HP_BAR_Y := -56.0    # HP 条中心 Y（立绘上方）
 const _LABEL_Y := -66.0     # 头顶文本 Y（HP 条上方）
 
 
-func setup(p_unit: Dictionary, board: IsoBoard) -> void:
+func setup(p_unit: Dictionary, board: IsoBoard, p_level_fn := Callable()) -> void:
 	unit = p_unit
 	_board = board
+	_level_fn = p_level_fn
+	# 等距方块地形下单位画在地形(z=0)和范围标记(z=5)之上
+	z_index = 10
 	_build_visual()
+
+
+## B2 屏幕坐标（可选注入 level_fn 支持柱顶站立高度；缺省 level 0 向后兼容）
+func _b2_cell_screen(pos: Vector2i) -> Vector2:
+	var lvl := 0
+	if _level_fn.is_valid():
+		lvl = int(_level_fn.call(pos.x, pos.y))
+	return IsoCoords.to_screen(pos.x, pos.y, lvl)
 
 
 ## B1 就地模式入口：注入 main.gd 引用 + 战场世界原点。
@@ -169,9 +182,9 @@ func update_state() -> void:
 		# B1 就地模式：双轨定位
 		_apply_render_proxy()
 	elif _board != null:
-		# B2 切场景模式：直接设 global_position
+		# B2 切场景模式：直接设 global_position（注入 level_fn 时含柱顶高度）
 		var pos_b2: Vector2i = unit[&"position"]
-		global_position = IsoCoords.to_screen(pos_b2.x, pos_b2.y)
+		global_position = _b2_cell_screen(pos_b2)
 	else:
 		return
 	# HP 条
@@ -222,9 +235,9 @@ func move_along_path(path: Array, on_done: Callable) -> void:
 			on_done.call()
 		)
 	else:
-		# B2 切场景模式：tween global_position
+		# B2 切场景模式：tween global_position（含柱顶高度）
 		for cell in path:
-			tween.tween_property(self, "global_position", IsoCoords.to_screen(cell.x, cell.y), 0.18)
+			tween.tween_property(self, "global_position", _b2_cell_screen(cell), 0.18)
 		tween.tween_callback(func():
 			update_state()
 			on_done.call()

@@ -6,7 +6,7 @@
 ## 设计：
 ##   - 纯静态函数，无副作用
 ##   - 战场坐标 (bx,by) ↔ 世界坐标 (origin.x + bx, origin.y + by)
-##   - chapter 不含 blockTitles，强制 battle.gd 走 range_overlay.render_terrain_fallback
+##   - chapter 不含 blockTitles；B2 地形渲染走 BattlefieldRenderer（等距方块柱）
 ##   - cell_context_to_terrain 映射优先级：water > mountain > plain（forest/fort/village/wall
 ##     世界层无对应数据源，先退化到 plain/mountain，留给 B1 阶段扩展）
 ##   - 战场中心自动找陆地（玩家可能站在水面，搜索附近最近的非水 cell）

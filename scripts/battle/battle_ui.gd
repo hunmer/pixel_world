@@ -43,6 +43,8 @@ extends CanvasLayer
 
 # ---- 注入的只读引用 ----
 var board: IsoBoard
+## 可选：柱顶高度函数（BattlefieldRenderer.stand_level，B2 等距方块模式注入）
+var level_fn: Callable = Callable()
 var grid: GridSystem
 var unit_sprites: Dictionary
 var turn: TurnManager
@@ -408,7 +410,10 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 	# 2D 版：cell 世界坐标 → 屏幕坐标（经 canvas transform 投影）
 	# board 在场景树中，IsoCoords.to_screen 给出 board 局部坐标；
 	# board 若无平移，局部=全局；CanvasLayer 上的 panel 用屏幕坐标定位。
-	var world_pos := IsoCoords.to_screen(at_pos.x, at_pos.y)
+	var menu_level := 0
+	if level_fn.is_valid():
+		menu_level = int(level_fn.call(at_pos.x, at_pos.y))
+	var world_pos := IsoCoords.to_screen(at_pos.x, at_pos.y, menu_level)
 	var canvas := board.get_viewport().get_canvas_transform()
 	var screen := canvas * (board.get_global_transform() * world_pos)
 	panel.position = screen - panel.size / 2.0 + Vector2(40, -40)

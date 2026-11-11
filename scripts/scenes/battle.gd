@@ -11,6 +11,8 @@
 
 extends Node2D
 
+const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
+
 var grid: GridSystem
 var turn: TurnManager
 var chapter: Dictionary
@@ -28,6 +30,8 @@ var _world_origin: Vector2i = Vector2i.ZERO  # 战场 (0,0) 对应的世界 cell
 signal battle_finished(result: StringName)
 
 var board: IsoBoard
+## B2 等距方块地形层（复用世界渲染管线：ColumnBatch + TerrainMaterialRegistry）
+var renderer: Node2D = null
 var _unit_sprites: Dictionary = {}  # unitId -> UnitSprite3D
 # 范围/光标可视化层（地形回退铺底 + 移动/攻击范围菱形墙 + 光标金色呼吸墙）
 var range_overlay: RangeOverlay = null
@@ -103,17 +107,24 @@ func _ready() -> void:
 	turn.start_player_phase()
 
 
-## B2 切场景模式渲染初始化（原 _ready 的渲染部分，保持不变）
+## B2 切场景模式渲染初始化：等距方块地形（像素版 Minecraft 风格，复用世界渲染管线）
 func _setup_b2_render() -> void:
-	# 注：pixel_world 不迁移 blocks.json，跳过 BlockMetrics 预加载
 	board = IsoBoard.new()
 	board.name = "Board"
 	add_child(board)
+	# 地形柱层（ColumnBatch 逐柱渲染，y_sort 处理柱间遮挡）
+	renderer = BattlefieldRendererScript.new()
+	board.add_child(renderer)
+	renderer.setup(grid)
+	# 范围/光标标记走注入模式：坐标/排序/高度由 renderer 提供（同 B1 的注入方式）
 	range_overlay = RangeOverlay.new()
 	add_child(range_overlay)
-	range_overlay.setup(board, grid, block_titles)
-	# 无 blockTitles 或 BlockAtlas 缺失 → 走 terrain fallback 色块铺底
-	range_overlay.render_terrain_fallback()
+	range_overlay.setup_world(
+		board, grid, block_titles,
+		Callable(renderer, "coord_for"),
+		Callable(renderer, "sort_for"),
+		Callable(renderer, "stand_level")
+	)
 	board.center_on_map(chapter.width, chapter.height)
 
 
@@ -148,6 +159,12 @@ func _b1_cell_level(x: int, y: int) -> int:
 	return _world.cell_stand_level(world_cell)
 
 
+## 屏幕坐标 → 战场 cell（仅 B2 调用；B1 走 _screen_to_battle_cell* 系列）。
+## renderer.pick_cell 逐层尝试柱顶投影，支持高低起伏地形。
+func _pick_battle_cell(screen_pos: Vector2) -> Vector2i:
+	return renderer.pick_cell(screen_pos, get_viewport().get_visible_rect().size)
+
+
 ## 把 battle.gd 自己的方法注入 turn_director（让它能回交战斗演出 / 胜负 / 状态机修改，
 ## 而无需持有父场景引用）。
 func _inject_turn_director_callables() -> void:
@@ -180,6 +197,9 @@ func _on_viewport_resized() -> void:
 func _build_ui() -> void:
 	battle_ui = BattleUI.new()
 	battle_ui.setup(board, grid, _unit_sprites, turn)
+	if renderer != null:
+		# B2 等距方块模式：菜单/浮字定位带柱顶高度
+		battle_ui.level_fn = Callable(renderer, "stand_level")
 	add_child(battle_ui)
 	_inject_battle_ui_callables()
 	battle_ui.build(_on_end_turn, _toggle_hosting, _open_pref_panel)
@@ -265,9 +285,9 @@ func _spawn_unit_sprite(u: Dictionary) -> void:
 		_world.add_child(us)
 		us.setup_world(u, _world, stand_level, _world_origin)
 	else:
-		# B2 切场景模式：挂 board 下
+		# B2 切场景模式：挂 board 下，注入 renderer.stand_level 支持柱顶站立
 		board.add_child(us)
-		us.setup(u, board)
+		us.setup(u, board, Callable(renderer, "stand_level"))
 	_unit_sprites[u.id] = us
 
 
@@ -278,7 +298,11 @@ func _debug_print_unit_alignment() -> void:
 		if us == null:
 			continue
 		var pos: Vector2i = u.position
-		var screen := IsoCoords.to_screen(pos.x, pos.y)
+		# B2 等距渲染下单位站在地形高度上（renderer.stand_level）；B1 就地模式无 renderer，退回 0 层
+		var lvl := 0
+		if renderer != null:
+			lvl = renderer.stand_level(pos.x, pos.y)
+		var screen := IsoCoords.to_screen(pos.x, pos.y, lvl)
 		print("[DEBUG-unit-align] id=%s name=%s cell=%s screen=%s actual=%s" % [
 			str(u.id), str(u.name), str(pos), str(screen), str(us.global_position)
 		])
@@ -373,7 +397,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _b1_mode:
 				detail_cell = _screen_to_battle_cell(mb.position)
 			else:
-				detail_cell = board.pick_cell(mb.position, get_viewport().get_visible_rect().size)
+				detail_cell = _pick_battle_cell(mb.position)
 			if detail_cell.x >= 0 and detail_cell.x < grid.width \
 					and detail_cell.y >= 0 and detail_cell.y < grid.height:
 				var du := grid.unit_at(detail_cell.x, detail_cell.y)
@@ -401,7 +425,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				if _b1_mode:
 					hover_cell = _screen_to_battle_cell_unbounded(mm.position)
 				else:
-					hover_cell = board.pick_cell(mm.position, get_viewport().get_visible_rect().size)
+					hover_cell = _pick_battle_cell(mm.position)
 				if hover_cell != cursor_pos:
 					cursor_pos = hover_cell
 					cursor_visible = true
@@ -443,7 +467,7 @@ func _on_tile_click_at_screen(screen_pos: Vector2) -> void:
 	if _b1_mode:
 		cell = _screen_to_battle_cell(screen_pos)
 	else:
-		cell = board.pick_cell(screen_pos, get_viewport().get_visible_rect().size)
+		cell = _pick_battle_cell(screen_pos)
 	if cell.x < 0 or cell.x >= grid.width or cell.y < 0 or cell.y >= grid.height:
 		return
 	cursor_pos = cell
