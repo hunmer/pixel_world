@@ -191,6 +191,7 @@ var _world_rng = DeterministicRngScript.new(0)
 var _sort_origin := Vector2i.ZERO
 var _has_sort_origin := false
 var _iso_view = IsometricViewScript.new(TILE_W, TILE_H, LEVEL_H)
+var _view_rotation_culling := false
 var _view_dragging := false
 var _view_drag_last_x := 0.0
 var _zoom_index := DEFAULT_ZOOM_INDEX
@@ -1179,7 +1180,16 @@ func _spawn_cell(cell: Vector2i) -> void:
 	if q <= WATER_MAX:
 		_water_cells[cell] = true
 	add_child(view)
-	view.configure(cell, state.render_blocks, _grid_to_screen(cell), _column_sort_y(cell), LEVEL_H)
+	view.configure(
+		cell,
+		state.render_blocks,
+		_grid_to_screen(cell),
+		_column_sort_y(cell),
+		LEVEL_H,
+		_iso_view._basis_x,
+		_iso_view._basis_y,
+		cell_stand_level
+	)
 	_spawn_ambient_for_cell(
 		cell,
 		q,
@@ -1195,14 +1205,20 @@ func _spawn_cell(cell: Vector2i) -> void:
 
 
 func _append_water_volume(cell: Vector2i, lakebed_level: int, blocks: Array) -> void:
-	# +x 位于屏幕右下、+y 位于左下；只有朝向非水邻格的前侧面可能暴露。
+	# 四个水平方向都保留独立的岸线侧壁；绘制时按当前视角选取朝前两侧。
 	var expose_right := _quantize(cell.x + 1, cell.y) > WATER_MAX
 	var expose_left := _quantize(cell.x, cell.y + 1) > WATER_MAX
+	var expose_back_right := _quantize(cell.x - 1, cell.y) > WATER_MAX
+	var expose_back_left := _quantize(cell.x, cell.y - 1) > WATER_MAX
 	for level in range(lakebed_level + 1, WATER_SURFACE_LEVEL + 1):
 		if expose_left:
 			blocks.append(_water_block(_water_left_tex, level, WATER_SIDE_ALPHA, &"left_side"))
 		if expose_right:
 			blocks.append(_water_block(_water_right_tex, level, WATER_SIDE_ALPHA, &"right_side"))
+		if expose_back_left:
+			blocks.append(_water_block(_water_left_tex, level, WATER_SIDE_ALPHA, &"left_side_opposite"))
+		if expose_back_right:
+			blocks.append(_water_block(_water_right_tex, level, WATER_SIDE_ALPHA, &"right_side_opposite"))
 	# 顶面只画一次，所有水格在同一个水位无缝拼接；透明像素不会重复覆盖。
 	var surface_block := _water_block(
 		_water_tex,
@@ -1211,9 +1227,9 @@ func _append_water_volume(cell: Vector2i, lakebed_level: int, blocks: Array) -> 
 		&"surface"
 	)
 	var shore_edges := 0
-	if _quantize(cell.x - 1, cell.y) > WATER_MAX:
+	if expose_back_right:
 		shore_edges |= 1
-	if _quantize(cell.x, cell.y - 1) > WATER_MAX:
+	if expose_back_left:
 		shore_edges |= 2
 	if expose_right:
 		shore_edges |= 4
@@ -1330,10 +1346,35 @@ func _continuous_view_rotation() -> int:
 ## 角度变化只改变表现层坐标；地形采样、生态状态和确定性随机流保持不动。
 func _refresh_view_projection() -> void:
 	var previous_player_position := _player_visual_position
+	var origin_screen := _iso_view.grid_to_screen(_sort_origin)
+	var cull_rect := Rect2()
+	if _cam != null:
+		var viewport_size := get_viewport_rect().size
+		var zoom := maxf(_cam.zoom.x, 0.001)
+		cull_rect = Rect2(
+			_cam.position - viewport_size / (2.0 * zoom),
+			viewport_size / zoom
+		).grow(256.0 / zoom)
+	_view_rotation_culling = true
 	for cell_value in _cells.keys():
 		var cell: Vector2i = cell_value
 		var view: Node2D = _cells[cell]
-		view.update_sort_position(_grid_to_screen(cell), _column_sort_y(cell))
+		var screen_position := _iso_view.grid_to_screen(cell)
+		var projected := screen_position - origin_screen
+		var sort_y := (
+			snappedf(projected.y, 0.001) * SORT_DEPTH_SCALE
+			+ clampf(projected.x * 0.001, -0.25, 0.25)
+		)
+		view.set_rotation_draw_culling(
+			_cam != null,
+			_cam == null or cull_rect.has_point(screen_position)
+		)
+		view.update_sort_position(
+			screen_position,
+			sort_y,
+			_iso_view._basis_x,
+			_iso_view._basis_y
+		)
 	if _player != null:
 		if _move_t >= 1.0:
 			_move_from_cell = _player_cell
@@ -1363,6 +1404,13 @@ func _refresh_view_projection() -> void:
 		_set_camera_position(_camera_smooth_position)
 
 
+func _restore_view_draw_culling() -> void:
+	_view_rotation_culling = false
+	for view_value in _cells.values():
+		var view: Node2D = view_value
+		view.set_rotation_draw_culling(false, true)
+
+
 func _ensure_sort_origin(near_cell: Vector2i) -> void:
 	if not _has_sort_origin:
 		_sort_origin = near_cell
@@ -1375,7 +1423,12 @@ func _ensure_sort_origin(near_cell: Vector2i) -> void:
 	for cell_value in _cells.keys():
 		var cell: Vector2i = cell_value
 		var view: Node2D = _cells[cell]
-		view.update_sort_position(_grid_to_screen(cell), _column_sort_y(cell))
+		view.update_sort_position(
+			_grid_to_screen(cell),
+			_column_sort_y(cell),
+			_iso_view._basis_x,
+			_iso_view._basis_y
+		)
 	_player_occlusion_dirty = true
 	_move_sort_from = _column_sort_y(_move_from_cell) + PLAYER_SORT_BIAS
 	_move_sort_to = _column_sort_y(_player_cell) + PLAYER_SORT_BIAS
@@ -3344,6 +3397,9 @@ func _try_move(d: Vector2i) -> void:
 func _process(delta: float) -> void:
 	if _iso_view.advance(delta, _continuous_view_rotation()):
 		_refresh_view_projection()
+	else:
+		if _view_rotation_culling:
+			_restore_view_draw_culling()
 	if _move_t < 1.0:
 		var speed := fast_multiplier if Input.is_physical_key_pressed(KEY_SHIFT) else 1.0
 		_move_t = minf(1.0, _move_t + delta / move_time * speed)

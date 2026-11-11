@@ -4,8 +4,13 @@ extends Node2D
 ## 这里按已经排好的顺序一次画完整根地块柱，避免不同格的层互相穿插。
 
 var _blocks: Array[Dictionary] = []
+var _cell := Vector2i.ZERO
 var _screen_y_offset := 0.0
 var _level_height := 8.0
+var _basis_x := Vector2(16.0, 8.0)
+var _basis_y := Vector2(-16.0, 8.0)
+var _neighbor_stand_level_fn: Callable = Callable()
+var _terrain_top_level := -1
 var _water_ripples: Array[Dictionary] = []
 var _ripple_redraw_elapsed := 0.0
 var _has_shoreline := false
@@ -17,8 +22,20 @@ var _block_cutaway_shades := {}  ## block index -> current deep-gray overlay amo
 var _block_cutaway_shade_targets := {}  ## block index -> target overlay amount
 var _occluder_visual_bounds := Rect2()
 var _has_occluder_visual_bounds := false
+var _occluder_bounds_dirty := true
+var _has_occluder_content := false
+var _occluder_broadphase_radius := 0.0
 static var _texture_image_cache: Dictionary = {}
 static var _texture_alpha_mask_cache: Dictionary = {}
+static var _projected_terrain_material: ShaderMaterial
+static var _projected_shader_angle := 0.0
+var _projected_mesh_cache: Dictionary = {}
+var _projected_draw_plan_cache: Dictionary = {}
+var _projected_sector := -1
+var _rotation_cull_active := false
+var _rotation_draw_visible := true
+
+const PROJECTED_TERRAIN_SHADER = preload("res://shaders/isometric_terrain_rotate.gdshader")
 
 const WATER_SURFACE_VISUAL_OFFSET := Vector2(0.0, -2.0)
 const MAX_WATER_RIPPLES := 4
@@ -45,6 +62,27 @@ const PLAYER_OCCLUSION_FADE_IN_RATE := 7.0
 const OCCLUSION_LEVEL_EPSILON := 0.01
 const OCCLUDER_TERRAIN := &"terrain"
 const OCCLUDER_PROP := &"prop"
+const DEFAULT_BASIS_X := Vector2(16.0, 8.0)
+const DEFAULT_BASIS_Y := Vector2(-16.0, 8.0)
+const TOP_CENTER_OFFSET := Vector2(0.0, -2.0)
+const TOP_UV := [
+	Vector2(16.0, 6.0),
+	Vector2(32.0, 14.0),
+	Vector2(16.0, 22.0),
+	Vector2(0.0, 14.0),
+]
+const RIGHT_SIDE_UV := [
+	Vector2(32.0, 14.0),
+	Vector2(16.0, 22.0),
+	Vector2(16.0, 32.0),
+	Vector2(32.0, 24.0),
+]
+const LEFT_SIDE_UV := [
+	Vector2(0.0, 14.0),
+	Vector2(16.0, 22.0),
+	Vector2(16.0, 32.0),
+	Vector2(0.0, 24.0),
+]
 
 
 func configure(
@@ -52,10 +90,28 @@ func configure(
 	blocks: Array[Dictionary],
 	screen_position: Vector2,
 	sort_y: float,
-	level_height: float
+	level_height: float,
+	basis_x := DEFAULT_BASIS_X,
+	basis_y := DEFAULT_BASIS_Y,
+	neighbor_stand_level_fn: Callable = Callable()
 ) -> void:
 	name = "Column_%d_%d" % [cell.x, cell.y]
+	_cell = cell
 	_blocks = blocks
+	_neighbor_stand_level_fn = neighbor_stand_level_fn
+	_terrain_top_level = -1
+	for block in _blocks:
+		if (
+			block.get("occluder_class", &"") == OCCLUDER_TERRAIN
+			and block.get("water_part", &"") == &""
+		):
+			_terrain_top_level = maxi(_terrain_top_level, int(block["level"]))
+	_projected_mesh_cache.clear()
+	_projected_draw_plan_cache.clear()
+	_projected_sector = -1
+	_has_occluder_content = false
+	_occluder_broadphase_radius = 0.0
+	_occluder_bounds_dirty = true
 	_level_height = level_height
 	_occlusion_alpha = 1.0
 	_occlusion_target_alpha = 1.0
@@ -69,7 +125,17 @@ func configure(
 		var configured_block: Dictionary = block_value
 		if int(configured_block.get("shore_edges", 0)) != 0:
 			_has_shoreline = true
-			break
+	for block_value in _blocks:
+		var configured_block: Dictionary = block_value
+		var occluder_class: StringName = configured_block.get("occluder_class", &"")
+		if occluder_class != OCCLUDER_TERRAIN and occluder_class != OCCLUDER_PROP:
+			continue
+		_has_occluder_content = true
+		var texture: Texture2D = configured_block["texture"]
+		_occluder_broadphase_radius = maxf(
+			_occluder_broadphase_radius,
+			float(configured_block["level"]) * _level_height + texture.get_size().length()
+		)
 	var tint := self_modulate
 	tint.a = 1.0
 	self_modulate = tint
@@ -77,15 +143,84 @@ func configure(
 	# 岸线循环由 RenderingServer 的 animation slice 驱动，不让每个岸线格
 	# 都进入 _process()。这里只有短生命周期的雨雪水波需要 CPU 更新。
 	set_process(not _water_ripples.is_empty())
-	update_sort_position(screen_position, sort_y)
+	update_sort_position(screen_position, sort_y, basis_x, basis_y)
 
 
-func update_sort_position(screen_position: Vector2, sort_y: float) -> void:
+func update_sort_position(
+	screen_position: Vector2,
+	sort_y: float,
+	basis_x := DEFAULT_BASIS_X,
+	basis_y := DEFAULT_BASIS_Y
+) -> void:
 	# 节点原点承载合成的 Y-sort 深度；局部绘制偏移把像素补偿回真实投影位置。
 	position = Vector2(screen_position.x, sort_y)
 	_screen_y_offset = screen_position.y - sort_y
-	_rebuild_occluder_visual_bounds()
+	_basis_x = basis_x
+	_basis_y = basis_y
+	_projected_sector = (1 if _basis_x.y < 0.0 else 0) | (2 if _basis_y.y < 0.0 else 0)
+	_occluder_bounds_dirty = true
+	if _rotation_cull_active and not _rotation_draw_visible:
+		return
+	var terrain_material := _get_projected_terrain_material()
+	material = terrain_material
+	var view_angle := _basis_x.angle() - DEFAULT_BASIS_X.angle()
+	if not is_equal_approx(_projected_shader_angle, view_angle):
+		terrain_material.set_shader_parameter("view_angle", view_angle)
+		_projected_shader_angle = view_angle
 	queue_redraw()
+
+
+static func _get_projected_terrain_material() -> ShaderMaterial:
+	if _projected_terrain_material == null:
+		_projected_terrain_material = ShaderMaterial.new()
+		_projected_terrain_material.shader = PROJECTED_TERRAIN_SHADER
+	return _projected_terrain_material
+
+
+func _is_projected_terrain(block: Dictionary) -> bool:
+	return (
+		block.get("occluder_class", &"") == OCCLUDER_TERRAIN
+		or block.get("water_part", &"") != &""
+	)
+
+
+## 地块 level L 的侧面若已有同层或更高邻格，就是柱体内部面，不能绘制。
+## 只在当前朝向的两个侧面调用；边界与真正的高差仍保留完整侧壁。
+func _is_side_exposed(axis: int, positive: bool, level: int) -> bool:
+	if not _neighbor_stand_level_fn.is_valid():
+		return true
+	var direction := Vector2i.ZERO
+	if axis == 0:
+		direction = Vector2i(1 if positive else -1, 0)
+	else:
+		direction = Vector2i(0, 1 if positive else -1)
+	var neighbor_level := int(_neighbor_stand_level_fn.call(_cell + direction))
+	return neighbor_level < level
+
+
+func _is_default_projection() -> bool:
+	return _basis_x.is_equal_approx(DEFAULT_BASIS_X) and _basis_y.is_equal_approx(DEFAULT_BASIS_Y)
+
+
+## 柱内较低方块的顶面被同柱上层占据，不属于可见表面。
+## 水面是独立透明表层；湖床顶面仍保留以透过水体显示。
+func _is_visible_top(water_part: StringName, level: int) -> bool:
+	if water_part == &"surface":
+		return true
+	return water_part == &"" and level == _terrain_top_level
+
+
+## 顶面四角顺序固定为上、右、下、左；旋转只改变地面基向量，高度不旋转。
+func _terrain_top_corners(center: Vector2) -> PackedVector2Array:
+	var top_center := center + TOP_CENTER_OFFSET
+	var half_x := _basis_x * 0.5
+	var half_y := _basis_y * 0.5
+	return PackedVector2Array([
+		top_center - half_x - half_y,
+		top_center + half_x - half_y,
+		top_center + half_x + half_y,
+		top_center - half_x + half_y,
+	])
 
 
 func _block_visual_rect(block: Dictionary) -> Rect2:
@@ -94,6 +229,13 @@ func _block_visual_rect(block: Dictionary) -> Rect2:
 		0.0,
 		_screen_y_offset - float(block["level"]) * _level_height
 	) + Vector2(block["render_offset"])
+	if _is_projected_terrain(block) and not _is_default_projection():
+		var extents := (_basis_x.abs() + _basis_y.abs()) * 0.5
+		var top_center := center + TOP_CENTER_OFFSET
+		return Rect2(
+			top_center - extents,
+			extents * 2.0 + Vector2(0.0, _level_height)
+		)
 	return Rect2(center - texture.get_size() * 0.5, texture.get_size())
 
 
@@ -172,6 +314,7 @@ func _block_can_occlude_player(block: Dictionary, player_stand_level: float) -> 
 func _rebuild_occluder_visual_bounds() -> void:
 	_has_occluder_visual_bounds = false
 	_occluder_visual_bounds = Rect2()
+	_occluder_bounds_dirty = false
 	for block in _blocks:
 		var occluder_class: StringName = block.get("occluder_class", &"")
 		if occluder_class != OCCLUDER_TERRAIN and occluder_class != OCCLUDER_PROP:
@@ -191,6 +334,13 @@ func player_occluding_block_indices(
 	player_stand_level: float
 ) -> Array[int]:
 	var result: Array[int] = []
+	if not _has_occluder_content:
+		return result
+	if _occluder_bounds_dirty:
+		var column_center := position + Vector2(0.0, _screen_y_offset)
+		if not player_rect.grow(_occluder_broadphase_radius).has_point(column_center):
+			return result
+		_rebuild_occluder_visual_bounds()
 	if (
 		not _has_occluder_visual_bounds
 		or not _occluder_visual_bounds.intersects(player_rect)
@@ -463,41 +613,419 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-func _draw() -> void:
+## 将连续、同贴图且同色调的投影面合并为三角形网格，避免逐面 draw_polygon
+## 在完整地图旋转时产生数万次 CanvasItem 绘制调用。
+class ProjectedTerrainBatch:
+	var texture: Texture2D
+	var water_part: StringName = &""
+	var tint := Color.WHITE
+	var start_index := -1
+	var vertices := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	var customs := PackedColorArray()
+	var colors := PackedColorArray()
+
+	func matches(next_texture: Texture2D, next_part: StringName, next_tint: Color) -> bool:
+		return (
+			start_index >= 0
+			and texture == next_texture
+			and water_part == next_part
+			and tint.is_equal_approx(next_tint)
+		)
+
+	func begin(
+		next_texture: Texture2D,
+		next_part: StringName,
+		next_tint: Color,
+		block_index: int
+	) -> void:
+		texture = next_texture
+		water_part = next_part
+		tint = next_tint
+		start_index = block_index
+
+	func append_quad(points: PackedVector2Array, quad_uvs: Array, center: Vector2) -> void:
+		for vertex_index in [0, 1, 2, 0, 2, 3]:
+			vertices.append(points[vertex_index])
+			uvs.append(quad_uvs[vertex_index])
+			var vertical := maxf(float(quad_uvs[vertex_index].y) - 22.0, 0.0)
+			customs.append(Color(center.x, center.y, 1.0, vertical))
+			colors.append(tint)
+
+	func append_side(
+		corners: PackedVector2Array,
+		axis: int,
+		positive: bool,
+		level_height: float,
+		center: Vector2
+	) -> void:
+		var first := 0
+		var second := 0
+		var quad_uvs: Array = []
+		if axis == 0:
+			first = 1 if positive else 0
+			second = 2 if positive else 3
+			quad_uvs = RIGHT_SIDE_UV
+		else:
+			first = 3 if positive else 0
+			second = 2 if positive else 1
+			quad_uvs = LEFT_SIDE_UV
+		var down := Vector2(0.0, level_height)
+		append_quad(
+			PackedVector2Array([
+				corners[first],
+				corners[second],
+				corners[second] + down,
+				corners[first] + down,
+			]),
+			quad_uvs,
+			center
+		)
+
+	func commit(mesh_cache: Dictionary, sector: int, end_index: int) -> ArrayMesh:
+		if start_index < 0 or vertices.is_empty():
+			start_index = -1
+			return null
+		var cache_key := "%d:%d:%d:%d:%s" % [
+			start_index,
+			end_index,
+			sector,
+			texture.get_instance_id(),
+			str(tint),
+		]
+		var mesh: ArrayMesh = mesh_cache.get(cache_key)
+		if mesh == null:
+			var surface := SurfaceTool.new()
+			surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+			surface.set_custom_format(0, SurfaceTool.CUSTOM_RGBA_FLOAT)
+			var texture_size := texture.get_size()
+			for vertex_index in vertices.size():
+				# draw_polygon 接受像素 UV，但 draw_mesh/ArrayMesh 必须使用归一化 UV。
+				surface.set_uv(uvs[vertex_index] / texture_size)
+				surface.set_color(colors[vertex_index])
+				surface.set_custom(0, customs[vertex_index])
+				var point := vertices[vertex_index]
+				surface.add_vertex(Vector3(point.x, point.y, 0.0))
+			mesh = surface.commit()
+			mesh_cache[cache_key] = mesh
+		start_index = -1
+		vertices = PackedVector2Array()
+		uvs = PackedVector2Array()
+		customs = PackedColorArray()
+		colors = PackedColorArray()
+		return mesh
+
+	func flush(
+		canvas: CanvasItem,
+		mesh_cache: Dictionary,
+		sector: int,
+		end_index: int,
+		screen_y_offset: float
+	) -> void:
+		var mesh := commit(mesh_cache, sector, end_index)
+		if mesh == null:
+			return
+		# CanvasItem.draw_set_transform 不作用于 draw_mesh，必须显式传 transform。
+		canvas.draw_mesh(
+			mesh,
+			texture,
+			Transform2D(0.0, Vector2(0.0, screen_y_offset))
+		)
+
+
+func _draw_textured_quad(
+	points: PackedVector2Array,
+	uvs: Array,
+	texture: Texture2D,
+	tint: Color
+) -> void:
+	draw_polygon(
+		points,
+		PackedColorArray([tint, tint, tint, tint]),
+		PackedVector2Array(uvs),
+		texture
+	)
+
+
+func _draw_terrain_side(
+	texture: Texture2D,
+	corners: PackedVector2Array,
+	axis: int,
+	positive: bool,
+	tint: Color
+) -> void:
+	var first := 0
+	var second := 0
+	var uvs: Array = []
+	if axis == 0:
+		first = 1 if positive else 0
+		second = 2 if positive else 3
+		uvs = RIGHT_SIDE_UV
+	else:
+		first = 3 if positive else 0
+		second = 2 if positive else 1
+		uvs = LEFT_SIDE_UV
+	var down := Vector2(0.0, _level_height)
+	_draw_textured_quad(
+		PackedVector2Array([
+			corners[first],
+			corners[second],
+			corners[second] + down,
+			corners[first] + down,
+		]),
+		uvs,
+		texture,
+		tint
+	)
+
+
+## 实心地形的源贴图只带默认视角的两侧；转到背面时复用对应材质，
+## 但按当前视角只画朝向镜头的两侧。平地内部侧面由前排顶面覆盖。
+func _draw_projected_terrain(
+	texture: Texture2D,
+	center: Vector2,
+	tint: Color,
+	water_part: StringName,
+	level: int
+) -> void:
+	var corners := _terrain_top_corners(center)
+	if water_part != &"surface":
+		if water_part == &"":
+			_draw_terrain_side(texture, corners, 0, _basis_x.y >= 0.0, tint)
+			_draw_terrain_side(texture, corners, 1, _basis_y.y >= 0.0, tint)
+		elif water_part == &"right_side" and _basis_x.y >= 0.0:
+			_draw_terrain_side(texture, corners, 0, true, tint)
+		elif water_part == &"right_side_opposite" and _basis_x.y < 0.0:
+			_draw_terrain_side(texture, corners, 0, false, tint)
+		elif water_part == &"left_side" and _basis_y.y >= 0.0:
+			_draw_terrain_side(texture, corners, 1, true, tint)
+		elif water_part == &"left_side_opposite" and _basis_y.y < 0.0:
+			_draw_terrain_side(texture, corners, 1, false, tint)
+	if _is_visible_top(water_part, level):
+		_draw_textured_quad(corners, TOP_UV, texture, tint)
+
+
+func _append_batch_terrain(
+	batch: ProjectedTerrainBatch,
+	corners: PackedVector2Array,
+	water_part: StringName,
+	center: Vector2,
+	level: int
+) -> void:
+	if water_part != &"surface":
+		if water_part == &"":
+			var x_positive := _basis_x.y >= 0.0
+			var y_positive := _basis_y.y >= 0.0
+			if _is_side_exposed(0, x_positive, level):
+				batch.append_side(corners, 0, x_positive, _level_height, center)
+			if _is_side_exposed(1, y_positive, level):
+				batch.append_side(corners, 1, y_positive, _level_height, center)
+		elif (
+			water_part == &"right_side" and _basis_x.y >= 0.0
+			and _is_side_exposed(0, true, level)
+		):
+			batch.append_side(corners, 0, true, _level_height, center)
+		elif (
+			water_part == &"right_side_opposite" and _basis_x.y < 0.0
+			and _is_side_exposed(0, false, level)
+		):
+			batch.append_side(corners, 0, false, _level_height, center)
+		elif (
+			water_part == &"left_side" and _basis_y.y >= 0.0
+			and _is_side_exposed(1, true, level)
+		):
+			batch.append_side(corners, 1, true, _level_height, center)
+		elif (
+			water_part == &"left_side_opposite" and _basis_y.y < 0.0
+			and _is_side_exposed(1, false, level)
+		):
+			batch.append_side(corners, 1, false, _level_height, center)
+	if _is_visible_top(water_part, level):
+		batch.append_quad(corners, TOP_UV, center)
+
+
+func _commit_draw_plan_batch(
+	batch: ProjectedTerrainBatch,
+	plan: Array,
+	sector: int,
+	end_index: int
+) -> void:
+	var mesh := batch.commit(_projected_mesh_cache, sector, end_index)
+	if mesh != null:
+		plan.append({"kind": &"mesh", "mesh": mesh, "texture": batch.texture})
+
+
+## 普通柱没有动态遮挡时，把每帧绘制退化为遍历已缓存命令。网格顶点、UV、
+## CUSTOM0 与色调只在首次遇到某个朝向扇区时生成，连续旋转不再逐顶点重建。
+func _build_projected_draw_plan(sector: int) -> Array:
+	var plan: Array = []
+	var batch := ProjectedTerrainBatch.new()
 	for index in _blocks.size():
 		var block: Dictionary = _blocks[index]
-		var level: int = block["level"]
+		var level := int(block["level"])
 		var texture: Texture2D = block["texture"]
+		var water_part: StringName = block.get("water_part", &"")
+		var draw_modulate: Color = block["modulate"]
+		var projected := _is_projected_terrain(block) and (
+			not _is_default_projection() or (water_part != &"" and water_part != &"surface")
+		)
+		if projected:
+			if not batch.matches(texture, water_part, draw_modulate):
+				_commit_draw_plan_batch(batch, plan, sector, index - 1)
+				batch.begin(texture, water_part, draw_modulate, index)
+			var center := (
+				Vector2(0.0, -level * _level_height)
+				+ Vector2(block["render_offset"])
+				+ TOP_CENTER_OFFSET
+			)
+			var half_x := DEFAULT_BASIS_X * 0.5
+			var half_y := DEFAULT_BASIS_Y * 0.5
+			var corners := PackedVector2Array([
+				center - half_x - half_y,
+				center + half_x - half_y,
+				center + half_x + half_y,
+				center - half_x + half_y,
+			])
+			_append_batch_terrain(batch, corners, water_part, center, level)
+		else:
+			_commit_draw_plan_batch(batch, plan, sector, index - 1)
+			plan.append({"kind": &"texture", "index": index})
+		if water_part == &"surface":
+			_commit_draw_plan_batch(batch, plan, sector, index)
+			plan.append({"kind": &"water_effects", "index": index})
+	_commit_draw_plan_batch(batch, plan, sector, _blocks.size() - 1)
+	return plan
+
+
+func _draw_cached_plan(plan: Array) -> void:
+	draw_set_transform(Vector2(0, _screen_y_offset))
+	for item_value in plan:
+		var item: Dictionary = item_value
+		var kind: StringName = item["kind"]
+		if kind == &"mesh":
+			# draw_mesh 不继承 draw_set_transform，Y-sort 偏移必须作为参数传入。
+			draw_mesh(
+				item["mesh"],
+				item["texture"],
+				Transform2D(0.0, Vector2(0.0, _screen_y_offset))
+			)
+			continue
+		var block: Dictionary = _blocks[int(item["index"])]
 		var center := Vector2(
 			0.0,
-			_screen_y_offset - level * _level_height
+			-int(block["level"]) * _level_height
 		) + Vector2(block["render_offset"])
-		var draw_modulate: Color = block["modulate"]
-		draw_modulate.a *= float(_block_occlusion_alphas.get(index, 1.0))
-		var draw_position := center - texture.get_size() * 0.5
-		draw_texture(
-			texture,
-			draw_position,
-			draw_modulate
-		)
-		var cutaway_shade := float(_block_cutaway_shades.get(index, 0.0))
-		if cutaway_shade > 0.0:
-			# 白色 alpha mask 让深灰以真实颜色覆盖，而不是简单乘暗后仍偏绿/偏棕。
-			# 保留一部分原贴图，形成可辨认材质的深灰不可通行剖面。
-			var shade_color := PLAYER_CUTAWAY_SHADE_COLOR
-			shade_color.a = cutaway_shade * draw_modulate.a
-			draw_texture(
-				_texture_alpha_mask(texture),
-				draw_position,
-				shade_color
-			)
-		if block.get("water_part", &"") == &"surface":
+		if kind == &"texture":
+			var texture: Texture2D = block["texture"]
+			draw_texture(texture, center - texture.get_size() * 0.5, block["modulate"])
+		else:
 			_draw_shoreline_foam(
 				center,
 				int(block.get("shore_edges", 0)),
 				int(block.get("shore_seed", 0))
 			)
 			_draw_water_ripples(center + WATER_SURFACE_VISUAL_OFFSET)
+	draw_set_transform(Vector2.ZERO)
+
+
+func set_rotation_draw_culling(active: bool, draw_visible: bool) -> void:
+	if _rotation_cull_active == active and _rotation_draw_visible == draw_visible:
+		return
+	_rotation_cull_active = active
+	_rotation_draw_visible = draw_visible
+	queue_redraw()
+
+
+func _draw() -> void:
+	if _rotation_cull_active and not _rotation_draw_visible:
+		return
+	var sector := (1 if _basis_x.y < 0.0 else 0) | (2 if _basis_y.y < 0.0 else 0)
+	if (
+		_block_occlusion_alphas.is_empty()
+		and _block_occlusion_targets.is_empty()
+		and _block_cutaway_shades.is_empty()
+		and _block_cutaway_shade_targets.is_empty()
+	):
+		if not _projected_draw_plan_cache.has(sector):
+			_projected_draw_plan_cache[sector] = _build_projected_draw_plan(sector)
+		_draw_cached_plan(_projected_draw_plan_cache[sector])
+		return
+	draw_set_transform(Vector2(0, _screen_y_offset))
+	var projected_batch := ProjectedTerrainBatch.new()
+	for index in _blocks.size():
+		var block: Dictionary = _blocks[index]
+		var level: int = block["level"]
+		var texture: Texture2D = block["texture"]
+		var center := Vector2(
+			0.0,
+			-level * _level_height
+		) + Vector2(block["render_offset"])
+		var draw_modulate: Color = block["modulate"]
+		draw_modulate.a *= float(_block_occlusion_alphas.get(index, 1.0))
+		var draw_position := center - texture.get_size() * 0.5
+		var water_part: StringName = block.get("water_part", &"")
+		var cutaway_shade := float(_block_cutaway_shades.get(index, 0.0))
+		var projected_terrain := _is_projected_terrain(block) and (
+			not _is_default_projection() or (water_part != &"" and water_part != &"surface")
+		)
+		var can_batch := projected_terrain and cutaway_shade <= 0.0 and draw_modulate.a >= 0.999
+		if can_batch:
+			if not projected_batch.matches(texture, water_part, draw_modulate):
+				projected_batch.flush(self, _projected_mesh_cache, sector, index - 1, _screen_y_offset)
+				projected_batch.begin(texture, water_part, draw_modulate, index)
+			var batch_center := (
+				Vector2(0.0, -level * _level_height)
+				+ Vector2(block["render_offset"])
+				+ TOP_CENTER_OFFSET
+			)
+			var half_x := DEFAULT_BASIS_X * 0.5
+			var half_y := DEFAULT_BASIS_Y * 0.5
+			var corners := PackedVector2Array([
+				batch_center - half_x - half_y,
+				batch_center + half_x - half_y,
+				batch_center + half_x + half_y,
+				batch_center - half_x + half_y,
+			])
+			_append_batch_terrain(projected_batch, corners, water_part, batch_center, level)
+		else:
+			projected_batch.flush(self, _projected_mesh_cache, sector, index - 1, _screen_y_offset)
+			if projected_terrain:
+				_draw_projected_terrain(texture, center, draw_modulate, water_part, level)
+			else:
+				draw_texture(
+					texture,
+					draw_position,
+					draw_modulate
+				)
+		if cutaway_shade > 0.0:
+			# 白色 alpha mask 让深灰以真实颜色覆盖，而不是简单乘暗后仍偏绿/偏棕。
+			# 保留一部分原贴图，形成可辨认材质的深灰不可通行剖面。
+			var shade_color := PLAYER_CUTAWAY_SHADE_COLOR
+			shade_color.a = cutaway_shade * draw_modulate.a
+			if projected_terrain:
+				_draw_projected_terrain(
+					_texture_alpha_mask(texture),
+					center,
+					shade_color,
+					water_part,
+					level
+				)
+			else:
+				draw_texture(
+					_texture_alpha_mask(texture),
+					draw_position,
+					shade_color
+				)
+		if water_part == &"surface":
+			projected_batch.flush(self, _projected_mesh_cache, sector, index, _screen_y_offset)
+			_draw_shoreline_foam(
+				center,
+				int(block.get("shore_edges", 0)),
+				int(block.get("shore_seed", 0))
+			)
+			_draw_water_ripples(center + WATER_SURFACE_VISUAL_OFFSET)
+	projected_batch.flush(self, _projected_mesh_cache, sector, _blocks.size() - 1, _screen_y_offset)
+	draw_set_transform(Vector2.ZERO)
 
 
 func _draw_shoreline_foam(
@@ -533,11 +1061,12 @@ func _draw_shoreline_frame(
 	seed: int,
 	animation_step: int
 ) -> void:
+	var corners := _terrain_top_corners(surface_center)
 	var vertices := [
-		Vector2(-16.0, -2.0),
-		Vector2(0.0, -10.0),
-		Vector2(16.0, -2.0),
-		Vector2(0.0, 6.0),
+		corners[3],
+		corners[0],
+		corners[1],
+		corners[2],
 	]
 	var edges := [
 		[vertices[0], vertices[1]],
@@ -766,6 +1295,7 @@ func _draw_ellipse(
 		return
 	# 使用 Canvas 变换把单个 draw_arc 压成椭圆，避免每圈、每帧分配
 	# PackedVector2Array 并在 GDScript 中重复计算 sin/cos。
+	var y_offset := Vector2.ZERO
 	draw_set_transform(center, 0.0, Vector2(1.0, radius_y / radius_x))
 	draw_arc(Vector2.ZERO, radius_x, 0.0, TAU, RIPPLE_SEGMENTS, color, width, true)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_set_transform(y_offset, 0.0, Vector2.ONE)
