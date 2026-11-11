@@ -2,12 +2,14 @@
 ##
 ## 跑法：godot --headless --path . --script res://tests/map_editor_contract.gd
 ## 覆盖：种子生成确定性 / resize / 模型↔JSON 互转 / 保存回读校验（含坏地图拒收）/
-##       loader 双目录扫描合并（res:// + user://battlefields）。
+##       loader 双目录扫描合并（res:// + user://battlefields）/
+##       新地形全链一致性（TerrainData ↔ DEFAULT_LEGEND ↔ TERRAIN_GLYPH/CN ↔ TERRAIN_STYLES）。
 
 extends SceneTree
 
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
+const RendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 
 const TMP_RES_ID := "contract_tmp_map"
 const TMP_USER_ID := "contract_tmp_user"
@@ -172,6 +174,64 @@ func _run() -> void:
 		if String(e.file) == TMP_USER_ID + ".json":
 			still = true
 	_expect(not still, "清理后 user:// 临时条目消失")
+
+	# ---- 7. 新地形全链一致性：TerrainData ↔ DEFAULT_LEGEND ↔ TERRAIN_GLYPH/CN ↔ TERRAIN_STYLES ----
+	var new_terrains: Array = [&"sand", &"snow", &"grass", &"rocky"]
+	for t in new_terrains:
+		_expect(TerrainData.TERRAIN.has(t), "TerrainData 注册新地形 %s" % t)
+		if TerrainData.TERRAIN.has(t):
+			var tile: Dictionary = TerrainData.TERRAIN[t]
+			_expect(bool(tile[&"walkable"]) and int(tile[&"move_cost"][&"foot"]) < 99,
+				"新地形 %s 可站立（walkable 且 foot 可通行）" % t)
+		var glyph: String = String(BattlefieldDocScript.TERRAIN_GLYPH.get(t, ""))
+		_expect(glyph.length() == 1, "%s 有单字符主图例（实际 '%s'）" % [t, glyph])
+		if glyph.length() == 1:
+			_expect(BattlefieldLoaderScript.DEFAULT_LEGEND.get(glyph, &"") == t,
+				"DEFAULT_LEGEND['%s'] == %s" % [glyph, t])
+			_expect(BattlefieldDocScript.glyph_to_terrain(glyph) == t,
+				"glyph_to_terrain('%s') == %s（图例往返一致）" % [glyph, t])
+		_expect(String(BattlefieldDocScript.TERRAIN_CN.get(t, "")) != "", "%s 有中文名" % t)
+		var style: Dictionary = RendererScript.TERRAIN_STYLES.get(t, {})
+		_expect(not style.is_empty() and int(style.get("height", 0)) >= 1,
+			"%s 有渲染样式且 height>=1" % t)
+		var pblocks: Array = RendererScript.preview_blocks(t)
+		var prev_all_tex := not pblocks.is_empty()
+		for b in pblocks:
+			if b.get("texture", null) == null:
+				prev_all_tex = false
+		_expect(prev_all_tex, "%s preview_blocks 非空且贴图全非空" % t)
+
+	# 全链闭环：TerrainData 每种地形都必须有 图例/中文名/渲染样式（防以后加地形漏一环）
+	for t in TerrainData.TERRAIN.keys():
+		_expect(BattlefieldDocScript.TERRAIN_GLYPH.has(t), "全地形 %s 缺 TERRAIN_GLYPH" % t)
+		_expect(BattlefieldDocScript.TERRAIN_CN.has(t), "全地形 %s 缺 TERRAIN_CN" % t)
+		_expect(RendererScript.TERRAIN_STYLES.has(t), "全地形 %s 缺 TERRAIN_STYLES" % t)
+
+	# 端到端：新图例字符画 → quick_validate → save_model → loader 回读出新地形名
+	var nt: Dictionary = BattlefieldDocScript.create_empty(8, 4)
+	nt.id = TMP_RES_ID
+	nt.name = "新地形链"
+	nt.rows[0] = "ssSSggrr"
+	nt.rows[1] = "rSg.rsSg"
+	nt.units = [
+		{ "class": "swordsman", "name": "甲", "level": 1, "x": 4, "y": 1, "faction": "player" },
+		{ "class": "berserker", "name": "乙", "level": 1, "x": 0, "y": 3, "faction": "enemy" },
+	]
+	_expect(BattlefieldDocScript.quick_validate(nt) == "", "新图例模型 quick_validate 通过")
+	_cleanup_res_tmp()
+	var nt_saved: Dictionary = BattlefieldDocScript.save_model(nt)
+	_expect(bool(nt_saved.get("ok", false)), "新图例地图 save_model 成功: %s" % nt_saved.get("error", ""))
+	if bool(nt_saved.get("ok", false)):
+		var nt_loaded := BattlefieldLoaderScript.load_battlefield(String(nt_saved.get("path", "")))
+		_expect(bool(nt_loaded.get("ok", false)), "新图例地图 loader 回读 ok: %s" % nt_loaded.get("error", ""))
+		if bool(nt_loaded.get("ok", false)):
+			var nch: Dictionary = nt_loaded["chapter"]
+			_expect(nch["map"][0][0] == &"sand" and nch["map"][0][1] == &"sand", "回读沙地 s→sand")
+			_expect(nch["map"][0][2] == &"snow" and nch["map"][0][3] == &"snow", "回读雪地 S→snow")
+			_expect(nch["map"][0][4] == &"grass" and nch["map"][0][5] == &"grass", "回读草原 g→grass")
+			_expect(nch["map"][0][6] == &"rocky" and nch["map"][0][7] == &"rocky", "回读碎石地 r→rocky")
+			_expect(nch["map"][1][3] == &"plain", "新图例行中的 '.' 仍是 plain")
+	_cleanup_res_tmp()
 
 	print("MAP_EDITOR_CONTRACT_OK")
 	quit(0)

@@ -52,6 +52,10 @@ const DEFAULT_LEGEND := {
 	"F": &"fort",
 	"v": &"village",
 	"#": &"wall",
+	"s": &"sand",
+	"S": &"snow",
+	"g": &"grass",
+	"r": &"rocky",
 }
 
 
@@ -143,7 +147,7 @@ static func load_battlefield(path: String) -> Dictionary:
 		for x in range(width):
 			var t: StringName = row[x]
 			if not TerrainData.TERRAIN.has(t):
-				return { "ok": false, "error": "未知地形 \"%s\"（第 %d 行第 %d 列）；可用: plain/forest/mountain/water/fort/village/wall" % [String(t), y + 1, x + 1] }
+				return { "ok": false, "error": "未知地形 \"%s\"（第 %d 行第 %d 列）；可用: plain/forest/mountain/water/fort/village/wall/sand/snow/grass/rocky" % [String(t), y + 1, x + 1] }
 	# 3) 单位（两阵营共享 occupied 做重叠检查）
 	var occupied: Dictionary = {}
 	var pu := _parse_units(d, "playerUnits", &"player", map, width, height, occupied, "u_p")

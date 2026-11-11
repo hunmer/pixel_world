@@ -27,6 +27,10 @@ const TERRAIN_GLYPH := {
 	&"fort": "F",
 	&"village": "v",
 	&"wall": "#",
+	&"sand": "s",
+	&"snow": "S",
+	&"grass": "g",
+	&"rocky": "r",
 }
 
 ## 地形中文名（编辑器侧栏 / 状态文案用）
@@ -38,6 +42,10 @@ const TERRAIN_CN := {
 	&"fort": "要塞",
 	&"village": "村庄",
 	&"wall": "城墙",
+	&"sand": "沙地",
+	&"snow": "雪地",
+	&"grass": "草原",
+	&"rocky": "碎石地",
 }
 
 ## 图例 -> 地形（懒缓存 DEFAULT_LEGEND 拷贝）

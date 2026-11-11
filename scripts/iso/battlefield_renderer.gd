@@ -1,7 +1,7 @@
 ## iso/battlefield_renderer.gd — JSON 战场的等距方块渲染器（像素版 Minecraft 风格）
 ##
 ## 复用世界渲染管线（isometric_column_batch + TerrainMaterialRegistry 贴图 + 程序化水面），
-## 把战棋 GridSystem 的 7 种地形渲染成高低起伏的方块柱，替代旧的平面色块 fallback。
+## 把战棋 GridSystem 的 11 种地形渲染成高低起伏的方块柱，替代旧的平面色块 fallback。
 ##
 ## 用法（battle.gd B2 / map_editor.gd 编辑器画布共用）：
 ##   var r := BattlefieldRenderer.new()
@@ -33,6 +33,10 @@ const TERRAIN_STYLES := {
 	&"fort":     {"top": &"mossy_rock", "column": &"rock",      "height": 3},
 	&"village":  {"top": &"parched_soil", "column": &"soil",    "height": 2},
 	&"wall":     {"top": &"rock",       "column": &"rock",      "height": 4},
+	&"sand":    {"top": &"sand",       "column": &"parched_soil", "height": 2},
+	&"snow":    {"top": &"snow",       "column": &"rock",      "height": 2},
+	&"grass":   {"top": &"rock_grass", "column": &"soil",      "height": 2},
+	&"rocky":   {"top": &"rock",       "column": &"soil",      "height": 2},
 }
 
 ## 装饰物（level=相对柱顶的附加层，此处全部贴柱顶；offset_y 由贴图高度自适应）
@@ -44,6 +48,15 @@ const TERRAIN_PROPS := {
 	],
 	&"village": ["res://meowa_tiles/trees/apple_tree.png"],
 	&"fort":    ["res://meowa_tiles/decorations/mossy_boulder_large.png"],
+	&"sand":    [
+		"res://meowa_tiles/trees/palm_tree_small.png",
+		"res://meowa_tiles/trees/palm_tree_tall.png",
+	],
+	&"snow":    [
+		"res://meowa_tiles/trees/snowy_pine_small.png",
+		"res://meowa_tiles/trees/snowy_pine_round.png",
+	],
+	&"rocky":   ["res://meowa_tiles/decorations/mossy_boulder_small.png"],
 }
 
 ## 柱顶贴图的绘制高度（32×32 补齐后顶面菱形底部距中心 13px，见 _pad_texture_to_32）
@@ -334,6 +347,7 @@ static func _ensure_shared_textures() -> void:
 	)
 	for surface_id in [
 		&"grass", &"soil", &"rock", &"mossy_rock", &"moist_soil", &"parched_soil",
+		&"sand", &"snow", &"rock_grass",
 	]:
 		var entry := {}
 		for role in [&"top", &"column", &"underwater"]:
