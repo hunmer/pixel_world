@@ -32,6 +32,7 @@ static var _projected_shader_angle := 0.0
 var _projected_mesh_cache: Dictionary = {}
 var _projected_draw_plan_cache: Dictionary = {}
 var _projected_sector := -1
+var _draw_cull_rect := Rect2()
 var _rotation_cull_active := false
 var _rotation_draw_visible := true
 
@@ -159,6 +160,7 @@ func update_sort_position(
 	_basis_y = basis_y
 	_projected_sector = (1 if _basis_x.y < 0.0 else 0) | (2 if _basis_y.y < 0.0 else 0)
 	_occluder_bounds_dirty = true
+	_update_draw_cull_rect()
 	if _rotation_cull_active and not _rotation_draw_visible:
 		return
 	var terrain_material := _get_projected_terrain_material()
@@ -168,6 +170,21 @@ func update_sort_position(
 		terrain_material.set_shader_parameter("view_angle", view_angle)
 		_projected_shader_angle = view_angle
 	queue_redraw()
+
+
+## draw_mesh 的显式偏移不参与自动视口剔除；节点原点又是合成后的 sort_y，
+## 因此必须显式提供覆盖真实本地绘制内容的矩形。
+func _update_draw_cull_rect() -> void:
+	_draw_cull_rect = Rect2()
+	for index in _blocks.size():
+		var block_rect := _block_visual_rect(_blocks[index])
+		block_rect.position -= position
+		_draw_cull_rect = block_rect if index == 0 else _draw_cull_rect.merge(block_rect)
+	RenderingServer.canvas_item_set_custom_rect(
+		get_canvas_item(),
+		not _blocks.is_empty(),
+		_draw_cull_rect
+	)
 
 
 static func _get_projected_terrain_material() -> ShaderMaterial:
@@ -725,12 +742,15 @@ class ProjectedTerrainBatch:
 		var mesh := commit(mesh_cache, sector, end_index)
 		if mesh == null:
 			return
-		# CanvasItem.draw_set_transform 不作用于 draw_mesh，必须显式传 transform。
+		# draw_mesh 必须在 identity Canvas transform 下记录，否则 custom rect
+		# 仍无法纠正 Y-sort 原点造成的视口剔除；Y 偏移只走显式 transform。
+		canvas.draw_set_transform(Vector2.ZERO)
 		canvas.draw_mesh(
 			mesh,
 			texture,
 			Transform2D(0.0, Vector2(0.0, screen_y_offset))
 		)
+		canvas.draw_set_transform(Vector2(0.0, screen_y_offset))
 
 
 func _draw_textured_quad(
@@ -903,12 +923,14 @@ func _draw_cached_plan(plan: Array) -> void:
 		var item: Dictionary = item_value
 		var kind: StringName = item["kind"]
 		if kind == &"mesh":
-			# draw_mesh 不继承 draw_set_transform，Y-sort 偏移必须作为参数传入。
+			# 与动态遮挡路径一致：mesh 记录时保持 identity，避免绕过 custom rect。
+			draw_set_transform(Vector2.ZERO)
 			draw_mesh(
 				item["mesh"],
 				item["texture"],
 				Transform2D(0.0, Vector2(0.0, _screen_y_offset))
 			)
+			draw_set_transform(Vector2(0, _screen_y_offset))
 			continue
 		var block: Dictionary = _blocks[int(item["index"])]
 		var center := Vector2(

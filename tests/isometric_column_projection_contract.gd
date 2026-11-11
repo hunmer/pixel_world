@@ -48,6 +48,20 @@ func _run() -> void:
 		"共享旋转材质不得保存单列Y-sort偏移，偏移只能来自draw_mesh变换"
 	)
 
+	column.update_sort_position(
+		Vector2(40, 200),
+		1600.0,
+		Vector2(16, 8).rotated(PI * 0.25),
+		Vector2(-16, 8).rotated(PI * 0.25)
+	)
+	var visual_top_center := (
+		Vector2(0, column._screen_y_offset) + ColumnBatchScript.TOP_CENTER_OFFSET
+	)
+	_expect(
+		column._draw_cull_rect.has_point(visual_top_center),
+		"Y-sort原点在视口外时，自定义剔除矩形仍必须覆盖draw_mesh的真实顶面位置"
+	)
+
 	for degrees in [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]:
 		var angle := deg_to_rad(degrees)
 		var basis_x := Vector2(16, 8).rotated(angle)
@@ -120,8 +134,8 @@ func _run() -> void:
 		Vector2.ZERO,
 		0.0,
 		10.0,
-		DEFAULT_BASIS_X,
-		DEFAULT_BASIS_Y,
+		ColumnBatchScript.DEFAULT_BASIS_X,
+		ColumnBatchScript.DEFAULT_BASIS_Y,
 		flat_neighbors
 	)
 	column.update_sort_position(
@@ -129,7 +143,7 @@ func _run() -> void:
 	)
 	column.queue_redraw()
 	await process_frame
-	var plan: Array = column._projected_draw_plan_cache.get(column._projected_sector(), [])
+	var plan: Array = column._projected_draw_plan_cache.get(column._projected_sector, [])
 	var mesh_arrays: Array = plan[0]["mesh"].surface_get_arrays(0)
 	_expect(
 		mesh_arrays[Mesh.ARRAY_VERTEX].size() == 6,
@@ -146,8 +160,8 @@ func _run() -> void:
 		Vector2.ZERO,
 		0.0,
 		10.0,
-		DEFAULT_BASIS_X,
-		DEFAULT_BASIS_Y,
+		ColumnBatchScript.DEFAULT_BASIS_X,
+		ColumnBatchScript.DEFAULT_BASIS_Y,
 		flat_neighbors
 	)
 	column.update_sort_position(
@@ -155,7 +169,7 @@ func _run() -> void:
 	)
 	column.queue_redraw()
 	await process_frame
-	plan = column._projected_draw_plan_cache.get(column._projected_sector(), [])
+	plan = column._projected_draw_plan_cache.get(column._projected_sector, [])
 	mesh_arrays = plan[0]["mesh"].surface_get_arrays(0)
 	_expect(
 		mesh_arrays[Mesh.ARRAY_VERTEX].size() == 6,
@@ -169,8 +183,8 @@ func _run() -> void:
 		Vector2.ZERO,
 		0.0,
 		10.0,
-		DEFAULT_BASIS_X,
-		DEFAULT_BASIS_Y,
+		ColumnBatchScript.DEFAULT_BASIS_X,
+		ColumnBatchScript.DEFAULT_BASIS_Y,
 		low_neighbors
 	)
 	column.update_sort_position(
@@ -178,7 +192,7 @@ func _run() -> void:
 	)
 	column.queue_redraw()
 	await process_frame
-	plan = column._projected_draw_plan_cache.get(column._projected_sector(), [])
+	plan = column._projected_draw_plan_cache.get(column._projected_sector, [])
 	mesh_arrays = plan[0]["mesh"].surface_get_arrays(0)
 	_expect(
 		mesh_arrays[Mesh.ARRAY_VERTEX].size() == 18,
