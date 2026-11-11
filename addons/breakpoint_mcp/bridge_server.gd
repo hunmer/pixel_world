@@ -5,7 +5,10 @@ extends Node
 ## Wire format (both directions), one JSON object per line ("\n" terminated):
 ##   request:  {"id": "<string>", "method": "<name>", "params": { ... }}
 ##   response: {"id": "<string>", "ok": true,  "result": { ... }}
-##             {"id": "<string>", "ok": false, "error": {"code": ..., "message": ...}}
+##             {"id": "<string>", "ok": false, "error": {"code": ..., "message": ..., "remedy": ...}}
+##   `remedy` is the next action for that code (error_remedies.gd) and is omitted
+##   when the plane has nothing to say — the pre-auth denial below carries none by
+##   design, because it must not tell an unauthenticated peer anything at all.
 ##
 ## Binds to 127.0.0.1 only. The port comes from the BREAKPOINT_BRIDGE_PORT env
 ## var (default 9080). The socket is polled from `_process`, so all request
@@ -67,7 +70,7 @@ func _setup_auth() -> void:
 
 
 func shutdown() -> void:
-	for c in _clients:
+	for c: Dictionary in _clients:
 		var peer: StreamPeerTCP = c["peer"]
 		if peer:
 			peer.disconnect_from_host()
@@ -110,7 +113,7 @@ func _process(_delta: float) -> void:
 			_clients.append({"peer": peer, "buf": "", "authed": not _auth_required})
 	# Service existing connections.
 	var still_alive: Array = []
-	for c in _clients:
+	for c: Dictionary in _clients:
 		var peer: StreamPeerTCP = c["peer"]
 		peer.poll()
 		var status := peer.get_status()
@@ -160,12 +163,15 @@ func _handle_line(c: Dictionary, line: String) -> void:
 		return
 	var req: Dictionary = parsed
 	var id: Variant = req.get("id", null)
+	@warning_ignore("unsafe_call_argument")
 	var method := String(req.get("method", ""))
 	var params: Dictionary = req.get("params", {}) if typeof(req.get("params")) == TYPE_DICTIONARY else {}
 	# Handshake gate: an unauthenticated peer may ONLY authenticate. Anything else
 	# is denied with a generic code and the connection is closed.
 	if not c.get("authed", false):
-		if method == "auth" and BridgeSecret.const_time_eq(String(params.get("secret", "")), _secret):
+		@warning_ignore("unsafe_call_argument")
+		var auth_ok: bool = method == "auth" and BridgeSecret.const_time_eq(String(params.get("secret", "")), _secret)
+		if auth_ok:
 			c["authed"] = true
 			_send(peer, {"id": id, "ok": true})
 		else:
@@ -193,6 +199,7 @@ func _handle_line(c: Dictionary, line: String) -> void:
 ## closing. Never reveals the expected secret, the received value, the failing
 ## method, or any engine detail — only a fixed `unauthorized` code.
 func _deny_unauth(c: Dictionary) -> void:
+	@warning_ignore("unsafe_call_argument")
 	_send(c["peer"], {"id": null, "ok": false, "error": {"code": "unauthorized"}})
 	c["close"] = true
 
@@ -206,7 +213,7 @@ func _send(peer: StreamPeerTCP, obj: Dictionary) -> void:
 ## so a subscribed MCP host can emit notifications/resources/updated. Events carry
 ## no "id" (they are not responses); the host routes them by the "event" field.
 func broadcast_event(uri: String) -> void:
-	for c in _clients:
+	for c: Dictionary in _clients:
 		var peer: StreamPeerTCP = c["peer"]
 		if peer and c.get("authed", false) and peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
 			_send(peer, {"event": "resource.changed", "uri": uri})

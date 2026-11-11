@@ -80,6 +80,7 @@ var _copy_feedback: Label = null
 var _timer: Timer = null
 var _pause_toggle: CheckButton = null
 var _pause_state: Label = null
+var _body: VBoxContainer = null   # every Control child lives in here (see _build_ui)
 
 
 ## plugin.gd injects the live bridge server so the editor-bridge plane is read
@@ -100,9 +101,10 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	for key in _probes:
+	for key: Variant in _probes:
 		var pr: Dictionary = _probes[key]
 		if pr["peer"] != null:
+			@warning_ignore("unsafe_method_access")
 			pr["peer"].disconnect_from_host()
 	_probes.clear()
 
@@ -111,32 +113,53 @@ func _exit_tree() -> void:
 
 func _build_ui() -> void:
 	name = "Breakpoint"
-	add_theme_constant_override("separation", 6)
+
+	# #124: a dock slot cannot scroll and cannot be shrunk past its content, so a
+	# tall dock is not clipped — it raises the MINIMUM size of the whole editor
+	# layout, which the editor can only satisfy by pushing the bottom panel and
+	# the lower docks out of the window. A Label with autowrap reports a minimum
+	# height measured at its NARROWEST width, a VBoxContainer sums those, and this
+	# dock demanded 311x4015 px against ~208x125 for every built-in dock. Putting
+	# every Control inside a ScrollContainer decouples the dock's minimum height
+	# from its content height, which is what EditorInspector does for the same
+	# reason. Verify with get_combined_minimum_size(), not by eye.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	add_child(scroll)
+
+	_body = VBoxContainer.new()
+	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_body.add_theme_constant_override("separation", 6)
+	scroll.add_child(_body)
 
 	var header := Label.new()
 	header.text = "Breakpoint MCP"
 	header.add_theme_font_size_override("font_size", 15)
-	add_child(header)
+	_body.add_child(header)
 
 	var sub := Label.new()
 	sub.text = "bridge status · ports · client setup"
 	sub.modulate = Color(1, 1, 1, 0.6)
-	add_child(sub)
+	_body.add_child(sub)
 
-	add_child(HSeparator.new())
+	_body.add_child(HSeparator.new())
 
 	var bridges_hdr := Label.new()
 	bridges_hdr.text = "Bridges"
 	bridges_hdr.modulate = Color(1, 1, 1, 0.75)
-	add_child(bridges_hdr)
+	_body.add_child(bridges_hdr)
 
-	for p in PLANES:
+	for p: Variant in PLANES:
 		var row := Label.new()
 		row.add_theme_font_size_override("font_size", 13)
 		_rows[p["key"]] = row
-		add_child(row)
+		_body.add_child(row)
+		@warning_ignore("unsafe_call_argument")
 		_set_plane(p["key"], "pending", "…")
-	add_child(HSeparator.new())
+	_body.add_child(HSeparator.new())
 
 	# Control: a one-click "Pause Agent" latch honored by the editor + runtime
 	# bridges (pause_latch.gd). Engaged, those two planes hold new agent commands
@@ -144,60 +167,72 @@ func _build_ui() -> void:
 	var ctrl_hdr := Label.new()
 	ctrl_hdr.text = "Control"
 	ctrl_hdr.modulate = Color(1, 1, 1, 0.75)
-	add_child(ctrl_hdr)
+	_body.add_child(ctrl_hdr)
 
 	_pause_toggle = CheckButton.new()
 	_pause_toggle.text = "Pause Agent"
 	_pause_toggle.tooltip_text = "Hold new agent commands on the editor + runtime bridges. In-flight ops finish and a bare ping still answers; resume to continue."
 	_pause_toggle.toggled.connect(_on_pause_toggled)
-	add_child(_pause_toggle)
+	_body.add_child(_pause_toggle)
 
 	_pause_state = Label.new()
 	_pause_state.add_theme_font_size_override("font_size", 12)
 	_pause_state.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	add_child(_pause_state)
+	_body.add_child(_pause_state)
 
-	add_child(HSeparator.new())
+	_body.add_child(HSeparator.new())
 
 	var cfg_hdr := Label.new()
 	cfg_hdr.text = "Config"
 	cfg_hdr.modulate = Color(1, 1, 1, 0.75)
-	add_child(cfg_hdr)
+	_body.add_child(cfg_hdr)
 
 	_config_label = Label.new()
 	_config_label.add_theme_font_size_override("font_size", 12)
 	_config_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	add_child(_config_label)
+	_body.add_child(_config_label)
 
-	add_child(HSeparator.new())
+	_body.add_child(HSeparator.new())
 
 	var copy_btn := Button.new()
 	copy_btn.text = "Copy MCP-client config"
 	copy_btn.tooltip_text = "Copy the mcpServers snippet for this project to the clipboard."
 	copy_btn.pressed.connect(_on_copy_pressed)
-	add_child(copy_btn)
+	_body.add_child(copy_btn)
 
 	var refresh_btn := Button.new()
 	refresh_btn.text = "Refresh"
 	refresh_btn.pressed.connect(_refresh)
-	add_child(refresh_btn)
+	_body.add_child(refresh_btn)
 
 	_copy_feedback = Label.new()
 	_copy_feedback.add_theme_font_size_override("font_size", 12)
 	_copy_feedback.modulate = Color(1, 1, 1, 0.7)
 	_copy_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	add_child(_copy_feedback)
+	_body.add_child(_copy_feedback)
 
 	var foot := Label.new()
 	foot.text = "Status/config only — the assistant runs in your MCP client, not here."
 	foot.modulate = Color(1, 1, 1, 0.5)
 	foot.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	add_child(foot)
+	_body.add_child(foot)
+
+	# The height half of #124 is the ScrollContainer above; this is the width half.
+	# A non-wrapping Label reports its FULL text width as a minimum, so one long
+	# status line (311 px) forced the dock wider than a default dock slot (280 px).
+	# Trimming with an ellipsis lets the dock shrink; _set_plane keeps the whole
+	# line reachable as a tooltip. Applies to every such Label, including any
+	# added later.
+	for child in _body.get_children():
+		var lbl := child as Label
+		if lbl != null and lbl.autowrap_mode == TextServer.AUTOWRAP_OFF:
+			lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
 
 func _display_name(key: String) -> String:
-	for p in PLANES:
+	for p: Variant in PLANES:
 		if p["key"] == key:
+			@warning_ignore("unsafe_call_argument")
 			return String(p["name"])
 	return key
 
@@ -207,6 +242,7 @@ func _set_plane(key: String, status: String, detail: String) -> void:
 	if row == null:
 		return
 	row.text = plane_line(_display_name(key), status, detail)
+	row.tooltip_text = row.text   # the row trims with an ellipsis (see _build_ui)
 	var col := COLOR_PENDING
 	if status == "ok":
 		col = COLOR_OK
@@ -228,11 +264,17 @@ func _refresh() -> void:
 
 func _update_editor_plane() -> void:
 	if _server != null and _server.has_method("get_status"):
+		@warning_ignore("unsafe_method_access")
 		var s: Dictionary = _server.get_status()
-		if bool(s.get("listening", false)):
+		@warning_ignore("unsafe_call_argument")
+		var listening: bool = bool(s.get("listening", false))
+		if listening:
+			@warning_ignore("unsafe_call_argument")
 			var n := int(s.get("clients", 0))
+			@warning_ignore("unsafe_call_argument")
 			var host := String(s.get("host", "127.0.0.1"))
 			var suffix := "client" if n == 1 else "clients"
+			@warning_ignore("unsafe_call_argument")
 			_set_plane("editor", "ok", "%s:%d · %d %s" % [host, int(s.get("port", DEFAULT_BRIDGE_PORT)), n, suffix])
 		else:
 			_set_plane("editor", "fail", "not listening")
@@ -283,7 +325,9 @@ func _project_path() -> String:
 
 func _bridge_port() -> int:
 	if _server != null and _server.has_method("get_status"):
+		@warning_ignore("unsafe_method_access")
 		var s: Dictionary = _server.get_status()
+		@warning_ignore("unsafe_call_argument")
 		return int(s.get("port", DEFAULT_BRIDGE_PORT))
 	return _env_port("BREAKPOINT_BRIDGE_PORT", DEFAULT_BRIDGE_PORT)
 
@@ -304,6 +348,7 @@ func _editor_setting_int(key: String, fallback: int) -> int:
 	if es != null and es.has_setting(key):
 		var v: Variant = es.get_setting(key)
 		if typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT:
+			@warning_ignore("unsafe_call_argument")
 			return int(v)
 	return fallback
 
@@ -325,6 +370,7 @@ func _start_probe(key: String, port: int) -> void:
 	if _probes.has(key):
 		var old: Dictionary = _probes[key]
 		if old["peer"] != null:
+			@warning_ignore("unsafe_method_access")
 			old["peer"].disconnect_from_host()
 		_probes.erase(key)
 	var peer := StreamPeerTCP.new()
@@ -340,21 +386,27 @@ func _process(_delta: float) -> void:
 	if _probes.is_empty():
 		return
 	var done: Array = []
-	for key in _probes:
+	for key: Variant in _probes:
 		var pr: Dictionary = _probes[key]
 		var peer: StreamPeerTCP = pr["peer"]
 		peer.poll()
 		var st := peer.get_status()
 		if st == StreamPeerTCP.STATUS_CONNECTED:
+			@warning_ignore("unsafe_call_argument")
 			_set_plane(key, "ok", "127.0.0.1:%d reachable" % int(pr["port"]))
 			peer.disconnect_from_host()
 			done.append(key)
 		elif st == StreamPeerTCP.STATUS_ERROR:
+			@warning_ignore("unsafe_call_argument")
 			_set_plane(key, "fail", "127.0.0.1:%d unreachable" % int(pr["port"]))
 			done.append(key)
-		elif Time.get_ticks_msec() > int(pr["deadline"]):
-			_set_plane(key, "fail", "127.0.0.1:%d no response" % int(pr["port"]))
-			peer.disconnect_from_host()
-			done.append(key)
-	for key in done:
+		else:
+			@warning_ignore("unsafe_call_argument")
+			var expired := Time.get_ticks_msec() > int(pr["deadline"])
+			if expired:
+				@warning_ignore("unsafe_call_argument")
+				_set_plane(key, "fail", "127.0.0.1:%d no response" % int(pr["port"]))
+				peer.disconnect_from_host()
+				done.append(key)
+	for key: Variant in done:
 		_probes.erase(key)
