@@ -573,7 +573,7 @@ var _pending_move_undo: Dictionary = {}   # 移动可撤销记录
 | **G** | **动态帮助** `dynamic_help` | 玩家 **1-2 分钟无操作**时浮现气泡「需要帮助？按 H 看提示」+ 当前该做什么的暗示。对齐 `experience-pacing`（不活跃 1-2 分钟显示帮助）。 | 防卡死（§6 容错的兜底）。 | `TutorialDirector` 计时器，监听 `Input` 事件重置；超时调 `show_dynamic_help(current_beat_hint)`。 |
 | **H** | **错误纠正提示** `error_guard` | 玩家做了危险操作时弹红色警告气泡 + 二次确认对话框（「此举会被反击，确定？」）。 | 危险操作预警（beat 19、§6 错误行动类）。 | 接入 `battle.gd` 的攻击/移动前 hook，调 `CombatSystem.preview` 判断风险，超阈值弹 `error_guard`。 |
 
-> **视觉一致性**（`visual-player-guidance`：Consistency）：8 种组件**统一用 [10] §1.2 的 10 色配色**，禁止引入第 11 色；统一用衬线字体（思源宋体）；统一羊皮纸 + 铁灰边风格。
+> **视觉一致性**（`visual-player-guidance`：Consistency）：8 种组件**统一用 [10] §1.2 的 10 色配色**，禁止引入第 11 色；统一用衬线字体（思源宋体）；统一羊皮纸 + 铁灰边风格；画风统一为**日漫二次元赛璐璐**（清晰线稿 + 平涂 + 硬边阴影，见 [13](13_art_style.md) §1.3）。
 
 ---
 
@@ -915,7 +915,7 @@ res://i18n/
 | §1 总纲 | [00 设计支柱](00_design_pillars.md) | 三大支柱教学目标 |
 | §2 节奏 | [09 关卡总表](09_levels_and_scenes.md#21-关卡总表) / [11 §6.3](11_balance_and_progression.md#63-难度梯度flow-state-三阶段) | 15 章难度曲线同步 |
 | §3 beat | [09 设计卡 1](09_levels_and_scenes.md#设计卡-1第-1-章--学院的陷落教学--撤退战) / [04 凯尔](04_characters.md) / [08 玩法](08_gameplay_mechanics.md) | 第 1 章撤退战 + 角色口吻 + 机制 |
-| §4 类型库 | [10 §1.2 配色](10_ui_ux.md#12-视觉风格定位古代魔法--庄重史诗) / [10 §3.6 范围色](10_ui_ux.md#36-光标与范围可视化对齐-range_overlaygd) | 视觉一致性 |
+| §4 类型库 | [10 §1.2 配色](10_ui_ux.md#12-视觉风格定位古代魔法--庄重史诗--日漫二次元) / [10 §3.6 范围色](10_ui_ux.md#36-光标与范围可视化对齐-range_overlaygd) | 视觉一致性 |
 | §5 UI 解锁 | [10 §3.2 菜单](10_ui_ux.md#32-单位行动菜单选中单位移动后弹出) / [10 §4 整备](10_ui_ux.md#4-战前整备界面) | Hick 定律 |
 | §6 容错 | [10 §6.2 防误操作](10_ui_ux.md#62-防误操作player-error-handling) / `battle.gd::_cancel_move` | 错误分类应对 |
 | §7 DDA | [11 §7](11_balance_and_progression.md#七动态难度调整dda--对齐-turn_director) | Buster 原则 |

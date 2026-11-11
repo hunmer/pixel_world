@@ -1,6 +1,6 @@
 # UI/UX 雪碧图生成提示词列表
 
-> 本文档为 [`10_ui_ux.md`](./10_ui_ux.md) 的**美术资源生产配套**。所有提示词严格服从该文档的「古代魔法 + 庄重史诗」基调与配色表，**全部不含文字**（文字一律由 Godot 端 Label/RichTextLabel 渲染叠加，避免位图字体锯齿与多语言问题），并优先设计为**九宫格可拉伸（9-slice stretchable）**控件。
+> 本文档为 [`10_ui_ux.md`](./10_ui_ux.md) 的**美术资源生产配套**。所有提示词严格服从该文档的「古代魔法 + 庄重史诗」基调与配色表，**画风为「日漫二次元赛璐璐」**（清晰线稿 + 平涂 + 硬边二级阴影，对齐 [`13_art_style.md`](./13_art_style.md) §1.3 / §2.5），**全部不含文字**（文字一律由 Godot 端 Label/RichTextLabel 渲染叠加，避免位图字体锯齿与多语言问题），并优先设计为**九宫格可拉伸（9-slice stretchable）**控件。
 
 ---
 
@@ -19,7 +19,7 @@
 - **透明背景 PNG**（`transparent background, alpha channel, isolated asset, no backdrop`）。
 - **9-slice 友好**：装饰集中在四角和边缘 ≤24px 内，**中央为均质平铺纹理**（`uniform flat center, seamless, tileable middle, decorations confined to corners and borders`）。
 - **正交正面视角**，无透视畸变（`front-facing, flat orthographic, game UI sprite`）。
-- **2D 风格**，非写实照片（`2D digital painting, hand-painted fantasy game UI, soft cell shading, no photorealism`）。
+- **日漫二次元风格**，非写实照片、非厚涂油画（`2D Japanese anime style, cel shading: clean crisp lineart, flat base colors, hard-edged 2-tone shadows, no photorealism, no painterly brush strokes`）。
 - **配色锁定**：只能用 0.3 表中的 10 色，禁止第 11 色。
 
 ### 0.3 全局配色表（来自 10_ui_ux.md §1.2，**禁止引入第 11 色**）
@@ -41,14 +41,16 @@
 
 ```
 Fantasy tactics RPG UI element, ancient magic + solemn epic tone,
-2D hand-painted digital art, soft cell shading, front-facing flat orthographic,
-aged parchment texture base with subtle 12% grain noise, wrought-iron embossed borders,
+2D Japanese anime style illustration, cel shading with clean crisp lineart (colored line trace, no pure black),
+flat base colors with hard-edged 2-tone shadows, front-facing flat orthographic,
+aged parchment texture base with subtle 12% grain noise, wrought-iron borders with hard-edged two-tone bevel (cel shaded, no smooth gradient),
 antique gold trim, subtle arcane crystal glow where magical,
 PALETTE LOCKED to dark slate blue-gray (#2B2B3A), near-black ink (#1A1A24), antique gold (#C9A227),
 ley-line azure (#408CFF), blood red (#B22222), crystal violet (#BF59FF), emerald (#3CB371),
 ember orange (#E07B2A), parchment (#E8D9B0), bone white (#F2EDE0).
 NO TEXT, NO LETTERS, NO NUMBERS, NO RUNES-AS-TEXT, NO CAPTIONS, NO WATERMARK.
 Transparent background PNG, isolated asset, seamless tileable center, 9-slice stretchable.
+NEGATIVE: photorealistic, oil painting, impasto brush strokes, soft airbrush gradients, 3D render, pixel art, chibi, moe, oversaturated neon.
 ```
 
 ---
@@ -64,7 +66,7 @@ Transparent background PNG, isolated asset, seamless tileable center, 9-slice st
 - **Prompt**：
   ```
   {PREFIX} A rectangular info panel background. Center: aged parchment (#E8D9B0) with faint grain.
-  Border: 8px wrought-iron gray (#2B2B3A) embossed frame, inner 2px antique-gold (#C9A227) hairline.
+  Border: 8px wrought-iron gray (#2B2B3A) frame with hard-edged two-tone bevel (cel shaded, no smooth gradient), inner 2px antique-gold (#C9A227) hairline.
   Four corners: small subtle heraldic scrollwork flourishes in dark gold, kept within 28px corner zones.
   Middle area perfectly flat and uniform for text overlay. Soft inner shadow at edges.
   ```
@@ -88,7 +90,7 @@ Transparent background PNG, isolated asset, seamless tileable center, 9-slice st
 - **Prompt**：
   ```
   {PREFIX} A vertical pop-up menu panel, slightly tapered top. Parchment center (#E8D9B0).
-  Iron-gray (#2B2B3A) embossed border with gold (#C9A227) inner trim. A single thin gold horizontal divider rule
+  Iron-gray (#2B2B3A) hard-edged two-tone bevel border (cel shaded, no smooth gradient) with gold (#C9A227) inner trim. A single thin gold horizontal divider rule
   baked at 40% from top (decorative notch, no text). Bottom-right corner: tiny wrought-iron hinge stud.
   Flat uniform middle for stacked menu rows. Soft drop shadow outside.
   ```
@@ -112,7 +114,7 @@ Transparent background PNG, isolated asset, seamless tileable center, 9-slice st
   ```
   {PREFIX} A battle forecast panel with a baked-in vertical center divider (2px gold double-rule) splitting left/right columns,
   and a baked-in horizontal divider at 70% height for the warning footer zone. Parchment (#E8D9B0) body.
-  Iron-gray embossed border, gold trim. Top header band (40px) tinted slightly darker slate.
+  Iron-gray hard-edged two-tone bevel border (cel shaded, no smooth gradient), gold trim. Top header band (40px) tinted slightly darker slate.
   Two small heraldic shield silhouettes (empty, blank) as column headers. NO numbers, NO text anywhere.
   ```
 
@@ -133,7 +135,7 @@ Transparent background PNG, isolated asset, seamless tileable center, 9-slice st
 - **存放**：`godot/assets/ui/frames/panel-settings.png`
 - **Prompt**：
   ```
-  {PREFIX} A tall settings panel. Parchment (#E8D9B0) body. Iron-gray embossed border, gold inner trim.
+  {PREFIX} A tall settings panel. Parchment (#E8D9B0) body. Iron-gray hard-edged two-tone bevel border (cel shaded, no smooth gradient), gold inner trim.
   Three faint horizontal section dividers (1px gold, 20% opacity) suggesting Display/Game/Audio groupings, no labels.
   Corner scrollwork. Flat uniform sections for option rows.
   ```
@@ -194,7 +196,7 @@ Transparent background PNG, isolated asset, seamless tileable center, 9-slice st
 - **Prompt**：
   ```
   {PREFIX} A primary confirmation button background. Parchment (#E8D9B0) face with a raised gold (#C9A227) beveled border (3px)
-  and inner iron-gray (#2B2B3A) thin line. Subtle top highlight, bottom shadow for embossed feel.
+  and inner iron-gray (#2B2B3A) thin line. Hard-edged top highlight and bottom shadow (two-tone cel bevel, no smooth gradient).
   Center perfectly flat for label. NO text.
   ```
 
@@ -293,11 +295,11 @@ Transparent background PNG, isolated asset, seamless tileable center, 9-slice st
 - **Prompt（未勾选）**：
   ```
   {PREFIX} A small empty checkbox, 32x32. Iron-gray (#2B2B3A) square frame with gold (#C9A227) inner bevel, transparent center.
-  Slight emboss. No text, no checkmark.
+  Hard-edged top highlight and bottom shadow (cel bevel, no smooth gradient). No text, no checkmark.
   ```
 - **Prompt（勾选）**：
   ```
-  {PREFIX} Same checkbox frame but with a bold gold (#C9A227) hand-painted checkmark stroke inside. No text.
+  {PREFIX} Same checkbox frame but with a bold gold (#C9A227) clean checkmark stroke inside (flat solid stroke with crisp cel-shaded edges). No text.
   ```
 
 ### 2.12 单选项圆点 `radio`
@@ -546,7 +548,7 @@ Transparent background PNG, isolated asset, seamless tileable center, 9-slice st
 - [ ] **透明背景 PNG**：非全屏元素必须透明；全屏卷轴可保留自有背景。
 - [ ] **正交正面**：无透视畸变（光标/范围块按等距菱形视角除外）。
 - [ ] **命名一致**：文件名严格按本文「存放路径」列，便于代码引用与 `theme_create`/`theme_set_stylebox` 对齐。
-- [ ] **风格统一**：羊皮纸 + 铁灰 + 暗金基调贯穿，无科幻/现代/赛博元素混入。
+- [ ] **风格统一**：**日漫二次元赛璐璐**（清晰线稿 + 平涂 + 硬边二级阴影）贯穿，羊皮纸 + 铁灰 + 暗金基调成立，无写实厚涂 / 科幻 / 现代 / 赛博元素混入。
 - [ ] **对齐文档**：HP 三色（绿/金/<25% 红）、范围六色（蓝/红/紫/金/绿/橙）严格命中。
 
 ---
