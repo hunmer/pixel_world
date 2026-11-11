@@ -204,6 +204,19 @@ func move_action_loops() -> bool:
 	)
 
 
+## 地图视角变化时按原移动进度重投影，不重置行为、计时或确定性状态。
+func reproject(
+	new_from_visual: Vector2,
+	new_target_visual: Vector2,
+	new_from_sort_y: float,
+	new_target_sort_y: float
+) -> void:
+	_from_visual = new_from_visual
+	_target_visual = new_target_visual
+	_visual_position = _from_visual.lerp(_target_visual, clampf(_move_t, 0.0, 1.0))
+	rebase_sort(new_from_sort_y, new_target_sort_y)
+
+
 func rebase_sort(new_from_sort_y: float, new_target_sort_y: float) -> void:
 	_from_sort_y = new_from_sort_y
 	_target_sort_y = new_target_sort_y

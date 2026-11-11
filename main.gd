@@ -12,6 +12,7 @@ const LEVEL_H := 10  ## 方块侧壁高度：与 32x32 等距地块的侧壁高�
 const ColumnBatchScript = preload("res://scripts/isometric_column_batch.gd")
 const WanderingAnimalScript = preload("res://scripts/wandering_animal.gd")
 const IsometricDepthSort = preload("res://scripts/isometric_depth_sort.gd")
+const IsometricViewScript = preload("res://scripts/isometric_view.gd")
 const WeatherSystemScript = preload("res://scripts/weather_system.gd")
 const DayNightSystemScript = preload("res://scripts/day_night_system.gd")
 const WorldAudioSystemScript = preload("res://scripts/world_audio_system.gd")
@@ -40,7 +41,7 @@ const AnimalBehaviorRegistryScript = preload(
 const ECOLOGY_MANIFEST_PATH := "res://config/ecology/manifest.json"
 const ECOSYSTEM_CONFIG_PATH := "res://config/ecosystems.json"
 const FLORA_LAYER_IDS := ["tree", "ground_cover", "decoration"]
-const SORT_DIAGONAL_STRIDE := 128  ## 大于流式窗口宽度，确保同对角线的 x 次序精确
+const SORT_DEPTH_SCALE := 16.0  ## 默认角度下与旧版每格 128 的合成深度间距一致
 const SORT_REBASE_DISTANCE := 4096
 
 const ANIMAL_SORT_BIAS := WanderingAnimalScript.SORT_BIAS
@@ -189,6 +190,9 @@ var _current_seed := 0
 var _world_rng = DeterministicRngScript.new(0)
 var _sort_origin := Vector2i.ZERO
 var _has_sort_origin := false
+var _iso_view = IsometricViewScript.new(TILE_W, TILE_H, LEVEL_H)
+var _view_dragging := false
+var _view_drag_last_x := 0.0
 var _zoom_index := DEFAULT_ZOOM_INDEX
 var _pinch_factor := 1.0
 var _camera_smooth_position := Vector2.ZERO
@@ -1296,15 +1300,67 @@ func _in_stream(cell: Vector2i, center: Vector2i) -> bool:
 
 
 func _grid_to_screen(cell: Vector2i, level := 0.0) -> Vector2:
-	return Vector2(
-		(cell.x - cell.y) * TILE_W * 0.5,
-		(cell.x + cell.y) * TILE_H * 0.5 - level * LEVEL_H
-	)
+	return _iso_view.grid_to_screen(cell, level)
 
 
 func _column_sort_y(cell: Vector2i) -> float:
 	var sort_cell := cell - _sort_origin
-	return float((sort_cell.x + sort_cell.y) * SORT_DIAGONAL_STRIDE + sort_cell.x)
+	# 投影 y 决定前后关系；量化后用投影 x 做稳定的同深度次序。
+	# 排序键只用于合成，真实脚点仍由 _grid_to_screen 独立计算。
+	var projected := _iso_view.grid_to_screen(sort_cell)
+	var depth := snappedf(_iso_view.get_depth_key(sort_cell), 0.001)
+	var tie_break := clampf(projected.x * 0.001, -0.25, 0.25)
+	return depth * SORT_DEPTH_SCALE + tie_break
+
+
+func _continuous_view_rotation() -> int:
+	if _battle_active or is_world_map_open():
+		return 0
+	var counterclockwise := (
+		Input.is_physical_key_pressed(KEY_Q)
+		or Input.is_physical_key_pressed(KEY_LEFT)
+	)
+	var clockwise := (
+		Input.is_physical_key_pressed(KEY_E)
+		or Input.is_physical_key_pressed(KEY_RIGHT)
+	)
+	return int(clockwise) - int(counterclockwise)
+
+
+## 角度变化只改变表现层坐标；地形采样、生态状态和确定性随机流保持不动。
+func _refresh_view_projection() -> void:
+	var previous_player_position := _player_visual_position
+	for cell_value in _cells.keys():
+		var cell: Vector2i = cell_value
+		var view: Node2D = _cells[cell]
+		view.update_sort_position(_grid_to_screen(cell), _column_sort_y(cell))
+	if _player != null:
+		if _move_t >= 1.0:
+			_move_from_cell = _player_cell
+			_move_level_from = _move_level_to
+		_move_from = _grid_to_screen(_move_from_cell, _move_level_from)
+		_move_to = _grid_to_screen(_player_cell, _move_level_to)
+		_player_visual_position = _move_from.lerp(_move_to, clampf(_move_t, 0.0, 1.0))
+		_move_sort_from = _column_sort_y(_move_from_cell) + PLAYER_SORT_BIAS
+		_move_sort_to = _column_sort_y(_player_cell) + PLAYER_SORT_BIAS
+		_set_player_render_position(_player_visual_position, _player_movement_sort_y())
+	for animal_value in _animals.values():
+		var animal: AnimatedSprite2D = animal_value
+		if not is_instance_valid(animal):
+			continue
+		animal.reproject(
+			_cell_feet_pos(animal.from_cell),
+			_cell_feet_pos(animal.target_cell),
+			_column_sort_y(animal.from_cell) + ANIMAL_SORT_BIAS,
+			_column_sort_y(animal.target_cell) + ANIMAL_SORT_BIAS
+		)
+	_player_occlusion_dirty = true
+	# 保留相机相对玩家的平移量，旋转不会把视野突然甩到世界原点。
+	if _cam != null:
+		var focus_delta := _player_visual_position - previous_player_position
+		_camera_smooth_position += focus_delta
+		_battle_focus_world_pos += focus_delta
+		_set_camera_position(_camera_smooth_position)
 
 
 func _ensure_sort_origin(near_cell: Vector2i) -> void:
@@ -3250,7 +3306,7 @@ func _cell_feet_pos(cell: Vector2i) -> Vector2:
 	return _grid_to_screen(cell, _stand_level(q))
 
 
-## 输入沿等距地图的两条正交轴移动：左/右 = 左上/右下，上/下 = 右上/左下。
+## WASD 与上下方向键移动；左右方向键保留给视角连续旋转。
 func _input_dir() -> Vector2i:
 	if is_world_map_open():
 		return Vector2i.ZERO
@@ -3258,9 +3314,9 @@ func _input_dir() -> Vector2i:
 		return Vector2i(0, -1)
 	if Input.is_action_pressed("ui_down") or Input.is_physical_key_pressed(KEY_S):
 		return Vector2i(0, 1)
-	if Input.is_action_pressed("ui_left") or Input.is_physical_key_pressed(KEY_A):
+	if Input.is_physical_key_pressed(KEY_A):
 		return Vector2i(-1, 0)
-	if Input.is_action_pressed("ui_right") or Input.is_physical_key_pressed(KEY_D):
+	if Input.is_physical_key_pressed(KEY_D):
 		return Vector2i(1, 0)
 	return Vector2i.ZERO
 
@@ -3286,6 +3342,8 @@ func _try_move(d: Vector2i) -> void:
 
 
 func _process(delta: float) -> void:
+	if _iso_view.advance(delta, _continuous_view_rotation()):
+		_refresh_view_projection()
 	if _move_t < 1.0:
 		var speed := fast_multiplier if Input.is_physical_key_pressed(KEY_SHIFT) else 1.0
 		_move_t = minf(1.0, _move_t + delta / move_time * speed)
@@ -3499,6 +3557,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		# 地图是模态 UI；鼠标缩放、触控手势和背景快捷键都不应穿透。
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
+		_view_dragging = event.pressed
+		if event.pressed:
+			_view_drag_last_x = event.position.x
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventMouseMotion and _view_dragging:
+		var drag_dx: float = event.position.x - _view_drag_last_x
+		_view_drag_last_x = event.position.x
+		_iso_view.drag_by(drag_dx)
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_zoom_step(1)
@@ -3516,8 +3586,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			_pinch_factor = 1.0
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and not event.echo:
-		if event.physical_keycode == KEY_R:
+		if event.physical_keycode == KEY_R and event.ctrl_pressed:
 			_regenerate(0)
+		elif event.physical_keycode == KEY_R:
+			_iso_view.reset_rotation()
+		elif event.physical_keycode == KEY_Z:
+			_iso_view.rotate_step(-1)
+		elif event.physical_keycode == KEY_X:
+			_iso_view.rotate_step(1)
 		elif event.physical_keycode == KEY_T and _weather != null:
 			if event.shift_pressed:
 				_weather.set_auto_mode()
@@ -3539,8 +3615,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			# B1 就地战斗进行中不开（_battle_active 时输入已被战斗层接管）。
 			if _hud != null:
 				_hud.toggle_battlefield_panel()
-		elif (event.physical_keycode == KEY_E or event.keycode == KEY_E) and not _battle_active:
-			# 打开战场地图编辑器（种子生成地形 / 涂地形 / 放阵营角色，保存为 JSON 战场）。
+		elif (
+			(event.physical_keycode == KEY_E or event.keycode == KEY_E)
+			and event.ctrl_pressed
+			and not _battle_active
+		):
+			# Ctrl+E 打开地图编辑器；单独 E 用于连续顺时针旋转。
 			if not is_world_map_open():
 				_open_map_editor()
 		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
@@ -3691,15 +3771,9 @@ func _on_weather_water_impact(
 	var canvas_inverse := get_viewport().get_canvas_transform().affine_inverse()
 	var global_world := canvas_inverse * viewport_position
 	var world_position := to_local(global_world)
-	var difference := world_position.x / (TILE_W * 0.5)
-	var sum := (
-		world_position.y
-		- WATER_SURFACE_VISUAL_OFFSET.y
-		+ WATER_SURFACE_LEVEL * LEVEL_H
-	) / (TILE_H * 0.5)
-	var grid_position := Vector2(
-		(sum + difference) * 0.5,
-		(sum - difference) * 0.5
+	var grid_position := _iso_view.screen_to_grid(
+		world_position - WATER_SURFACE_VISUAL_OFFSET,
+		WATER_SURFACE_LEVEL
 	)
 	var cell := Vector2i(roundi(grid_position.x), roundi(grid_position.y))
 	if not _water_cells.has(cell):
@@ -3709,10 +3783,8 @@ func _on_weather_water_impact(
 		+ WATER_SURFACE_VISUAL_OFFSET
 	)
 	var local_offset := world_position - surface_center
-	var edge_ratio := (
-		absf(local_offset.x) / (TILE_W * 0.5)
-		+ absf(local_offset.y) / (TILE_H * 0.5)
-	)
+	var grid_offset := _iso_view.screen_to_grid(local_offset)
+	var edge_ratio := absf(grid_offset.x) + absf(grid_offset.y)
 	if edge_ratio > 0.94:
 		return
 	var edge_clearance := 1.0 - edge_ratio
@@ -4032,11 +4104,13 @@ func cell_stand_level(cell: Vector2i) -> int:
 ## 公开查询：屏幕坐标 → 世界 cell（供战棋 cell 拾取用）
 func screen_to_cell(screen_pos: Vector2) -> Vector2i:
 	var world_pos := _screen_to_world_pos(screen_pos)
-	var best_cell := IsoCoords.to_cell(world_pos)
+	var initial_grid := _iso_view.screen_to_grid(world_pos)
+	var best_cell := Vector2i(roundi(initial_grid.x), roundi(initial_grid.y))
 	var best_score := INF
 	var seen := {}
 	for guess_level in range(WATER_SURFACE_LEVEL, LEVELS * 3):
-		var base := IsoCoords.to_cell(world_pos + Vector2(0.0, guess_level * LEVEL_H))
+		var base_grid := _iso_view.screen_to_grid(world_pos, float(guess_level))
+		var base := Vector2i(roundi(base_grid.x), roundi(base_grid.y))
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
 				var cell := base + Vector2i(dx, dy)
@@ -4045,7 +4119,8 @@ func screen_to_cell(screen_pos: Vector2) -> Vector2i:
 				seen[cell] = true
 				var lvl := _stand_level(_quantize(cell.x, cell.y))
 				var local := world_pos - _grid_to_screen(cell, float(lvl))
-				var score := absf(local.x) / (TILE_W * 0.5) + absf(local.y) / (TILE_H * 0.5)
+				var grid_offset := _iso_view.screen_to_grid(local)
+				var score := absf(grid_offset.x) + absf(grid_offset.y)
 				if score < best_score:
 					best_score = score
 					best_cell = cell
@@ -4061,7 +4136,8 @@ func screen_to_cell_in_rect(screen_pos: Vector2, origin: Vector2i, size: Vector2
 			var cell := Vector2i(x, y)
 			var lvl := _stand_level(_quantize(cell.x, cell.y))
 			var local := world_pos - _grid_to_screen(cell, float(lvl))
-			var score := absf(local.x) / (TILE_W * 0.5) + absf(local.y) / (TILE_H * 0.5)
+			var grid_offset := _iso_view.screen_to_grid(local)
+			var score := absf(grid_offset.x) + absf(grid_offset.y)
 			if score < best_score:
 				best_score = score
 				best_cell = cell

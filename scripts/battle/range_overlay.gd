@@ -27,6 +27,7 @@ var _level_fn := Callable()            # (x, y) -> int，高度层（B1/等距�
 # ---- 内部状态 ----
 var _cursor_marker: Node2D = null
 var _cursor_float_root: Node2D = null
+var _cursor_frame: Node2D = null
 var _cursor_float_tween: Tween = null
 var _range_markers: Array = []         # Array[Node2D]
 var _range_tweens: Array = []
@@ -98,19 +99,24 @@ func _cell_level(x: int, y: int) -> int:
 	return 0
 
 
+## 从当前投影的两条基向量构造格菱形，B1 旋转后仍贴合格子。
+func _cell_corners(x: int, y: int, corner_scale := 1.0) -> PackedVector2Array:
+	var center := _cell_to_screen(x, y)
+	var basis_x := (_cell_to_screen(x + 1, y) - center) * 0.5 * corner_scale
+	var basis_y := (_cell_to_screen(x, y + 1) - center) * 0.5 * corner_scale
+	return PackedVector2Array([
+		center - basis_x - basis_y,
+		center + basis_x - basis_y,
+		center + basis_x + basis_y,
+		center - basis_x + basis_y,
+	])
+
+
 ## 在 cell(x,y) 画实心菱形（替代 board.make_cell_quad，自带工厂）
 func _make_color_block(x: int, y: int, color: Color) -> Node2D:
 	var node := _ColorBlock.new()
 	node.color = color
-	var c := _cell_to_screen(x, y)
-	var hw := IsoCoords.TILE_W * 0.5
-	var hh := IsoCoords.TILE_H * 0.5
-	node.corners = PackedVector2Array([
-		c + Vector2(0, -hh),
-		c + Vector2(hw, 0),
-		c + Vector2(0, hh),
-		c + Vector2(-hw, 0),
-	])
+	node.corners = _cell_corners(x, y)
 	# B1 模式：直接 position=屏幕坐标 + z_index 保证在地形之上
 	if is_world_mode():
 		node.z_index = 5  # 地形之上、单位之下（单位 z_index=10）
@@ -122,15 +128,7 @@ func _make_outline_block(x: int, y: int, color: Color, line_width: float = 2.0) 
 	var node := _OutlineDraw.new()
 	node.color = color
 	node.width = line_width
-	var c := _cell_to_screen(x, y)
-	var hw := IsoCoords.TILE_W * 0.5 * _QUAD_INSET_SCALE
-	var hh := IsoCoords.TILE_H * 0.5 * _QUAD_INSET_SCALE
-	node.corners = [
-		c + Vector2(0, -hh),
-		c + Vector2(hw, 0),
-		c + Vector2(0, hh),
-		c + Vector2(-hw, 0),
-	]
+	node.corners = _cell_corners(x, y, _QUAD_INSET_SCALE)
 	if is_world_mode():
 		node.z_index = 5
 	return node
@@ -239,6 +237,7 @@ func create_cursor_particles() -> void:
 
 	var frame := _make_diamond_frame(_CURSOR_COLOR)
 	_cursor_float_root.add_child(frame)
+	_cursor_frame = frame
 
 	_start_cursor_float(_cursor_float_root)
 	_cursor_marker = root
@@ -253,6 +252,12 @@ func update_cursor_particles(x: int, y: int, can_show: bool) -> void:
 	_cursor_marker.visible = true
 	# 定位：B1 走双轨（position=sort_y, offset 补偿），B2 直接设 global_position
 	var c := _cell_to_screen(x, y)
+	if _cursor_frame != null and is_instance_valid(_cursor_frame):
+		var corners := _cell_corners(x, y)
+		for i in corners.size():
+			corners[i] -= c
+		_cursor_frame.set("corners", corners)
+		_cursor_frame.queue_redraw()
 	if is_world_mode():
 		_cursor_marker.position = c
 		_cursor_marker.z_index = 6
