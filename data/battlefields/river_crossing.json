@@ -1,0 +1,32 @@
+{
+	"id": "river_crossing",
+	"name": "渡河攻坚战",
+	"description": "13×11 中央河流 + 两座桥（y4/y8），东岸要塞封锁南桥。演示 map 全名写法；水面对 foot 全阻断，只能走桥。5v5。",
+	"map": [
+		"plain forest plain plain plain water water water plain plain forest plain plain",
+		"plain plain plain forest plain water water water plain plain plain forest plain",
+		"forest plain plain plain plain water water water plain forest plain plain plain",
+		"plain plain forest plain plain water water water plain plain plain plain forest",
+		"plain plain plain village plain plain plain plain plain plain plain forest plain",
+		"forest plain plain plain plain water water water forest plain plain plain plain",
+		"plain plain forest plain plain water water water plain plain forest plain plain",
+		"plain plain plain plain forest water water water plain plain plain plain plain",
+		"plain plain plain plain plain plain plain plain fort plain plain forest plain",
+		"plain forest plain plain plain water water water plain plain plain plain plain",
+		"plain plain plain forest plain water water water forest plain plain plain plain"
+	],
+	"playerUnits": [
+		{ "class": "lancer", "name": "银枪", "level": 3, "x": 2, "y": 5 },
+		{ "class": "swordsman", "name": "罗兰", "level": 3, "x": 2, "y": 4 },
+		{ "class": "knight", "name": "铁盾", "level": 3, "x": 0, "y": 4 },
+		{ "class": "archer", "name": "薇拉", "level": 2, "x": 3, "y": 4 },
+		{ "class": "priest", "name": "塞西尔", "level": 2, "x": 2, "y": 6 }
+	],
+	"enemyUnits": [
+		{ "class": "knight", "name": "桥头守将", "level": 3, "x": 9, "y": 4 },
+		{ "class": "berserker", "name": "血斧", "level": 2, "x": 9, "y": 8 },
+		{ "class": "archer", "level": 2, "x": 10, "y": 9 },
+		{ "class": "mage", "name": "暮语", "level": 2, "x": 11, "y": 6 },
+		{ "class": "assassin", "name": "影刃", "level": 3, "x": 8, "y": 5 }
+	]
+}

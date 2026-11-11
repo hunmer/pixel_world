@@ -1,0 +1,18 @@
+{
+	"id": "arena_1v1",
+	"name": "竞技场单挑",
+	"description": "5×5 极简冒烟战场：剑士 vs 狂战士 1v1，最快验证战斗循环/胜负结算。",
+	"rows": [
+		".....",
+		".....",
+		".....",
+		".....",
+		"....."
+	],
+	"playerUnits": [
+		{ "class": "swordsman", "name": "罗兰", "level": 3, "x": 1, "y": 2 }
+	],
+	"enemyUnits": [
+		{ "class": "berserker", "name": "血斧", "level": 3, "x": 3, "y": 2 }
+	]
+}

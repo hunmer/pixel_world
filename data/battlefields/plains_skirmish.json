@@ -1,0 +1,28 @@
+{
+	"id": "plains_skirmish",
+	"name": "平原前哨战",
+	"description": "12×9 标准遭遇战：平原为主，散布森林（回避+减速）与一座村庄。4v4 综合阵容，验证移动/射程/治疗的基础流程。",
+	"rows": [
+		"....f.......",
+		".f..f...f...",
+		"..........f.",
+		"............",
+		"..f........f",
+		"............",
+		".f....f...m.",
+		"............",
+		".....v......"
+	],
+	"playerUnits": [
+		{ "class": "swordsman", "name": "罗兰", "level": 3, "x": 1, "y": 4 },
+		{ "class": "knight", "name": "铁盾", "level": 3, "x": 0, "y": 4 },
+		{ "class": "archer", "name": "薇拉", "level": 2, "x": 1, "y": 3 },
+		{ "class": "priest", "name": "塞西尔", "level": 2, "x": 1, "y": 5 }
+	],
+	"enemyUnits": [
+		{ "class": "berserker", "name": "血斧", "level": 2, "x": 10, "y": 4 },
+		{ "class": "archer", "level": 2, "x": 11, "y": 3 },
+		{ "class": "lancer", "level": 2, "x": 10, "y": 5 },
+		{ "class": "assassin", "name": "影刃", "level": 3, "x": 11, "y": 2 }
+	]
+}

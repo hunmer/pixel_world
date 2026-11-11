@@ -17,6 +17,7 @@ const DayNightSystemScript = preload("res://scripts/day_night_system.gd")
 const WorldAudioSystemScript = preload("res://scripts/world_audio_system.gd")
 const DepthOfFieldSystemScript = preload("res://scripts/depth_of_field_system.gd")
 const GameHudScript = preload("res://scripts/game_hud.gd")
+const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const WorldMapOverlayScript = preload("res://scripts/world_map_overlay.gd")
 const UnderwaterAnimalShader = preload("res://shaders/underwater_animal.gdshader")
 const DeterministicRngScript = preload("res://scripts/world/deterministic_rng.gd")
@@ -3430,6 +3431,8 @@ func _setup_camera() -> void:
 func _setup_hud() -> void:
 	_hud = GameHudScript.new()
 	_hud.name = "GameHUD"
+	_hud.battlefield_picked.connect(_on_battlefield_picked)
+	_hud.editor_requested.connect(_open_map_editor)
 	add_child(_hud)
 
 
@@ -3531,6 +3534,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			# 进入战棋（融合进 pixel_world 的战术 RPG 系统）
 			# P = Play battle；physical_keycode 和 keycode 都匹配，确保注入输入也能触发
 			_enter_battle()
+		elif (event.physical_keycode == KEY_O or event.keycode == KEY_O) and not _battle_active:
+			# 打开/关闭 JSON 战场加载列表（调试入口，与 P 的随机遭遇战互补）。
+			# B1 就地战斗进行中不开（_battle_active 时输入已被战斗层接管）。
+			if _hud != null:
+				_hud.toggle_battlefield_panel()
+		elif (event.physical_keycode == KEY_E or event.keycode == KEY_E) and not _battle_active:
+			# 打开战场地图编辑器（种子生成地形 / 涂地形 / 放阵营角色，保存为 JSON 战场）。
+			if not is_world_map_open():
+				_open_map_editor()
 		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
 			_zoom_step(1)
 		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
@@ -3815,6 +3827,45 @@ func _enter_battle() -> void:
 		"hosting": false,
 	}
 	get_tree().change_scene_to_file("res://scenes/Battle.tscn")
+
+
+## 从 JSON 战场文件进入战棋（HUD 战场列表点选触发）。
+## JSON 声明的战场与真实世界地形无关（无 world_origin），固定走 B2 独立场景模式，
+## 不受 Settings.battle_inline_mode 影响。
+func _enter_battlefield(path: String) -> void:
+	var result: Dictionary = BattlefieldLoaderScript.load_battlefield(path)
+	if not bool(result.get("ok", false)):
+		var msg := String(result.get("error", "未知错误"))
+		push_error("[world] 战场加载失败: %s → %s" % [path, msg])
+		if _hud != null:
+			_hud.show_battlefield_error(msg)
+		return
+	var chapter: Dictionary = result["chapter"]
+	var info: Dictionary = result["info"]
+	# L1 埋点：JSON 战场入口（按 AGENTS.md 调试埋点强制原则）
+	print("[world] 加载 JSON 战场: %s（%dx%d, 我方%d/敌方%d, hosting=%s）→ 独立场景模式" % [
+		info.get("name", path), chapter.width, chapter.height,
+		(chapter.playerUnits as Array).size(), (chapter.enemyUnits as Array).size(),
+		str(info.get("hosting", false)),
+	])
+	SceneArgs.battle_args = {
+		"chapter": chapter,
+		"return_to": "res://main.tscn",
+		"hosting": bool(info.get("hosting", false)),
+	}
+	get_tree().change_scene_to_file("res://scenes/Battle.tscn")
+
+
+func _on_battlefield_picked(path: String) -> void:
+	_enter_battlefield(path)
+
+
+## 打开战场地图编辑器（E 键 / 战场面板「🛠 打开地图编辑器」按钮触发）。
+## 编辑器保存的 JSON 落在 data/battlefields（或 user://battlefields），
+## 返回后在战场列表（O 键）中即可开战。
+func _open_map_editor() -> void:
+	print("[world] 打开战场地图编辑器 → res://scenes/MapEditor.tscn")  # L1 埋点
+	get_tree().change_scene_to_file("res://scenes/MapEditor.tscn")
 
 
 # ============================================================

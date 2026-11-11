@@ -1,0 +1,32 @@
+{
+	"id": "mountain_pass",
+	"name": "山口要塞",
+	"description": "13×11 两侧山脊夹一条要塞通道（fort 门 + 墙体分流），敌方据守 Fort 门，村庄可作回复点。5v5 攻坚战。",
+	"rows": [
+		"mmmmmmm.mmmmm",
+		"mm...f.f...mm",
+		"m...........m",
+		"m..v.....v..m",
+		"m....FFF....m",
+		"m...........m",
+		"....##.##....",
+		".....m.m.....",
+		".............",
+		"..f.......f..",
+		"mmmmmmmmmmmmm"
+	],
+	"playerUnits": [
+		{ "class": "swordsman", "name": "罗兰", "level": 4, "x": 6, "y": 9 },
+		{ "class": "knight", "name": "铁盾", "level": 3, "x": 4, "y": 8 },
+		{ "class": "lancer", "name": "银枪", "level": 3, "x": 7, "y": 9 },
+		{ "class": "archer", "name": "薇拉", "level": 2, "x": 8, "y": 8 },
+		{ "class": "priest", "name": "塞西尔", "level": 2, "x": 5, "y": 9 }
+	],
+	"enemyUnits": [
+		{ "class": "knight", "name": "要塞守将", "level": 4, "x": 6, "y": 4 },
+		{ "class": "berserker", "name": "血斧", "level": 3, "x": 5, "y": 4 },
+		{ "class": "archer", "name": "哨塔射手", "level": 3, "x": 7, "y": 4 },
+		{ "class": "mage", "name": "暮语", "level": 3, "x": 6, "y": 1 },
+		{ "class": "assassin", "name": "影刃", "level": 3, "x": 6, "y": 2 }
+	]
+}

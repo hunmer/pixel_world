@@ -90,6 +90,12 @@ static func get_profession(class_id: StringName) -> Dictionary:
 	return _professions.get(_default_id, {})
 
 
+## 职业 id 是否存在（battlefield_loader 等 JSON 入口用，避免静默回退默认职业）
+static func has_profession(class_id: StringName) -> bool:
+	_ensure_loaded()
+	return _professions.has(class_id)
+
+
 static var DEFAULT_PROFESSION: Dictionary:
 	get:
 		_ensure_loaded()

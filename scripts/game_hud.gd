@@ -1,16 +1,28 @@
 extends CanvasLayer
-
+## 战场选择面板（调试）：列出 data/battlefields/*.json，点选后由 main.gd 以 B2 独立场景加载。
 ## 屏幕顶部只保留操作提示；面板为右上角小地图预留空间且不拦截输入。
+
+const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
+
+## 用户点选了一个战场 JSON（main.gd 接收后 _enter_battlefield）
+signal battlefield_picked(path: String)
+
+## 用户请求打开地图编辑器（main.gd 接收后切 MapEditor.tscn）
+signal editor_requested()
 
 const HELP_BG := Color(0.035, 0.055, 0.075, 0.90)
 const BORDER := Color(0.25, 0.37, 0.43, 0.88)
 const TEXT_SECONDARY := Color(0.56, 0.68, 0.71)
 const ACCENT := Color(0.40, 0.86, 0.76)
 const KEY_COLOR := Color(1.0, 0.78, 0.34)
+const ERROR_COLOR := Color(1.0, 0.45, 0.42)
 const MINIMAP_RESERVE := 150.0
 
 var _top_area: VBoxContainer
 var _help_flow: HFlowContainer
+## 战场选择面板（懒创建；null = 关闭）
+var _battlefield_panel: Control = null
+var _battlefield_error_label: Label = null
 
 
 func _ready() -> void:
@@ -65,6 +77,18 @@ func _build_ui() -> void:
 	_add_hint("F", "复位")
 	_add_hint("R", "新世界")
 	_add_hint("P", "进入战棋")
+	_add_hint("O", "战场列表")
+	_add_hint("E", "地图编辑器")
+
+	# 右上角「战场」按钮（JSON 战场加载列表，调试入口）
+	var battlefield_btn := Button.new()
+	battlefield_btn.name = "BattlefieldBtn"
+	battlefield_btn.text = "⚔ 战场"
+	battlefield_btn.position = Vector2(get_viewport().get_visible_rect().size.x - MINIMAP_RESERVE - 210, 10)
+	battlefield_btn.size = Vector2(100, 32)
+	battlefield_btn.add_theme_font_size_override("font_size", 12)
+	battlefield_btn.pressed.connect(toggle_battlefield_panel)
+	root.add_child(battlefield_btn)
 
 	# 右上角「设置」按钮
 	var settings_btn := Button.new()
@@ -122,6 +146,141 @@ func _open_settings() -> void:
 		if p != null: p.queue_free()
 	)
 	vbox.add_child(close_btn)
+
+
+## ---- 战场选择面板（JSON 战场加载列表，调试入口） --------------------------
+
+## 打开/关闭战场面板（O 键 / ⚔ 按钮共用）
+func toggle_battlefield_panel() -> void:
+	if _battlefield_panel != null and is_instance_valid(_battlefield_panel):
+		close_battlefield_panel()
+	else:
+		_open_battlefield_panel()
+
+
+func close_battlefield_panel() -> void:
+	if _battlefield_panel != null and is_instance_valid(_battlefield_panel):
+		_battlefield_panel.queue_free()
+	_battlefield_panel = null
+	_battlefield_error_label = null
+
+
+## 面板打开时 ESC 关闭（O 键由 main.gd 分发，避免与主输入链抢事件）
+func _unhandled_input(event: InputEvent) -> void:
+	if _battlefield_panel == null or not is_instance_valid(_battlefield_panel):
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == KEY_ESCAPE or event.keycode == KEY_ESCAPE:
+			close_battlefield_panel()
+			get_viewport().set_input_as_handled()
+
+
+func _open_battlefield_panel() -> void:
+	close_battlefield_panel()
+	var vp := get_viewport().get_visible_rect().size
+	var panel := PanelContainer.new()
+	panel.name = "BattlefieldPanel"
+	panel.custom_minimum_size = Vector2(500.0, 0.0)
+	panel.position = Vector2((vp.x - 500.0) / 2.0, 90.0)
+	panel.add_theme_stylebox_override("panel", _panel_style())
+	$"HUDRoot".add_child(panel)
+	_battlefield_panel = panel
+
+	var vbox := VBoxContainer.new()
+	vbox.name = "BattlefieldVBox"
+	vbox.offset_left = 14.0
+	vbox.offset_top = 10.0
+	vbox.offset_right = -14.0
+	vbox.offset_bottom = -10.0
+	vbox.add_theme_constant_override("separation", 6)
+	panel.add_child(vbox)
+
+	# 标题行：标题 + 关闭按钮
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	vbox.add_child(head)
+	var title := _label("加载战场（JSON）", 14, ACCENT)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var close_btn := Button.new()
+	close_btn.text = "✕ 关闭"
+	close_btn.pressed.connect(close_battlefield_panel)
+	head.add_child(close_btn)
+
+	var subtitle := _label("data/battlefields/*.json · 独立场景模式 · O/ESC 关闭", 10, TEXT_SECONDARY)
+	vbox.add_child(subtitle)
+
+	# 可滚动列表
+	var scroll := ScrollContainer.new()
+	scroll.name = "BattlefieldScroll"
+	scroll.custom_minimum_size = Vector2(0.0, 300.0)
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.name = "BattlefieldList"
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 4)
+	scroll.add_child(list)
+
+	# 错误提示行（加载失败时由 main.gd 回填）
+	_battlefield_error_label = _label("", 11, ERROR_COLOR)
+	_battlefield_error_label.visible = false
+	vbox.add_child(_battlefield_error_label)
+
+	# 编辑器入口：打开战场地图编辑器（种子生成地形 / 涂地形 / 放阵营角色，保存即出现在本列表）
+	var editor_btn := Button.new()
+	editor_btn.name = "OpenEditorBtn"
+	editor_btn.text = "🛠 打开地图编辑器"
+	editor_btn.add_theme_font_size_override("font_size", 12)
+	editor_btn.pressed.connect(func(): editor_requested.emit())
+	vbox.add_child(editor_btn)
+
+	# 填充列表（L1 埋点：面板打开时打印条目数，方便确认扫描正常）
+	var battlefields: Array = BattlefieldLoaderScript.list_battlefields()
+	print("[hud] 战场列表打开：data/battlefields/ 共 %d 个" % battlefields.size())
+	if battlefields.is_empty():
+		list.add_child(_label("（data/battlefields/ 下没有 *.json）", 11, TEXT_SECONDARY))
+		return
+	for entry in battlefields:
+		list.add_child(_make_battlefield_entry(entry))
+
+
+## 单个战场条目：按钮（名称 + 规模）+ 描述行；解析失败的条目置灰
+func _make_battlefield_entry(entry: Dictionary) -> Control:
+	var item := VBoxContainer.new()
+	item.add_theme_constant_override("separation", 1)
+
+	var btn := Button.new()
+	btn.text = "%s   （%d×%d · 我方%d/敌方%d）" % [
+		entry.get("name", ""), entry.get("width", 0), entry.get("height", 0),
+		entry.get("players", 0), entry.get("enemies", 0),
+	]
+	btn.add_theme_font_size_override("font_size", 13)
+	var err := String(entry.get("error", ""))
+	var path := String(entry.get("path", ""))
+	if not err.is_empty():
+		btn.disabled = true
+	else:
+		btn.pressed.connect(func():
+			# 不主动关面板：成功时切场景整个 HUD 会被释放，失败时留面板显示错误
+			battlefield_picked.emit(path)
+		)
+	item.add_child(btn)
+
+	var desc := String(entry.get("description", ""))
+	if not err.is_empty():
+		desc = "⚠ " + err
+	if not desc.is_empty():
+		item.add_child(_label("    " + desc, 10, ERROR_COLOR if not err.is_empty() else TEXT_SECONDARY))
+	return item
+
+
+## 加载失败时在面板上回显错误（main.gd 调用）
+func show_battlefield_error(message: String) -> void:
+	if _battlefield_error_label == null or not is_instance_valid(_battlefield_error_label):
+		return
+	_battlefield_error_label.text = "加载失败：" + message
+	_battlefield_error_label.visible = true
 
 
 func _add_hint(key_text: String, action_text: String) -> void:
