@@ -1,8 +1,12 @@
 extends CanvasLayer
 ## 战场选择面板（调试）：列出 data/battlefields/*.json，点选后由 main.gd 以 B2 独立场景加载。
-## 左侧竖排图标按钮（战场列表/设置）；操作提示移到右下角；面板不拦截输入。
+## 左侧竖排图标按钮（战场列表/设置）；右侧常驻多 Tab 面板（side_panel.gd，【输出】=原左上角日志）；
+## 操作提示移到右下角；面板不拦截输入（右侧 SidePanel 除外，它要承接滚动/按钮）。
 
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
+const SidePanelScript = preload("res://scripts/side_panel.gd")
+## 侧栏占用的窗口右侧列宽；main.gd 用它让 3D 视锥让出该列。
+const SIDE_PANEL_WIDTH := SidePanelScript.PANEL_WIDTH
 
 ## 用户点选了一个战场 JSON（main.gd 接收后 _enter_battlefield）
 signal battlefield_picked(path: String)
@@ -26,7 +30,35 @@ var _battlefield_error_label: Label = null
 
 func _ready() -> void:
 	layer = 100
+	_apply_window_override_size()
 	_build_ui()
+
+
+## 编辑器调试运行不会重读 project.godot 的 window_*_override；
+## 侧栏需要窗口多出一列，这里按配置补齐窗口尺寸（直接 godot --path . / 导出包时为幂等 no-op）。
+func _apply_window_override_size() -> void:
+	var width := int(ProjectSettings.get_setting_with_override(
+		"display/window/size/window_width_override"))
+	var height := int(ProjectSettings.get_setting_with_override(
+		"display/window/size/window_height_override"))
+	if width <= 0 or height <= 0:
+		print("[side_panel] window_*_override 未配置，窗口尺寸保持引擎默认")
+		return
+	_resize_window_to(Vector2i(width, height))
+	# 引擎/调试器可能在主场景 _ready 之后才施加启动尺寸；deferred 再补一次。
+	_resize_window_to.call_deferred(Vector2i(width, height))
+
+
+func _resize_window_to(target: Vector2i) -> void:
+	var window := get_window()
+	if window.size == target:
+		return
+	window.size = target
+	print("[side_panel] 窗口尺寸 → %s（实际 %s，屏幕 %s）" % [
+		target,
+		window.size,
+		DisplayServer.screen_get_usable_rect(),
+	])
 
 
 func _build_ui() -> void:
@@ -42,7 +74,8 @@ func _build_ui() -> void:
 	_bottom_area.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_bottom_area.offset_left = 12.0
 	_bottom_area.offset_top = -56.0
-	_bottom_area.offset_right = -12.0
+	# 右侧给常驻 SidePanel 让位，操作提示条不被覆盖
+	_bottom_area.offset_right = -12.0 - SidePanelScript.PANEL_WIDTH
 	_bottom_area.offset_bottom = -10.0
 	root.add_child(_bottom_area)
 
@@ -109,6 +142,11 @@ func _build_ui() -> void:
 	settings_btn.add_theme_font_size_override("font_size", 18)
 	settings_btn.pressed.connect(_open_settings)
 	left_bar.add_child(settings_btn)
+
+	# 右侧常驻多 Tab 面板：【输出】tab 承接原左上角屏幕日志（见 side_panel.gd）
+	var side_panel := SidePanelScript.new()
+	side_panel.name = "SidePanel"
+	root.add_child(side_panel)
 
 
 ## 设置面板：战斗模式切换（就地/独立场景）

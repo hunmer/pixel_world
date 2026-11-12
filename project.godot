@@ -26,9 +26,10 @@ Panku="*res://addons/panku_console/console.tscn"
 
 window/size/viewport_width=1280
 window/size/viewport_height=800
-window/size/window_width_override=1280
+window/size/window_width_override=1640
 window/size/window_height_override=800
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [editor_plugins]
 

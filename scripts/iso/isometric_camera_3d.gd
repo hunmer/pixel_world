@@ -21,6 +21,13 @@ var target_yaw_radians: float = IsoProjection.CAMERA_YAW
 var elevation_radians: float = IsoProjection.CAMERA_ELEVATION
 var target_elevation_radians: float = IsoProjection.CAMERA_ELEVATION
 var rotation_smoothing: float = 14.0
+## 窗口右侧为 HUD 侧栏预留的像素宽度；_apply_view 把相机沿屏幕右方向整体平移
+## 该宽度的一半（世界单位），画面内容左移让出右侧列，舞台不再延伸到面板下方
+## （面板在画布层，不参与 3D 投影）。
+var reserved_right_px: float = 0.0:
+	set(value):
+		reserved_right_px = maxf(value, 0.0)
+		_update_projection_size()
 var _viewport_size := Vector2(1280.0, 800.0)
 
 
@@ -118,6 +125,26 @@ func screen_to_grid(screen_position: Vector2, level: float = 0.0) -> Variant:
 
 func _update_projection_size() -> void:
 	size = _viewport_size.y / (IsoProjection.TILE_PIXELS * zoom)
+	# 正交下 size 覆盖整个视口高度；预留列换算见 _reserved_lateral_world。
+	# 注意：frustum_offset 只在 PROJECTION_FRUSTUM 下生效（渲染端忽略正交投影的该值，
+	# 实测 ±符号截图无差异），因此预留列改由 _apply_view 的相机整体平移实现。
+	_apply_view()
+
+
+## 预留列宽度换算成的世界位移：沿屏幕右方向平移正交相机 = 滑动取景窗，
+## 相机滑右 → 画面内容左移 reserved/2 像素（世界中心落到舞台中心）。
+func _reserved_lateral_world() -> Vector3:
+	if reserved_right_px <= 0.0 or _viewport_size.y <= 1.0:
+		return Vector3.ZERO
+	var horizontal := cos(elevation_radians)
+	var view_dir := Vector3(
+		-sin(yaw_radians) * horizontal,
+		-sin(elevation_radians),
+		-cos(yaw_radians) * horizontal
+	).normalized()
+	var right := view_dir.cross(Vector3.UP).normalized()
+	var world_per_px := size / _viewport_size.y
+	return right * (reserved_right_px * 0.5 * world_per_px)
 
 
 func _apply_view() -> void:
@@ -129,6 +156,8 @@ func _apply_view() -> void:
 		sin(elevation_radians),
 		cos(yaw_radians) * horizontal
 	) * CAMERA_DISTANCE
-	position = focus_position + offset
-	if position.distance_squared_to(focus_position) > 0.000001:
-		look_at(focus_position, Vector3.UP)
+	var lateral := _reserved_lateral_world()
+	position = focus_position + offset + lateral
+	var aim := focus_position + lateral
+	if position.distance_squared_to(aim) > 0.000001:
+		look_at(aim, Vector3.UP)

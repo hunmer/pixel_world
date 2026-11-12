@@ -1,6 +1,6 @@
 # 数据模型
 
-本项目无数据库 / 无网络持久层。"数据模型"指**运行时领域对象**（多为 GDScript Dictionary，全 StringName key）与**流式生成的世界状态**。
+本项目无数据库 / 无网络持久层。"数据模型"指**运行时领域对象**（多为 GDScript Dictionary，全 StringName key）、**流式生成的世界状态**与 **3D 正交渲染结构**。
 
 ## 世界生成核心数据结构（`scripts/world/`）
 
@@ -17,7 +17,7 @@
 
 ### `CellState`（`scripts/world/cell_state.gd`）
 
-**渲染状态**，承载 `CellContext` 解析后的渲染决策（flora / 水体块 / 材质选择），供批量绘制消费。有对应契约测试 `tests/cell_state_contract.gd`、`cell_state_integration_contract.gd`。
+**渲染状态**，承载 `CellContext` 解析后的渲染决策（flora / 水体块 / 材质选择），供 3D chunk / 批量绘制消费。有对应契约测试 `tests/cell_state_contract.gd`、`cell_state_integration_contract.gd`。
 
 ### 确定性 RNG（`scripts/world/deterministic_rng.gd`）
 
@@ -27,12 +27,23 @@
 
 `main.gd` 持有这些非持久化状态：
 
-- 已生成 cell 集合 / Column 批次（`_spawn_cell` 产生，`_free_cell` 释放）
-- 活跃动物 `WanderingAnimal` 集合 + 群体状态缓存（`CommunityStateStore`）
-- 玩家位置 `_player_cell`、相机 `_cam`、缩放 `_zoom_index`
+- 已生成 cell 集合 / 3D chunk（`_spawn_cell` 产生，`_free_cell` 释放；`IsometricTerrain3D.CHUNK_SIZE=2`）
+- 活跃动物 `WanderingAnimal`（AnimatedSprite3D）集合 + 群体状态缓存（`CommunityStateStore`）
+- 玩家位置 `_player_cell`、相机 `_cam: IsometricCamera3D`、缩放 `_zoom_index`
 - 战斗态：`_battle_active`, `_battle_system`, 战前相机/玩家可见性备份
 
-> **注意：世界状态不持久化到磁盘**。重新生成（R 键 / 重启）会重新流式生成；探索过的地图在内存中保留，但程序退出即丢失（README 的"explored map data"指会话内）。
+> **注意：世界状态不持久化到磁盘**。重新生成（Ctrl+R / 重启）会重新流式生成；探索过的地图在内存中保留，但程序退出即丢失。
+
+## 3D 正交渲染结构（`scripts/iso/`，2026-11-12 迁移）
+
+| 类 | 关键常量 / 数据 | 说明 |
+| --- | --- | --- |
+| `IsoProjection3D`（iso_projection_3d.gd） | `TILE_PIXELS=32, TILE_HEIGHT=16, LEVEL_PIXELS=10` | 2:1 dimetric 像素标尺 → 3D 世界单位换算 |
+| `IsometricCamera3D` | `zoom 0.5–4`；`SUPPORTED_ANGLES` | 正交 Camera3D；**旋转只动相机**，不重建地形 |
+| `isometric_view.gd` | `SUPPORTED_ANGLES=[0,90,180,270]` | 离散视角：素材逐角度验收仅四视角，其余角度有拼缝 |
+| `IsometricTerrain3D`（isometric_terrain_3d.gd） | `CHUNK_SIZE=2, MAX_WATER_RIPPLES=48` | chunk 化 3D 柱地形；水面涟漪池 |
+| `SunlightSystem`（sunlight_system.gd） | DirectionalLight3D | 由 `_setup_day_night` 创建；参数读 `config/sunlight.json` |
+| `main.gd._grid_to_world(cell) -> Vector3` | — | 网格坐标 → 3D 世界坐标（返回 Vector3） |
 
 ## 生态 / 群落数据（`scripts/ecology/`）
 
@@ -85,17 +96,33 @@
 - Skill：`type(damage/heal/aoe/buff/debuff), element, range, targetType, mpCost, cooldown, power, hitBonus, stat, buffValue, buffTurns`
 - Item：`type(consumable/throwable/equip/buff), target, effect(heal_hp/heal_mp/damage/buff/cleanse/equip), power, range, uses, ...`
 - Profession：`power, agility→spd, attack_range`（职业固有射程优先于武器）
-- Terrain：`{ type, def_bonus, avoid_bonus, move_cost:{foot,armor,cavalry,flying}, walkable }`，`move_cost=99` 不可通行。
+- Terrain：`{ type, def_bonus, avoid_bonus, move_cost:{foot,armor,cavalry,flying}, walkable }`，`move_cost=99` 不可通行。**11 种地形**：`plain, grass, sand, snow, rocky, forest, water, village, fort, wall, mountain`。
 
 ### `chapter`（战斗输入，见 `public-interfaces.md`）
-`{ width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin, blockTitles }`
+`{ id?, name?, width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin?, hosting? }`
+
+两个来源产出同构 chapter：`world_to_chapter`（世界地形采样）与 `BattlefieldLoader.load_battlefield`（JSON 文件）。
+
+### JSON 战场文档模型（`scripts/editor/battlefield_doc.gd`）
+
+```
+{ id, name, description, hosting: bool,
+  width, height, rows: PackedStringArray,      # 字符画，legend 字符 → 地形
+  units: [{ class, name, level, x, y, faction }] }
+```
+- `generate(seed)`：确定性生成（水域/山脊/森林/村庄/要塞布局）。
+- `to_json_dict()` 输出与 `data/battlefields/*.json` 完全一致的 JSON；`save_model()` 保存即回读校验；`quick_validate()` 轻校验（完整校验在 BattlefieldLoader）。
 
 ### 战斗运行时状态（battle.gd）
 - `GridSystem`（实例）：地形矩阵 + 移动范围 / 可达性。
 - `TurnManager`（实例）：回合调度。
 - 状态机 `Mode`：`IDLE | UNIT_SELECTED | MOVING | MENU | ENEMY_TURN | ANIMATING`。
-- `_unit_sprites: { unitId -> UnitSprite3D }`、`current_move_range`、`current_attack_tiles`、`cursor_pos`、`_pending_move_undo`。
+- `_unit_sprites`、`current_move_range`、`current_attack_tiles`、`cursor_pos`、`_pending_move_undo`。
 - `TurnDirector`：敌方 AI 回合 + 玩家托管编排 + 偏好数据（`key=unitId → {priorityTargetId, strategy}`）。
+
+### 战场地形高度规则（`battlefield_renderer.gd`）
+
+渲染为等距方块柱：`water → h1`；`plain/grass/sand/snow/rocky/forest/village → h2`；`fort → h3`；`wall → h4`；`mountain → h5`。贴图取自 `config/ecology/world/base.json` 的 materials。
 
 ## 用户偏好持久化（`Settings` autoload）
 
@@ -109,6 +136,7 @@ inline_mode=true   ; true=就地(B1) / false=独立场景(B2)
 ## 缓存 / 流式状态边界
 
 - `CommunityStateStore`：群落状态**有界缓存**，完成的与空的领地计划共享，避免流式单格更新重复搜索。
-- `terrain_material_registry`（`scripts/world/terrain_material_registry.gd`）：地形材质注册（避免重复创建）。
+- `terrain_material_registry`（`scripts/world/terrain_material_registry.gd`）：地形材质注册（避免重复创建）。注意 `set_texture_processor(raw_texture, texture_path)` **必须两参都传**，漏第二参整批贴图全 null 崩溃（HANDOFF 坑）。
 - `noise_registry`（`scripts/world/noise_registry.gd`）：命名噪声场缓存。
 - 鸟渲染器（`scripts/ecology/ambient_renderers/bird_renderer.gd`）：viewport 生命周期内的飞越，自带清理。
+- `BattlefieldLoader` 扫描缓存：`res://data/battlefields/` + `user://battlefields/`，res 优先、同名跳过。

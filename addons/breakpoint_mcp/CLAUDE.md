@@ -2,7 +2,7 @@
 
 ## 模块简单介绍
 
-`addons/breakpoint_mcp` 是一个 **vendored 第三方 Godot 编辑器插件**（作者 James Livingston，`plugin.cfg` v1.9.1，MIT）。它在启用时启动一个 **loopback TCP/JSON 桥**（`127.0.0.1:9080` 编辑器 / `9081` 运行时），把"活的 Godot 编辑器"和"正在运行的游戏"暴露给一个 MCP host，使外部 AI 助手能驱动引擎：场景/节点/资源 CRUD（全部带 undo/redo）、项目设置、ClassDB 查询、文档搜索、编辑器+游戏内截图，以及运行时桥（实时 SceneTree、属性读写、方法调用、信号、输入注入、Performance 监视器）。
+`addons/breakpoint_mcp` 是一个 **vendored 第三方 Godot 编辑器插件**（作者 James Livingston，`plugin.cfg` v1.23.0，MIT）。它在启用时启动一个 **loopback TCP/JSON 桥**（`127.0.0.1:9080` 编辑器 / `9081` 运行时），把"活的 Godot 编辑器"和"正在运行的游戏"暴露给一个 MCP host，使外部 AI 助手能驱动引擎：场景/节点/资源 CRUD（全部带 undo/redo）、项目设置、ClassDB 查询、文档搜索、编辑器+游戏内截图，以及运行时桥（实时 SceneTree、属性读写、方法调用、信号、输入注入、Performance 监视器）。
 
 技术栈：`@tool` EditorPlugin + `TCPServer`（`_process` 轮询，newline-delimited JSON）+ 自写 Variant⇄JSON 编解码 + 每项目密钥握手认证。要求 Godot 4.2+（4.4+ 推荐）。本项目（Godot 4.7）已在 `project.godot [editor_plugins]` **启用**。
 

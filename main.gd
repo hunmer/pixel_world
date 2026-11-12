@@ -3449,6 +3449,8 @@ func _setup_hud() -> void:
 	_hud.battlefield_picked.connect(_on_battlefield_picked)
 	_hud.editor_requested.connect(_open_map_editor)
 	add_child(_hud)
+	# 侧栏独占窗口右侧一列：3D 视锥让出该宽度，舞台不延伸到面板下方。
+	_cam.reserved_right_px = GameHudScript.SIDE_PANEL_WIDTH
 
 
 func _setup_world_map() -> void:
@@ -3966,7 +3968,12 @@ func _handle_battle_input(event: InputEvent) -> bool:
 func _battle_camera_focus() -> Vector2:
 	if _battle_cam_offset.is_zero_approx() or not is_instance_valid(_cam):
 		return _battle_focus_world_pos
-	var viewport_center := get_viewport_rect().size * 0.5
+	# 3D 舞台已让出右侧侧栏列；B1 视觉中心 = 舞台中心，不是窗口中心。
+	var viewport_size := get_viewport_rect().size
+	var viewport_center := Vector2(
+		(viewport_size.x - GameHudScript.SIDE_PANEL_WIDTH) * 0.5,
+		viewport_size.y * 0.5
+	)
 	var level := _player_current_stand_level()
 	var from: Variant = IsoProjection.screen_to_world(_cam, viewport_center, level)
 	var to: Variant = IsoProjection.screen_to_world(_cam, viewport_center + _battle_cam_offset, level)
@@ -4028,6 +4035,9 @@ func _update_battle_edge_pan(delta: float) -> void:
 	if mouse.x < 0 or mouse.y < 0 or mouse.x > size.x or mouse.y > size.y:
 		return
 	if _is_battle_mouse_over_ui(mouse):
+		return
+	# 鼠标悬在右侧侧栏列上（HUD 面板，不属于 battle_ui）→ 不滚屏。
+	if mouse.x > size.x - GameHudScript.SIDE_PANEL_WIDTH:
 		return
 	var dir := Vector2.ZERO
 	if mouse.x < _BATTLE_EDGE_PAN_MARGIN:

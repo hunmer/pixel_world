@@ -41,3 +41,4 @@
 - @rules/mcp-debugging.md — MCP 调试流程 / 断点 / 已知坑
 - @rules/image-viewing.md — 图片查看；@rules/autoplay-hosting.md — 托管自动战斗
 - @rules/skill-item-system.md — 技能 / 物品 / MP / 冷却
+- 本地godot文档大全 - F:\godot-docs-html-stable

@@ -1,25 +1,34 @@
 # 对外接口
 
-> 本项目是**单机游戏**，不暴露 REST API / WebSocket / SDK / CLI 给外部进程。本文件列出"接口"的两种现实形态：**玩家输入映射** 与 **跨场景 / 跨模块的代码契约**。
+> 本项目是**单机游戏**，不暴露 REST API / WebSocket / SDK / CLI 给外部进程。本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**调试通道**。
 
-## 玩家输入映射（`project.godot [input]` + `main.gd._unhandled_input`）
+## 玩家输入映射（`project.godot [input]` + `main.gd._unhandled_input` @ 3503）
 
 ### 世界探索（main.gd）
 
 | 操作 | 动作 | 实现位置 |
 | --- | --- | --- |
-| `WASD` / 方向键 | 沿等距网格移动 | `_input_dir` → `_try_move` |
+| `WASD` / 方向键 | 沿等距网格移动（←→ 已被旋转占用，移动用 WASD） | `_input_dir` → `_try_move` |
 | `Shift` | 加速（`fast_multiplier=3.0`） | `_try_move` |
-| 鼠标滚轮 / `+` / `-` | 缩放（`ZOOM_LEVELS=[0.5,1,2,3,4]`） | `_zoom_step` |
+| 鼠标滚轮 / `+` / `-` | 缩放（zoom 0.5–4） | `_zoom_step` |
+| `F` | 复位缩放到默认档 | `_unhandled_input` |
+| `Z` / `Q` / `←` | 视角逆时针旋转 90° | `_cam.rotate_step(-1)` |
+| `X` / `→` / `E`(战斗中) | 视角顺时针旋转 90° | `_cam.rotate_step(1)` |
+| 中键拖拽 | 平滑旋转视角（像素差 → 角度） | `_view_dragging` → `_cam.drag_by` |
+| `R` | **复位视角旋转**（不再是重新生成！） | `_cam.reset_rotation()` |
+| `Ctrl+R` | 重新生成世界（新种子） | `_regenerate(0)` |
 | `M` | 开关大地图 | `_toggle_world_map` |
-| `T` / `Shift+T` | 切换天气 / 恢复自动天气 | `_unhandled_input` → weather_system |
+| `T` / `Shift+T` | 切换天气 / 恢复自动天气 | → weather_system |
 | `N` / `Shift+N` | 切换昼夜 / 恢复自动昼夜 | → day_night_system |
 | `B` | 切换景深 | → depth_of_field_system |
-| `F` | 重置相机 | `_setup_camera` 相关 |
-| `R` | 重新生成世界（新种子） | `_regenerate` |
 | `P` | 进入战斗（B1/B2 由设置决定） | `_enter_battle` |
+| `O`（非战斗时） | 打开 JSON 战场列表面板 | HUD `toggle_battlefield_panel` |
+| `E`（非战斗时） | 打开战场地图编辑器 | `_open_map_editor` |
+| `~` | 呼出 Panku 调试控制台（REPL） | autoload `Panku` |
 
-### 战斗（battle.gd，`project.godot [input]` 定义的命名动作）
+> 视角只支持 4 个正交角度（0/90/180/270，`isometric_view.gd SUPPORTED_ANGLES`）——素材逐角度验收仅通过四视角，其余角度会出现地形拼缝。
+
+### 战斗（battle.gd + project.godot [input]）
 
 | 输入动作 | 默认键 | 用途 |
 | --- | --- | --- |
@@ -27,80 +36,93 @@
 | `cancel` | Esc | 取消移动 / 返回 |
 | `end_turn` | E | 结束回合 |
 
-battle.gd 另在 `_unhandled_input` 处理鼠标选格、键盘方向移动光标。
+battle.gd 另处理鼠标选格、键盘移动光标。B1 相机由 main.gd 处理：中键或 `Space`+左键拖拽平移、边缘滚屏、滚轮缩放（编辑器画布还支持右键拖拽平移）。
 
 ## 跨场景代码契约
 
-### `SceneArgs`（autoload 单例）— 唯一的跨场景传参通道
-
-Godot `change_scene_to_file` 不带参，故用全局单例暂存。`battle.gd._ready` 读取 `SceneArgs.battle_args`：
+### `SceneArgs`（autoload）— 唯一的跨场景传参通道
 
 ```gdscript
 SceneArgs.battle_args = {
-    "chapter": <Dictionary>,     # 必填，WorldToChapter 产物
-    "return_to": "res://main.tscn",  # 可选，B2 结束后回到哪
-    "world": <main.gd 实例>       # 仅 B1 注入；存在则 _b1_mode=true
+    "chapter": <Dictionary>,          # 必填：world_to_chapter 或 battlefield_loader 产物（同构）
+    "return_to": "res://main.tscn",   # 可选，B2 结束后回到哪
+    "world": <main.gd 实例>           # 仅 B1 注入；存在则 _b1_mode=true
 }
 ```
 
-### `Settings`（autoload 单例）— 用户偏好
+### `Settings`（autoload）— 用户偏好
 
 | 成员 | 类型 | 默认 | 含义 |
 | --- | --- | --- | --- |
 | `battle_inline_mode` | bool | true | true=就地战斗(B1) / false=独立场景(B2) |
-| `set_battle_inline_mode(v)` | 方法 | — | 设置并持久化到 `user://settings.cfg` |
-| `save()` | 方法 | — | 写 ConfigFile |
+| `set_battle_inline_mode(v)` / `save()` | 方法 | — | 持久化到 `user://settings.cfg` |
 
 ## 世界 → 战棋适配契约（`scripts/core/world_to_chapter.gd`）
-
-纯静态函数，是两个子系统的边界：
 
 | 函数 | 输入 | 输出 | 说明 |
 | --- | --- | --- | --- |
 | `world_to_chapter(sampler, player_cell, radius, seed)` | TerrainSampler + 玩家格 + 半径 + 种子 | `chapter` Dictionary | 主入口：生成 21×21 战场 |
-| `cell_context_to_terrain(ctx)` | CellContext | StringName | CellContext → 战棋地形（当前只映射 `water`/`mountain`/`plain`） |
-| `_find_nearest_land(...)` | — | 格 | 玩家在水面时找最近陆地作战场中心 |
-| `_is_standable(...)` / `_find_standable_near(...)` | — | 格 | 单位只放 walkable 格 |
+| `cell_context_to_terrain(ctx)` | CellContext | StringName | CellContext → 战棋地形 |
+| `_find_standable_near(...)` | — | 格 | 单位只放 walkable 格 |
 
-`chapter` Dictionary 结构（战棋侧消费）：
-```
+`chapter` Dictionary 结构：`{ id?, name?, width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin?, hosting? }`。
+
+## JSON 战场加载契约（`scripts/core/battlefield_loader.gd`）★ loader 是唯一权威校验点
+
+| 接口 | 说明 |
+| --- | --- |
+| `BattlefieldLoader.list_battlefields()` | 扫描 `res://data/battlefields/*.json` + `user://battlefields/*.json`（res 优先、同名跳过）；坏 JSON 条目带 error 返回（HUD 置灰显示） |
+| `BattlefieldLoader.load_battlefield(path)` | JSON → chapter（与 world_to_chapter 同构）；校验：地形名合法 / 行宽一致 / 职业合法 / 坐标界内 / standable / 单位不重叠 / 双阵营各≥1 |
+| `DEFAULT_LEGEND` | 图例字符 → 地形名默认映射（编辑器 `BattlefieldDoc` 与之一致） |
+
+**战场 JSON 顶层 schema**（`rows` 是**顶层字段，不嵌在 terrain 下**）：
+
+```json
 {
-  width, height,          # 战场尺寸（半径 10 → 21×21）
-  map: StringName[height][width],  # 地形矩阵
-  playerUnits: [...], enemyUnits: [...],  # Unit dict 数组
-  world_origin: Vector2i,  # B1 用：战场(0,0) 对应的世界 cell
-  blockTitles: [...]       # 地形标题（可选，B1 走 fallback 色块）
+  "id": "arena_1v1", "name": "竞技场单挑", "description": "...",
+  "rows": ["....", ".@@.", "...."],
+  "legend": { "@": "water", "#": "mountain", "T": "forest", "F": "fort", "V": "village", "W": "wall", "g": "grass", "s": "sand", "S": "snow", "r": "rocky" },
+  "playerUnits": [{ "class": "swordsman", "name": "剑士", "level": 1, "x": 2, "y": 1 }],
+  "enemyUnits":  [ ... ],
+  "hosting": true
 }
 ```
 
-## 战棋内部对外暴露的静态接口（被 battle.gd 调用）
+地形共 **11 种**：`plain, grass, sand, snow, rocky, forest, water, village, fort, wall, mountain`（`core/terrain.gd`）。
+
+## 战场编辑器契约（`scripts/editor/`）
+
+| 组件 | 主要接口 |
+| --- | --- |
+| `BattlefieldDoc`（battlefield_doc.gd） | 模型 `{ id, name, description, hosting, width, height, rows, units:[{class,name,level,x,y,faction}] }`；`generate(seed)`（确定性：水域/山脊/森林/村庄/要塞）、`resize()`、`to_json_dict()`、`load_path()`、`save_model()`（保存即回读校验）、`quick_validate()` |
+| `EditorCanvas`（editor_canvas.gd） | 内嵌 `BattlefieldRenderer` 渲染；左键按下/拖动发 `cell` 信号（多高度拾取）；右键或 Space+左键平移、滚轮缩放；已放单位显示职业头像+阵营色环+等级徽标 |
+| `map_editor.gd`（场景） | 四工具：画笔/填充/橡皮/角色放置；种子输入+🎲随机+🌱生成；侧栏分组折叠 + at-icons 图标 |
+| `TilePreview`（tile_preview.gd) | 地形调色板缩略图（真实 ColumnBatch 等距方块柱渲染，4 列 GridContainer） |
+
+## 战棋内部静态接口（被 battle.gd 调用）
 
 | 脚本 | 形态 | 主要对外接口 |
 | --- | --- | --- |
-| `core/professions.gd` | `class_name ProfessionData` | `load_data()` / `apply_profession()` |
-| `core/skills.gd` | 静态 | `load_data()` / 技能结算查表 |
-| `core/items.gd` | 静态 | `load_data()` |
+| `core/professions.gd` | `class_name ProfessionData` | `load_data()` / `apply_profession()` / `has_profession()` |
+| `core/skills.gd` / `items.gd` | 静态 | `load_data()` / 查表结算 |
 | `core/weapons.gd` | `class_name WeaponData` | 武器三角 / 经验公式 |
-| `core/terrain.gd` | `class_name TerrainData` | 地形 def/avoid/move_cost/walkable 查表 |
+| `core/terrain.gd` | `class_name TerrainData` | 地形 def/avoid/move_cost/walkable 查表（11 地形） |
 | `core/unit.gd` | 静态 | UnitData 构造 + 默认成长率 |
-| `systems/combat_system.gd` | 全静态 | 战斗结算（伤害/命中/暴击/死亡/经验） |
-| `systems/skill_system.gd` | 全静态 | 技能结算 |
-| `systems/item_system.gd` | 全静态 | 物品结算 |
-| `systems/buff_system.gd` | 全静态零依赖 | buff/属性修正 |
+| `systems/combat_system.gd` 等五个 | 全静态 | 战斗/技能/物品/buff 结算 |
 | `systems/grid_system.gd` | 实例 | `GridSystem.new(w,h,map)`；移动范围/可达性 |
 | `systems/turn_manager.gd` | 实例 | 回合调度 |
-| `systems/enemy_ai.gd` / `player_ai.gd` | 静态/实例 | AI 决策 |
-
-> 上述接口的精确签名需查各文件源码（本索引未逐行展开）。
 
 ## 信号（signal）
 
 | 发出方 | 信号 | 监听方 | 用途 |
 | --- | --- | --- | --- |
-| `battle.gd` | `battle_finished(result: StringName)` | `main.gd._exit_battle`（B1） | 通知战斗结束，触发恢复 |
+| `battle.gd` | `battle_finished(result: StringName)` | `main.gd._exit_battle`（B1） | 战斗结束，触发恢复 |
+| `world_map_overlay.gd` | `open_state_changed(is_open: bool)` | main.gd | 大地图开合 |
+| `game_hud.gd`（BattlefieldPanel） | `battlefield_picked(path)` | `main.gd._on_battlefield_picked` | O 列表点选战场 |
 | `weather_system.gd` | water impact 相关 | `main.gd._on_weather_water_impact` | 雨滴击水反馈 |
-| 各表现层系统 | （内部） | main.gd 装配时 connect | 系统 ↔ 主场景联动 |
+| `editor_canvas.gd` | `cell`（左键/拖动） | `map_editor.gd` | 画笔/填充/橡皮/放置工具解释 |
 
 ## 给 AI / 调试进程的接口（非游戏内）
 
-`addons/breakpoint_mcp` 在 `127.0.0.1:9080` 暴露 **loopback newline-delimited JSON** 协议，方法名 1:1 对应 `editor_*` / `scene_*` / `node_*` 工具。详见该插件独立 `CLAUDE.md` 与 `addons/breakpoint_mcp/README.md`。**这是唯一的进程间对外接口**，仅供本地调试 host 使用，绑定 loopback。
+- **`addons/breakpoint_mcp`**：`127.0.0.1:9080`（编辑器）/ **9081**（运行时）loopback newline-delimited JSON，方法名 1:1 对应 `editor_*` / `scene_*` / `node_*` / `dbg_*` / `runtime_*` 工具。经 MCP 按会话激活后调用（见 `AGENTS.md` 与 `rules/godot-tools-map.md`，298 个工具地图）。
+- **`addons/panku_console`**：游戏内 `~` REPL；项目命令集 `scripts/debug_console_commands.gd` 注册为 `dbg.*`（`help / list_battlefields / battlefield(id) / editor / enter_battle / battle_mode / player / time_scale`）。新命令 = 对象公共方法 + `_HELP_方法名` 常量；新对象用 `Panku.gd_exprenv.register_env(name, obj)` 注册。autoload 单例与场景根 `current` 自动可用。
