@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "sun_azimuth_degrees": 32.0,
+  "day_energy": 0.75,
+  "day_ambient_energy": 0.55,
+  "night_ambient_energy": 0.38,
+  "day_color": "#fff0d1",
+  "twilight_color": "#ff8c47",
+  "day_ambient_color": "#ebf5ff",
+  "night_ambient_color": "#7a94c7",
+  "shadow_max_distance": 72.0,
+  "shadow_bias": 0.03,
+  "shadow_normal_bias": 0.45,
+  "shadow_opacity": 1.0
+}

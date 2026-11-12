@@ -18,6 +18,18 @@ func _expect(condition: bool, message: String) -> void:
 		assert(condition, message)
 
 
+## x=DirectionalLight3D 数量，y=WorldEnvironment 数量；递归覆盖场景内真实节点。
+func _lighting_counts(node: Node) -> Vector2i:
+	var counts := Vector2i.ZERO
+	if node is DirectionalLight3D:
+		counts.x += 1
+	if node is WorldEnvironment:
+		counts.y += 1
+	for child in node.get_children():
+		counts += _lighting_counts(child)
+	return counts
+
+
 func _run() -> void:
 	var world = load("res://main.tscn").instantiate()
 	world.seed = 42
@@ -32,6 +44,9 @@ func _run() -> void:
 	_expect(world._cam is Camera3D and world._cam.current, "B1 未复用主世界 Camera3D")
 	var battle = world._battle_system
 	_expect(battle._b1_mode and battle.renderer == null, "B1 错误创建了 B2 地形")
+	_expect(battle._sunlight == null, "B1 不应重复创建战斗太阳")
+	_expect(_lighting_counts(world) == Vector2i(1, 1), "B1 主世界应有且只有一组太阳与环境节点")
+	_expect(_lighting_counts(battle) == Vector2i.ZERO, "B1 战斗节点不应持有额外灯光或环境")
 	_expect(not battle._unit_sprites.is_empty(), "B1 没有战棋单位")
 	for sprite in battle._unit_sprites.values():
 		_expect(sprite is Node3D, "B1 单位不是 Node3D")
@@ -85,6 +100,15 @@ func _run() -> void:
 	_expect(not b2._b1_mode, "B2 被误判为 B1")
 	_expect(b2.board.camera is Camera3D and b2.board.camera.current, "B2 未启用 Camera3D")
 	_expect(b2.renderer._terrain_3d != null, "B2 未创建共享真实 3D 地形")
+	_expect(b2._sunlight != null, "B2 未创建静态白昼 SunlightSystem")
+	_expect(_lighting_counts(b2) == Vector2i(1, 1), "B2 应有且只有一个方向光和一个环境节点")
+	var b2_sun: DirectionalLight3D = b2._sunlight.sun
+	_expect(b2_sun != null and b2_sun.light_energy > 0.0, "B2 静态白昼没有有效直射光")
+	_expect(b2_sun.global_basis.z.y > 0.0, "B2 太阳位于地平线以下")
+	_expect(b2_sun.shadow_enabled, "B2 地形太阳未启用真实阴影")
+	var b2_environment: Environment = b2._sunlight.world_environment.environment
+	_expect(b2_environment != null and b2_environment.ambient_light_energy > 0.0, "B2 缺少有效环境光")
+	_expect(b2._sunlight._clock == null, "B2 静态白昼不应绑定主世界时钟")
 	_expect(not b2._unit_sprites.is_empty(), "B2 没有战棋单位")
 	var first_unit: Dictionary = b2.grid.units.values()[0]
 	var first_sprite: Node3D = b2._unit_sprites[first_unit.id]

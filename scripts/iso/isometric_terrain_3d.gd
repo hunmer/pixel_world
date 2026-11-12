@@ -198,6 +198,7 @@ func _ensure_ripple_renderer() -> void:
 	_ripple_instance = MultiMeshInstance3D.new()
 	_ripple_instance.name = "WaterRipples"
 	_ripple_instance.multimesh = multimesh
+	_ripple_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_ripple_instance.visible = false
 	add_child(_ripple_instance)
 
@@ -284,6 +285,7 @@ func _append_block(groups: Dictionary, cell: Vector2i, block: Dictionary) -> voi
 			"normals": [],
 			"uvs": [],
 			"colors": [],
+			"transparent": transparent,
 			"material": _mesh_material(atlas, transparent),
 		}
 	var group: Dictionary = groups[key]
@@ -356,6 +358,11 @@ func _commit_mesh_group(chunk: Node3D, group: Dictionary) -> void:
 	mesh.surface_set_material(0, group["material"])
 	var instance := MeshInstance3D.new()
 	instance.mesh = mesh
+	instance.cast_shadow = (
+		GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if bool(group["transparent"])
+		else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	)
 	chunk.add_child(instance)
 
 
@@ -377,6 +384,7 @@ func _commit_prop_group(chunk: Node3D, group: Dictionary) -> void:
 		multimesh.set_instance_color(index, group["colors"][index])
 	var instance := MultiMeshInstance3D.new()
 	instance.multimesh = multimesh
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	chunk.add_child(instance)
 
 
@@ -387,8 +395,9 @@ func _add_quad(
 	texture: Texture2D,
 	tint: Color
 ) -> void:
-	var normal := ((points[1] as Vector3) - (points[0] as Vector3)).cross(
-		(points[2] as Vector3) - (points[0] as Vector3)
+	# Godot 正面采用顺时针 winding；交叉积取反才是柱体朝外的光照法线。
+	var normal := ((points[2] as Vector3) - (points[0] as Vector3)).cross(
+		(points[1] as Vector3) - (points[0] as Vector3)
 	).normalized()
 	for index in [0, 1, 2, 0, 2, 3]:
 		(group["vertices"] as Array).append(points[index])
@@ -434,7 +443,14 @@ func _mesh_material(atlas: Texture2D, transparent: bool) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_texture = atlas
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# 只有不透明实心柱参与真实日照；水面继续无光照，避免透明叠面出现黑斑。
+	material.shading_mode = (
+		BaseMaterial3D.SHADING_MODE_UNSHADED
+		if transparent
+		else BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	)
+	material.metallic_specular = 0.0
+	material.roughness = 1.0
 	material.vertex_color_use_as_albedo = true
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	if transparent:

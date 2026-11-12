@@ -17,6 +17,7 @@ const WanderingAnimalScript = preload("res://scripts/wandering_animal.gd")
 const IsometricDepthSort = preload("res://scripts/isometric_depth_sort.gd")
 const WeatherSystemScript = preload("res://scripts/weather_system.gd")
 const DayNightSystemScript = preload("res://scripts/day_night_system.gd")
+const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
 const WorldAudioSystemScript = preload("res://scripts/world_audio_system.gd")
 const DepthOfFieldSystemScript = preload("res://scripts/depth_of_field_system.gd")
 const GameHudScript = preload("res://scripts/game_hud.gd")
@@ -184,6 +185,7 @@ var _hud
 var _world_map
 var _weather
 var _day_night
+var _sunlight
 var _ambient_registry
 ## 兼容现有调试/契约读取；实际实例由 AmbientRegistry 按配置创建。
 var _fireflies
@@ -3593,6 +3595,10 @@ func _setup_day_night() -> void:
 	_day_night = DayNightSystemScript.new()
 	_day_night.name = "DayNightSystem"
 	add_child(_day_night)
+	_sunlight = SunlightSystemScript.new()
+	_sunlight.name = "SunlightSystem"
+	add_child(_sunlight)
+	_sunlight.bind(_day_night)
 	var args := OS.get_cmdline_user_args()
 	var time_arg := args.find("--time")
 	if time_arg == -1 or time_arg + 1 >= args.size():

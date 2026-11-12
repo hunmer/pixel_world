@@ -13,6 +13,7 @@ extends Node2D
 
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
+const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
 
 var grid: GridSystem
 var turn: TurnManager
@@ -33,6 +34,8 @@ signal battle_finished(result: StringName)
 var board: IsoBoard
 ## B2 等距方块地形层（复用世界渲染管线：ColumnBatch + TerrainMaterialRegistry）
 var renderer: Node2D = null
+## 仅独立 B2 创建静态白昼；B1 复用主世界的昼夜太阳。
+var _sunlight: Node3D = null
 var _unit_sprites: Dictionary = {}  # unitId -> UnitSprite3D
 # 范围/光标可视化层（地形回退铺底 + 移动/攻击范围菱形墙 + 光标金色呼吸墙）
 var range_overlay: RangeOverlay = null
@@ -110,6 +113,11 @@ func _ready() -> void:
 
 ## B2 切场景模式渲染初始化：等距方块地形（像素版 Minecraft 风格，复用世界渲染管线）
 func _setup_b2_render() -> void:
+	# 独立场景没有 main.gd 的昼夜系统，固定为可读的正午真实日照。
+	_sunlight = SunlightSystemScript.new()
+	_sunlight.name = "BattleSunlight"
+	add_child(_sunlight)
+	_sunlight.apply_time(0.5, 0.0)
 	board = IsoBoard.new()
 	board.name = "Board"
 	add_child(board)
