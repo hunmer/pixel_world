@@ -29,6 +29,7 @@ const EditorCanvasScript = preload("res://scripts/editor/editor_canvas.gd")
 const TilePreviewScript = preload("res://scripts/editor/tile_preview.gd")
 const ProfessionDataScript = preload("res://scripts/core/professions.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
+const HintBarScript = preload("res://scripts/hint_bar.gd")
 
 const Tool = { PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5 }
 const TAB_BLOCK := 3
@@ -124,6 +125,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			if get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			_back_to_world()
+		elif not ctrl and (key.keycode == KEY_Q or key.keycode == KEY_Z):
+			# 视角旋转 ±90°（Q/Z 左转；E/X 右转；R 复位）——与世界/战棋肌肉记忆一致
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			_canvas.rotate_view(-1)
+		elif not ctrl and (key.keycode == KEY_E or key.keycode == KEY_X):
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			_canvas.rotate_view(1)
+		elif not ctrl and key.keycode == KEY_R:
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			_canvas.reset_view()
 
 
 # ============================================================
@@ -158,11 +172,15 @@ func _build_ui() -> void:
 	_canvas.cell_dragged.connect(_on_cell_dragged)
 	_canvas.hover_changed.connect(_on_hover_changed)
 	_canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# 3D 取景让出右侧栏宽度（同世界 reserved_right_px），画布内容对齐舞台中心
+	_canvas.sidebar_reserved_px = SIDEBAR_WIDTH
 	holder.add_child(_canvas)
 
 	# ---- 左上角垂直工具条（悬浮在画布上，取代旧「工具」Tab） ----
 	holder.add_child(_build_tool_bar())
 	holder.add_child(_build_cell_info())
+	# ---- 底部操作提示条（复用 hint_bar.gd 组件，与世界 HUD 同一套 keycap 提示） ----
+	holder.add_child(_build_hint_bar())
 
 	# ---- 右侧面板：标题 / 5 个 Tab / 状态栏（固定宽，不吃画布空间） ----
 	var side := PanelContainer.new()
@@ -395,6 +413,31 @@ func _build_cell_info() -> Control:
 	_cell_info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(_cell_info_label)
 	return panel
+
+
+## 底部右侧操作提示条：快捷键/鼠标操作 keycap（复用 hint_bar.gd，同 game_hud）。
+## 锚定右下角、向左/向上生长（HFlow 过窄自动换行）；横向避开左下 CellInfoPanel
+## （其右缘固定 250px，最窄 1024 视口下画布宽约 680，提示条左缘 ≥268 不重叠）。
+func _build_hint_bar() -> Control:
+	var bar := HintBarScript.new()
+	bar.name = "EditorHintBar"
+	bar.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	bar.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	bar.custom_minimum_size = Vector2(360.0, 30.0)
+	bar.offset_left = -412.0
+	bar.offset_top = -86.0
+	bar.offset_right = -12.0
+	bar.offset_bottom = -10.0
+	bar.set_title("操作")
+	bar.add_hint("左键", "使用工具")
+	bar.add_hint("SPACE+左键 / 右键拖", "平移")
+	bar.add_hint("滚轮 / 双指捏合", "缩放")
+	bar.add_hint("Q E / Z X", "转向 90°")
+	bar.add_hint("R", "视角复位")
+	bar.add_hint("CTRL+Z / Y", "撤销 / 重做")
+	bar.add_hint("ESC", "返回世界")
+	return bar
 
 
 ## Tab【地形】：地形 / 植物 分组调色板。

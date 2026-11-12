@@ -223,11 +223,11 @@ func _run() -> void:
 		"左下格信息显示坐标/中文地形/z（实际 %s）" % editor._cell_info_label.text)
 	var selected_polygon: PackedVector2Array = editor._canvas._selection_marker.polygon
 	_expect(editor._canvas._selection_marker.visible
-		and selected_polygon == editor._canvas._renderer.top_polygon_for(1, 1),
-		"选择高亮与真实顶面多边形一致")
+		and selected_polygon == editor._canvas._poly_to_local(
+			editor._canvas._renderer.top_polygon_for(1, 1)),
+		"选择高亮与真实顶面多边形一致（画布局部坐标）")
 	var selected_top: Vector2 = editor._canvas._renderer.top_center_for(1, 1)
-	var selected_canvas_point: Vector2 = editor._canvas.get_global_transform().affine_inverse() * (
-		editor._canvas._renderer.get_global_transform() * selected_top)
+	var selected_canvas_point: Vector2 = editor._canvas._screen_to_local(selected_top)
 	editor._canvas._refresh_hover(selected_canvas_point)
 	_expect(editor._canvas.hover_cell == select_cell, "高度修改前 hover 停在所选格")
 
@@ -238,15 +238,19 @@ func _run() -> void:
 		"SpinBox 只改所选格 z=6，不动其他格")
 	_expect(editor._canvas._renderer.cell_z(select_cell) == 6,
 		"改 z 同步渲染器布局深拷贝，不停留在模型")
-	var selected_blocks: Array = (editor._canvas._renderer._columns[select_cell] as Node)._blocks
+	var column: Variant = editor._canvas._renderer._columns[select_cell]
+	var selected_blocks: Array = column["_blocks"] if column is Dictionary else column._blocks
 	_expect(selected_blocks.size() == 1 and int(selected_blocks[0].level) == 6,
 		"改 z 后实际重建的单块 level=6")
-	_expect(editor._canvas._renderer.top_center_for(1, 1) == selected_top + Vector2(0, -60),
-		"改 z 后真实顶面向上移动 6×10px")
-	_expect(editor._canvas._selection_marker.polygon == editor._canvas._renderer.top_polygon_for(1, 1),
+	var raised_top: Vector2 = editor._canvas._renderer.top_center_for(1, 1)
+	_expect(raised_top.y < selected_top.y and selected_top.y - raised_top.y > 30.0,
+		"改 z 后真实顶面向上移动（6 层显著）")
+	_expect(editor._canvas._selection_marker.polygon == editor._canvas._poly_to_local(
+			editor._canvas._renderer.top_polygon_for(1, 1)),
 		"改 z 后选择高亮同步到新顶面")
 	_expect(editor._canvas.hover_cell == select_cell
-		and editor._canvas._hover_marker.polygon == editor._canvas._renderer.top_polygon_for(1, 1),
+		and editor._canvas._hover_marker.polygon == editor._canvas._poly_to_local(
+			editor._canvas._renderer.top_polygon_for(1, 1)),
 		"鼠标不动时 hover 仍随单格 z 重建刷新")
 	editor._seal_pending()
 	var height_cursor: int = editor._history_cursor
@@ -264,24 +268,28 @@ func _run() -> void:
 	editor._jump_history(height_cursor)
 	_expect(BattlefieldDocScript.cell_z(editor.model, select_cell) == 6, "历史跳转恢复高度后状态")
 
-	# 直接以 renderer 顶面中心反变换到 canvas 局部坐标，验证缩放/平移不破坏命中。
+	# 3D 相机拾取：以 renderer 顶面中心（视口坐标）反推画布局部坐标，
+	# 验证缩放（相机 zoom 档位）/平移（board.pan）/旋转后命中不受影响。
 	var pick_cell := Vector2i(2, 3)
-	var renderer_point: Vector2 = editor._canvas._renderer.top_center_for(pick_cell.x, pick_cell.y)
-	var canvas_point: Vector2 = editor._canvas.get_global_transform().affine_inverse() * (
-		editor._canvas._renderer.get_global_transform() * renderer_point)
+	var canvas_point: Vector2 = editor._canvas._screen_to_local(
+		editor._canvas._renderer.top_center_for(pick_cell.x, pick_cell.y))
 	_expect(editor._canvas._pick(canvas_point) == pick_cell, "默认缩放顶面中心命中")
-	editor._canvas._zoom_at(Vector2(120, 100), editor._canvas.ZOOM_STEP)
-	canvas_point = editor._canvas.get_global_transform().affine_inverse() * (
-		editor._canvas._renderer.get_global_transform() * renderer_point)
+	editor._canvas._zoom_wheel(editor._canvas.WHEEL_ZOOM_IN, Vector2(120, 100))
+	canvas_point = editor._canvas._screen_to_local(
+		editor._canvas._renderer.top_center_for(pick_cell.x, pick_cell.y))
 	_expect(editor._canvas._pick(canvas_point) == pick_cell, "缩放后顶面中心仍命中同格")
-	editor._canvas._world.position += Vector2(37, -19)
-	canvas_point = editor._canvas.get_global_transform().affine_inverse() * (
-		editor._canvas._renderer.get_global_transform() * renderer_point)
+	editor._canvas._board.pan(-37.0, 19.0)
+	canvas_point = editor._canvas._screen_to_local(
+		editor._canvas._renderer.top_center_for(pick_cell.x, pick_cell.y))
 	_expect(editor._canvas._pick(canvas_point) == pick_cell, "平移后顶面中心仍命中同格")
+	editor._canvas.rotate_view(1)
 	editor._canvas._refresh_hover(canvas_point)
 	_expect(editor._canvas.hover_cell == pick_cell
-		and editor._canvas._hover_marker.polygon == editor._canvas._renderer.top_polygon_for(pick_cell.x, pick_cell.y),
-		"平移缩放后 hover 与真实顶面高光同步")
+		and editor._canvas._hover_marker.polygon == editor._canvas._poly_to_local(
+			editor._canvas._renderer.top_polygon_for(pick_cell.x, pick_cell.y)),
+		"平移缩放旋转后 hover 与真实顶面高光同步")
+	editor._canvas.rotate_view(-1)
+	editor._canvas.reset_view()
 
 	var selected_before_paint: Vector2i = editor._canvas.selected_cell
 	tabs.current_tab = 2

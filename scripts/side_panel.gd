@@ -14,6 +14,8 @@ const ACCENT := Color(0.40, 0.86, 0.76)
 
 var _tabs: TabContainer
 var _log_label: RichTextLabel
+var _pending_log_bbcode := ""
+var _log_update_pending := false
 
 ## PankuModuleNativeLogger 实例（duck-typed；Panku 不在时保持 null）
 var _logger_module = null
@@ -79,8 +81,9 @@ func _build_tabs() -> void:
 	_log_label.scroll_following = true
 	_log_label.scroll_active = true
 	_log_label.selection_enabled = true
-	_log_label.shortcut_keys_enabled = false
-	_log_label.focus_mode = Control.FOCUS_NONE
+	_log_label.context_menu_enabled = true
+	_log_label.shortcut_keys_enabled = true
+	_log_label.focus_mode = Control.FOCUS_CLICK
 	_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_log_label.add_theme_font_size_override("normal_font_size", 12)
@@ -116,11 +119,28 @@ func _attach_panku() -> void:
 	print("[side_panel] 已接管 native_logger 屏幕日志（左上角覆盖关闭）")
 
 
+func _process(_delta: float) -> void:
+	# 拖选时保留最新全量日志，选区清除后再刷新，避免重写文本打断选择。
+	if _log_update_pending and not _log_selection_active():
+		_log_label.text = _pending_log_bbcode
+		_log_update_pending = false
+
+
+func _log_selection_active() -> bool:
+	return not _log_label.get_selected_text().is_empty() \
+		or (_log_label.has_focus() and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+
+
 func _on_log_content_updated(bbcode: String) -> void:
+	if _log_selection_active():
+		_pending_log_bbcode = bbcode
+		_log_update_pending = true
+		return
 	_log_label.text = bbcode
 
 
 func _clear_log() -> void:
+	_log_label.deselect()
 	if _logger_module != null and is_instance_valid(_logger_module):
 		# content_updated 会回传空文本并同步本面板
 		_logger_module.logger_ui.clear_all()

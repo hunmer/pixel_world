@@ -97,7 +97,8 @@ func _build_visual() -> void:
 		var tex_h := (portrait.texture as Texture2D).get_height()
 		if tex_h > 0:
 			portrait.pixel_size = 1.0 / float(tex_h)
-			portrait.offset = Vector2(0.0, -tex_h * 0.5)
+			# offset 不改变深度位置；抬高节点本身，避免立绘陷入地形柱。
+			portrait.position = Vector3(0.0, 0.5, 0.0)
 		_configure_billboard(portrait)
 		add_child(portrait)
 	if _white_texture == null:

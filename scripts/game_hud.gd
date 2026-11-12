@@ -6,6 +6,7 @@ extends CanvasLayer
 
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const SidePanelScript = preload("res://scripts/side_panel.gd")
+const HintBarScript = preload("res://scripts/hint_bar.gd")
 ## 侧栏占用的窗口右侧列宽；main.gd 用它让 3D 视锥让出该列。
 const SIDE_PANEL_WIDTH := SidePanelScript.PANEL_WIDTH
 ## 左侧停靠竖栏宽度（不透明，装战场/设置按钮）；窗口分栏 = 左栏 + 中间舞台 + 右侧栏。
@@ -21,11 +22,9 @@ const HELP_BG := Color(0.035, 0.055, 0.075, 0.90)
 const BORDER := Color(0.25, 0.37, 0.43, 0.88)
 const TEXT_SECONDARY := Color(0.56, 0.68, 0.71)
 const ACCENT := Color(0.40, 0.86, 0.76)
-const KEY_COLOR := Color(1.0, 0.78, 0.34)
 const ERROR_COLOR := Color(1.0, 0.45, 0.42)
 
 var _bottom_area: VBoxContainer
-var _help_flow: HFlowContainer
 ## 战场选择面板（懒创建；null = 关闭）
 var _battlefield_panel: Control = null
 var _battlefield_error_label: Label = null
@@ -82,42 +81,30 @@ func _build_ui() -> void:
 	_bottom_area.offset_bottom = -10.0
 	root.add_child(_bottom_area)
 
-	var help_panel := PanelContainer.new()
+	# 操作提示条（抽离为可复用组件 hint_bar.gd；地图编辑器 map_editor.gd 复用同一组件）
+	var help_panel := HintBarScript.new()
 	help_panel.name = "HelpPanel"
-	help_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	help_panel.custom_minimum_size = Vector2(800.0, 32.0)
 	help_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
-	help_panel.add_theme_stylebox_override("panel", _panel_style())
 	_bottom_area.add_child(help_panel)
-
-	_help_flow = HFlowContainer.new()
-	_help_flow.name = "HelpFlow"
-	_help_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_help_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_help_flow.add_theme_constant_override("h_separation", 12)
-	_help_flow.add_theme_constant_override("v_separation", 4)
-	help_panel.add_child(_help_flow)
-
-	var help_title := _label("操作", 11, ACCENT)
-	help_title.name = "HelpTitle"
-	_help_flow.add_child(help_title)
-	_add_hint("WASD / ↑ ↓", "移动")
-	_add_hint("SHIFT", "加速")
-	_add_hint("滚轮 / + −", "缩放")
-	_add_hint("Q E / ← → / Z X", "切换 90°")
-	_add_hint("中键拖拽", "步进旋转")
-	_add_hint("R", "视角复位")
-	_add_hint("SPACE+拖拽", "平移地图")
-	_add_hint("M", "地图")
-	_add_hint("T", "天气")
-	_add_hint("N", "昼夜")
-	_add_hint("B", "景深")
-	_add_hint("SHIFT + T / N", "恢复自动")
-	_add_hint("F", "缩放复位")
-	_add_hint("CTRL + R", "新世界")
-	_add_hint("P", "进入战棋")
-	_add_hint("O", "战场列表")
-	_add_hint("CTRL + E", "地图编辑器")
+	help_panel.set_title("操作")
+	help_panel.add_hint("WASD / ↑ ↓", "移动")
+	help_panel.add_hint("SHIFT", "加速")
+	help_panel.add_hint("滚轮 / + −", "缩放")
+	help_panel.add_hint("Q E / ← → / Z X", "切换 90°")
+	help_panel.add_hint("中键拖拽", "步进旋转")
+	help_panel.add_hint("R", "视角复位")
+	help_panel.add_hint("SPACE+拖拽", "平移地图")
+	help_panel.add_hint("M", "地图")
+	help_panel.add_hint("T", "天气")
+	help_panel.add_hint("N", "昼夜")
+	help_panel.add_hint("B", "景深")
+	help_panel.add_hint("SHIFT + T / N", "恢复自动")
+	help_panel.add_hint("F", "缩放复位")
+	help_panel.add_hint("CTRL + R", "新世界")
+	help_panel.add_hint("P", "进入战棋")
+	help_panel.add_hint("O", "战场列表")
+	help_panel.add_hint("CTRL + E", "地图编辑器")
 
 	# 左侧停靠竖栏（不透明窗格）：战场列表 + 设置按钮装进栏内，游戏画面不再从栏下透出
 	var left_rail := PanelContainer.new()
@@ -342,27 +329,6 @@ func show_battlefield_error(message: String) -> void:
 	_battlefield_error_label.visible = true
 
 
-func _add_hint(key_text: String, action_text: String) -> void:
-	var group := HBoxContainer.new()
-	group.name = "Hint%d" % _help_flow.get_child_count()
-	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	group.add_theme_constant_override("separation", 5)
-	_help_flow.add_child(group)
-
-	var key_panel := PanelContainer.new()
-	key_panel.name = "Keycap"
-	key_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	key_panel.add_theme_stylebox_override("panel", _keycap_style())
-	group.add_child(key_panel)
-	var key_label := _label(key_text, 10, KEY_COLOR)
-	key_label.name = "Key"
-	key_panel.add_child(key_label)
-
-	var action_label := _label(action_text, 11, TEXT_SECONDARY)
-	action_label.name = "Action"
-	group.add_child(action_label)
-
-
 func _label(text_value: String, font_size: int, color: Color) -> Label:
 	var result := Label.new()
 	result.text = text_value
@@ -407,23 +373,4 @@ func _rail_style() -> StyleBoxFlat:
 	style.content_margin_top = 10.0
 	style.content_margin_right = 7.0
 	style.content_margin_bottom = 10.0
-	return style
-
-
-func _keycap_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.10, 0.095, 0.075, 0.96)
-	style.border_color = KEY_COLOR
-	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_left = 4
-	style.corner_radius_bottom_right = 4
-	style.content_margin_left = 4.0
-	style.content_margin_top = 2.0
-	style.content_margin_right = 4.0
-	style.content_margin_bottom = 2.0
 	return style

@@ -44,7 +44,7 @@ func has_module_data(key:String) -> bool:
 	return module_data.has(key)
 
 func load_window_data(window:PankuLynxWindow):
-	window.position = load_module_data("window_position", window.get_layout_position([
+	var default_position: Vector2 = window.get_layout_position([
 		Control.PRESET_TOP_LEFT,
 		Control.PRESET_CENTER_TOP,
 		Control.PRESET_TOP_RIGHT,
@@ -54,8 +54,12 @@ func load_window_data(window:PankuLynxWindow):
 		Control.PRESET_BOTTOM_LEFT,
 		Control.PRESET_CENTER_BOTTOM,
 		Control.PRESET_BOTTOM_RIGHT,
-	][randi()%9]))
-	window.size = load_module_data("window_size", window.get_normal_window_size())
+	][randi()%9])
+	var saved_position: Variant = load_module_data("window_position", default_position)
+	window.position = saved_position if saved_position is Vector2 and saved_position.is_finite() else default_position
+	var default_size: Vector2 = window.get_normal_window_size()
+	var saved_size: Variant = load_module_data("window_size", default_size)
+	window.size = saved_size if saved_size is Vector2 and saved_size.is_finite() else default_size
 	window.set_window_visibility(load_module_data("window_visibility", false))
 
 func save_window_data(window:PankuLynxWindow):

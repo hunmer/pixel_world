@@ -1,8 +1,10 @@
-## editor/editor_canvas.gd — 编辑器画布（等距方块版）
+## editor/editor_canvas.gd — 编辑器画布（等距方块版，IsoBoard 3D 相机）
 ##
-## 复用 BattlefieldRenderer（ColumnBatch 等距方块柱 + 世界同款贴图）渲染地形，
-## 与战斗内观感完全一致。左键按下/拖动发出 cell 信号，由 map_editor.gd 按工具解释。
-## 右键拖拽或按住空格+左键拖拽平移、滚轮缩放（无相机，直接变换 world 节点）。
+## 复用 BattlefieldRenderer + IsoBoard（与 B2 战棋同款 IsometricCamera3D）：
+## 视角旋转（Q/E/Z/X/R）、滚轮/双指捏合缩放、右键拖拽或空格+左键平移。
+## 左键按下/拖动发出 cell 信号，由 map_editor.gd 按工具解释。
+## 地形走 3D 等距管线（渲染器检测到 Camera3D 自动切换）；悬停/选中/单位
+## 标记为屏幕空间 2D 节点，挂 _world（恒等变换）下并随相机逐帧对齐。
 ## 已放置单位显示职业头像+阵营色环+等级徽标（缺图回退阵营色圆点+职业字，原视觉）。
 
 class_name EditorCanvas
@@ -11,6 +13,7 @@ extends Control
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
+const IsoBoardScript = preload("res://scripts/iso/iso_board.gd")
 
 signal cell_pressed(cell: Vector2i)
 signal cell_dragged(cell: Vector2i)
@@ -20,10 +23,9 @@ const PLAYER_COLOR := Color(0.376, 0.647, 0.980)
 const ENEMY_COLOR := Color(0.973, 0.443, 0.443)
 const HOVER_COLOR := Color(1.0, 0.85, 0.3, 0.55)
 const SELECTION_COLOR := Color(0.25, 0.95, 1.0, 0.62)
-const ZOOM_MIN := 0.5
-const ZOOM_MAX := 4.0
-const ZOOM_STEP := 1.15
-const DEFAULT_ZOOM := 1.6
+## 滚轮/手势每步缩放因子（与 B2 battle.gd 一致：factor<1 = 放大一步）
+const WHEEL_ZOOM_IN := 0.9
+const WHEEL_ZOOM_OUT := 1.1
 
 ## 编辑器模型引用（BattlefieldDoc 模型 dict；由 map_editor.gd 维护并触发重建）
 var model: Dictionary = {}:
@@ -38,22 +40,39 @@ var selected_cell := Vector2i(-1, -1):
 		_update_selection_marker()
 var _world: Node2D = null
 var _renderer: Node2D = null
+var _board: IsoBoard = null
 var _hover_marker: Polygon2D = null
 var _selection_marker: Polygon2D = null
 var _unit_markers: Array[Node2D] = []
 var _dragging := false
 var _panning := false
+## 视图状态缓存（相机 yaw/elevation/zoom/focus + 画布全局矩形）：
+## 任一变化时重算悬停/选中多边形与单位标记位置（相机旋转是平滑动画）。
+var _view_cache := {}
+
+## 右侧栏宽度（世界单位换算预留列，同 main.gd reserved_right_px）：
+## 让 3D 取景对齐「去掉侧栏后的画布舞台」中心，而非整个窗口中心。
+var sidebar_reserved_px: float = 0.0:
+	set(value):
+		sidebar_reserved_px = maxf(value, 0.0)
+		if _board != null and _board.camera != null:
+			_board.camera.reserved_right_px = sidebar_reserved_px
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	clip_contents = true
+	# 3D 视图轴：IsoBoard = IsometricCamera3D（旋转/缩放/平移/拾取，B2 同款）
+	_board = IsoBoardScript.new()
+	_board.name = "EditorBoard"
+	add_child(_board)
+	_board.camera.reserved_right_px = sidebar_reserved_px
+	# 屏幕空间覆盖层（恒等变换，坐标 = 画布局部 = 视口坐标 - 画布全局原点）
 	_world = Node2D.new()
 	_world.name = "EditorWorld"
-	_world.scale = Vector2(DEFAULT_ZOOM, DEFAULT_ZOOM)
 	add_child(_world)
 	_renderer = BattlefieldRendererScript.new()
-	_world.add_child(_renderer)
+	_board.add_child(_renderer)
 	_hover_marker = Polygon2D.new()
 	_hover_marker.name = "HoverMarker"
 	_hover_marker.z_index = 20
@@ -119,12 +138,13 @@ func _refresh_cell(cell: Vector2i) -> void:
 
 
 func _center_map() -> void:
-	var zoom := _world.scale.x if _world.scale != Vector2.ZERO else DEFAULT_ZOOM
-	_world.scale = Vector2(zoom, zoom)
-	_world.position = size * 0.5 - _renderer.map_center() * zoom
+	if _board == null or _board.camera == null or model.is_empty():
+		return
+	_board.center_on_map(int(model.width), int(model.height))
 
 
-## 容器尺寸变化（含首次布局 0->实际值）-> 按当前缩放重居中，保持地图可见
+## 容器尺寸变化（含首次布局 0->实际值）-> 重居中，保持地图可见。
+## 相机投影以视口高为基准，侧栏预留由 reserved_right_px 处理。
 func _on_canvas_resized() -> void:
 	if _renderer != null and _renderer.grid != null:
 		_center_map()
@@ -132,14 +152,32 @@ func _on_canvas_resized() -> void:
 
 
 # ============================================================
-# 输入：左键=工具操作，右键拖拽或空格+左键拖拽=平移，滚轮=缩放
+# 输入：左键=工具操作，右键拖拽或空格+左键拖拽=平移，
+# 滚轮/双指捏合=缩放，双指滚动（纵向）=缩放 —— 与 B2 战棋一致。
+# 注意：_gui_input 里鼠标事件 position 是画布局部坐标，
+# 手势事件（Magnify/PanGesture）position 是视口坐标，缩放锚点需区分换算。
 # ============================================================
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion:
+	if event is InputEventMagnifyGesture:
+		# 双指捏合：捏合张开（factor>1）→ 1/factor<1 → 放大一步（B2 同款公式）
+		var mag := event as InputEventMagnifyGesture
+		var factor := clampf(1.0 / mag.factor, 0.5, 2.0)
+		_board.zoom_by(factor, mag.position, get_viewport().get_visible_rect().size)
+		accept_event()
+		return
+	elif event is InputEventPanGesture:
+		# 双指滚动：纵向主导视为缩放（B2 同款系数）
+		var pan_g := event as InputEventPanGesture
+		if absf(pan_g.delta.y) > absf(pan_g.delta.x):
+			var factor := clampf(1.0 + pan_g.delta.y * 0.08, 0.75, 1.25)
+			_board.zoom_by(factor, pan_g.position, get_viewport().get_visible_rect().size)
+			accept_event()
+		return
+	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		if _panning:
-			_world.position += mm.relative
+			_board.pan(mm.relative.x, mm.relative.y)
 			_refresh_hover(mm.position)
 			accept_event()
 			return
@@ -169,21 +207,37 @@ func _gui_input(event: InputEvent) -> void:
 			_panning = mb.pressed
 			accept_event()
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_zoom_at(mb.position, ZOOM_STEP)
+			_zoom_wheel(WHEEL_ZOOM_IN, mb.position)
 			accept_event()
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_zoom_at(mb.position, 1.0 / ZOOM_STEP)
+			_zoom_wheel(WHEEL_ZOOM_OUT, mb.position)
 			accept_event()
 
 
-func _zoom_at(cursor: Vector2, factor: float) -> void:
-	var old_zoom := _world.scale.x
-	var new_zoom := clampf(old_zoom * factor, ZOOM_MIN, ZOOM_MAX)
-	if is_equal_approx(new_zoom, old_zoom):
-		return
-	_world.position = cursor - (cursor - _world.position) * (new_zoom / old_zoom)
-	_world.scale = Vector2(new_zoom, new_zoom)
-	_refresh_hover(cursor)
+## 视角旋转 ±90°（Q/E/Z/X）与复位（R）—— 转发到 IsoBoard 相机。
+func rotate_view(direction: int) -> void:
+	if _board != null and _board.camera != null:
+		_board.camera.rotate_step(direction)
+
+
+func reset_view() -> void:
+	if _board != null and _board.camera != null:
+		_board.camera.reset_rotation()
+
+
+## 滚轮缩放一步：factor<1 = 放大（B2 battle.gd 语义）。anchor 为画布局部坐标。
+func _zoom_wheel(factor: float, local_anchor: Vector2) -> void:
+	_board.zoom_by(factor, _local_to_screen(local_anchor), get_viewport().get_visible_rect().size)
+
+
+## 画布局部坐标 → 视口屏幕坐标（相机投影/拾取用）。
+func _local_to_screen(local_pos: Vector2) -> Vector2:
+	return get_global_rect().position + local_pos
+
+
+## 视口屏幕坐标 → 画布局部坐标（屏幕空间覆盖层定位用）。
+func _screen_to_local(screen_pos: Vector2) -> Vector2:
+	return screen_pos - get_global_rect().position
 
 
 func _refresh_hover(local_pos: Vector2) -> void:
@@ -195,12 +249,30 @@ func _refresh_hover(local_pos: Vector2) -> void:
 	hover_changed.emit(cell)
 
 
-## 画布局部坐标 -> cell（多高度感知拾取）
+## 画布局部坐标 -> cell（3D 相机射线拾取，多高度感知）
 func _pick(local_pos: Vector2) -> Vector2i:
 	if _renderer == null or _renderer.grid == null:
 		return Vector2i(-1, -1)
-	var global_pos: Vector2 = get_global_transform() * local_pos
-	return _renderer.pick_world(global_pos)
+	return _renderer.pick_cell(_local_to_screen(local_pos), size)
+
+
+## 相机旋转/缩放是平滑动画：逐帧检查视图状态，变化时重算覆盖层。
+func _process(_delta: float) -> void:
+	if _board == null or _board.camera == null or _renderer == null:
+		return
+	var cam := _board.camera
+	var view := {
+		"yaw": cam.yaw_radians,
+		"elev": cam.elevation_radians,
+		"zoom": cam.zoom,
+		"focus": cam.focus_position,
+		"origin": get_global_rect().position,
+	}
+	if _view_cache.is_empty() or str(view) != str(_view_cache):
+		_view_cache = view
+		_update_hover_marker()
+		_update_selection_marker()
+		_layout_unit_markers()
 
 
 func _update_hover_marker() -> void:
@@ -209,7 +281,7 @@ func _update_hover_marker() -> void:
 	if hover_cell.x < 0 or _renderer.grid == null:
 		_hover_marker.visible = false
 		return
-	_hover_marker.polygon = _renderer.top_polygon_for(hover_cell.x, hover_cell.y)
+	_hover_marker.polygon = _poly_to_local(_renderer.top_polygon_for(hover_cell.x, hover_cell.y))
 	_hover_marker.visible = true
 
 
@@ -222,8 +294,18 @@ func _update_selection_marker() -> void:
 	if selected_cell.x >= int(model.get("width", 0)) or selected_cell.y >= int(model.get("height", 0)):
 		_selection_marker.visible = false
 		return
-	_selection_marker.polygon = _renderer.top_polygon_for(selected_cell.x, selected_cell.y)
+	_selection_marker.polygon = _poly_to_local(_renderer.top_polygon_for(selected_cell.x, selected_cell.y))
 	_selection_marker.visible = true
+
+
+## 视口坐标多边形 → 画布局部坐标多边形（覆盖层挂 _world 恒等变换下）。
+func _poly_to_local(poly: PackedVector2Array) -> PackedVector2Array:
+	var offset := get_global_rect().position
+	var out := PackedVector2Array()
+	out.resize(poly.size())
+	for i in poly.size():
+		out[i] = poly[i] - offset
+	return out
 
 
 # ============================================================
@@ -240,10 +322,20 @@ func _rebuild_unit_markers() -> void:
 		marker.faction_color = ENEMY_COLOR if String(u.get("faction", "player")) == "enemy" else PLAYER_COLOR
 		marker.tag = "%s%d" % [String(u.get("tag", "?")), int(u.get("level", 1))]
 		marker.level = int(u.get("level", 1))
-		marker.position = _renderer.top_center_for(int(u.x), int(u.y))
 		marker.z_index = 15
 		_world.add_child(marker)
 		_unit_markers.append(marker)
+	_layout_unit_markers()
+
+
+## 单位标记对齐当前相机投影（相机旋转/缩放/平移后由 _process 调用）。
+func _layout_unit_markers() -> void:
+	if _renderer == null or _renderer.grid == null:
+		return
+	for i in mini(_unit_markers.size(), model.units.size()):
+		var u: Dictionary = model.units[i]
+		_unit_markers[i].position = _screen_to_local(
+			_renderer.top_center_for(int(u.x), int(u.y)))
 
 
 ## 单格地形/高度变了可能影响顶面 -> 该格上的标记位置重算
