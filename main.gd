@@ -3368,9 +3368,10 @@ func _setup_minimap() -> void:
 	var bg := ColorRect.new()
 	bg.color = Color(0.08, 0.08, 0.1, 0.9)
 	bg.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	bg.offset_left = -MINIMAP_SIZE - 12
+	# 舞台右上角 = 窗口右上角让出右侧侧栏列（小地图等游戏 UI 不压到面板下方）
+	bg.offset_left = -MINIMAP_SIZE - 12 - GameHudScript.SIDE_PANEL_WIDTH
 	bg.offset_top = 8
-	bg.offset_right = -8
+	bg.offset_right = -8 - GameHudScript.SIDE_PANEL_WIDTH
 	bg.offset_bottom = MINIMAP_SIZE + 12
 	var rect := TextureRect.new()
 	rect.texture = _minimap_tex
@@ -3451,6 +3452,7 @@ func _setup_hud() -> void:
 	add_child(_hud)
 	# 侧栏独占窗口右侧一列：3D 视锥让出该宽度，舞台不延伸到面板下方。
 	_cam.reserved_right_px = GameHudScript.SIDE_PANEL_WIDTH
+	_cam.reserved_left_px = GameHudScript.LEFT_RAIL_WIDTH
 
 
 func _setup_world_map() -> void:
@@ -3968,10 +3970,11 @@ func _handle_battle_input(event: InputEvent) -> bool:
 func _battle_camera_focus() -> Vector2:
 	if _battle_cam_offset.is_zero_approx() or not is_instance_valid(_cam):
 		return _battle_focus_world_pos
-	# 3D 舞台已让出右侧侧栏列；B1 视觉中心 = 舞台中心，不是窗口中心。
+	# 3D 舞台夹在左竖栏与右侧栏之间；B1 视觉中心 = 舞台中心，不是窗口中心。
 	var viewport_size := get_viewport_rect().size
 	var viewport_center := Vector2(
-		(viewport_size.x - GameHudScript.SIDE_PANEL_WIDTH) * 0.5,
+		(GameHudScript.LEFT_RAIL_WIDTH
+			+ viewport_size.x - GameHudScript.SIDE_PANEL_WIDTH) * 0.5,
 		viewport_size.y * 0.5
 	)
 	var level := _player_current_stand_level()
@@ -4038,6 +4041,9 @@ func _update_battle_edge_pan(delta: float) -> void:
 		return
 	# 鼠标悬在右侧侧栏列上（HUD 面板，不属于 battle_ui）→ 不滚屏。
 	if mouse.x > size.x - GameHudScript.SIDE_PANEL_WIDTH:
+		return
+	# 鼠标在左侧竖栏上 → 同样不滚屏。
+	if mouse.x < GameHudScript.LEFT_RAIL_WIDTH:
 		return
 	var dir := Vector2.ZERO
 	if mouse.x < _BATTLE_EDGE_PAN_MARGIN:

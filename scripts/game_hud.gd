@@ -1,12 +1,15 @@
 extends CanvasLayer
 ## 战场选择面板（调试）：列出 data/battlefields/*.json，点选后由 main.gd 以 B2 独立场景加载。
-## 左侧竖排图标按钮（战场列表/设置）；右侧常驻多 Tab 面板（side_panel.gd，【输出】=原左上角日志）；
-## 操作提示移到右下角；面板不拦截输入（右侧 SidePanel 除外，它要承接滚动/按钮）。
+## 窗口分栏：左侧停靠竖栏（战场列表/设置按钮，不透明）+ 中间游戏舞台 + 右侧常驻多 Tab 面板
+## （side_panel.gd，【输出】=原左上角日志）；操作提示条只占舞台底部；面板不拦截输入
+## （LeftRail/SidePanel 除外，它们要承接点击/滚动）。
 
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const SidePanelScript = preload("res://scripts/side_panel.gd")
 ## 侧栏占用的窗口右侧列宽；main.gd 用它让 3D 视锥让出该列。
 const SIDE_PANEL_WIDTH := SidePanelScript.PANEL_WIDTH
+## 左侧停靠竖栏宽度（不透明，装战场/设置按钮）；窗口分栏 = 左栏 + 中间舞台 + 右侧栏。
+const LEFT_RAIL_WIDTH := 56.0
 
 ## 用户点选了一个战场 JSON（main.gd 接收后 _enter_battlefield）
 signal battlefield_picked(path: String)
@@ -72,7 +75,7 @@ func _build_ui() -> void:
 	_bottom_area.name = "BottomArea"
 	_bottom_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bottom_area.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_bottom_area.offset_left = 12.0
+	_bottom_area.offset_left = LEFT_RAIL_WIDTH + 12.0
 	_bottom_area.offset_top = -56.0
 	# 右侧给常驻 SidePanel 让位，操作提示条不被覆盖
 	_bottom_area.offset_right = -12.0 - SidePanelScript.PANEL_WIDTH
@@ -116,12 +119,20 @@ func _build_ui() -> void:
 	_add_hint("O", "战场列表")
 	_add_hint("CTRL + E", "地图编辑器")
 
-	# 左侧竖排图标按钮栏：战场列表 + 设置（无文字，悬停显示提示）
+	# 左侧停靠竖栏（不透明窗格）：战场列表 + 设置按钮装进栏内，游戏画面不再从栏下透出
+	var left_rail := PanelContainer.new()
+	left_rail.name = "LeftRail"
+	left_rail.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
+	left_rail.offset_right = LEFT_RAIL_WIDTH
+	left_rail.mouse_filter = Control.MOUSE_FILTER_STOP
+	left_rail.add_theme_stylebox_override("panel", _rail_style())
+	root.add_child(left_rail)
+
 	var left_bar := VBoxContainer.new()
 	left_bar.name = "LeftBar"
-	left_bar.position = Vector2(10.0, 10.0)
 	left_bar.add_theme_constant_override("separation", 8)
-	root.add_child(left_bar)
+	left_bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	left_rail.add_child(left_bar)
 
 	# 「战场」按钮（JSON 战场加载列表，调试入口）
 	var battlefield_btn := Button.new()
@@ -383,6 +394,19 @@ func _panel_style() -> StyleBoxFlat:
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
 	style.shadow_size = 4
 	style.shadow_offset = Vector2(0.0, 2.0)
+	return style
+
+
+## 左侧停靠竖栏样式：不透明、贴边、无圆角/阴影（真分栏窗格，不透出游戏画面）
+func _rail_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.035, 0.055, 0.075, 1.0)
+	style.border_color = BORDER
+	style.border_width_right = 1
+	style.content_margin_left = 7.0
+	style.content_margin_top = 10.0
+	style.content_margin_right = 7.0
+	style.content_margin_bottom = 10.0
 	return style
 
 

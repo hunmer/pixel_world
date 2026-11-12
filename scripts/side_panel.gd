@@ -130,21 +130,13 @@ func _clear_log() -> void:
 
 func _panel_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = HELP_BG
+	# 不透明停靠面板：作为右侧栏窗格，不透出底下的游戏画面（分栏布局），
+	# 无圆角/阴影（贴边停靠，不做悬浮卡片效果）。
+	style.bg_color = Color(0.035, 0.055, 0.075, 1.0)
 	style.border_color = BORDER
 	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_left = 6
-	style.corner_radius_bottom_right = 6
 	style.content_margin_left = 7.0
 	style.content_margin_top = 3.0
 	style.content_margin_right = 7.0
 	style.content_margin_bottom = 3.0
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
-	style.shadow_size = 4
-	style.shadow_offset = Vector2(0.0, 2.0)
 	return style

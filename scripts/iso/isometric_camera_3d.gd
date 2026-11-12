@@ -21,12 +21,16 @@ var target_yaw_radians: float = IsoProjection.CAMERA_YAW
 var elevation_radians: float = IsoProjection.CAMERA_ELEVATION
 var target_elevation_radians: float = IsoProjection.CAMERA_ELEVATION
 var rotation_smoothing: float = 14.0
-## 窗口右侧为 HUD 侧栏预留的像素宽度；_apply_view 把相机沿屏幕右方向整体平移
-## 该宽度的一半（世界单位），画面内容左移让出右侧列，舞台不再延伸到面板下方
-## （面板在画布层，不参与 3D 投影）。
+## 窗口左右两侧为 HUD 侧栏预留的像素宽度；_apply_view 把相机沿屏幕右方向平移
+## (右预留-左预留)/2 的世界单位，画面内容对齐到中间舞台的中心，
+## 舞台 = 窗口去掉左右侧栏后的区域（侧栏在画布层，不参与 3D 投影）。
 var reserved_right_px: float = 0.0:
 	set(value):
 		reserved_right_px = maxf(value, 0.0)
+		_update_projection_size()
+var reserved_left_px: float = 0.0:
+	set(value):
+		reserved_left_px = maxf(value, 0.0)
 		_update_projection_size()
 var _viewport_size := Vector2(1280.0, 800.0)
 
@@ -131,10 +135,11 @@ func _update_projection_size() -> void:
 	_apply_view()
 
 
-## 预留列宽度换算成的世界位移：沿屏幕右方向平移正交相机 = 滑动取景窗，
-## 相机滑右 → 画面内容左移 reserved/2 像素（世界中心落到舞台中心）。
+## 预留列宽度换算成的世界位移：沿屏幕右方向平移正交相机 = 滑动取景窗。
+## 净平移 = (右预留 - 左预留)/2 像素 → 舞台中心（而非窗口中心）落到光轴上。
 func _reserved_lateral_world() -> Vector3:
-	if reserved_right_px <= 0.0 or _viewport_size.y <= 1.0:
+	var net_px := (reserved_right_px - reserved_left_px) * 0.5
+	if absf(net_px) < 0.001 or _viewport_size.y <= 1.0:
 		return Vector3.ZERO
 	var horizontal := cos(elevation_radians)
 	var view_dir := Vector3(
@@ -144,7 +149,7 @@ func _reserved_lateral_world() -> Vector3:
 	).normalized()
 	var right := view_dir.cross(Vector3.UP).normalized()
 	var world_per_px := size / _viewport_size.y
-	return right * (reserved_right_px * 0.5 * world_per_px)
+	return right * (net_px * world_per_px)
 
 
 func _apply_view() -> void:
