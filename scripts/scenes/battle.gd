@@ -154,7 +154,10 @@ func _setup_b1_render() -> void:
 
 
 func _b2_cell_to_screen(x: int, y: int, level := -1.0) -> Vector2:
-	return board.cell_to_screen(x, y, float(renderer.stand_level(x, y)) if level < 0.0 else level)
+	# 范围/路径默认贴可见顶面；显式 level 的菜单定位仍沿用单位站立层。
+	if level < 0.0:
+		return renderer.top_center_for(x, y)
+	return board.cell_to_screen(x, y, level)
 
 
 ## B1 坐标转换：战场局部 cell (x,y) → 屏幕坐标（供 range_overlay 用）
@@ -213,9 +216,9 @@ func _on_viewport_resized() -> void:
 func _build_ui() -> void:
 	battle_ui = BattleUI.new()
 	battle_ui.setup(board, grid, _unit_sprites, turn)
-	if renderer != null:
-		# B2 等距方块模式：菜单/浮字定位带柱顶高度
-		battle_ui.level_fn = Callable(renderer, "stand_level")
+	# B1 没有 IsoBoard；菜单定位与范围层共用同一套真实顶面投影。
+	battle_ui.cell_screen_fn = Callable(self, "_b1_cell_to_screen" if _b1_mode else "_b2_cell_to_screen")
+	battle_ui.level_fn = Callable(self, "_b1_cell_level") if _b1_mode else Callable(renderer, "stand_level")
 	add_child(battle_ui)
 	_inject_battle_ui_callables()
 	battle_ui.build(_on_end_turn, _toggle_hosting, _open_pref_panel)
@@ -626,6 +629,7 @@ func _update_hover_path(hover_cell: Vector2i) -> void:
 	_last_path_update_msec = now_msec
 	if selected_unit.is_empty() or mode != Mode.UNIT_SELECTED:
 		range_overlay.clear_path()
+		range_overlay.clear_threat_arrows()
 		return
 	var key := "%d,%d" % [hover_cell.x, hover_cell.y]
 	var hover_unit := grid.unit_at(hover_cell.x, hover_cell.y)
@@ -635,16 +639,33 @@ func _update_hover_path(hover_cell: Vector2i) -> void:
 			var atk_path := grid.find_path(selected_unit.position, stand, selected_unit.moveType, selected_unit.stats.mov)
 			if not atk_path.is_empty() and atk_path.size() >= 2:
 				range_overlay.show_path(atk_path, Color(1.0, 0.25, 0.25))
+				range_overlay.clear_threat_arrows()
 				return
 		range_overlay.clear_path()
+		range_overlay.clear_threat_arrows()
 		return
-	# 移动路径：hover 移动范围内的空格 → 蓝色路径
+	# 移动路径：hover 移动范围内的空格 → 蓝色路径 + 所有威胁该落点的敌人抛物线。
 	if current_move_range.has(key):
+		_update_threat_arrows(hover_cell)
 		var path := grid.find_path(selected_unit.position, hover_cell, selected_unit.moveType, selected_unit.stats.mov)
 		if not path.is_empty() and path.size() >= 2:
 			range_overlay.show_path(path, Color(0.25, 0.55, 1.0))   # 蓝
 			return
 	range_overlay.clear_path()
+	range_overlay.clear_threat_arrows()
+
+
+## 候选落点沿用现有攻击距离规则；每个能攻击该格的存活敌人各产生一条箭头。
+func _update_threat_arrows(target: Vector2i) -> void:
+	var sources: Array[Vector2i] = []
+	for unit in grid.units.values():
+		if unit.get(&"isDead", false) or unit.get(&"faction", &"") == &"player":
+			continue
+		var attack_range: Array = ProfessionData.unit_attack_range(unit)
+		var dist := absi(unit.position.x - target.x) + absi(unit.position.y - target.y)
+		if dist >= int(attack_range[0]) and dist <= int(attack_range[1]):
+			sources.append(unit.position)
+	range_overlay.show_threat_arrows(sources, target)
 
 
 ## 找一个攻击站位：在移动范围内、该格可停、且所选单位从该格能打到 target_cell。

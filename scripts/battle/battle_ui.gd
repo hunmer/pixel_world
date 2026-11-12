@@ -45,6 +45,8 @@ extends CanvasLayer
 var board: IsoBoard
 ## 可选：柱顶高度函数（BattlefieldRenderer.stand_level，B2 等距方块模式注入）
 var level_fn: Callable = Callable()
+## B1/B2 统一注入 cell → 屏幕坐标，避免 B1 没有 IsoBoard 时菜单定位中断。
+var cell_screen_fn: Callable = Callable()
 var grid: GridSystem
 var unit_sprites: Dictionary
 var turn: TurnManager
@@ -411,7 +413,11 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 	var menu_level := 0
 	if level_fn.is_valid():
 		menu_level = int(level_fn.call(at_pos.x, at_pos.y))
-	var screen := board.cell_to_screen(at_pos.x, at_pos.y, float(menu_level))
+	var screen := Vector2.ZERO
+	if cell_screen_fn.is_valid():
+		screen = cell_screen_fn.call(at_pos.x, at_pos.y, float(menu_level))
+	elif board != null:
+		screen = board.cell_to_screen(at_pos.x, at_pos.y, float(menu_level))
 	panel.position = screen - panel.size / 2.0 + Vector2(40, -40)
 	panel.add_theme_stylebox_override("panel", _make_panel_style())
 	menu_container.add_child(panel)

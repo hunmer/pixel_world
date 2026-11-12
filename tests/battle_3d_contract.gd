@@ -116,10 +116,7 @@ func _run() -> void:
 		first_unit.position, float(b2.renderer.stand_level(first_unit.position.x, first_unit.position.y))
 	)
 	_expect(first_sprite.global_position.distance_to(expected_world) < 0.001, "B2 单位未落在柱顶")
-	var cell_screen: Vector2 = b2.board.cell_to_screen(
-		first_unit.position.x, first_unit.position.y,
-		float(b2.renderer.stand_level(first_unit.position.x, first_unit.position.y))
-	)
+	var cell_screen: Vector2 = b2.renderer.top_center_for(first_unit.position.x, first_unit.position.y)
 	_expect(b2.renderer.pick_cell(cell_screen, root.get_visible_rect().size) == first_unit.position,
 		"B2 Camera3D 柱顶拾取失败")
 	b2.range_overlay.highlight_range({"0,0": 1}, {}, {})

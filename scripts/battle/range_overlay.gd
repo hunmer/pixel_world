@@ -58,6 +58,8 @@ func _process(_delta: float) -> void:
 		update_cursor_particles(_cursor_cell.x, _cursor_cell.y, true)
 	if _path_marker != null and is_instance_valid(_path_marker):
 		_path_marker.queue_redraw()
+	if _threat_marker != null and is_instance_valid(_threat_marker):
+		_threat_marker.queue_redraw()
 
 
 ## B2 模式入口（保留原签名，向后兼容 battle.gd 现有调用）
@@ -240,6 +242,7 @@ func _higher_neighbor_count(x: int, y: int, level: int) -> int:
 func clear_range_highlight() -> void:
 	_clear_range_markers()
 	clear_path()
+	clear_threat_arrows()
 
 
 # ============================================================
@@ -320,6 +323,39 @@ func clear_path() -> void:
 	if _path_marker != null and is_instance_valid(_path_marker):
 		_path_marker.segments = []
 		_path_marker.queue_redraw()
+
+
+# ---- 威胁抛物线：敌人 → 当前候选落点，与蓝色移动路径独立叠加 ----
+var _threat_marker: Node2D = null
+
+
+func show_threat_arrows(sources: Array, target: Vector2i) -> void:
+	clear_threat_arrows()
+	if sources.is_empty():
+		return
+	if _threat_marker == null or not is_instance_valid(_threat_marker):
+		_threat_marker = _ThreatDrawer.new()
+		_threat_marker.name = "ThreatArrowMarker"
+		_attach(_threat_marker)
+		if is_world_mode():
+			_threat_marker.z_index = 6
+	_threat_marker.coord_fn = _coord_fn
+	_threat_marker.arcs = []
+	for source in sources:
+		_threat_marker.arcs.append({ source = source, target = target })
+	_threat_marker.queue_redraw()
+
+
+func clear_threat_arrows() -> void:
+	if _threat_marker != null and is_instance_valid(_threat_marker):
+		_threat_marker.arcs = []
+		_threat_marker.queue_redraw()
+
+
+func threat_arrow_count() -> int:
+	if _threat_marker == null or not is_instance_valid(_threat_marker):
+		return 0
+	return _threat_marker.arcs.size()
 
 
 # ============================================================
@@ -440,3 +476,41 @@ class _PathDrawer:
 		var left := back + perp * half
 		var right := back - perp * half
 		draw_colored_polygon(PackedVector2Array([tip, left, right]), color)
+
+
+## 火焰纹章风格威胁箭头：每个可攻击落点的敌人各画一条红色二次抛物线。
+class _ThreatDrawer:
+	extends Node2D
+	const _RED := Color(0.95, 0.12, 0.10, 0.96)
+	const _OUTLINE := Color(0.24, 0.015, 0.015, 0.90)
+	var arcs: Array = []             # [{ source: Vector2i, target: Vector2i }, ...]
+	var coord_fn := Callable()       # 与路径/范围层共用真实顶面投影
+
+	func _to_screen(cell: Vector2i) -> Vector2:
+		if coord_fn.is_valid():
+			return coord_fn.call(cell.x, cell.y)
+		return IsoCoords.to_screen(cell.x, cell.y)
+
+	func _draw() -> void:
+		for arc in arcs:
+			var start := _to_screen(arc.source)
+			var end := _to_screen(arc.target)
+			var distance := start.distance_to(end)
+			if distance < 1.0:
+				continue
+			var lift := clampf(distance * 0.28, 28.0, 88.0)
+			var control := (start + end) * 0.5 - Vector2(0.0, lift * 2.0)
+			var points := PackedVector2Array()
+			for i in range(25):
+				var t := float(i) / 24.0
+				points.append((1.0 - t) * (1.0 - t) * start
+					+ 2.0 * (1.0 - t) * t * control + t * t * end)
+			draw_polyline(points, _OUTLINE, 5.0, true)
+			draw_polyline(points, _RED, 2.5, true)
+			var direction := (end - points[points.size() - 2]).normalized()
+			var perpendicular := Vector2(-direction.y, direction.x)
+			var back := end - direction * 12.0
+			var left := back + perpendicular * 6.0
+			var right := back - perpendicular * 6.0
+			draw_colored_polygon(PackedVector2Array([end, left, right]), _RED)
+			draw_polyline(PackedVector2Array([end, left, right, end]), _OUTLINE, 1.5, true)

@@ -24,21 +24,26 @@ func _run() -> void:
 		return world.cell_stand_level(a) > world.cell_stand_level(b)
 	)
 
-	var viewport_center: Vector2 = world.get_viewport_rect().size * 0.5
 	world._cam.zoom = 2.0
 	for i in mini(12, samples.size()):
 		var cell := samples[i]
-		var center: Vector2 = world._grid_to_screen(cell, float(world.cell_stand_level(cell)))
 		world._cam.focus_position = IsoProjection.grid_to_world(cell, float(world.cell_stand_level(cell)))
-		var picked: Vector2i = world.screen_to_cell(viewport_center)
+		# 侧栏会平移正交相机；点击目标的真实投影中心，而非窗口几何中心。
+		var center: Vector2 = world._grid_to_screen(cell, float(world.cell_stand_level(cell)))
+		var picked: Vector2i = world.screen_to_cell(center)
 		if picked != cell:
-			push_error("战旗高地拾取偏移: cell=%s picked=%s level=%d" % [
-				str(cell), str(picked), world.cell_stand_level(cell)
+			var hit := IsoProjection.pick_top_face(
+				world._cam, center, 0, world.LEVELS * 3 - 1,
+				Callable(world, "cell_stand_level")
+			)
+			push_error("战旗高地拾取偏移: cell=%s picked=%s level=%d picked_level=%d hit=%s" % [
+				str(cell), str(picked), world.cell_stand_level(cell),
+				world.cell_stand_level(picked), str(hit)
 			])
 			quit(1)
 			return
 		var rect_picked: Vector2i = world.screen_to_cell_in_rect(
-			viewport_center,
+			center,
 			cell - Vector2i(10, 10),
 			Vector2i(21, 21)
 		)

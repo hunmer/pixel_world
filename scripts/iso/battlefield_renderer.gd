@@ -250,7 +250,7 @@ func pick_cell(screen_pos: Vector2, _viewport_size: Vector2) -> Vector2i:
 	var camera := _active_camera()
 	if camera != null:
 		var hit := IsoProjection.pick_top_face(
-			camera, screen_pos, 0, PICK_MAX_LEVEL, Callable(self, "_pick_stand_level")
+			camera, screen_pos, 0, PICK_MAX_LEVEL, Callable(self, "_pick_visual_top_level")
 		)
 		return hit.get("cell", Vector2i(-1, -1)) as Vector2i
 	var canvas := get_viewport().get_canvas_transform()
@@ -258,8 +258,9 @@ func pick_cell(screen_pos: Vector2, _viewport_size: Vector2) -> Vector2i:
 	return pick_world(world)
 
 
-func _pick_stand_level(cell: Vector2i) -> float:
-	return float(stand_level(cell.x, cell.y)) if _in_bounds(cell) else -1.0
+func _pick_visual_top_level(cell: Vector2i) -> float:
+	# 拾取必须落在玩家实际看到的顶面；旧陆柱站立层比最上块高一层。
+	return float(_visual_top_level(cell.x, cell.y)) if _in_bounds(cell) else -1.0
 
 
 ## 全局（viewport canvas）坐标 → 格子。逐层尝试：命中层的投影点落在该格柱顶。
@@ -279,8 +280,10 @@ func pick_world(world: Vector2) -> Vector2i:
 					return Vector2i(x, y)
 		return Vector2i(-1, -1)  # 悬空布局没有空白地面 fallback。
 	for lvl in range(PICK_MAX_LEVEL, -1, -1):
-		var candidate := IsoCoords.to_cell(local + Vector2(0.0, lvl * IsoCoords.LEVEL_H))
-		if _in_bounds(candidate) and stand_level(candidate.x, candidate.y) == lvl:
+		var candidate := IsoCoords.to_cell(
+			local - ColumnBatchScript.TOP_CENTER_OFFSET + Vector2(0.0, lvl * IsoCoords.LEVEL_H)
+		)
+		if _in_bounds(candidate) and _visual_top_level(candidate.x, candidate.y) == lvl:
 			return candidate
 	var fallback := IsoCoords.to_cell(local)
 	if _in_bounds(fallback):

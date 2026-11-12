@@ -82,9 +82,9 @@ func _run() -> void:
 		and renderer.sort_for(1, 0) < renderer.sort_for(1, 1), "sort_for 对角单调")
 
 	# 5. 多高度拾取（root/renderer 未进树 → global_transform=identity，直接用世界坐标）
-	var hit: Vector2i = renderer.pick_world(IsoCoordsScript.to_screen(3, 2, 2))
+	var hit: Vector2i = renderer.pick_world(renderer.top_center_for(3, 2))
 	_expect(hit == Vector2i(3, 2), "平原柱顶点击命中 (3,2)（实际 %s）" % hit)
-	var hit_m: Vector2i = renderer.pick_world(IsoCoordsScript.to_screen(4, 3, 5))
+	var hit_m: Vector2i = renderer.pick_world(renderer.top_center_for(4, 3))
 	_expect(hit_m == Vector2i(4, 3), "山顶点击命中 (4,3)（实际 %s）" % hit_m)
 	var hit_w: Vector2i = renderer.pick_world(IsoCoordsScript.to_screen(4, 4, 1))
 	_expect(hit_w == Vector2i(4, 4), "水面点击命中 (4,4)（实际 %s）" % hit_w)
