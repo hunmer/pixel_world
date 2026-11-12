@@ -7,6 +7,9 @@ extends Node3D
 
 const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 const UNIT_VISUAL_PX := 32.0
+const SCREEN_HORIZONTAL_EPSILON := 0.001
+# 职业立绘与鱼类旧素材一致，原图朝左；转向只看相机投影后的屏幕水平位移。
+const SOURCE_FACES_RIGHT := false
 
 var unit: Dictionary
 var portrait: Sprite3D
@@ -187,8 +190,9 @@ func update_state() -> void:
 	var faction_key: StringName = unit[&"faction"]
 	_name_label.modulate = FACTION_COLOR.get(faction_key, Color.WHITE)
 	_name_label.text = _build_name_label(unit)
-	var alpha := 0.5 if bool(unit[&"hasActed"]) else 1.0
-	_set_children_alpha(alpha)
+	# ALPHA_CUT_DISCARD 会裁掉半透明像素；存活单位始终不透明，仅用RGB区分已行动。
+	_set_children_alpha(1.0)
+	portrait.modulate = Color(0.58, 0.58, 0.58, 1.0) if bool(unit[&"hasActed"]) else Color.WHITE
 	visible = not bool(unit[&"isDead"])
 
 func _set_children_alpha(a: float) -> void:
@@ -199,6 +203,17 @@ func _set_children_alpha(a: float) -> void:
 func fade_alpha(a: float) -> void:
 	_set_children_alpha(a)
 
+## 与鱼类移动一致：按相机投影后的屏幕水平位移转向，近零位移保留原朝向。
+func face_movement(target: Vector3) -> void:
+	var camera := _active_camera()
+	if camera == null:
+		return
+	var screen_delta := IsoProjection.world_to_screen(camera, target).x - IsoProjection.world_to_screen(camera, global_position).x
+	if absf(screen_delta) <= SCREEN_HORIZONTAL_EPSILON:
+		return
+	portrait.flip_h = (screen_delta > 0.0) != SOURCE_FACES_RIGHT
+
+
 func move_along_path(path: Array, on_done: Callable) -> void:
 	if path.is_empty():
 		on_done.call()
@@ -206,6 +221,7 @@ func move_along_path(path: Array, on_done: Callable) -> void:
 	var tween := create_tween()
 	for cell in path:
 		var target := _world_cell_world(cell) if is_world_mode() else _b2_cell_world(cell)
+		tween.tween_callback(func(): face_movement(target))
 		tween.tween_property(self, "global_position", target, 0.18)
 		if is_world_mode():
 			tween.tween_callback(func(): unit[&"position"] = cell)

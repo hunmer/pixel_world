@@ -266,7 +266,7 @@ func _on_player_phase(turn_num: int) -> void:
 	# L1 埋点：回合切换（按 AGENTS.md 调试埋点强制原则）
 	print("[turn] === 玩家回合 #%d 开始 ===" % turn_num)
 	mode = Mode.IDLE
-	battle_ui.set_phase_text("玩家回合 #%d" % turn_num, Color(0.29, 0.87, 0.50))
+	battle_ui.set_phase_text("第 %d 轮 · 我方行动" % turn_num, Color(0.29, 0.87, 0.50))
 	_refresh_all_units()
 	# 托管模式下不需要手动选中（托管自己驱动），跳过 debug_auto_select 避免范围墙未入树报错
 	if SceneArgs.battle_args.get("debug_auto_select_first_player", false) and not turn_director.is_hosting():
@@ -285,9 +285,11 @@ func _on_enemy_phase(turn_num: int) -> void:
 		return  # 战斗已分胜负，丢弃后续回合信号
 	# L1 埋点：回合切换
 	print("[turn] === 敌方回合 #%d 开始 ===" % turn_num)
-	battle_ui.set_phase_text("敌方回合 #%d" % turn_num, Color(0.97, 0.44, 0.44))
+	battle_ui.set_phase_text("第 %d 轮 · 敌方行动" % turn_num, Color(0.97, 0.44, 0.44))
 	mode = Mode.ENEMY_TURN
 	_clear_range_highlight()
+	# TurnManager 已在信号前复位敌方行动状态；立即恢复存活单位亮度与顶部状态。
+	_refresh_all_units()
 
 	turn_director.start_enemy_phase()
 

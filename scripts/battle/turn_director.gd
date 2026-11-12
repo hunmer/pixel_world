@@ -209,6 +209,12 @@ func start_enemy_phase() -> void:
 		if enemy.isDead:
 			continue
 		await _enemy_act(enemy)
+		# 没有可攻击目标也算完成行动；同步立绘与顶部状态，不能留到下一轮误显示。
+		if not enemy.isDead:
+			enemy.hasActed = true
+			var us: UnitSprite3D = unit_sprites.get(enemy.id)
+			if us != null:
+				us.update_state()
 	await get_tree().create_timer(0.4).timeout
 	on_check_battle_end.call()
 	if turn.phase == &"enemy":
@@ -257,6 +263,7 @@ func _enemy_act(enemy: Dictionary) -> void:
 func _tween_move(us: UnitSprite3D, path: Array) -> void:
 	for cell in path:
 		var target := us._world_cell_world(cell) if us.is_world_mode() else us._b2_cell_world(cell)
+		us.face_movement(target)
 		var tw := create_tween()
 		tw.tween_property(us, "global_position", target, 0.15)
 		await tw.finished

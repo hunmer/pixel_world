@@ -70,6 +70,9 @@ var end_turn_btn: Button
 var info_label: Label
 var menu_container: Control
 var preview_container: Control
+var turn_status_panel: PanelContainer
+var _turn_status_labels: Dictionary = {}
+var _turn_status_signature := ""
 # 单位详情面板（右键查看任意单位完整信息；与行动菜单 menu_container 独立）
 var _unit_detail_panel: Control = null
 
@@ -98,6 +101,75 @@ func setup(p_board: IsoBoard, p_grid: GridSystem, p_unit_sprites: Dictionary, p_
 	turn = p_turn
 
 
+func _process(_delta: float) -> void:
+	# 战斗、技能、物品和AI都可能改HP/行动状态；以签名检测统一刷新，避免遗漏调用链。
+	refresh_turn_status()
+
+
+func _build_turn_status_panel() -> void:
+	turn_status_panel = PanelContainer.new()
+	turn_status_panel.name = "TurnStatus"
+	turn_status_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	turn_status_panel.offset_left = 230.0
+	turn_status_panel.offset_top = 10.0
+	turn_status_panel.offset_right = -230.0
+	turn_status_panel.offset_bottom = 78.0
+	turn_status_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	turn_status_panel.add_theme_stylebox_override("panel", _make_panel_style())
+	var rows := VBoxContainer.new()
+	rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rows.add_theme_constant_override("separation", 2)
+	turn_status_panel.add_child(rows)
+	for faction: StringName in [&"player", &"enemy"]:
+		var has_faction := false
+		for u: Dictionary in turn.units:
+			if StringName(u.get(&"faction", &"")) == faction:
+				has_faction = true
+				break
+		if not has_faction:
+			continue
+		var label := Label.new()
+		label.name = "PlayerStatus" if faction == &"player" else "EnemyStatus"
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.add_theme_font_size_override("font_size", 13)
+		label.add_theme_color_override("font_color", FACTION_COLOR[faction])
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rows.add_child(label)
+		_turn_status_labels[faction] = label
+	add_child(turn_status_panel)
+	refresh_turn_status()
+
+
+## 顶部精简状态：阵营、存活角色、行动状态与实时HP；死亡角色不再占行。
+func refresh_turn_status() -> void:
+	if turn == null or _turn_status_labels.is_empty():
+		return
+	var signature := "%d:%s" % [turn.turn_number, String(turn.phase)]
+	for u: Dictionary in turn.units:
+		signature += "|%s:%s:%s:%d:%d:%s:%s" % [
+			String(u.get(&"id", &"")), String(u.get(&"name", "")),
+			String(u.get(&"faction", &"")), int(u.get(&"hp", 0)),
+			int((u.get(&"stats", {}) as Dictionary).get(&"hp", 0)),
+			str(bool(u.get(&"hasActed", false))), str(bool(u.get(&"isDead", false)))
+		]
+	if signature == _turn_status_signature:
+		return
+	_turn_status_signature = signature
+	for faction: StringName in _turn_status_labels:
+		var parts := PackedStringArray()
+		for u: Dictionary in turn.units:
+			if StringName(u.get(&"faction", &"")) != faction or bool(u.get(&"isDead", false)):
+				continue
+			var stats: Dictionary = u.get(&"stats", {})
+			parts.append("%s %s HP%d/%d" % [
+				String(u.get(&"name", "")), "已行动" if bool(u.get(&"hasActed", false)) else "未行动",
+				int(u.get(&"hp", 0)), int(stats.get(&"hp", 0))
+			])
+		var label: Label = _turn_status_labels[faction]
+		label.text = "%s｜%s" % [FACTION_NAME[faction], "；".join(parts)]
+		label.visible = not parts.is_empty()
+
+
 # ============================================================
 # HUD 构建
 # ============================================================
@@ -105,10 +177,11 @@ func build(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pref_cb: Cal
 	name = "UI"
 	# 回合标签
 	phase_label = Label.new()
-	phase_label.text = "玩家回合 #1"
+	phase_label.text = "第 1 轮 · 我方行动"
 	phase_label.add_theme_font_size_override("font_size", 22)
 	phase_label.position = Vector2(16, 12)
 	add_child(phase_label)
+	_build_turn_status_panel()
 	# 结束回合按钮
 	end_turn_btn = Button.new()
 	end_turn_btn.text = "结束回合 (E)"

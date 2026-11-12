@@ -55,7 +55,13 @@ func _run_b2() -> void:
 	var battle = load("res://scenes/Battle.tscn").instantiate()
 	root.add_child(battle)
 	await create_timer(0.4).timeout
+	_expect(battle.battle_ui.phase_label.text == "第 1 轮 · 我方行动", "B2 顶部未显示中文当前轮数")
+	var player_status: Label = battle.battle_ui._turn_status_labels[&"player"]
+	var enemy_status: Label = battle.battle_ui._turn_status_labels[&"enemy"]
+	_expect(player_status.text.contains("移动测试 未行动 HP")
+		and enemy_status.text.contains("弓手 未行动 HP"), "B2 顶部阵营角色/行动/HP状态不完整")
 	var target := Vector2i(1, 0)
+	var start_screen: Vector2 = battle._b2_cell_to_screen(0, 0)
 	battle._select_unit(player)
 	_expect(battle.current_move_range.has("1,0"), "B2 高差目标不在移动指示范围")
 	battle._last_path_update_msec = -100
@@ -87,6 +93,17 @@ func _run_b2() -> void:
 		"B2 跨高度移动完成后行动菜单未打开")
 	_expect(battle.range_overlay.threat_arrow_count() == 0,
 		"进入移动后行动菜单时应清除威胁抛物线")
+	var sprite: UnitSprite3D = battle._unit_sprites[player.id]
+	if absf(target_screen.x - start_screen.x) > UnitSprite3D.SCREEN_HORIZONTAL_EPSILON:
+		_expect(sprite.portrait.flip_h == ((target_screen.x > start_screen.x) != UnitSprite3D.SOURCE_FACES_RIGHT),
+			"B2 移动后未按屏幕水平方向翻转立绘")
+	player.hasActed = true
+	battle.battle_ui.update_unit_sprite(player)
+	await process_frame
+	await process_frame
+	_expect(sprite.visible and is_equal_approx(sprite.portrait.modulate.a, 1.0),
+		"B2 行动结束后存活单位被半透明裁剪/隐藏")
+	_expect(player_status.text.contains("移动测试 已行动 HP"), "B2 行动结束后顶部状态未实时刷新")
 	var focus_before: Vector3 = battle.board.camera.focus_position
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_MIDDLE
@@ -119,8 +136,13 @@ func _run_b1() -> void:
 	await create_timer(0.4).timeout
 	var battle = world._battle_system
 	var player: Dictionary = chapter.playerUnits[0]
+	_expect(battle.battle_ui.phase_label.text == "第 1 轮 · 我方行动", "B1 顶部未显示中文当前轮数")
+	var player_status: Label = battle.battle_ui._turn_status_labels[&"player"]
+	_expect(player_status.text.contains(String(player[&"name"]))
+		and player_status.text.contains("未行动 HP"), "B1 顶部我方角色/行动/HP状态不完整")
 	battle._select_unit(player)
 	var start: Vector2i = player.position
+	var start_screen: Vector2 = battle._b1_cell_to_screen(start.x, start.y)
 	var start_level: int = battle._b1_cell_level(start.x, start.y)
 	var target := Vector2i(-1, -1)
 	for key in battle.current_move_range.keys():
@@ -139,6 +161,17 @@ func _run_b1() -> void:
 			"B1 点击不同 z 的移动格后单位未到目标（target=%s position=%s）" % [str(target), str(player.position)])
 		_expect(battle.mode == battle.Mode.MENU and battle.battle_ui.has_open_menu(),
 			"B1 跨高度移动完成后行动菜单未打开")
+		var sprite: UnitSprite3D = battle._unit_sprites[player.id]
+		if absf(target_screen.x - start_screen.x) > UnitSprite3D.SCREEN_HORIZONTAL_EPSILON:
+			_expect(sprite.portrait.flip_h == ((target_screen.x > start_screen.x) != UnitSprite3D.SOURCE_FACES_RIGHT),
+				"B1 移动后未按屏幕水平方向翻转立绘")
+		player.hasActed = true
+		battle.battle_ui.update_unit_sprite(player)
+		await process_frame
+		await process_frame
+		_expect(sprite.visible and is_equal_approx(sprite.portrait.modulate.a, 1.0),
+			"B1 行动结束后存活单位被半透明裁剪/隐藏")
+		_expect(player_status.text.contains("已行动 HP"), "B1 行动结束后顶部状态未实时刷新")
 		var focus_before: Vector3 = world._cam.focus_position
 		var press := InputEventMouseButton.new()
 		press.button_index = MOUSE_BUTTON_MIDDLE
