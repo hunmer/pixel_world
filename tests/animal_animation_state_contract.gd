@@ -82,6 +82,25 @@ func _complete_step(animal, next_cell: Vector2i) -> void:
 	animal.consume_move_bout_step()
 
 
+func _begin_projected_step(
+	animal,
+	next_cell: Vector2i,
+	screen_horizontal_delta: float
+) -> void:
+	animal.begin_move(
+		next_cell,
+		Vector2(animal.grid_cell),
+		Vector2(next_cell),
+		0.0,
+		1.0,
+		0.1,
+		1.0,
+		0.0,
+		0.0,
+		screen_horizontal_delta
+	)
+
+
 func _cell_is_open(world, cell: Vector2i) -> bool:
 	var q: int = world._quantize(cell.x, cell.y)
 	if q <= world.WATER_MAX or not world._cells.has(cell):
@@ -152,36 +171,58 @@ func _run() -> void:
 		6.0
 	)
 	fish.start_move_bout(8)
-	fish.begin_move(
-		Vector2i.RIGHT,
-		Vector2.ZERO,
-		Vector2.RIGHT,
-		0.0,
-		1.0,
-		0.1,
-		1.0,
-		0.0,
-		0.0
-	)
-	_expect(not fish.flip_h, "原图朝右的鱼向右游时被错误镜像")
+	_begin_projected_step(fish, Vector2i.RIGHT, 24.0)
+	_expect(not fish.flip_h, "原图朝右的鱼向屏幕右侧游时被错误镜像")
 	_expect(fish.tick(0.2), "鱼向右测试移动未完成")
 	_expect(
 		fish.direction_persistence_score(Vector2i(2, 0), Vector2i.RIGHT)
 		> fish.direction_persistence_score(Vector2i(1, 1), Vector2i.RIGHT),
 		"鱼在连续行动段中没有偏好保持原方向"
 	)
+	_begin_projected_step(fish, Vector2i.ZERO, -24.0)
+	_expect(fish.flip_h, "原图朝右的鱼向屏幕左侧游前没有先镜像")
+	_expect(fish.tick(0.2), "鱼向左测试移动未完成")
+
+	# 相机旋转后，逻辑网格 X 与屏幕水平方向可能相反。
+	_begin_projected_step(fish, Vector2i.LEFT, 24.0)
+	_expect(not fish.flip_h, "负逻辑 X / 正屏幕位移时错误使用了网格方向")
+	_expect(fish.tick(0.2), "鱼的反向投影右移未完成")
+	_begin_projected_step(fish, Vector2i.ZERO, -24.0)
+	_expect(fish.flip_h, "正逻辑 X / 负屏幕位移时错误使用了网格方向")
+	_expect(fish.tick(0.2), "鱼的反向投影左移未完成")
+
+	_begin_projected_step(fish, Vector2i.DOWN, 0.0)
+	_expect(fish.flip_h, "纯垂直屏幕移动不应改变既有朝向")
+	_expect(fish.tick(0.2), "鱼的垂直测试移动未完成")
+	_begin_projected_step(fish, Vector2i.LEFT, 0.0005)
+	_expect(fish.flip_h, "近零正水平位移不应改变既有朝向")
+	_expect(fish.tick(0.2), "鱼的近零正位移测试移动未完成")
+	_begin_projected_step(fish, Vector2i.ZERO, -0.0005)
+	_expect(fish.flip_h, "近零负水平位移不应改变既有朝向")
+	_expect(fish.tick(0.2), "鱼的近零负位移测试移动未完成")
+
+	# 旧调用仍只传九个参数；缺省投影位移必须保留朝向。
 	fish.begin_move(
-		Vector2i.ZERO,
-		Vector2.RIGHT,
-		Vector2.ZERO,
-		1.0,
+		Vector2i.LEFT,
+		Vector2(fish.grid_cell),
+		Vector2(Vector2i.LEFT),
 		0.0,
+		1.0,
 		0.1,
 		1.0,
 		0.0,
 		0.0
 	)
-	_expect(fish.flip_h, "原图朝右的鱼向左游前没有先镜像")
+	_expect(fish.flip_h, "缺省屏幕位移的旧调用不应改变既有朝向")
+	_expect(fish.tick(0.2), "鱼的旧接口兼容移动未完成")
+
+	var legacy_fish = _configure_animal("legacy_fish", &"swim", true, [8, 12])
+	_begin_projected_step(legacy_fish, Vector2i.RIGHT, 24.0)
+	_expect(legacy_fish.flip_h, "原图朝左的旧素材向屏幕右侧游时没有镜像")
+	_expect(legacy_fish.tick(0.2), "旧素材鱼向右测试移动未完成")
+	_begin_projected_step(legacy_fish, Vector2i.ZERO, -24.0)
+	_expect(not legacy_fish.flip_h, "原图朝左的旧素材向屏幕左侧游时被错误镜像")
+	_expect(legacy_fish.tick(0.2), "旧素材鱼向左测试移动未完成")
 
 	var frog = _configure_animal("frog", &"jump", false, [1, 1])
 	frog.start_move_bout(1)
@@ -219,6 +260,7 @@ func _run() -> void:
 
 	walker.queue_free()
 	fish.queue_free()
+	legacy_fish.queue_free()
 	frog.queue_free()
 	world.queue_free()
 	await process_frame

@@ -198,6 +198,41 @@ func _run() -> void:
 				fish.sprite_frames.get_animation_loop(&"swim"),
 				"金鱼 swim 动画没有循环"
 			)
+			var base_camera_angle := rad_to_deg(world._cam.yaw_radians)
+			for camera_angle in [base_camera_angle, base_camera_angle + 180.0]:
+				world._cam.snap_to_angle(camera_angle)
+				for initial_flip in [false, true]:
+					fish.moving = false
+					fish.grid_cell = interior_water
+					fish.target_cell = interior_water
+					fish.finish_move_bout()
+					fish.flip_h = initial_flip
+					world._begin_animal_move(fish)
+					_expect(fish.moving, "真实金鱼无法开始投影朝向测试移动")
+					if not fish.moving:
+						continue
+					var from_level: float = world._stand_level(
+						world._quantize(fish.from_cell.x, fish.from_cell.y)
+					)
+					var to_level: float = world._stand_level(
+						world._quantize(fish.target_cell.x, fish.target_cell.y)
+					)
+					var screen_delta: float = (
+						world._grid_to_screen(fish.target_cell, to_level).x
+						- world._grid_to_screen(fish.from_cell, from_level).x
+					)
+					_expect(
+						absf(screen_delta) > 0.001,
+						"投影朝向测试移动缺少有效屏幕水平位移"
+					)
+					_expect(
+						fish.flip_h == ((screen_delta > 0.0) != fish.source_faces_right),
+						"主世界没有按相机投影方向翻转金鱼: angle=%s initial=%s delta=%s"
+						% [camera_angle, initial_flip, screen_delta]
+					)
+			fish.moving = false
+			fish.grid_cell = interior_water
+			fish.target_cell = interior_water
 			fish.finish_move_bout()
 			_expect(
 				fish.animation == &"swim" and fish.is_playing(),

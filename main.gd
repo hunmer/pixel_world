@@ -2743,6 +2743,13 @@ func _begin_animal_move(animal: AnimatedSprite3D) -> void:
 		return
 	var movement_decision := _animal_behavior_decision(animal, best_target, current_cell)
 	var movement_speed := maxf(0.01, float(movement_decision.get("speed_multiplier", 1.0)))
+	var from_stand_level := _stand_level(_quantize(current_cell.x, current_cell.y))
+	var to_stand_level := _stand_level(_quantize(best_target.x, best_target.y))
+	# 网格方向不等于屏幕方向；同一相机状态下投影起终点，供动物素材定向。
+	var screen_horizontal_delta := (
+		_grid_to_screen(best_target, to_stand_level).x
+		- _grid_to_screen(current_cell, from_stand_level).x
+	)
 	animal.begin_move(
 		best_target,
 		_cell_feet_pos(current_cell),
@@ -2751,8 +2758,9 @@ func _begin_animal_move(animal: AnimatedSprite3D) -> void:
 		_column_sort_y(best_target) + ANIMAL_SORT_BIAS,
 		animal.move_duration / movement_speed,
 		movement_speed,
-		_stand_level(_quantize(current_cell.x, current_cell.y)),
-		_stand_level(_quantize(best_target.x, best_target.y))
+		from_stand_level,
+		to_stand_level,
+		screen_horizontal_delta
 	)
 
 

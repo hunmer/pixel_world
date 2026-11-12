@@ -3,6 +3,7 @@ extends AnimatedSprite3D
 ## 世界生态动物：行为仍使用连续二维网格坐标，AnimatedSprite3D 负责真实深度落位。
 const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 const WORLD_PIXEL_SIZE := 1.0 / 32.0
+const SCREEN_HORIZONTAL_EPSILON := 0.001
 
 var material: Material:
 	set(value):
@@ -124,7 +125,8 @@ func begin_move(
 	duration: float,
 	playback_speed: float,
 	from_stand_level: float,
-	to_stand_level: float
+	to_stand_level: float,
+	screen_horizontal_delta: float = 0.0
 ) -> void:
 	from_cell = grid_cell
 	target_cell = next_cell
@@ -141,8 +143,9 @@ func begin_move(
 	moving = true
 	speed_scale = maxf(playback_speed, 0.001)
 	travel_direction = next_cell - from_cell
-	if not is_equal_approx(to_visual.x, from_visual.x):
-		var moving_screen_right := to_visual.x > from_visual.x
+	# 只使用相机投影后的屏幕水平位移；旧调用缺省传零时保留当前朝向。
+	if absf(screen_horizontal_delta) > SCREEN_HORIZONTAL_EPSILON:
+		var moving_screen_right := screen_horizontal_delta > 0.0
 		# 物种明确声明原图朝右时，向左移动才镜像；未声明的旧素材继续
 		# 沿用“原图朝左、向右镜像”的兼容行为。
 		flip_h = moving_screen_right != source_faces_right

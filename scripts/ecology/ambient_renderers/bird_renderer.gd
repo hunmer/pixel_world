@@ -1,6 +1,8 @@
 class_name BirdRenderer
 extends Node
 
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
+
 ## View-lifetime bird renderer used by AmbientRegistry.
 ##
 ## Ground birds remain children of their terrain column so they inherit the
@@ -450,13 +452,17 @@ func _apply_grounded_pose(entry: Dictionary) -> void:
 	var base := Vector2(entry.get("base_position", Vector2.ZERO))
 	var host := _entry_host(entry)
 	var cell: Vector2i = entry.get("cell", Vector2i.ZERO)
+	var uses_camera_3d := _observer_camera_3d(_last_observer_context) != null
+	var pixel_scale := _observer_scale(_last_observer_context) if uses_camera_3d else Vector2.ONE
 	if host != null and host.has_method("_grid_to_screen") and host.has_method("cell_stand_level"):
 		base = host._grid_to_screen(cell, float(host.cell_stand_level(cell))) \
-			+ Vector2(entry.get("member_jitter", Vector2.ZERO)) + _ground_visual_offset
+			+ (Vector2(entry.get("member_jitter", Vector2.ZERO)) + _ground_visual_offset) \
+			* pixel_scale
 	sprite.position = base + Vector2(
 		sin(angle) * radius,
 		0.0
-	)
+	) * pixel_scale
+	sprite.scale = pixel_scale
 	var horizontal_velocity := cos(angle) * radius * float(entry.get("speed", 1.0))
 	if absf(horizontal_velocity) > EPSILON:
 		# Both source sheets face right.
@@ -491,8 +497,15 @@ func _takeoff(key: Vector3i, context: Dictionary) -> void:
 	if not is_instance_valid(sprite):
 		_grounded.erase(key)
 		return
+	var world_level := _observer_flight_level(context)
 	var world_position := sprite.global_position
-	var screen_position := _world_to_screen(world_position, context)
+	var screen_position := _world_to_screen(world_position, context, world_level)
+	if _observer_camera_3d(context) != null:
+		# Ground sprites are already projected by main. Recover their continuous
+		# grid position once on the fixed stand plane; never integrate screen space.
+		world_level = _grounded_flight_level(entry, context)
+		screen_position = sprite.global_position
+		world_position = _screen_to_world(screen_position, context, world_level)
 	var viewport_size: Vector2 = context.get("viewport_size", Vector2.ZERO)
 	var player_screen: Vector2 = context.get(
 		"player_screen_position",
@@ -514,7 +527,7 @@ func _takeoff(key: Vector3i, context: Dictionary) -> void:
 		_seeded_rand01(int(entry.get("seed", 0)) + 37)
 	)
 	var screen_velocity := away * speed
-	var world_velocity := _screen_velocity_to_world(screen_velocity, context)
+	var world_velocity := _screen_velocity_to_world(screen_velocity, context, world_level)
 	var scale_value := _observer_scale(context)
 	_grounded.erase(key)
 	var old_parent := sprite.get_parent()
@@ -529,6 +542,7 @@ func _takeoff(key: Vector3i, context: Dictionary) -> void:
 		"sprite": sprite,
 		"world_position": world_position,
 		"world_velocity": world_velocity,
+		"world_level": world_level,
 		"age": 0.0,
 		"entered_viewport": true,
 		"kind": &"escape",
@@ -552,23 +566,26 @@ func _update_flying(context: Dictionary, delta: float) -> void:
 			continue
 		var previous_screen_position := sprite.position
 		entry["age"] = float(entry.get("age", 0.0)) + delta
+		var world_level := float(entry.get("world_level", _observer_flight_level(context)))
+		entry["world_level"] = world_level
 		# Integrate only authoritative world coordinates. Camera smoothing changes
 		# the projection below, never the bird's velocity or accumulated position.
 		var world_position: Vector2 = entry.get(
 			"world_position",
-			_screen_to_world(sprite.position, context)
+			_screen_to_world(sprite.position, context, world_level)
 		)
 		var world_velocity: Vector2 = entry.get(
 			"world_velocity",
 			_screen_velocity_to_world(
 				Vector2(entry.get("velocity", Vector2.ZERO)),
-				context
+				context,
+				world_level
 			)
 		)
 		world_position += world_velocity * delta
 		entry["world_position"] = world_position
 		entry["world_velocity"] = world_velocity
-		sprite.position = _world_to_screen(world_position, context)
+		sprite.position = _world_to_screen(world_position, context, world_level)
 		sprite.scale = observer_scale
 		var entered_viewport := bool(entry.get("entered_viewport", false))
 		var travel_min := previous_screen_position.min(sprite.position)
@@ -639,6 +656,7 @@ func _spawn_flyover(
 		_rng.randf()
 	)
 	var observer_scale := _observer_scale(context)
+	var world_level := _observer_flight_level(context)
 	var base_vertical_speed := lerpf(-4.0, 4.0, _rng.randf())
 	var trail_distance := 0.0
 	var spawned := 0
@@ -672,8 +690,9 @@ func _spawn_flyover(
 		)
 		_flying.append({
 			"sprite": sprite,
-			"world_position": _screen_to_world(screen_position, context),
-			"world_velocity": _screen_velocity_to_world(screen_velocity, context),
+			"world_position": _screen_to_world(screen_position, context, world_level),
+			"world_velocity": _screen_velocity_to_world(screen_velocity, context, world_level),
+			"world_level": world_level,
 			"age": 0.0,
 			"entered_viewport": false,
 			"kind": &"flyover",
@@ -767,8 +786,6 @@ func _schedule_next_flyover() -> void:
 
 
 func _observer_scale(context: Dictionary) -> Vector2:
-	if context.has("camera_3d"):
-		return Vector2.ONE
 	var zoom_value: Variant = context.get("zoom", Vector2.ONE)
 	if zoom_value is Vector2:
 		var zoom: Vector2 = zoom_value
@@ -777,13 +794,51 @@ func _observer_scale(context: Dictionary) -> Vector2:
 	return Vector2.ONE * uniform
 
 
-## The foreground flight layer stays in screen space for a stable draw layer,
-## while every bird keeps authoritative world coordinates. Project from the
-## current Camera2D values supplied by main; Viewport.canvas_transform can still
-## describe the previous camera frame while camera smoothing is being updated.
-func _world_to_screen(world_position: Vector2, context: Dictionary) -> Vector2:
-	if context.has("camera_3d"):
-		return world_position
+func _observer_camera_3d(context: Dictionary) -> Camera3D:
+	var camera_value: Variant = context.get("camera_3d", null)
+	if not camera_value is Camera3D:
+		return null
+	var camera := camera_value as Camera3D
+	return camera if is_instance_valid(camera) and camera.is_inside_tree() else null
+
+
+func _observer_flight_level(context: Dictionary) -> float:
+	var player_world_value: Variant = context.get("player_world_3d", null)
+	if player_world_value is Vector3:
+		var player_world := player_world_value as Vector3
+		return player_world.y / IsoProjection.LEVEL_HEIGHT
+	var camera := _observer_camera_3d(context)
+	if camera != null:
+		var focus_value: Variant = camera.get("focus_position")
+		if focus_value is Vector3:
+			var focus := focus_value as Vector3
+			return focus.y / IsoProjection.LEVEL_HEIGHT
+	return 0.0
+
+
+func _grounded_flight_level(entry: Dictionary, context: Dictionary) -> float:
+	var host := _entry_host(entry)
+	var cell: Vector2i = entry.get("cell", Vector2i.ZERO)
+	if host != null and host.has_method("cell_stand_level"):
+		return float(host.cell_stand_level(cell))
+	return _observer_flight_level(context)
+
+
+## The foreground flight layer stays in screen space for a stable draw layer.
+## Two-dimensional observers retain the legacy Camera2D transform. A Camera3D
+## observer stores continuous grid coordinates plus a fixed flight level, so
+## camera movement and zoom only change projection, never authoritative state.
+func _world_to_screen(
+	world_position: Vector2,
+	context: Dictionary,
+	world_level: float = 0.0
+) -> Vector2:
+	var camera := _observer_camera_3d(context)
+	if camera != null:
+		return IsoProjection.world_to_screen(
+			camera,
+			IsoProjection.visual_to_world(world_position, world_level)
+		)
 	var viewport_size: Vector2 = context.get("viewport_size", Vector2.ZERO)
 	var camera_world_position: Vector2 = context.get(
 		"camera_world_position",
@@ -793,9 +848,16 @@ func _world_to_screen(world_position: Vector2, context: Dictionary) -> Vector2:
 	return viewport_size * 0.5 + (world_position - camera_world_position) * zoom
 
 
-func _screen_to_world(screen_position: Vector2, context: Dictionary) -> Vector2:
-	if context.has("camera_3d"):
-		return screen_position
+func _screen_to_world(
+	screen_position: Vector2,
+	context: Dictionary,
+	world_level: float = 0.0
+) -> Vector2:
+	var camera := _observer_camera_3d(context)
+	if camera != null:
+		var point: Variant = IsoProjection.screen_to_world(camera, screen_position, world_level)
+		if point is Vector3:
+			return IsoProjection.world_to_grid_position(point as Vector3)
 	var viewport_size: Vector2 = context.get("viewport_size", Vector2.ZERO)
 	var camera_world_position: Vector2 = context.get(
 		"camera_world_position",
@@ -810,9 +872,19 @@ func _screen_to_world(screen_position: Vector2, context: Dictionary) -> Vector2:
 
 func _screen_velocity_to_world(
 	screen_velocity: Vector2,
-	context: Dictionary
+	context: Dictionary,
+	world_level: float = 0.0
 ) -> Vector2:
-	var zoom := Vector2.ONE if context.has("camera_3d") else _observer_scale(context)
+	var camera := _observer_camera_3d(context)
+	if camera != null:
+		# Orthographic projection is linear. Differencing two points on the same
+		# plane removes camera translation and converts pixels/second to grid/s.
+		var viewport_size: Vector2 = context.get("viewport_size", Vector2.ZERO)
+		var screen_origin := viewport_size * 0.5
+		var world_origin := _screen_to_world(screen_origin, context, world_level)
+		var world_tip := _screen_to_world(screen_origin + screen_velocity, context, world_level)
+		return world_tip - world_origin
+	var zoom := _observer_scale(context)
 	return Vector2(screen_velocity.x / zoom.x, screen_velocity.y / zoom.y)
 
 

@@ -3,6 +3,24 @@ extends SceneTree
 const BirdRendererScript = preload(
 	"res://scripts/ecology/ambient_renderers/bird_renderer.gd"
 )
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
+const IsometricCamera3D = preload("res://scripts/iso/isometric_camera_3d.gd")
+
+
+class TerrainHost3D:
+	extends Node2D
+
+	const Iso = preload("res://scripts/iso/iso_projection_3d.gd")
+
+	var camera: Camera3D
+	var stand_level := 3.0
+
+	func _grid_to_screen(cell: Vector2i, level: float) -> Vector2:
+		return Iso.grid_to_screen(camera, cell, level)
+
+	func cell_stand_level(_cell: Vector2i) -> float:
+		return stand_level
+
 
 var failures: Array[String] = []
 
@@ -31,6 +49,31 @@ func _observer(
 		"world_seed": 4242,
 		"allow_flyovers": false,
 	}
+
+
+func _observer_3d(camera, zoom: float, player_cell: Vector2i = Vector2i.ZERO) -> Dictionary:
+	var context := _observer(player_cell)
+	context["camera_3d"] = camera
+	context["viewport_size"] = camera.get_viewport().get_visible_rect().size
+	context["zoom"] = Vector2.ONE * zoom
+	context["camera_world_position"] = IsoProjection.world_to_grid_position(
+		camera.focus_position
+	)
+	context["player_world_3d"] = camera.focus_position
+	context["player_screen_position"] = camera.unproject_position(camera.focus_position)
+	return context
+
+
+func _expect_vector2_near(
+	actual: Vector2,
+	expected: Vector2,
+	message: String,
+	tolerance: float = 0.01
+) -> void:
+	_expect(
+		actual.distance_to(expected) <= tolerance,
+		"%s (actual=%s expected=%s)" % [message, actual, expected]
+	)
 
 
 func _run() -> void:
@@ -203,6 +246,8 @@ func _run() -> void:
 	_expect(renderer.get_flying_count() == 0, "clear 后仍有飞行鸟")
 	_expect(renderer.get_dismissed_count() == 0, "clear 后仍保留 dismissed 状态")
 
+	await _exercise_camera_3d(renderer)
+
 	renderer.queue_free()
 	host.queue_free()
 	await process_frame
@@ -241,3 +286,230 @@ func _run() -> void:
 		for failure in failures:
 			push_error(failure)
 		quit(1)
+
+
+func _exercise_camera_3d(renderer) -> void:
+	var camera = IsometricCamera3D.new()
+	root.add_child(camera)
+	var bird_cell := Vector2i(10, 10)
+	var stand_level := 3.0
+	var base_focus := IsoProjection.grid_to_world(bird_cell, stand_level)
+	camera.focus_position = base_focus
+	camera.zoom = 2.0
+	var host := TerrainHost3D.new()
+	host.camera = camera
+	host.stand_level = stand_level
+	root.add_child(host)
+	await process_frame
+
+	# The production camera limits are 0.5 / 2 / 4. Projection, inverse
+	# projection, pixel scale, and velocity conversion must agree at every stop.
+	var zoom_stops: Array[float] = [
+		IsometricCamera3D.MIN_ZOOM,
+		float(camera.zoom),
+		IsometricCamera3D.MAX_ZOOM,
+	]
+	var world_point := Vector2(13.25, 8.5)
+	var world_level := 2.5
+	for zoom in zoom_stops:
+		camera.zoom = zoom
+		var context := _observer_3d(camera, zoom)
+		_expect_vector2_near(
+			renderer._observer_scale(context),
+			Vector2.ONE * zoom,
+			"3D observer 没有采用相机 zoom"
+		)
+		var screen_point: Vector2 = renderer._world_to_screen(
+			world_point,
+			context,
+			world_level
+		)
+		_expect_vector2_near(
+			screen_point,
+			camera.unproject_position(
+				IsoProjection.visual_to_world(world_point, world_level)
+			),
+			"3D world_to_screen 与真实 Camera3D 投影不一致"
+		)
+		_expect_vector2_near(
+			renderer._screen_to_world(screen_point, context, world_level),
+			world_point,
+			"3D screen_to_world 不能还原连续 grid 坐标"
+		)
+		var screen_velocity := Vector2(73.0, -29.0)
+		var world_velocity: Vector2 = renderer._screen_velocity_to_world(
+			screen_velocity,
+			context,
+			world_level
+		)
+		var projected_velocity: Vector2 = renderer._world_to_screen(
+			world_point + world_velocity,
+			context,
+			world_level
+		) - screen_point
+		_expect_vector2_near(
+			projected_velocity,
+			screen_velocity,
+			"3D 屏幕速度与权威 grid 速度转换不一致",
+			0.02
+		)
+
+	# Moving and zooming the camera only reprojects an existing bird. It cannot
+	# rewrite position, velocity, level, or age; simulation steps stay identical.
+	renderer.clear()
+	camera.focus_position = base_focus
+	camera.zoom = 2.0
+	_expect(
+		renderer.force_flyover(1, 1, _observer_3d(camera, 2.0)) == 1,
+		"无法生成 3D flyover"
+	)
+	var flying: Array[AnimatedSprite2D] = renderer.get_flying_sprites()
+	if flying.size() == 1:
+		var position_before: Vector2 = renderer._flying[0]["world_position"]
+		var velocity_before: Vector2 = renderer._flying[0]["world_velocity"]
+		var level_before := float(renderer._flying[0]["world_level"])
+		var age_before := float(renderer._flying[0]["age"])
+		camera.focus_position = base_focus + IsoProjection.visual_to_world(
+			Vector2(0.75, -0.5)
+		)
+		camera.zoom = 0.5
+		var changed_context := _observer_3d(camera, 0.5)
+		renderer.update_observer(changed_context, 0.0)
+		_expect(renderer.get_flying_count() == 1, "3D 镜头变化错误回收了飞鸟")
+		if renderer.get_flying_count() == 1:
+			_expect_vector2_near(
+				renderer._flying[0]["world_position"],
+				position_before,
+				"3D 镜头移动/zoom 写回了权威位置"
+			)
+			_expect_vector2_near(
+				renderer._flying[0]["world_velocity"],
+				velocity_before,
+				"3D 镜头移动/zoom 写回了权威速度"
+			)
+			_expect(
+				is_equal_approx(float(renderer._flying[0]["world_level"]), level_before)
+				and is_equal_approx(float(renderer._flying[0]["age"]), age_before),
+				"3D 镜头变化改写了飞行高度或年龄"
+			)
+			_expect_vector2_near(
+				flying[0].scale,
+				Vector2.ONE * 0.5,
+				"3D 飞鸟没有随最小 zoom 缩放"
+			)
+			_expect_vector2_near(
+				flying[0].position,
+				renderer._world_to_screen(position_before, changed_context, level_before),
+				"3D 镜头变化后没有按权威位置重投影"
+			)
+		camera.zoom = 4.0
+		renderer.update_observer(_observer_3d(camera, 4.0), 0.25)
+		if renderer.get_flying_count() == 1:
+			_expect_vector2_near(
+				renderer._flying[0]["world_position"],
+				position_before + velocity_before * 0.25,
+				"3D 世界积分受 zoom 污染"
+			)
+			_expect_vector2_near(
+				renderer._flying[0]["world_velocity"],
+				velocity_before,
+				"3D 积分后世界速度发生变化"
+			)
+			_expect(
+				is_equal_approx(float(renderer._flying[0]["age"]), age_before + 0.25),
+				"3D zoom 改写了年龄增量"
+			)
+
+	# Spawn RNG consumption is independent of the observer zoom.
+	var spawn_frames: Array[int] = []
+	camera.focus_position = base_focus
+	camera.zoom = 0.5
+	renderer.clear()
+	renderer.force_flyover(4, 1, _observer_3d(camera, 0.5))
+	var minimum_zoom_rng_state: int = renderer._rng.state
+	for sprite in renderer.get_flying_sprites():
+		spawn_frames.append(sprite.frame)
+	renderer.clear()
+	camera.zoom = 4.0
+	renderer.force_flyover(4, 1, _observer_3d(camera, 4.0))
+	_expect(renderer.get_flying_count() == 4, "最大 zoom 改变了 flyover 生成数量")
+	_expect(
+		renderer._rng.state == minimum_zoom_rng_state,
+		"zoom 改变了 flyover 的确定性 RNG 序列"
+	)
+	var maximum_zoom_sprites: Array[AnimatedSprite2D] = renderer.get_flying_sprites()
+	if maximum_zoom_sprites.size() == spawn_frames.size():
+		for index in spawn_frames.size():
+			_expect(
+				maximum_zoom_sprites[index].frame == spawn_frames[index],
+				"zoom 改变了 flyover 的确定性初始帧"
+			)
+
+	# Ground sprites use the same pixel scale and offsets as their flight
+	# representation. Takeoff preserves the exact foot point at every zoom stop.
+	for zoom in zoom_stops:
+		renderer.clear()
+		camera.focus_position = base_focus
+		camera.zoom = zoom
+		renderer.add_cluster(bird_cell, host, Vector2(bird_cell), 1, 12345)
+		renderer.update_observer(_observer_3d(camera, zoom), 0.19)
+		var grounded: Array[AnimatedSprite2D] = renderer.get_grounded_sprites()
+		_expect(grounded.size() == 1, "3D 地面鸟没有激活")
+		if grounded.size() != 1:
+			continue
+		var ground_screen := grounded[0].global_position
+		_expect_vector2_near(
+			grounded[0].scale,
+			Vector2.ONE * zoom,
+			"3D 地面鸟没有采用当前 zoom"
+		)
+		renderer.update_observer(_observer_3d(camera, zoom, bird_cell), 0.0)
+		flying = renderer.get_flying_sprites()
+		_expect(
+			renderer.get_grounded_count() == 0 and flying.size() == 1,
+			"3D 地面鸟没有切换到飞行状态"
+		)
+		if flying.size() != 1:
+			continue
+		_expect_vector2_near(
+			flying[0].global_position,
+			ground_screen,
+			"3D ground-to-flight 发生位置跳变",
+			0.02
+		)
+		_expect_vector2_near(
+			flying[0].scale,
+			Vector2.ONE * zoom,
+			"3D ground-to-flight 发生尺度跳变"
+		)
+		_expect(
+			is_equal_approx(float(renderer._flying[0]["world_level"]), stand_level),
+			"3D 起飞没有保留地面站立高度"
+		)
+		var takeoff_position: Vector2 = renderer._flying[0]["world_position"]
+		var takeoff_velocity: Vector2 = renderer._flying[0]["world_velocity"]
+		var next_zoom := 4.0 if zoom < 4.0 else 0.5
+		camera.zoom = next_zoom
+		renderer.update_observer(_observer_3d(camera, next_zoom), 0.0)
+		if renderer.get_flying_count() == 1:
+			_expect_vector2_near(
+				renderer._flying[0]["world_position"],
+				takeoff_position,
+				"3D 起飞后 zoom 改写了位置"
+			)
+			_expect_vector2_near(
+				renderer._flying[0]["world_velocity"],
+				takeoff_velocity,
+				"3D 起飞后 zoom 改写了速度"
+			)
+			_expect_vector2_near(
+				flying[0].scale,
+				Vector2.ONE * next_zoom,
+				"3D 起飞后没有连续切换到新 zoom"
+			)
+
+	renderer.clear()
+	host.queue_free()
+	camera.queue_free()
+	await process_frame
+	await process_frame
