@@ -35,6 +35,8 @@
 class_name BattlefieldLoader
 extends RefCounted
 
+const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
+
 ## 战场 JSON 目录
 const BATTLEFIELD_DIR := "res://data/battlefields"
 
@@ -156,7 +158,16 @@ static func load_battlefield(path: String) -> Dictionary:
 	var eu := _parse_units(d, "enemyUnits", &"enemy", map, width, height, occupied, "u_e")
 	if not bool(eu.get("ok", false)):
 		return { "ok": false, "error": eu.get("error", "") }
-	# 4) 组装 chapter（无 blockTitles → battle.gd 走 terrain fallback 渲染）
+	# 4) 植物层（可选 "props": [{x,y,texture}]；越界/贴图缺失的条目跳过不报错）
+	var props: Array = _parse_props(d, width, height)
+	# 5) 显式单块布局（可选）：缺省字段保留旧柱体路径，出现时严格校验并规范化。
+	var block_layout: Dictionary = {}
+	if d.has("block_layout"):
+		var layout_result := BlockLayoutScript.normalize(d["block_layout"], width, height)
+		if not bool(layout_result.get("ok", false)):
+			return {"ok": false, "error": String(layout_result.get("error", "block_layout 非法"))}
+		block_layout = layout_result["layout"]
+	# 6) 组装 chapter（无 blockTitles → battle.gd 走 terrain fallback 渲染）
 	var chapter := {
 		"id": StringName(String(info["id"])),
 		"name": String(info["name"]),
@@ -165,11 +176,36 @@ static func load_battlefield(path: String) -> Dictionary:
 		"height": height,
 		"playerUnits": pu["units"],
 		"enemyUnits": eu["units"],
+		"props": props,
 	}
+	if not block_layout.is_empty():
+		chapter["block_layout"] = block_layout
 	return { "ok": true, "chapter": chapter, "info": info }
 
 
 ## ---- 内部实现 ----------------------------------------------------------
+
+
+## 植物层解析（宽松）：条目须为 {x,y,texture}；越界或贴图文件不存在的跳过
+static func _parse_props(d: Dictionary, width: int, height: int) -> Array:
+	var out: Array = []
+	var raw = d.get("props", [])
+	if not (raw is Array):
+		return out
+	for p in raw:
+		if not (p is Dictionary):
+			continue
+		var x := int(p.get("x", -1))
+		var y := int(p.get("y", -1))
+		var tex := String(p.get("texture", ""))
+		if tex.is_empty() or x < 0 or y < 0 or x >= width or y >= height:
+			push_warning("[battlefield_loader] 跳过非法植物条目: %s" % str(p))
+			continue
+		if not FileAccess.file_exists(tex):
+			push_warning("[battlefield_loader] 植物贴图不存在，跳过: %s" % tex)
+			continue
+		out.append({ "x": x, "y": y, "texture": tex })
+	return out
 
 
 static func _parse_json_file(path: String) -> Dictionary:

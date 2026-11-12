@@ -24,13 +24,15 @@ func _run() -> void:
 	_test_listing()
 	_test_examples_valid()
 	_test_custom_legend()
+	_test_block_layout()
 	_test_error_cases()
 	# 清理临时目录
 	var dir := DirAccess.open(TMP_DIR)
 	if dir != null:
 		for f in ["bad_glyph.json", "ragged.json", "bad_class.json", "oob.json",
 				"on_water.json", "overlap.json", "no_terrain.json", "empty_units.json",
-				"map_string_rows.json"]:
+				"map_string_rows.json", "bad_layout_version.json", "bad_layout_range.json",
+				"bad_layout_duplicate.json", "bad_layout_type.json", "bad_layout_oob.json"]:
 			if dir.file_exists(f):
 				dir.remove(f)
 		var err := dir.change_dir("..")
@@ -122,7 +124,39 @@ func _test_custom_legend() -> void:
 		dir.remove("legend_check.json")
 
 
-## 4) 错误分支：每个坏文件必须被对应错误拦下（ok=false 且 error 含关键词）
+## 4) 显式 block_layout：部分 cells 归一化、default_z 与 chapter 透传
+func _test_block_layout() -> void:
+	var json := """{
+		"rows": ["..", ".."],
+		"playerUnits": [{ "class": "swordsman", "x": 0, "y": 0 }],
+		"enemyUnits": [{ "class": "archer", "x": 1, "y": 1 }],
+		"block_layout": {"version": 1, "default_z": 4,
+			"cells": [{"x": 1, "y": 1, "z": 12}, {"x": 0, "y": 1}]}
+	}"""
+	var path := _write_tmp("partial_block_layout.json", json)
+	var res := BattlefieldLoaderScript.load_battlefield(path)
+	_expect(bool(res.get("ok", false)), "部分 block_layout 加载失败: %s" % res.get("error", ""))
+	if bool(res.get("ok", false)):
+		var layout: Dictionary = res["chapter"].get("block_layout", {})
+		_expect(int(layout.get("version", 0)) == 1 and int(layout.get("default_z", -1)) == 4,
+			"loader 透传 block_layout version/default_z")
+		_expect((layout.get("cells", []) as Array).size() == 4, "loader 将部分 cells 归一化为全格")
+		var heights := {}
+		for raw in layout.get("cells", []):
+			var cell: Dictionary = raw
+			heights[Vector2i(int(cell.x), int(cell.y))] = int(cell.z)
+		_expect(int(heights.get(Vector2i(0, 0), -1)) == 4
+			and int(heights.get(Vector2i(1, 0), -1)) == 4,
+			"缺失格补 default_z=4")
+		_expect(int(heights.get(Vector2i(0, 1), -1)) == 0
+			and int(heights.get(Vector2i(1, 1), -1)) == 12,
+			"已有格 z 缺省 0，显式 z 原样透传")
+	var dir := DirAccess.open(TMP_DIR)
+	if dir != null:
+		dir.remove("partial_block_layout.json")
+
+
+## 5) 错误分支：每个坏文件必须被对应错误拦下（ok=false 且 error 含关键词）
 func _test_error_cases() -> void:
 	var cases := [
 		["bad_glyph.json", '{"rows": ["..z."], "playerUnits": [{"class":"swordsman","x":0,"y":0}], "enemyUnits": [{"class":"archer","x":1,"y":0}]}', "z"],
@@ -133,6 +167,11 @@ func _test_error_cases() -> void:
 		["overlap.json", '{"rows": ["....", "...."], "playerUnits": [{"class":"swordsman","x":1,"y":1}], "enemyUnits": [{"class":"archer","x":1,"y":1}]}', "重叠"],
 		["no_terrain.json", '{"playerUnits": [{"class":"swordsman","x":0,"y":0}], "enemyUnits": [{"class":"archer","x":1,"y":0}]}', "地形"],
 		["empty_units.json", '{"rows": ["..."], "playerUnits": [], "enemyUnits": [{"class":"archer","x":1,"y":0}]}', "playerUnits"],
+		["bad_layout_version.json", '{"rows":["..",".."],"playerUnits":[{"class":"swordsman","x":0,"y":0}],"enemyUnits":[{"class":"archer","x":1,"y":1}],"block_layout":{"version":2,"default_z":0,"cells":[]}}', "version"],
+		["bad_layout_range.json", '{"rows":["..",".."],"playerUnits":[{"class":"swordsman","x":0,"y":0}],"enemyUnits":[{"class":"archer","x":1,"y":1}],"block_layout":{"version":1,"default_z":0,"cells":[{"x":0,"y":0,"z":17}]}}', "0..16"],
+		["bad_layout_duplicate.json", '{"rows":["..",".."],"playerUnits":[{"class":"swordsman","x":0,"y":0}],"enemyUnits":[{"class":"archer","x":1,"y":1}],"block_layout":{"version":1,"default_z":0,"cells":[{"x":0,"y":0},{"x":0,"y":0}]}}', "重复"],
+		["bad_layout_type.json", '{"rows":["..",".."],"playerUnits":[{"class":"swordsman","x":0,"y":0}],"enemyUnits":[{"class":"archer","x":1,"y":1}],"block_layout":{"version":1,"default_z":0,"cells":[{"x":0,"y":0,"z":1.5}]}}', "整数"],
+		["bad_layout_oob.json", '{"rows":["..",".."],"playerUnits":[{"class":"swordsman","x":0,"y":0}],"enemyUnits":[{"class":"archer","x":1,"y":1}],"block_layout":{"version":1,"default_z":0,"cells":[{"x":2,"y":0,"z":1}]}}', "越界"],
 	]
 	for c in cases:
 		var path := _write_tmp(String(c[0]), String(c[1]))
@@ -148,6 +187,7 @@ func _test_error_cases() -> void:
 	if bool(ok_res.get("ok", false)):
 		var ch: Dictionary = ok_res["chapter"]
 		_expect(int(ch["width"]) == 2 and int(ch["height"]) == 2, "map 字符串行尺寸错误")
+		_expect(not ch.has("block_layout"), "旧 JSON 缺布局时不注入，继续走旧柱逻辑")
 
 
 func _write_tmp(file_name: String, content: String) -> String:

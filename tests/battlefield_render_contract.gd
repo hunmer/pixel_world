@@ -7,6 +7,7 @@ extends SceneTree
 
 const RendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const IsoCoordsScript = preload("res://scripts/iso/iso_coords.gd")
+const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
 
 var failures: int = 0
 
@@ -145,11 +146,14 @@ func _run() -> void:
 			no_water = false
 	_expect(no_water and mblocks.size() == 5, "水→山后无水块且块数=5（实际 %d）" % mblocks.size())
 
-	# 9. setup(null) 安全（编辑器空模型路径）
+	# 9. 显式 block_layout：全地形同平面 / 独立多高度 / 水面不填湖床 / 空白拾取
+	_test_explicit_layout(root, grid)
+
+	# 10. setup(null) 安全（编辑器空模型路径）
 	renderer.setup(null)
 	_expect(renderer.column_count() == 0 and renderer.grid == null, "setup(null) 清空且不崩")
 
-	# 10. 调色板预览 blocks（编辑器 tile_preview 用）
+	# 11. 调色板预览 blocks（编辑器 tile_preview 用）
 	var expect_counts := {&"plain": 2, &"forest": 3, &"mountain": 5, &"water": 2, &"fort": 4, &"village": 3, &"wall": 4}
 	for t in expect_counts.keys():
 		var pblocks: Array = RendererScript.preview_blocks(t)
@@ -176,3 +180,83 @@ func _run() -> void:
 	else:
 		printerr("BATTLEFIELD_RENDER_CONTRACT_FAILED: %d 处失败" % failures)
 		quit(1)
+
+
+func _test_explicit_layout(root: Node2D, grid: GridSystem) -> void:
+	# 全地形在显式布局中都只画 z=0 的一个地形块；森林装饰仍允许作为独立 prop。
+	var plane: Node2D = RendererScript.new()
+	root.add_child(plane)
+	for terrain_id: StringName in TerrainData.TERRAIN.keys():
+		var one_grid := GridSystem.new(1, 1, [[terrain_id]])
+		plane.set_block_layout(BlockLayoutScript.create(1, 1))
+		plane.setup(one_grid)
+		_expect(plane.stand_level(0, 0) == 0, "显式平面 %s stand_level=0" % terrain_id)
+		var terrain_blocks: Array = []
+		for block: Dictionary in (plane._columns[Vector2i.ZERO] as Node)._blocks:
+			if block.get("occluder_class", &"terrain") != &"prop":
+				terrain_blocks.append(block)
+		_expect(terrain_blocks.size() == 1 and int(terrain_blocks[0].get("level", -1)) == 0,
+			"显式平面 %s 仅一个 z=0 地形块" % terrain_id)
+		_expect(terrain_blocks[0].get("water_part", &"") != &"bed", "显式平面 %s 不填湖床" % terrain_id)
+		var top: Vector2 = plane.top_center_for(0, 0)
+		_expect(top == IsoCoordsScript.to_screen(0, 0, 0) + Vector2(0, -2),
+			"显式平面 %s 顶面中心使用真实贴图偏移" % terrain_id)
+		_expect(plane.pick_world(top) == Vector2i.ZERO, "显式平面 %s 顶面中心可命中" % terrain_id)
+		_expect(plane.pick_world(top + Vector2(0, -9)) == Vector2i(-1, -1),
+			"显式平面 %s 顶面外空白不 fallback" % terrain_id)
+	plane.free()
+
+	var layout: Dictionary = BlockLayoutScript.create(5, 5)
+	BlockLayoutScript.set_z(layout, Vector2i(1, 0), 1)
+	BlockLayoutScript.set_z(layout, Vector2i(4, 4), 7)
+	BlockLayoutScript.set_z(layout, Vector2i(4, 3), 16)
+	var explicit_renderer: Node2D = RendererScript.new()
+	root.add_child(explicit_renderer)
+	explicit_renderer.set_block_layout(layout)
+	explicit_renderer.setup(grid)
+	_expect(explicit_renderer.has_explicit_block_layout(), "renderer 进入显式布局模式")
+	_expect(explicit_renderer.stand_level(1, 0) == 1
+		and explicit_renderer.stand_level(4, 4) == 7
+		and explicit_renderer.stand_level(4, 3) == 16, "显式多 z 高度贯通 stand_level")
+	var low_blocks: Array = (explicit_renderer._columns[Vector2i(0, 0)] as Node)._blocks
+	var high_blocks: Array = (explicit_renderer._columns[Vector2i(4, 3)] as Node)._blocks
+	var water_blocks: Array = (explicit_renderer._columns[Vector2i(4, 4)] as Node)._blocks
+	_expect(low_blocks.size() == 1 and high_blocks.size() == 1,
+		"不同 z 的陆地均不向下填层")
+	var water_surface: Array = water_blocks.filter(func(block: Dictionary) -> bool:
+		return block.get("water_part", &"") == &"surface")
+	var water_bed: Array = water_blocks.filter(func(block: Dictionary) -> bool:
+		return block.get("water_part", &"") == &"bed")
+	_expect(water_surface.size() == 1 and int(water_surface[0].level) == 7 and water_bed.is_empty(),
+		"高 z 水面只有一层 surface，无湖床（实际 %s）" % str(water_blocks))
+	var high_top: Vector2 = explicit_renderer.top_center_for(4, 3)
+	_expect(high_top == IsoCoordsScript.to_screen(4, 3, 16) + Vector2(0, -2),
+		"多 z 顶面中心与真实顶块一致")
+	_expect(explicit_renderer.pick_world(high_top) == Vector2i(4, 3), "多 z 高块顶面命中")
+	# (0,0) z0 与前列 (1,0) z1 的顶面重叠；绘制次序后者在前，必须命中 (1,0)。
+	var overlap: Vector2 = (explicit_renderer.top_center_for(0, 0) + explicit_renderer.top_center_for(1, 0)) * 0.5
+	_expect(explicit_renderer.pick_world(overlap) == Vector2i(1, 0), "重叠顶面按真实绘制次序命中前列")
+	_expect(explicit_renderer.y_sort_enabled, "单块层启用 Y-sort，刷新顺序不改变遮挡")
+	var back_before: Node = explicit_renderer._columns[Vector2i(0, 0)]
+	var front: Node = explicit_renderer._columns[Vector2i(1, 0)]
+	explicit_renderer.refresh_cell(0, 0)
+	var back_after: Node = explicit_renderer._columns[Vector2i(0, 0)]
+	_expect(back_after != back_before and back_after.get_index() > front.get_index()
+		and explicit_renderer.sort_for(0, 0) < explicit_renderer.sort_for(1, 0),
+		"反向刷新虽追加节点，仍由稳定 sort_for 键决定前后层级")
+	_expect(explicit_renderer.pick_world(overlap) == Vector2i(1, 0),
+		"反向单格刷新后重叠顶面仍命中前列")
+	explicit_renderer.free()
+
+	var renderer_3d: Node2D = RendererScript.new()
+	root.add_child(renderer_3d)
+	renderer_3d._ensure_terrain_3d()
+	renderer_3d.set_block_layout(layout)
+	renderer_3d.setup(grid)
+	var cell_3d: Dictionary = renderer_3d._terrain_3d._cells[Vector2i(4, 3)]
+	_expect(int(cell_3d.stand_level) == 16 and (cell_3d.blocks as Array).size() == 1
+		and int(cell_3d.blocks[0].level) == 16, "3D 显式高块同样不向下填层")
+	var water_3d: Dictionary = renderer_3d._terrain_3d._cells[Vector2i(4, 4)]
+	_expect((water_3d.blocks as Array).size() == 1
+		and water_3d.blocks[0].get("water_part", &"") == &"surface", "3D 显式水面同样无湖床")
+	renderer_3d.free()

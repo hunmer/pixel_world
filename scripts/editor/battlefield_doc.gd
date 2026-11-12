@@ -12,11 +12,14 @@ class_name BattlefieldDoc
 extends RefCounted
 
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
+const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
 
 const MIN_SIZE := 4
 const MAX_SIZE := 40
 const DEFAULT_WIDTH := 12
 const DEFAULT_HEIGHT := 9
+const BLOCK_MIN_Z := BlockLayoutScript.MIN_Z
+const BLOCK_MAX_Z := BlockLayoutScript.MAX_Z
 
 ## 地形 -> 图例（DEFAULT_LEGEND 的逆映射，取每种地形的主图例字符）
 const TERRAIN_GLYPH := {
@@ -51,6 +54,22 @@ const TERRAIN_CN := {
 ## 图例 -> 地形（懒缓存 DEFAULT_LEGEND 拷贝）
 static var _glyph_to_terrain: Dictionary = {}
 
+## 植物类地形（地面上的树/灌木）：调色板里与纯地形分开成组、各自单独成一个 tile，
+## 不再把树插在方块柱上组合展示。数据模型不变（仍是 11 种地形图例）。
+const PLANT_TERRAINS: Array[StringName] = [&"forest"]
+
+## 植物素材目录（调色板「植物」组按此枚举全部贴图，每张贴图一个 tile）
+const PLANT_DIRS := {
+	"树木": "res://meowa_tiles/trees",
+	"植物": "res://meowa_tiles/plants",
+	"装饰": "res://meowa_tiles/decorations",
+}
+
+
+## 是否植物类地形（调色板分组用）
+static func is_plant(t: StringName) -> bool:
+	return PLANT_TERRAINS.has(t)
+
 
 static func _static_init() -> void:
 	_glyph_to_terrain = BattlefieldLoaderScript.DEFAULT_LEGEND.duplicate()
@@ -72,10 +91,24 @@ static func create_empty(w: int = DEFAULT_WIDTH, h: int = DEFAULT_HEIGHT) -> Dic
 		"height": h,
 		"rows": rows,
 		"units": [],
+		"props": [],  # 植物层 [{x,y,texture}]，与地形解耦（一格至多一株）
+		"block_layout": BlockLayoutScript.create(w, h),
 	}
 
 
-## 调整尺寸：保留左上交集，扩出区域补平原，越界单位剔除
+static func cell_z(model: Dictionary, cell: Vector2i) -> int:
+	return BlockLayoutScript.z_at(model.get("block_layout", {}), cell)
+
+
+static func set_cell_z(model: Dictionary, cell: Vector2i, z: int) -> bool:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return false
+	if not model.has("block_layout"):
+		model["block_layout"] = BlockLayoutScript.create(int(model.width), int(model.height))
+	return BlockLayoutScript.set_z(model["block_layout"], cell, z)
+
+
+## 调整尺寸：保留左上交集，扩出区域补平原/默认高度，越界实体与高度条目剔除
 static func resize(model: Dictionary, w: int, h: int) -> Dictionary:
 	w = clampi(w, MIN_SIZE, MAX_SIZE)
 	h = clampi(h, MIN_SIZE, MAX_SIZE)
@@ -90,11 +123,21 @@ static func resize(model: Dictionary, w: int, h: int) -> Dictionary:
 		else:
 			rows.append(".".repeat(w))
 	var units: Array = (model.units as Array).filter(func(u): return u.x < w and u.y < h)
+	var props: Array = (model.get("props", []) as Array).filter(
+		func(p): return int(p.x) < w and int(p.y) < h)
 	var out: Dictionary = model.duplicate(true)
 	out.width = w
 	out.height = h
 	out.rows = rows
 	out.units = units
+	out.props = props
+	var old_layout: Dictionary = model.get("block_layout", {})
+	var default_z := int(old_layout.get("default_z", BlockLayoutScript.DEFAULT_Z))
+	out["block_layout"] = BlockLayoutScript.create(w, h, clampi(default_z, BLOCK_MIN_Z, BLOCK_MAX_Z))
+	if not old_layout.is_empty():
+		for y in range(mini(int(model.height), h)):
+			for x in range(mini(int(model.width), w)):
+				set_cell_z(out, Vector2i(x, y), cell_z(model, Vector2i(x, y)))
 	return out
 
 
@@ -184,6 +227,36 @@ static func glyph_to_terrain(g: String) -> StringName:
 	return _glyph_to_terrain.get(g, &"plain")
 
 
+## ---- 植物层（props）----------------------------------------------------
+
+## 取某格的植物贴图路径（无则 ""）
+static func prop_at(model: Dictionary, cell: Vector2i) -> String:
+	for p in model.get("props", []):
+		if int(p.x) == cell.x and int(p.y) == cell.y:
+			return String(p.texture)
+	return ""
+
+
+## 在某格放置/替换植物（texture=res:// 贴图路径）；返回是否改动了模型
+static func set_prop(model: Dictionary, cell: Vector2i, texture: String) -> bool:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return false
+	remove_prop(model, cell)
+	(model.props as Array).append({ "x": cell.x, "y": cell.y, "texture": texture })
+	return true
+
+
+## 移除某格植物；返回是否删到
+static func remove_prop(model: Dictionary, cell: Vector2i) -> bool:
+	var props: Array = model.get("props", [])
+	for i in range(props.size()):
+		var p: Dictionary = props[i]
+		if int(p.x) == cell.x and int(p.y) == cell.y:
+			props.remove_at(i)
+			return true
+	return false
+
+
 ## 模型 -> 战场 JSON dict（loader schema：rows + 显式 legend + 双阵营单位）
 static func to_json_dict(model: Dictionary) -> Dictionary:
 	var players: Array = []
@@ -206,7 +279,7 @@ static func to_json_dict(model: Dictionary) -> Dictionary:
 	for g in BattlefieldLoaderScript.DEFAULT_LEGEND:
 		legend[g] = String(BattlefieldLoaderScript.DEFAULT_LEGEND[g])
 	# loader schema：rows / legend / playerUnits / enemyUnits 均为顶层字段
-	return {
+	var out := {
 		"id": String(model.get("id", "")),
 		"name": String(model.get("name", "")),
 		"description": String(model.get("description", "")),
@@ -216,6 +289,18 @@ static func to_json_dict(model: Dictionary) -> Dictionary:
 		"playerUnits": players,
 		"enemyUnits": enemies,
 	}
+	# 植物层（可选字段：空则不写，保持旧 JSON 兼容）
+	var props: Array = model.get("props", [])
+	if not props.is_empty():
+		var jprops: Array = []
+		for p in props:
+			jprops.append({
+				"x": int(p.x), "y": int(p.y), "texture": String(p.texture),
+			})
+		out["props"] = jprops
+	if model.has("block_layout"):
+		out["block_layout"] = (model["block_layout"] as Dictionary).duplicate(true)
+	return out
 
 
 ## 战场 JSON dict -> 编辑器模型（顶层 "rows" 字符画与 "map" 全名矩阵两种写法都支持）
@@ -253,7 +338,20 @@ static func from_json_dict(d: Dictionary) -> Dictionary:
 				"y": int(u.get("y", 0)),
 				"faction": faction,
 			})
-	return {
+	# 植物层（可选；宽松解析：非法条目跳过）
+	var props: Array = []
+	for p in d.get("props", []):
+		if not (p is Dictionary):
+			continue
+		var tex := String(p.get("texture", ""))
+		if tex.is_empty():
+			continue
+		props.append({
+			"x": int(p.get("x", 0)),
+			"y": int(p.get("y", 0)),
+			"texture": tex,
+		})
+	var out := {
 		"id": String(d.get("id", "")),
 		"name": String(d.get("name", "")),
 		"description": String(d.get("description", "")),
@@ -262,11 +360,24 @@ static func from_json_dict(d: Dictionary) -> Dictionary:
 		"height": h,
 		"rows": rows,
 		"units": units,
+		"props": props,
 	}
+	# 旧 JSON 进入编辑器后统一成为 z=0 的显式单块平面；仅磁盘中途加载器保留旧柱路径。
+	if d.has("block_layout"):
+		out["block_layout"] = (d["block_layout"] as Dictionary).duplicate(true) if d["block_layout"] is Dictionary else d["block_layout"]
+	else:
+		out["block_layout"] = BlockLayoutScript.create(w, h)
+	return out
 
 
 ## 本地快速校验（保存前的即时反馈；权威校验是保存后的 loader 回读）
 ## 返回 "" 表示通过，否则为中文错误描述
+static func validate_block_layout(model: Dictionary) -> String:
+	if not model.has("block_layout"):
+		return ""
+	return BlockLayoutScript.validate(model["block_layout"], int(model.width), int(model.height))
+
+
 static func quick_validate(model: Dictionary) -> String:
 	var w: int = model.width
 	var h: int = model.height
@@ -293,6 +404,10 @@ static func quick_validate(model: Dictionary) -> String:
 			players += 1
 	if players < 1 or enemies < 1:
 		return "双方各需至少 1 个单位（当前 我方%d/敌方%d）" % [players, enemies]
+	if model.has("block_layout"):
+		var layout_error := validate_block_layout(model)
+		if not layout_error.is_empty():
+			return layout_error
 	return ""
 
 

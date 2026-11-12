@@ -124,6 +124,9 @@ func _setup_b2_render() -> void:
 	# 地形柱层（ColumnBatch 逐柱渲染，y_sort 处理柱间遮挡）
 	renderer = BattlefieldRendererScript.new()
 	board.add_child(renderer)
+	# JSON 战场植物层（chapter.props，编辑器放置的具体树/植物）——setup 前注入生效
+	renderer.set_custom_props(chapter.get("props", []))
+	renderer.set_block_layout(chapter.get("block_layout", {}))
 	renderer.setup(grid)
 	# 范围/光标标记走注入模式：坐标/排序/高度由 renderer 提供（同 B1 的注入方式）
 	range_overlay = RangeOverlay.new()

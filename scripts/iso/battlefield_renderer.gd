@@ -20,6 +20,7 @@ const ColumnBatchScript = preload("res://scripts/isometric_column_batch.gd")
 const Terrain3DScript = preload("res://scripts/iso/isometric_terrain_3d.gd")
 const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 const TerrainMaterialRegistryScript = preload("res://scripts/world/terrain_material_registry.gd")
+const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
 
 ## 材质配置来源（只读 materials 段，不加载整套生态配置）
 const MATERIALS_CONFIG_PATH := "res://config/ecology/world/base.json"
@@ -65,18 +66,29 @@ const WATER_SIDE_ALPHA := 0.50
 const WATER_COLOR := Color(0.070, 0.320, 0.520, 1.0)
 const SORT_DIAGONAL_STRIDE := 128.0
 
-## 拾取时尝试的最高层（wall=4, mountain=5，留裕量）
-const PICK_MAX_LEVEL := 8
+## 拾取时尝试的最高层（显式布局允许 0..16，旧柱最高 5）
+const PICK_MAX_LEVEL := BlockLayoutScript.MAX_Z
 
 var grid: GridSystem = null
 var _columns: Dictionary = {}  # 2D 编辑器: Vector2i -> ColumnBatch；3D: cell -> block 记录
 var _terrain_3d: Node3D = null
+## 自定义植物覆盖表（编辑器植物层 / JSON 战场 props）：cell -> 贴图路径。
+## ""=显式无植物（压制该地形默认装饰）；缺省格走 TERRAIN_PROPS 确定性选取。
+var _custom_props: Dictionary = {}
+## 空字典 = 旧柱体模式；非空 = 每格仅在指定 z 绘制一个独立方块。
+var _block_layout: Dictionary = {}
 
 ## ---- 材质/贴图缓存（battle 与 editor 场景共享，静态避免重复加载） ----
 static var _shared_registry: TerrainMaterialRegistry = null
 static var _shared_textures: Dictionary = {}   # surface_id -> {top: Texture2D, column: Texture2D, underwater: Texture2D}
 static var _shared_water: Dictionary = {}      # face -> Texture2D
 static var _shared_props: Dictionary = {}      # path -> Texture2D
+
+
+func _init() -> void:
+	# refresh_cell 会删除并重新 append 单柱；必须按 sort_for 的 Y 键排序，
+	# 否则新节点落到末尾，反向/前后相邻块的遮挡随编辑顺序改变。
+	y_sort_enabled = true
 
 
 func _active_camera() -> Camera3D:
@@ -134,6 +146,36 @@ func refresh_cell(x: int, y: int) -> void:
 		_terrain_3d.flush()
 
 
+## 批量设置自定义植物覆盖（setup 前调用即可生效；setup 后需 rebuild_all）。
+## props: [{x,y,texture}]
+func set_custom_props(props: Array) -> void:
+	_custom_props.clear()
+	for p in props:
+		_custom_props[Vector2i(int(p.x), int(p.y))] = String(p.texture)
+
+
+## setup 前注入显式单块布局；传空字典恢复旧柱体模式。
+func set_block_layout(layout: Dictionary) -> void:
+	_block_layout = layout.duplicate(true)
+
+
+func has_explicit_block_layout() -> bool:
+	return not _block_layout.is_empty()
+
+
+func cell_z(cell: Vector2i) -> int:
+	return BlockLayoutScript.z_at(_block_layout, cell) if has_explicit_block_layout() else 0
+
+
+## 单格设置自定义植物（不重建，随下一次 refresh_cell 生效）；
+## texture 为空 = 清除该格覆盖（恢复地形默认装饰选取）
+func set_cell_prop(cell: Vector2i, texture: String) -> void:
+	if texture.is_empty():
+		_custom_props.erase(cell)
+	else:
+		_custom_props[cell] = texture
+
+
 func column_count() -> int:
 	return _columns.size()
 
@@ -146,6 +188,48 @@ func coord_for(x: int, y: int) -> Vector2:
 	return IsoCoords.to_screen(x, y, stand_level(x, y))
 
 
+## 真实顶面中心：2D 与贴图 TOP_CENTER_OFFSET 对齐；3D 与实际单块/柱顶同层。
+## coord_for 保留旧战斗站立层契约，编辑器高光/锚点/拾取统一改用这里。
+func top_center_for(x: int, y: int) -> Vector2:
+	var level := _visual_top_level(x, y)
+	var camera := _active_camera()
+	if camera != null:
+		return IsoProjection.world_to_screen(camera, IsoProjection.grid_to_world(Vector2i(x, y), level))
+	return IsoCoords.to_screen(x, y, level) + ColumnBatchScript.TOP_CENTER_OFFSET
+
+
+## 顶面多边形（上、右、下、左），与 isometric_column_batch._terrain_top_corners 同构。
+func top_polygon_for(x: int, y: int) -> PackedVector2Array:
+	var cell := Vector2i(x, y)
+	var level := _visual_top_level(x, y)
+	var camera := _active_camera()
+	if camera != null:
+		var center := IsoProjection.grid_to_world(cell, level)
+		var half := IsoProjection.GRID_STEP * 0.5
+		return PackedVector2Array([
+			IsoProjection.world_to_screen(camera, center + Vector3(-half, 0, -half)),
+			IsoProjection.world_to_screen(camera, center + Vector3(half, 0, -half)),
+			IsoProjection.world_to_screen(camera, center + Vector3(half, 0, half)),
+			IsoProjection.world_to_screen(camera, center + Vector3(-half, 0, half)),
+		])
+	var center := top_center_for(x, y)
+	var half_x := ColumnBatchScript.DEFAULT_BASIS_X * 0.5
+	var half_y := ColumnBatchScript.DEFAULT_BASIS_Y * 0.5
+	return PackedVector2Array([
+		center - half_x - half_y,
+		center + half_x - half_y,
+		center + half_x + half_y,
+		center - half_x + half_y,
+	])
+
+
+func _visual_top_level(x: int, y: int) -> int:
+	if has_explicit_block_layout():
+		return stand_level(x, y)
+	# 旧陆柱最上块 level=height-1；旧水面 block.level=height。
+	return stand_level(x, y) - (0 if _tile_type(x, y) == &"water" else 1)
+
+
 ## Y-sort 深度（与世界 main.gd._column_sort_y 同构）
 func sort_for(x: int, y: int) -> float:
 	return (x + y) * SORT_DIAGONAL_STRIDE + x
@@ -155,6 +239,8 @@ func sort_for(x: int, y: int) -> float:
 func stand_level(x: int, y: int) -> int:
 	if grid == null or not _in_bounds(Vector2i(x, y)):
 		return 0
+	if has_explicit_block_layout():
+		return cell_z(Vector2i(x, y))
 	var style: Dictionary = TERRAIN_STYLES.get(_tile_type(x, y), TERRAIN_STYLES[&"plain"])
 	return int(style["height"])
 
@@ -179,6 +265,19 @@ func _pick_stand_level(cell: Vector2i) -> float:
 ## 全局（viewport canvas）坐标 → 格子。逐层尝试：命中层的投影点落在该格柱顶。
 func pick_world(world: Vector2) -> Vector2i:
 	var local := global_transform.affine_inverse() * world
+	if has_explicit_block_layout():
+		if grid == null:
+			return Vector2i(-1, -1)
+		# ColumnBatch 由 renderer.y_sort_enabled 按 sort_for 绘制；按对角线逆序命中，
+		# 与刷新后仍稳定的真实遮挡次序一致，不能依赖会被 refresh_cell 改变的节点顺序。
+		for diagonal in range(grid.width + grid.height - 2, -1, -1):
+			var x_max := mini(grid.width - 1, diagonal)
+			var x_min := maxi(0, diagonal - grid.height + 1)
+			for x in range(x_max, x_min - 1, -1):
+				var y := diagonal - x
+				if Geometry2D.is_point_in_polygon(local, top_polygon_for(x, y)):
+					return Vector2i(x, y)
+		return Vector2i(-1, -1)  # 悬空布局没有空白地面 fallback。
 	for lvl in range(PICK_MAX_LEVEL, -1, -1):
 		var candidate := IsoCoords.to_cell(local + Vector2(0.0, lvl * IsoCoords.LEVEL_H))
 		if _in_bounds(candidate) and stand_level(candidate.x, candidate.y) == lvl:
@@ -206,9 +305,11 @@ func _build_column(cell: Vector2i) -> void:
 	var blocks: Array[Dictionary] = []
 	var tile_type := _tile_type(cell.x, cell.y)
 	var style: Dictionary = TERRAIN_STYLES.get(tile_type, TERRAIN_STYLES[&"plain"])
-	var height := int(style["height"])
+	var height := stand_level(cell.x, cell.y) if has_explicit_block_layout() else int(style["height"])
 
-	if tile_type == &"water":
+	if has_explicit_block_layout():
+		_append_explicit_block(cell, blocks, tile_type, style)
+	elif tile_type == &"water":
 		_append_water_column(cell, blocks)
 	else:
 		var top_tex := _surface_texture(style["top"], &"top")
@@ -223,6 +324,7 @@ func _build_column(cell: Vector2i) -> void:
 
 	if _active_camera() != null:
 		_ensure_terrain_3d()
+	if _terrain_3d != null:
 		_columns[cell] = {"_blocks": blocks, "stand_level": height}
 		_terrain_3d.set_cell(cell, blocks, height)
 		return
@@ -236,6 +338,31 @@ func _build_column(cell: Vector2i) -> void:
 		IsoCoords.LEVEL_H
 	)
 	_columns[cell] = column
+
+
+## 显式布局：只生成所在 z 的一个顶块，绝不补地下层；水也只有水面，无湖床/侧壁。
+func _append_explicit_block(cell: Vector2i, blocks: Array[Dictionary], tile_type: StringName, style: Dictionary) -> void:
+	var z := cell_z(cell)
+	if tile_type == &"water":
+		var surface := _water_block(_water_tex(&"surface"), z, WATER_SURFACE_ALPHA, &"surface")
+		var shore := 0
+		if _neighbor_is_land(cell.x - 1, cell.y, false):
+			shore |= 1
+		if _neighbor_is_land(cell.x, cell.y - 1, false):
+			shore |= 2
+		if _neighbor_is_land(cell.x + 1, cell.y, false):
+			shore |= 4
+		if _neighbor_is_land(cell.x, cell.y + 1, false):
+			shore |= 8
+		surface["shore_edges"] = shore
+		surface["shore_seed"] = (cell.x * 73856093) ^ (cell.y * 19349663)
+		blocks.append(surface)
+		return
+	var top_tex := _surface_texture(style["top"], &"top")
+	blocks.append(_block(top_tex, z, _terrain_tint(tile_type)))
+	var prop := _prop_for(cell, tile_type)
+	if not prop.is_empty():
+		blocks.append(prop)
 
 
 ## 水格：湖床（0 层）+ 半透明水面顶块（带岸线位掩码）。
@@ -280,12 +407,20 @@ func _terrain_tint(tile_type: StringName) -> Color:
 	return Color.WHITE
 
 
-## 装饰物 block（树/巨石）。贴图底部对齐柱顶菱形，同一格确定性选取。
+## 装饰物 block（树/巨石）。贴图底部对齐柱顶菱形。
+## 选取顺序：自定义覆盖表（编辑器植物层/JSON props，""=压制默认）>
+## 该地形 TERRAIN_PROPS 按格确定性选取。
 func _prop_for(cell: Vector2i, tile_type: StringName) -> Dictionary:
-	var candidates: Array = TERRAIN_PROPS.get(tile_type, [])
-	if candidates.is_empty():
-		return {}
-	var path: String = candidates[(cell.x * 31 + cell.y * 17) % candidates.size()]
+	var path := ""
+	if _custom_props.has(cell):
+		path = String(_custom_props[cell])
+		if path.is_empty():
+			return {}  # 显式无植物
+	else:
+		var candidates: Array = TERRAIN_PROPS.get(tile_type, [])
+		if candidates.is_empty():
+			return {}
+		path = candidates[(cell.x * 31 + cell.y * 17) % candidates.size()]
 	var tex := _prop_texture(path)
 	if tex == null:
 		return {}
@@ -436,8 +571,10 @@ static func _make_water_face_texture(face: StringName) -> ImageTexture:
 # ============================================================
 
 ## 给定地形生成单柱预览 blocks（tile_preview.gd 调色板缩略图用）。
-## 水面不带岸线/侧壁；装饰物固定取该地形的第一个候选（无网格坐标可做确定性选取）。
-static func preview_blocks(terrain: StringName) -> Array:
+## 水面不带岸线/侧壁；with_prop=false 时不叠装饰物；single=true 时只保留
+## 顶块并压到 level 0（调色板每个地形就是一个 tile，不再叠成高塔）。
+## 装饰物固定取该地形的第一个候选（无网格坐标可做确定性选取）。
+static func preview_blocks(terrain: StringName, with_prop := true, single := false) -> Array:
 	_ensure_shared_textures()
 	var style: Dictionary = TERRAIN_STYLES.get(terrain, TERRAIN_STYLES[&"plain"])
 	var height := int(style["height"])
@@ -453,16 +590,49 @@ static func preview_blocks(terrain: StringName) -> Array:
 		var tint := Color(0.58, 0.58, 0.62, 1.0) if terrain == &"wall" else Color.WHITE
 		for lvl in range(height):
 			blocks.append(_preview_block(top_tex if lvl == height - 1 else col_tex, lvl, tint))
-		var candidates: Array = TERRAIN_PROPS.get(terrain, [])
-		if not candidates.is_empty():
-			var tex: Texture2D = load(String(candidates[0]))
-			if tex != null:
-				var lift := (tex.get_size().y - TOP_TEXTURE_BASE) * 0.5
-				var prop := _preview_block(tex, height, Color.WHITE)
-				prop["render_offset"] = Vector2(0.0, -lift)
-				prop["occluder_class"] = &"prop"
+		if with_prop:
+			var prop := _preview_prop(terrain, height)
+			if not prop.is_empty():
 				blocks.append(prop)
+	if single and blocks.size() > 1:
+		var top: Dictionary = blocks[blocks.size() - 1]
+		top["level"] = 0
+		blocks = [top]
 	return blocks
+
+
+## 植物调色板 tile：装饰物贴图单独成一块（不叠在柱上）。无候选返回 {}。
+static func preview_prop_block(terrain: StringName) -> Dictionary:
+	_ensure_shared_textures()
+	return _preview_prop(terrain, 0)
+
+
+## 按贴图路径生成独立植物 tile（调色板枚举全部 trees/plants/decorations 用）。
+## 路径加载失败返回 {}。
+static func preview_path_block(path: String) -> Dictionary:
+	_ensure_shared_textures()
+	var tex: Texture2D = load(path)
+	if tex == null:
+		return {}
+	var lift := (tex.get_size().y - TOP_TEXTURE_BASE) * 0.5
+	var prop := _preview_block(tex, 0, Color.WHITE)
+	prop["render_offset"] = Vector2(0.0, -lift)
+	prop["occluder_class"] = &"prop"
+	return prop
+
+
+static func _preview_prop(terrain: StringName, level: int) -> Dictionary:
+	var candidates: Array = TERRAIN_PROPS.get(terrain, [])
+	if candidates.is_empty():
+		return {}
+	var tex: Texture2D = load(String(candidates[0]))
+	if tex == null:
+		return {}
+	var lift := (tex.get_size().y - TOP_TEXTURE_BASE) * 0.5
+	var prop := _preview_block(tex, level, Color.WHITE)
+	prop["render_offset"] = Vector2(0.0, -lift)
+	prop["occluder_class"] = &"prop"
+	return prop
 
 
 static func _shared_tex(surface_id: StringName, role: StringName) -> Texture2D:

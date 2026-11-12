@@ -41,6 +41,13 @@ func _run() -> void:
 		_expect(r.length() == 10, "生成行宽 == 10")
 		for ch in r:
 			_expect(legend_keys.has(ch), "生成图例字符 '%s' 合法" % ch)
+	_expect(BattlefieldDocScript.validate_block_layout(g1) == "", "生成模型带合法显式平面")
+	var generated_layout: Dictionary = g1.block_layout
+	_expect(int(generated_layout.version) == 1 and int(generated_layout.default_z) == 0,
+		"生成布局 version=1 / default_z=0")
+	_expect((generated_layout.cells as Array).size() == 80, "生成布局覆盖全部 80 格")
+	for cell: Dictionary in generated_layout.cells:
+		_expect(int(cell.z) == 0, "生成/新建统一 z=0 平面")
 
 	# 尺寸钳制
 	var tiny: Dictionary = BattlefieldDocScript.generate("x", 2, 2)
@@ -54,10 +61,16 @@ func _run() -> void:
 		{ "class": "swordsman", "name": "A", "level": 1, "x": 0, "y": 0, "faction": "player" },
 		{ "class": "berserker", "name": "B", "level": 1, "x": 5, "y": 3, "faction": "enemy" },
 	]
+	BattlefieldDocScript.set_cell_z(m, Vector2i(1, 1), 7)
+	BattlefieldDocScript.set_cell_z(m, Vector2i(5, 3), 12)
 	var r2: Dictionary = BattlefieldDocScript.resize(m, 4, 8)
 	_expect(r2.rows[1] == "##ff", "resize 裁剪行内容")
 	_expect(r2.rows[4] == "....", "resize 扩出行为平原")
 	_expect((r2.units as Array).size() == 1, "越界单位被剔除（保留 (0,0)）")
+	_expect(BattlefieldDocScript.cell_z(r2, Vector2i(1, 1)) == 7, "resize 保留交集格高度")
+	_expect(BattlefieldDocScript.cell_z(r2, Vector2i(3, 7)) == 0, "resize 扩出格补默认 z=0")
+	_expect((r2.block_layout.cells as Array).size() == 32, "resize 后布局严格覆盖 4×8")
+	_expect(BattlefieldDocScript.validate_block_layout(r2) == "", "resize 后布局合法")
 
 	# ---- 3. 模型 ↔ JSON 互转 round-trip ----
 	var doc: Dictionary = BattlefieldDocScript.generate("rt", 8, 6)
@@ -70,14 +83,19 @@ func _run() -> void:
 		{ "class": "swordsman", "name": "罗兰", "level": 3, "x": cells[0].x, "y": cells[0].y, "faction": "player" },
 		{ "class": "mage", "name": "暮语", "level": 2, "x": cells[1].x, "y": cells[1].y, "faction": "enemy" },
 	]
+	BattlefieldDocScript.set_cell_z(doc, Vector2i(0, 0), 7)
 	var j: Dictionary = BattlefieldDocScript.to_json_dict(doc)
 	_expect(j.id == "rt_map" and j.name == "回环测试" and j.hosting == true, "to_json 元字段")
 	_expect((j.rows as Array).size() == 6, "to_json rows 行数（顶层字段）")
 	_expect((j.playerUnits as Array).size() == 1 and (j.enemyUnits as Array).size() == 1, "to_json 双阵营拆分")
+	_expect(int(j.block_layout.cells[0].z) == 7, "to_json 写入独立方块高度")
+	BattlefieldDocScript.set_cell_z(doc, Vector2i(0, 0), 9)
+	_expect(int(j.block_layout.cells[0].z) == 7, "to_json 布局深拷贝，不共享单元")
 	var back: Dictionary = BattlefieldDocScript.from_json_dict(j)
 	_expect(back.id == "rt_map" and back.hosting == true, "from_json 元字段回读")
 	_expect("\n".join(back.rows) == "\n".join(doc.rows), "from_json rows 回读一致")
 	_expect((back.units as Array).size() == 2, "from_json 单位回读")
+	_expect(BattlefieldDocScript.cell_z(back, Vector2i(0, 0)) == 7, "from_json 布局高度回读")
 	var u0: Dictionary = back.units[0]
 	_expect(u0.faction == "player" and u0.class == "swordsman" and u0.level == 3, "from_json 单位字段")
 
@@ -97,6 +115,25 @@ func _run() -> void:
 	_expect(BattlefieldDocScript.quick_validate(bad) != "", "缺单位被 quick_validate 拒绝")
 	bad.rows[2] = "zzzzz"
 	_expect(BattlefieldDocScript.quick_validate(bad) != "", "未知图例被 quick_validate 拒绝")
+	var bad_layout: Dictionary = back.duplicate(true)
+	bad_layout.block_layout = []
+	_expect(BattlefieldDocScript.quick_validate(bad_layout) != "", "非对象 block_layout 被拒绝")
+	var bad_version: Dictionary = back.duplicate(true)
+	bad_version.block_layout.version = 2
+	_expect(BattlefieldDocScript.quick_validate(bad_version) != "", "非法布局版本被拒绝")
+	var bad_z: Dictionary = back.duplicate(true)
+	bad_z.block_layout.cells[0].z = 17
+	_expect(BattlefieldDocScript.quick_validate(bad_z) != "", "z>16 被拒绝")
+	var bad_float: Dictionary = back.duplicate(true)
+	bad_float.block_layout.cells[0].z = 1.5
+	_expect(BattlefieldDocScript.quick_validate(bad_float) != "", "非整数 z 被拒绝")
+	var bad_duplicate: Dictionary = back.duplicate(true)
+	bad_duplicate.block_layout.cells.append({"x": 0, "y": 0, "z": 3})
+	_expect(BattlefieldDocScript.quick_validate(bad_duplicate) != "", "重复格坐标被拒绝")
+	var bad_source: Dictionary = j.duplicate(true)
+	bad_source.block_layout = "broken"
+	_expect(BattlefieldDocScript.quick_validate(BattlefieldDocScript.from_json_dict(bad_source)) != "",
+		"from_json_dict 不吞掉非法布局类型")
 
 	# ---- 5. save_model：先清残留 → 保存 → loader 回读 → 删除 ----
 	_cleanup_res_tmp()
@@ -109,6 +146,7 @@ func _run() -> void:
 		{ "class": "swordsman", "name": "契约甲", "level": 2, "x": pc[0].x, "y": pc[0].y, "faction": "player" },
 		{ "class": "berserker", "name": "契约乙", "level": 2, "x": pc[1].x, "y": pc[1].y, "faction": "enemy" },
 	]
+	BattlefieldDocScript.set_cell_z(sv, Vector2i(0, 0), 9)
 	var saved: Dictionary = BattlefieldDocScript.save_model(sv)
 	_expect(bool(saved.get("ok", false)), "save_model 成功: %s" % saved.get("error", ""))
 	var saved_path := String(saved.get("path", ""))
@@ -119,6 +157,8 @@ func _run() -> void:
 		var ch: Dictionary = loaded["chapter"]
 		_expect(ch.width == 6 and ch.height == 5, "回读 chapter 尺寸")
 		_expect((ch.playerUnits as Array).size() == 1, "回读 playerUnits")
+		_expect(ch.has("block_layout") and int(ch.block_layout.cells[0].z) == 9,
+			"保存回读后 loader 透传独立方块高度")
 	_cleanup_res_tmp()
 
 	# 坏地图拒收：单位站在水上 → save 失败且不残留文件
