@@ -1,5 +1,7 @@
 extends SceneTree
 
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
+
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -23,11 +25,11 @@ func _run() -> void:
 	)
 
 	var viewport_center: Vector2 = world.get_viewport_rect().size * 0.5
-	world._cam.zoom = Vector2(2.0, 2.0)
+	world._cam.zoom = 2.0
 	for i in mini(12, samples.size()):
 		var cell := samples[i]
 		var center: Vector2 = world._grid_to_screen(cell, float(world.cell_stand_level(cell)))
-		world._cam.position = center
+		world._cam.focus_position = IsoProjection.grid_to_world(cell, float(world.cell_stand_level(cell)))
 		var picked: Vector2i = world.screen_to_cell(viewport_center)
 		if picked != cell:
 			push_error("战旗高地拾取偏移: cell=%s picked=%s level=%d" % [

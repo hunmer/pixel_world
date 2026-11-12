@@ -31,6 +31,7 @@ var _cursor_frame: Node2D = null
 var _cursor_float_tween: Tween = null
 var _range_markers: Array = []         # Array[Node2D]
 var _range_tweens: Array = []
+var _cursor_cell := Vector2i.ZERO
 
 # ---- 常量（颜色与原版一致）----
 const _RANGE_COLOR_MOVABLE := Color(0.25, 0.55, 1.0)
@@ -43,6 +44,20 @@ const _CURSOR_FLOAT_HEIGHT := 4.0
 const _CURSOR_FLOAT_PERIOD := 1.0
 # 范围菱形相对格子的缩放（与原版 _QUAD_INSET_SCALE 一致）
 const _QUAD_INSET_SCALE := 0.85
+
+
+## Camera3D 旋转/缩放只改变屏幕投影；刷新轻量标记，不触碰地形 mesh。
+func _process(_delta: float) -> void:
+	for marker in _range_markers:
+		if not is_instance_valid(marker) or not marker.has_meta("cell"):
+			continue
+		var cell: Vector2i = marker.get_meta("cell")
+		marker.set("corners", _cell_corners(cell.x, cell.y, float(marker.get_meta("corner_scale", 1.0))))
+		marker.queue_redraw()
+	if _cursor_marker != null and is_instance_valid(_cursor_marker) and _cursor_marker.visible:
+		update_cursor_particles(_cursor_cell.x, _cursor_cell.y, true)
+	if _path_marker != null and is_instance_valid(_path_marker):
+		_path_marker.queue_redraw()
 
 
 ## B2 模式入口（保留原签名，向后兼容 battle.gd 现有调用）
@@ -80,10 +95,10 @@ func _attach(n: Node2D) -> void:
 
 
 ## 统一入口：cell (x,y) → 屏幕坐标。B1 走 _coord_fn，B2 走 IsoCoords
-func _cell_to_screen(x: int, y: int) -> Vector2:
+func _cell_to_screen(x: int, y: int, level := -1.0) -> Vector2:
 	if _coord_fn.is_valid():
-		return _coord_fn.call(x, y)
-	return IsoCoords.to_screen(x, y)
+		return _coord_fn.call(x, y, level)
+	return board.cell_to_screen(x, y, _cell_level(x, y) if level < 0.0 else level)
 
 
 ## 统一入口：cell (x,y) → sort_y。B1 走 _sort_fn，B2 返回 0（B2 不用 y_sort）
@@ -102,8 +117,9 @@ func _cell_level(x: int, y: int) -> int:
 ## 从当前投影的两条基向量构造格菱形，B1 旋转后仍贴合格子。
 func _cell_corners(x: int, y: int, corner_scale := 1.0) -> PackedVector2Array:
 	var center := _cell_to_screen(x, y)
-	var basis_x := (_cell_to_screen(x + 1, y) - center) * 0.5 * corner_scale
-	var basis_y := (_cell_to_screen(x, y + 1) - center) * 0.5 * corner_scale
+	var level := float(_cell_level(x, y))
+	var basis_x := (_cell_to_screen(x + 1, y, level) - center) * 0.5 * corner_scale
+	var basis_y := (_cell_to_screen(x, y + 1, level) - center) * 0.5 * corner_scale
 	return PackedVector2Array([
 		center - basis_x - basis_y,
 		center + basis_x - basis_y,
@@ -117,6 +133,8 @@ func _make_color_block(x: int, y: int, color: Color) -> Node2D:
 	var node := _ColorBlock.new()
 	node.color = color
 	node.corners = _cell_corners(x, y)
+	node.set_meta("cell", Vector2i(x, y))
+	node.set_meta("corner_scale", 1.0)
 	# B1 模式：直接 position=屏幕坐标 + z_index 保证在地形之上
 	if is_world_mode():
 		node.z_index = 5  # 地形之上、单位之下（单位 z_index=10）
@@ -129,6 +147,8 @@ func _make_outline_block(x: int, y: int, color: Color, line_width: float = 2.0) 
 	node.color = color
 	node.width = line_width
 	node.corners = _cell_corners(x, y, _QUAD_INSET_SCALE)
+	node.set_meta("cell", Vector2i(x, y))
+	node.set_meta("corner_scale", _QUAD_INSET_SCALE)
 	if is_world_mode():
 		node.z_index = 5
 	return node
@@ -251,6 +271,7 @@ func update_cursor_particles(x: int, y: int, can_show: bool) -> void:
 		return
 	_cursor_marker.visible = true
 	# 定位：B1 走双轨（position=sort_y, offset 补偿），B2 直接设 global_position
+	_cursor_cell = Vector2i(x, y)
 	var c := _cell_to_screen(x, y)
 	if _cursor_frame != null and is_instance_valid(_cursor_frame):
 		var corners := _cell_corners(x, y)

@@ -10,9 +10,11 @@ const TILE_H := 16  ## 菱形高（像素）
 const LEVEL_H := 10  ## 方块侧壁高度：与 32x32 等距地块的侧壁高度一致
 
 const ColumnBatchScript = preload("res://scripts/isometric_column_batch.gd")
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
+const IsometricCamera3DScript = preload("res://scripts/iso/isometric_camera_3d.gd")
+const IsometricTerrain3DScript = preload("res://scripts/iso/isometric_terrain_3d.gd")
 const WanderingAnimalScript = preload("res://scripts/wandering_animal.gd")
 const IsometricDepthSort = preload("res://scripts/isometric_depth_sort.gd")
-const IsometricViewScript = preload("res://scripts/isometric_view.gd")
 const WeatherSystemScript = preload("res://scripts/weather_system.gd")
 const DayNightSystemScript = preload("res://scripts/day_night_system.gd")
 const WorldAudioSystemScript = preload("res://scripts/world_audio_system.gd")
@@ -166,7 +168,7 @@ var _little_grass_tex: ImageTexture  ## 稀草泥土（soil_with_little_grass �
 var _parched_tex: ImageTexture  ## 干裂土（沙漠过渡带的主地表）
 var _sand_tex: ImageTexture  ## 沙漠基础方块（sand 补齐到 32x32）
 var _snow_tex: ImageTexture  ## 雪地贴图补齐到 32x32，和其他地块共用同一锚点
-var _cells := {}     ## Vector2i -> IsometricColumnBatch，每格一个批绘制节点
+var _cells := {}     ## Vector2i -> bool；真实柱网格由 IsometricTerrain3D 按 chunk 合批
 var _cell_states := {}  ## Vector2i -> CellState；生态、占用与导航的唯一逻辑来源
 var _water_cells := {}  ## 当前流式窗口内的水格索引，供天气落点 O(1) 命中
 var _animals := {}   ## 出生格 -> WanderingAnimal；出生格保持确定性生成身份
@@ -176,7 +178,8 @@ var _animal_groups = CommunityStateStoreScript.new(2048)
 var _animal_behavior_distance_cache := {}
 var _ecology_near_tag_cache := {}
 var _explored := {}  ## Vector2i -> Color；探索时缓存基础色，地图打开时不再采样地形
-var _cam: Camera2D
+var _cam: Camera3D
+var _terrain: Node3D
 var _hud
 var _world_map
 var _weather
@@ -190,7 +193,6 @@ var _current_seed := 0
 var _world_rng = DeterministicRngScript.new(0)
 var _sort_origin := Vector2i.ZERO
 var _has_sort_origin := false
-var _iso_view = IsometricViewScript.new(TILE_W, TILE_H, LEVEL_H)
 var _view_rotation_culling := false
 var _view_dragging := false
 var _view_drag_last_x := 0.0
@@ -203,7 +205,7 @@ var _battle_active := false            # 战斗模式开关（照搬 is_world_ma
 var _battle_system: Node2D = null      # BattleSystem 实例（battle.gd 作为子节点）
 var _battle_focus_world_pos := Vector2.ZERO  # 战斗时相机聚焦的世界坐标
 # 战场相机操控：B1 下相机归 main.gd，战场中心 + offset 即相机位置。
-var _battle_cam_offset := Vector2.ZERO   # 平移偏移（相对战场中心）
+var _battle_cam_offset := Vector2.ZERO   # 平移偏移（实际屏幕像素，相对战场中心）
 var _battle_pan_active := false          # 拖拽平移中（中键 / 空格+左键）
 var _battle_pan_last := Vector2.ZERO     # 上次拖拽鼠标位置
 # 进入战斗时备份的相机/玩家状态，退出时恢复
@@ -213,7 +215,7 @@ var _player_visible_backup := true
 # BattleSystem 脚本预加载
 const _BattleScript := preload("res://scripts/scenes/battle.gd")
 
-var _player: Sprite2D
+var _player: Sprite3D
 var _player_cell := Vector2i.ZERO
 var _move_from_cell := Vector2i.ZERO
 var _move_from := Vector2.ZERO
@@ -965,6 +967,7 @@ func _ready() -> void:
 	_grass_tex = _terrain_materials.get_texture(&"grass")
 	_little_grass_tex = _terrain_materials.get_texture(&"sparse_grass")
 	_snow_tex = _terrain_materials.get_texture(&"snow")
+	_setup_terrain()
 	_setup_player()
 	_setup_camera()
 	_setup_depth_of_field()
@@ -1023,8 +1026,8 @@ func _regenerate(new_seed: int) -> void:
 	_move_sort_to = _move_sort_from
 	_move_level_from = _stand_level(_quantize(_player_cell.x, _player_cell.y))
 	_move_level_to = _move_level_from
-	_set_player_render_position(_player_visual_position, _move_sort_to)
 	_move_t = 1.0
+	_set_player_render_position(_player_visual_position, _move_sort_to)
 	_update_player_occlusion(0.0)
 	_snap_camera_position(_player_visual_position)
 	_reveal()
@@ -1175,21 +1178,10 @@ func _spawn_cell(cell: Vector2i) -> void:
 			return int(a["render_priority"]) < int(b["render_priority"])
 		return int(a["serial"]) < int(b["serial"])
 	)
-	var view: Node2D = ColumnBatchScript.new()
-	_cells[cell] = view
+	_terrain.set_cell(cell, state.render_blocks, cell_stand_level(cell))
+	_cells[cell] = true
 	if q <= WATER_MAX:
 		_water_cells[cell] = true
-	add_child(view)
-	view.configure(
-		cell,
-		state.render_blocks,
-		_grid_to_screen(cell),
-		_column_sort_y(cell),
-		LEVEL_H,
-		_iso_view._basis_x,
-		_iso_view._basis_y,
-		cell_stand_level
-	)
 	_spawn_ambient_for_cell(
 		cell,
 		q,
@@ -1199,7 +1191,7 @@ func _spawn_cell(cell: Vector2i) -> void:
 		)),
 		context.region_anchor,
 		state,
-		view
+		self
 	)
 	_player_occlusion_dirty = true
 
@@ -1276,12 +1268,10 @@ func _free_cell(cell: Vector2i) -> void:
 	_cell_states.erase(cell)
 	if not _cells.has(cell):
 		return
-	var view: Node2D = _cells[cell]
 	_cells.erase(cell)
 	_water_cells.erase(cell)
-	if is_instance_valid(view):
-		remove_child(view)
-		view.queue_free()
+	if is_instance_valid(_terrain):
+		_terrain.remove_cell(cell)
 
 
 ## 逻辑坐标中的方形流式窗口，经标准等距投影后就是画面中的菱形视窗。
@@ -1304,6 +1294,9 @@ func _update_streaming() -> void:
 			var cell := Vector2i(x, y)
 			if not _cells.has(cell):
 				_spawn_cell(cell)
+	# 每个流式批次只重建受影响的 chunk，而非每格一个 Node。
+	if is_instance_valid(_terrain):
+		_terrain.flush()
 	# 所有地块与静态生态对象完成后再生成动物群，避免群成员落在尚未加载的树木或装饰上。
 	_spawn_fauna_for_stream()
 	_cleanup_streamed_animals()
@@ -1315,86 +1308,40 @@ func _in_stream(cell: Vector2i, center: Vector2i) -> bool:
 	return absi(cell.x - center.x) <= stream_extent and absi(cell.y - center.y) <= stream_extent
 
 
+func _grid_to_world(cell: Vector2i, level := 0.0) -> Vector3:
+	return IsoProjection.grid_to_world(cell, level)
+
+
 func _grid_to_screen(cell: Vector2i, level := 0.0) -> Vector2:
-	return _iso_view.grid_to_screen(cell, level)
+	var world_position := IsoProjection.grid_to_world(cell, level)
+	if is_instance_valid(_cam):
+		return _cam.unproject_position(world_position)
+	return Vector2(
+		float(cell.x - cell.y) * TILE_W * 0.5,
+		float(cell.x + cell.y) * TILE_H * 0.5 - level * LEVEL_H
+	)
 
 
 func _column_sort_y(cell: Vector2i) -> float:
 	var sort_cell := cell - _sort_origin
-	# 投影 y 决定前后关系；量化后用投影 x 做稳定的同深度次序。
-	# 排序键只用于合成，真实脚点仍由 _grid_to_screen 独立计算。
-	var projected := _iso_view.grid_to_screen(sort_cell)
-	var depth := snappedf(_iso_view.get_depth_key(sort_cell), 0.001)
+	# 逻辑排序只服务兼容接口；真实遮挡由 Camera3D 深度完成，旋转不重写排序状态。
+	var projected := Vector2(
+		float(sort_cell.x - sort_cell.y) * TILE_W * 0.5,
+		float(sort_cell.x + sort_cell.y) * TILE_H * 0.5
+	)
+	var depth := snappedf(projected.y, 0.001)
 	var tie_break := clampf(projected.x * 0.001, -0.25, 0.25)
 	return depth * SORT_DEPTH_SCALE + tie_break
 
 
-## 角度变化只改变表现层坐标；地形采样、生态状态和确定性随机流保持不动。
+## 角度变化只旋转 Camera3D；地形、生态状态和连续网格坐标全部保持不变。
 func _refresh_view_projection() -> void:
-	var previous_player_position := _player_visual_position
-	var origin_screen := _iso_view.grid_to_screen(_sort_origin)
-	var cull_rect := Rect2()
-	if _cam != null:
-		var viewport_size := get_viewport_rect().size
-		var zoom := maxf(_cam.zoom.x, 0.001)
-		cull_rect = Rect2(
-			_cam.position - viewport_size / (2.0 * zoom),
-			viewport_size / zoom
-		).grow(256.0 / zoom)
-	_view_rotation_culling = true
-	for cell_value in _cells.keys():
-		var cell: Vector2i = cell_value
-		var view: Node2D = _cells[cell]
-		var screen_position := _iso_view.grid_to_screen(cell)
-		var projected := screen_position - origin_screen
-		var sort_y := (
-			snappedf(projected.y, 0.001) * SORT_DEPTH_SCALE
-			+ clampf(projected.x * 0.001, -0.25, 0.25)
-		)
-		view.set_rotation_draw_culling(
-			_cam != null,
-			_cam == null or cull_rect.has_point(screen_position)
-		)
-		view.update_sort_position(
-			screen_position,
-			sort_y,
-			_iso_view._basis_x,
-			_iso_view._basis_y
-		)
-	if _player != null:
-		if _move_t >= 1.0:
-			_move_from_cell = _player_cell
-			_move_level_from = _move_level_to
-		_move_from = _grid_to_screen(_move_from_cell, _move_level_from)
-		_move_to = _grid_to_screen(_player_cell, _move_level_to)
-		_player_visual_position = _move_from.lerp(_move_to, clampf(_move_t, 0.0, 1.0))
-		_move_sort_from = _column_sort_y(_move_from_cell) + PLAYER_SORT_BIAS
-		_move_sort_to = _column_sort_y(_player_cell) + PLAYER_SORT_BIAS
-		_set_player_render_position(_player_visual_position, _player_movement_sort_y())
-	for animal_value in _animals.values():
-		var animal: AnimatedSprite2D = animal_value
-		if not is_instance_valid(animal):
-			continue
-		animal.reproject(
-			_cell_feet_pos(animal.from_cell),
-			_cell_feet_pos(animal.target_cell),
-			_column_sort_y(animal.from_cell) + ANIMAL_SORT_BIAS,
-			_column_sort_y(animal.target_cell) + ANIMAL_SORT_BIAS
-		)
+	_view_rotation_culling = false
 	_player_occlusion_dirty = true
-	# 保留相机相对玩家的平移量，旋转不会把视野突然甩到世界原点。
-	if _cam != null:
-		var focus_delta := _player_visual_position - previous_player_position
-		_camera_smooth_position += focus_delta
-		_battle_focus_world_pos += focus_delta
-		_set_camera_position(_camera_smooth_position)
 
 
 func _restore_view_draw_culling() -> void:
 	_view_rotation_culling = false
-	for view_value in _cells.values():
-		var view: Node2D = view_value
-		view.set_rotation_draw_culling(false, true)
 
 
 func _ensure_sort_origin(near_cell: Vector2i) -> void:
@@ -1406,15 +1353,6 @@ func _ensure_sort_origin(near_cell: Vector2i) -> void:
 	if absi(distance.x) < SORT_REBASE_DISTANCE and absi(distance.y) < SORT_REBASE_DISTANCE:
 		return
 	_sort_origin = near_cell
-	for cell_value in _cells.keys():
-		var cell: Vector2i = cell_value
-		var view: Node2D = _cells[cell]
-		view.update_sort_position(
-			_grid_to_screen(cell),
-			_column_sort_y(cell),
-			_iso_view._basis_x,
-			_iso_view._basis_y
-		)
 	_player_occlusion_dirty = true
 	_move_sort_from = _column_sort_y(_move_from_cell) + PLAYER_SORT_BIAS
 	_move_sort_to = _column_sort_y(_player_cell) + PLAYER_SORT_BIAS
@@ -1423,7 +1361,7 @@ func _ensure_sort_origin(near_cell: Vector2i) -> void:
 		_player_movement_sort_y()
 	)
 	for animal_value in _animals.values():
-		var animal: AnimatedSprite2D = animal_value
+		var animal: AnimatedSprite3D = animal_value
 		if not is_instance_valid(animal):
 			continue
 		animal.rebase_sort(
@@ -2055,7 +1993,7 @@ func _spawn_ambient_for_cell(
 			^ cell.y * 0xd8163841
 			^ (_current_seed + placement_seed)
 		)
-		var local_surface_position := _grid_to_screen(cell, q) - host.position
+		var local_surface_position := Vector2(cell)
 		_ambient_registry.add_cluster(
 			StringName(ambient_id),
 			cell,
@@ -2526,7 +2464,7 @@ func _restore_animal_group(group_id: String) -> void:
 func _active_animal_count_for_group(group_id: String) -> int:
 	var count := 0
 	for animal_value in _animals.values():
-		var animal: AnimatedSprite2D = animal_value
+		var animal: AnimatedSprite3D = animal_value
 		if (
 			is_instance_valid(animal)
 			and String(animal.community_group_id) == group_id
@@ -2535,14 +2473,14 @@ func _active_animal_count_for_group(group_id: String) -> int:
 	return count
 
 
-func _release_animal_group_member(animal: AnimatedSprite2D) -> void:
+func _release_animal_group_member(animal: AnimatedSprite3D) -> void:
 	var group_id := String(animal.community_group_id)
 	if group_id.is_empty() or not _animal_groups.has(group_id):
 		return
 	_animal_groups.decrement_active_members(group_id)
 
 
-func _spawn_animal(species_id: String, cell: Vector2i, _level: int) -> AnimatedSprite2D:
+func _spawn_animal(species_id: String, cell: Vector2i, _level: int) -> AnimatedSprite3D:
 	if _animals.has(cell) or _animal_cell_reserved(cell):
 		return null
 	if not _animal_species.has(species_id):
@@ -2571,7 +2509,7 @@ func _spawn_animal(species_id: String, cell: Vector2i, _level: int) -> AnimatedS
 	)
 	if not bool(spawn_decision.get("allowed", false)):
 		return null
-	var animal: AnimatedSprite2D = WanderingAnimalScript.new()
+	var animal: AnimatedSprite3D = WanderingAnimalScript.new()
 	_animals[cell] = animal
 	add_child(animal)
 	animal.configure(
@@ -2583,7 +2521,8 @@ func _spawn_animal(species_id: String, cell: Vector2i, _level: int) -> AnimatedS
 		_animal_wait(cell, 0),
 		StringName(species.get("behavior", &"wander")),
 		species.get("movement", {}),
-		float(species.get("foot_offset_y", 0.0))
+		float(species.get("foot_offset_y", 0.0)),
+		_stand_level(terrain_level)
 	)
 	var metadata: Dictionary = species.get("metadata", {})
 	if bool(metadata.get("aquatic", false)):
@@ -2610,7 +2549,7 @@ func _underwater_animal_material_for_depth(water_depth: int) -> ShaderMaterial:
 	)
 	material.set_shader_parameter("waterline", 0.29)
 	material.set_shader_parameter(
-		"visibility",
+		"submerged_visibility",
 		clampf(0.80 - float(depth_key - 1) * 0.05, 0.62, 0.80)
 	)
 	_underwater_animal_material_cache[depth_key] = material
@@ -2707,7 +2646,7 @@ func _clear_animals() -> void:
 func _cleanup_streamed_animals() -> void:
 	for origin_value in _animals.keys():
 		var origin: Vector2i = origin_value
-		var animal: AnimatedSprite2D = _animals[origin]
+		var animal: AnimatedSprite3D = _animals[origin]
 		if not is_instance_valid(animal):
 			_animals.erase(origin)
 			continue
@@ -2727,7 +2666,7 @@ func _cleanup_streamed_animals() -> void:
 
 func _update_animals(delta: float) -> void:
 	for animal_value in _animals.values():
-		var animal: AnimatedSprite2D = animal_value
+		var animal: AnimatedSprite3D = animal_value
 		if not is_instance_valid(animal):
 			continue
 		var active := _animal_in_active_stream(animal)
@@ -2763,14 +2702,14 @@ func _update_animals(delta: float) -> void:
 			_begin_animal_move(animal)
 
 
-func _animal_in_active_stream(animal: AnimatedSprite2D) -> bool:
+func _animal_in_active_stream(animal: AnimatedSprite3D) -> bool:
 	return (
 		_in_stream(animal.grid_cell, _stream_center)
 		or (animal.moving and _in_stream(animal.target_cell, _stream_center))
 	)
 
 
-func _begin_animal_move(animal: AnimatedSprite2D) -> void:
+func _begin_animal_move(animal: AnimatedSprite3D) -> void:
 	var current_cell: Vector2i = animal.grid_cell
 	var fleeing := _animal_should_flee(animal)
 	_animal_behavior_distance_cache.clear()
@@ -2815,7 +2754,7 @@ func _begin_animal_move(animal: AnimatedSprite2D) -> void:
 	)
 
 
-func _can_animal_enter(animal: AnimatedSprite2D, target: Vector2i) -> bool:
+func _can_animal_enter(animal: AnimatedSprite3D, target: Vector2i) -> bool:
 	if not _in_stream(target, _stream_center):
 		return false
 	var current_cell: Vector2i = animal.grid_cell
@@ -2831,9 +2770,9 @@ func _can_animal_enter(animal: AnimatedSprite2D, target: Vector2i) -> bool:
 	return true
 
 
-func _animal_cell_reserved(cell: Vector2i, except_animal: AnimatedSprite2D = null) -> bool:
+func _animal_cell_reserved(cell: Vector2i, except_animal: AnimatedSprite3D = null) -> bool:
 	for other_value in _animals.values():
-		var other: AnimatedSprite2D = other_value
+		var other: AnimatedSprite3D = other_value
 		if other == except_animal or not is_instance_valid(other):
 			continue
 		if other.grid_cell == cell or (other.moving and other.target_cell == cell):
@@ -2841,7 +2780,7 @@ func _animal_cell_reserved(cell: Vector2i, except_animal: AnimatedSprite2D = nul
 	return false
 
 
-func _animal_should_flee(animal: AnimatedSprite2D) -> bool:
+func _animal_should_flee(animal: AnimatedSprite3D) -> bool:
 	var current_decision := _animal_behavior_decision(
 		animal,
 		animal.grid_cell,
@@ -2860,7 +2799,7 @@ func _animal_should_flee(animal: AnimatedSprite2D) -> bool:
 
 
 func _animal_move_score(
-	animal: AnimatedSprite2D,
+	animal: AnimatedSprite3D,
 	candidate: Vector2i,
 	current_cell: Vector2i
 ) -> float:
@@ -2883,7 +2822,7 @@ func _animal_move_score(
 
 
 func _animal_behavior_decision(
-	animal: AnimatedSprite2D,
+	animal: AnimatedSprite3D,
 	candidate: Vector2i,
 	current_cell: Vector2i
 ) -> Dictionary:
@@ -3028,11 +2967,11 @@ func _animal_behavior_distance_to_tag(
 	return nearest
 
 
-func _animal_social_center(animal: AnimatedSprite2D) -> Vector2:
+func _animal_social_center(animal: AnimatedSprite3D) -> Vector2:
 	var total := Vector2.ZERO
 	var count := 0
 	for other_value in _animals.values():
-		var other: AnimatedSprite2D = other_value
+		var other: AnimatedSprite3D = other_value
 		if (
 			not is_instance_valid(other)
 			or not other.visible
@@ -3048,7 +2987,7 @@ func _animal_wait(origin: Vector2i, step_index: int) -> float:
 	return ANIMAL_WAIT_MIN + _cell_rand(origin, 8200 + step_index * 53) * ANIMAL_WAIT_SPAN
 
 
-func _animal_bout_steps(animal: AnimatedSprite2D) -> int:
+func _animal_bout_steps(animal: AnimatedSprite3D) -> int:
 	var step_count: int = int(animal.move_steps_max) - int(animal.move_steps_min) + 1
 	if step_count <= 1:
 		return int(animal.move_steps_min)
@@ -3057,7 +2996,7 @@ func _animal_bout_steps(animal: AnimatedSprite2D) -> int:
 	) % step_count
 
 
-func _animal_step_pause(animal: AnimatedSprite2D) -> float:
+func _animal_step_pause(animal: AnimatedSprite3D) -> float:
 	return lerpf(
 		animal.step_pause_min,
 		animal.step_pause_max,
@@ -3135,25 +3074,32 @@ func _pad_texture_to_32(tex: Texture2D) -> ImageTexture:
 
 # ---------- 角色 ----------
 
+func _setup_terrain() -> void:
+	_terrain = IsometricTerrain3DScript.new()
+	_terrain.name = "IsometricTerrain3D"
+	add_child(_terrain)
+
+
 func _setup_player() -> void:
-	_player = Sprite2D.new()
+	_player = Sprite3D.new()
 	var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
 	for y in 8:
 		for x in 8:
 			var border := x == 0 or y == 0 or x == 7 or y == 7
 			img.set_pixel(x, y, Color(0.5, 0.08, 0.1) if border else Color(0.95, 0.35, 0.3))
 	_player.texture = ImageTexture.create_from_image(img)
-	_player.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_player.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_player.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_player.pixel_size = 1.0 / 32.0
+	_player.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	_player.shaded = false
 	add_child(_player)
 
 
-## 玩家节点也使用脚点排序代理；offset 只负责把像素补偿回真实脚点，镜头不再跟随代理坐标。
-func _set_player_render_position(visual_position: Vector2, sort_y: float) -> void:
-	_player.position = Vector2(visual_position.x, sort_y)
-	_player.offset = Vector2(
-		0,
-		visual_position.y - sort_y - _player.texture.get_height() / 2.0
-	)
+## 玩家使用真实 3D 脚点；sort_y 仅保留给旧调试接口，不再参与 Canvas 排序。
+func _set_player_render_position(visual_position: Vector2, _sort_y: float) -> void:
+	_player.position = IsoProjection.visual_to_world(visual_position, _player_current_stand_level())
+	_player.offset = Vector2(0, -_player.texture.get_height() / 2.0)
 
 
 func _player_movement_sort_y() -> float:
@@ -3291,38 +3237,11 @@ func _player_occlusion_needs_rebuild() -> bool:
 	)
 
 
-func _update_player_occlusion(delta: float) -> void:
-	if _player_occlusion_needs_rebuild():
-		var state := _collect_player_occlusion_state()
-		var next_cells: Dictionary = state["blocks"]
-		var target_alpha := _player_occlusion_target_alpha(int(state["core_block_count"]))
-		for cell_value in _player_occluder_cells.keys():
-			var cell: Vector2i = cell_value
-			if next_cells.has(cell) or not _cells.has(cell):
-				continue
-			_cells[cell].set_player_occlusion_blocks([], 1.0)
-			_player_occlusion_fading_cells[cell] = true
-		for cell_value in next_cells.keys():
-			var cell: Vector2i = cell_value
-			if not _cells.has(cell):
-				continue
-			_cells[cell].set_player_occlusion_blocks(next_cells[cell], target_alpha)
-			_player_occlusion_fading_cells[cell] = true
-		_player_occluder_cells = next_cells
-		_player_occlusion_dirty = false
-		_player_occlusion_last_visual_position = _player_visual_position
-		_player_occlusion_last_sort_y = _player_occlusion_sort_y()
-		_player_occlusion_last_stand_level = _player_current_stand_level()
-
-	for cell_value in _player_occlusion_fading_cells.keys():
-		var cell: Vector2i = cell_value
-		if not _cells.has(cell):
-			_player_occlusion_fading_cells.erase(cell)
-			continue
-		var view: Node2D = _cells[cell]
-		var settled: bool = view.advance_player_occlusion(delta)
-		if settled:
-			_player_occlusion_fading_cells.erase(cell)
+func _update_player_occlusion(_delta: float) -> void:
+	# 真实 3D 深度替代 CanvasItem 遮挡淡出；保留空状态供旧调试面板查询。
+	_player_occluder_cells.clear()
+	_player_occlusion_fading_cells.clear()
+	_player_occlusion_dirty = false
 
 
 func get_player_occluder_cells() -> Array[Vector2i]:
@@ -3341,8 +3260,7 @@ func _stand_level(q: int) -> int:
 
 
 func _cell_feet_pos(cell: Vector2i) -> Vector2:
-	var q := _quantize(cell.x, cell.y)
-	return _grid_to_screen(cell, _stand_level(q))
+	return Vector2(cell)
 
 
 ## WASD 与上下方向键移动；左右方向键用于离散视角切换。
@@ -3381,11 +3299,8 @@ func _try_move(d: Vector2i) -> void:
 
 
 func _process(delta: float) -> void:
-	if _iso_view.advance(delta):
-		_refresh_view_projection()
-	else:
-		if _view_rotation_culling:
-			_restore_view_draw_culling()
+	if is_instance_valid(_cam):
+		_cam.advance(delta)
 	if _move_t < 1.0:
 		var speed := fast_multiplier if Input.is_physical_key_pressed(KEY_SHIFT) else 1.0
 		_move_t = minf(1.0, _move_t + delta / move_time * speed)
@@ -3406,10 +3321,9 @@ func _process(delta: float) -> void:
 	# 战斗模式：相机聚焦战场（中心 + 平移偏移），跳过跟随玩家的 lerp
 	if _battle_active:
 		_update_battle_edge_pan(delta)  # 边缘滚屏：鼠标在视口边缘时累加偏移
-		_set_camera_position(_battle_focus_world_pos + _battle_cam_offset)
+		_set_camera_position(_battle_camera_focus())
 	else:
-		# 逻辑状态不做像素取整，避免从已量化的 Camera2D.position 反复积分
-		# 而丢失亚像素进度；仅最终渲染位置按当前 zoom 对齐像素网格。
+		# 连续网格状态不做像素取整；Camera3D 只消费平滑后的焦点。
 		var camera_blend := 1.0 - exp(
 			-camera_smoothing_speed * maxf(delta, 0.0)
 		)
@@ -3421,17 +3335,18 @@ func _process(delta: float) -> void:
 	_sync_depth_of_field_focus()
 	if _ambient_registry != null:
 		var viewport_size := get_viewport_rect().size
+		var camera_focus_grid := IsoProjection.world_to_grid(_cam.focus_position)
 		_ambient_registry.update_observer_all(
 			{
 				"player_cell": _player_cell,
 				"player_world_position": _player_visual_position,
-				"player_screen_position": viewport_size * 0.5 + (
-					_player_visual_position - _cam.position
-				) * _cam.zoom,
-				"camera_world_position": _cam.position,
+				"player_world_3d": _player.global_position,
+				"player_screen_position": _cam.unproject_position(_player.global_position),
+				"camera_world_position": Vector2(camera_focus_grid),
+				"camera_3d": _cam,
 				"viewport_size": viewport_size,
 				"canvas_transform": get_viewport().get_canvas_transform(),
-				"zoom": _cam.zoom,
+				"zoom": Vector2.ONE * _cam.zoom,
 				"world_seed": _current_seed,
 				"map_open": is_world_map_open(),
 				"allow_flyovers": not is_world_map_open(),
@@ -3518,13 +3433,11 @@ func _map_color_for_context(context, sampler = null) -> Color:
 # ---------- 相机 / HUD / 输入 ----------
 
 func _setup_camera() -> void:
-	_cam = Camera2D.new()
-	_cam.enabled = true
-	# 内建 smoothing 会让实际 canvas 中心落在亚像素上；本项目需要保持
-	# nearest 像素安全，因此在 _process() 中保存独立浮点状态后再量化输出。
-	_cam.position_smoothing_enabled = false
-	_cam.rotation_smoothing_enabled = false
+	_cam = IsometricCamera3DScript.new()
+	_cam.name = "IsometricCamera3D"
+	# Camera3D 没有 Camera2D 的 position/rotation smoothing 属性；逻辑跟随由 main.gd 插值。
 	add_child(_cam)
+	_cam.current = true
 	_apply_zoom()
 
 
@@ -3608,7 +3521,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and _view_dragging:
 		var drag_dx: float = event.position.x - _view_drag_last_x
 		_view_drag_last_x = event.position.x
-		_iso_view.drag_by(drag_dx)
+		_cam.drag_by(Vector2(drag_dx, 0.0))
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed:
@@ -3631,11 +3544,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.physical_keycode == KEY_R and event.ctrl_pressed:
 			_regenerate(0)
 		elif event.physical_keycode == KEY_R:
-			_iso_view.reset_rotation()
+			_cam.reset_rotation()
 		elif event.physical_keycode in [KEY_Z, KEY_Q, KEY_LEFT]:
-			_iso_view.rotate_step(-1)
+			_cam.rotate_step(-1)
 		elif event.physical_keycode in [KEY_X, KEY_RIGHT]:
-			_iso_view.rotate_step(1)
+			_cam.rotate_step(1)
 		elif event.physical_keycode == KEY_T and _weather != null:
 			if event.shift_pressed:
 				_weather.set_auto_mode()
@@ -3666,7 +3579,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not is_world_map_open():
 				_open_map_editor()
 		elif event.physical_keycode == KEY_E:
-			_iso_view.rotate_step(1)
+			_cam.rotate_step(1)
 		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
 			_zoom_step(1)
 		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
@@ -3719,10 +3632,7 @@ func _sync_depth_of_field_focus() -> void:
 	if _depth_of_field == null or _cam == null:
 		return
 	var viewport_size := get_viewport_rect().size
-	var player_screen_position := (
-		viewport_size * 0.5
-		+ (_player_visual_position - _cam.position) * _cam.zoom
-	)
+	var player_screen_position := _cam.unproject_position(_player.global_position)
 	_depth_of_field.set_focus_screen_position(player_screen_position, viewport_size)
 
 
@@ -3805,36 +3715,30 @@ func _sync_weather_environment() -> void:
 	)
 
 
-## 世界空间粒子负责雨雪；这里只把少量代表性落点反投影到真实水格。
-## 涟漪交给该水柱批绘制，因而位于水面之上、荷叶之下，并继续服从地图 Y-sort。
+## 世界空间粒子负责雨雪；少量落点通过真实射线命中水面并交给 3D 水波池。
 func _on_weather_water_impact(
 	viewport_position: Vector2,
 	kind: StringName,
 	strength: float
 ) -> void:
-	var canvas_inverse := get_viewport().get_canvas_transform().affine_inverse()
-	var global_world := canvas_inverse * viewport_position
-	var world_position := to_local(global_world)
-	var grid_position := _iso_view.screen_to_grid(
-		world_position - WATER_SURFACE_VISUAL_OFFSET,
+	var picked: Variant = IsoProjection.screen_to_grid(
+		_cam,
+		viewport_position,
 		WATER_SURFACE_LEVEL
 	)
-	var cell := Vector2i(roundi(grid_position.x), roundi(grid_position.y))
+	if picked == null:
+		return
+	var continuous := picked as Vector2
+	var cell := Vector2i(floori(continuous.x + 0.5), floori(continuous.y + 0.5))
 	if not _water_cells.has(cell):
 		return
-	var surface_center := (
-		_grid_to_screen(cell, WATER_SURFACE_LEVEL)
-		+ WATER_SURFACE_VISUAL_OFFSET
-	)
-	var local_offset := world_position - surface_center
-	var grid_offset := _iso_view.screen_to_grid(local_offset)
-	var edge_ratio := absf(grid_offset.x) + absf(grid_offset.y)
+	var offset_cells := continuous - Vector2(cell)
+	var edge_ratio := absf(offset_cells.x) + absf(offset_cells.y)
 	if edge_ratio > 0.94:
 		return
-	var edge_clearance := 1.0 - edge_ratio
-	var maximum_radius := clampf(3.0 + edge_clearance * 10.0, 3.0, 10.5)
-	var column = _cells[cell]
-	column.spawn_water_ripple(local_offset, kind, strength, maximum_radius)
+	var maximum_radius := clampf(3.0 + (1.0 - edge_ratio) * 10.0, 3.0, 10.5)
+	if is_instance_valid(_terrain) and _terrain.has_method(&"spawn_water_ripple"):
+		_terrain.spawn_water_ripple(cell, offset_cells, kind, strength, maximum_radius)
 
 
 func _zoom_step(delta: int) -> void:
@@ -3847,27 +3751,30 @@ func _zoom_step(delta: int) -> void:
 
 func _apply_zoom() -> void:
 	var value := ZOOM_LEVELS[_zoom_index]
-	_cam.zoom = Vector2(value, value)
+	_cam.zoom = value
 	_set_camera_position(_camera_smooth_position)
 	_sync_depth_of_field_focus()
 	if _weather != null:
 		_weather.refresh_particle_field()
 	if _ambient_registry != null:
-		# Camera2D 的 canvas transform 在本帧末尾生效；延后一帧重新分配
+		# Camera3D 投影在本帧更新；延后一帧重新分配有限表现槽位。
 		# 有限表现槽位，保证缩放后仍优先服务当前视口内的 ambient。
 		_ambient_registry.call_deferred("refresh_all")
 
 
 func _set_camera_position(world_position: Vector2) -> void:
-	var snap_step := Vector2.ONE / _cam.zoom.x
-	_cam.position = world_position.snapped(snap_step)
+	if not is_instance_valid(_cam):
+		return
+	_cam.focus_position = IsoProjection.visual_to_world(
+		world_position,
+		_player_current_stand_level()
+	)
 
 
 ## 首次生成、换种子和自动截图属于瞬移，不应把旧视角缓慢拖进新位置。
 func _snap_camera_position(world_position: Vector2) -> void:
 	_camera_smooth_position = world_position
 	_set_camera_position(world_position)
-	_cam.force_update_scroll()
 
 
 ## 命令行带 `-- --shot` 时：渲染后截图到 /tmp/pixel_world_shot.png 并退出（自动验证用）
@@ -4003,7 +3910,7 @@ func _enter_battle_inline(chapter: Dictionary) -> void:
 	_zoom_index = DEFAULT_ZOOM_INDEX  # 2 → 2.0x
 	_apply_zoom()
 	var center_world_cell := _player_cell
-	_battle_focus_world_pos = _grid_to_screen(center_world_cell, _stand_level(_quantize(center_world_cell.x, center_world_cell.y)))
+	_battle_focus_world_pos = Vector2(center_world_cell)
 	_snap_camera_position(_battle_focus_world_pos)
 	# 4. 实例化 BattleSystem 并注入 main.gd 引用
 	SceneArgs.battle_args = {
@@ -4049,6 +3956,23 @@ func _handle_battle_input(event: InputEvent) -> bool:
 	return false
 
 
+## B1 平移仍以屏幕像素累积，最终通过同一 Camera3D 射线换算为连续网格偏移。
+func _battle_camera_focus() -> Vector2:
+	if _battle_cam_offset.is_zero_approx() or not is_instance_valid(_cam):
+		return _battle_focus_world_pos
+	var viewport_center := get_viewport_rect().size * 0.5
+	var level := _player_current_stand_level()
+	var from: Variant = IsoProjection.screen_to_world(_cam, viewport_center, level)
+	var to: Variant = IsoProjection.screen_to_world(_cam, viewport_center + _battle_cam_offset, level)
+	if from == null or to == null:
+		return _battle_focus_world_pos
+	var delta := (to as Vector3) - (from as Vector3)
+	return _battle_focus_world_pos + Vector2(
+		delta.x / IsoProjection.GRID_STEP,
+		delta.z / IsoProjection.GRID_STEP
+	)
+
+
 ## B1 战场拖拽平移：中键 / 空格+左键 拖拽时累加 _battle_cam_offset。
 ## 在 _unhandled_input 的 B1 分支调用（缩放键已由 _handle_battle_input 放行）。
 func _handle_battle_camera_input(event: InputEvent) -> bool:
@@ -4071,11 +3995,13 @@ func _handle_battle_camera_input(event: InputEvent) -> bool:
 		return true
 	elif event is InputEventMouseMotion and _battle_pan_active:
 		var mm := event as InputEventMouseMotion
-		var zoom := _cam.zoom.x if _cam != null else 1.0
-		# 屏幕拖拽反方向施加到相机（与 iso_board.pan 语义一致）
-		_battle_cam_offset -= (mm.position - _battle_pan_last) / zoom
+		if mm.ctrl_pressed:
+			_cam.drag_by(Vector2(mm.position.x - _battle_pan_last.x, 0.0))
+		else:
+			# offset 始终是实际屏幕像素；射线反投影只在焦点换算时处理 zoom。
+			_battle_cam_offset -= mm.position - _battle_pan_last
+			_clamp_battle_cam_offset()
 		_battle_pan_last = mm.position
-		_clamp_battle_cam_offset()
 		return true
 	return false
 
@@ -4083,7 +4009,7 @@ func _handle_battle_camera_input(event: InputEvent) -> bool:
 ## B1 战场边缘滚屏：鼠标距视口边缘 < 阈值时按方向累加 _battle_cam_offset。
 ## 拖拽中 / 鼠标在 UI 上时不触发。在 _process 的 B1 分支调用。
 const _BATTLE_EDGE_PAN_MARGIN := 24.0   # 触发边缘滚屏的边距（像素）
-const _BATTLE_EDGE_PAN_SPEED := 420.0   # 边缘滚屏速度（屏幕像素/秒 → 除以 zoom 转世界）
+const _BATTLE_EDGE_PAN_SPEED := 420.0   # 边缘滚屏速度（实际屏幕像素/秒）
 func _update_battle_edge_pan(delta: float) -> void:
 	if _battle_pan_active or _cam == null:
 		return
@@ -4108,10 +4034,9 @@ func _update_battle_edge_pan(delta: float) -> void:
 		dir.y += 1.0
 	if dir == Vector2.ZERO:
 		return
-	var zoom := _cam.zoom.x
-	# 边缘滚屏 = 相机往鼠标指向方向走（同向）：鼠标在右边缘 → 相机右移 → 看到右侧内容。
+	# 边缘滚屏 = 相机往鼠标指向方向走（同向）；offset 不预除 zoom。
 	# （与拖拽平移相反：拖拽是抓地图反方向拖，用 -=）
-	_battle_cam_offset += dir * (_BATTLE_EDGE_PAN_SPEED / zoom) * delta
+	_battle_cam_offset += dir * _BATTLE_EDGE_PAN_SPEED * delta
 	_clamp_battle_cam_offset()
 
 
@@ -4145,51 +4070,24 @@ func cell_stand_level(cell: Vector2i) -> int:
 	return _stand_level(_quantize(cell.x, cell.y))
 
 
-## 公开查询：屏幕坐标 → 世界 cell（供战棋 cell 拾取用）
+## 公开查询：屏幕坐标 → 世界 cell。真实射线与方格柱顶求交，最近顶面优先。
 func screen_to_cell(screen_pos: Vector2) -> Vector2i:
-	var world_pos := _screen_to_world_pos(screen_pos)
-	var initial_grid := _iso_view.screen_to_grid(world_pos)
-	var best_cell := Vector2i(roundi(initial_grid.x), roundi(initial_grid.y))
-	var best_score := INF
-	var seen := {}
-	for guess_level in range(WATER_SURFACE_LEVEL, LEVELS * 3):
-		var base_grid := _iso_view.screen_to_grid(world_pos, float(guess_level))
-		var base := Vector2i(roundi(base_grid.x), roundi(base_grid.y))
-		for dy in range(-1, 2):
-			for dx in range(-1, 2):
-				var cell := base + Vector2i(dx, dy)
-				if seen.has(cell):
-					continue
-				seen[cell] = true
-				var lvl := _stand_level(_quantize(cell.x, cell.y))
-				var local := world_pos - _grid_to_screen(cell, float(lvl))
-				var grid_offset := _iso_view.screen_to_grid(local)
-				var score := absf(grid_offset.x) + absf(grid_offset.y)
-				if score < best_score:
-					best_score = score
-					best_cell = cell
-	return best_cell
+	var hit := IsoProjection.pick_top_face(
+		_cam, screen_pos, 0, LEVELS * 3 - 1, Callable(self, "cell_stand_level")
+	)
+	return hit.get("cell", _player_cell) as Vector2i
 
 
 func screen_to_cell_in_rect(screen_pos: Vector2, origin: Vector2i, size: Vector2i) -> Vector2i:
-	var world_pos := _screen_to_world_pos(screen_pos)
-	var best_cell := origin
-	var best_score := INF
-	for y in range(origin.y, origin.y + size.y):
-		for x in range(origin.x, origin.x + size.x):
-			var cell := Vector2i(x, y)
-			var lvl := _stand_level(_quantize(cell.x, cell.y))
-			var local := world_pos - _grid_to_screen(cell, float(lvl))
-			var grid_offset := _iso_view.screen_to_grid(local)
-			var score := absf(grid_offset.x) + absf(grid_offset.y)
-			if score < best_score:
-				best_score = score
-				best_cell = cell
-	return best_cell
+	var valid_cell := func(cell: Vector2i) -> bool:
+		return cell.x >= origin.x and cell.y >= origin.y \
+			and cell.x < origin.x + size.x and cell.y < origin.y + size.y
+	var hit := IsoProjection.pick_top_face(
+		_cam, screen_pos, 0, LEVELS * 3 - 1,
+		Callable(self, "cell_stand_level"), valid_cell
+	)
+	return hit.get("cell", origin) as Vector2i
 
 
-func _screen_to_world_pos(screen_pos: Vector2) -> Vector2:
-	var zoom := _cam.zoom.x if _cam != null else 1.0
-	var cam_pos := _cam.position if _cam != null else Vector2.ZERO
-	var viewport_center := get_viewport_rect().size * 0.5
-	return (screen_pos - viewport_center) / zoom + cam_pos
+func _screen_to_world_pos(screen_pos: Vector2, level: float = 0.0) -> Variant:
+	return IsoProjection.screen_to_world(_cam, screen_pos, level)

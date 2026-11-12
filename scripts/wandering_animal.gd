@@ -1,4 +1,15 @@
-extends AnimatedSprite2D
+extends AnimatedSprite3D
+
+## 世界生态动物：行为仍使用连续二维网格坐标，AnimatedSprite3D 负责真实深度落位。
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
+const WORLD_PIXEL_SIZE := 1.0 / 32.0
+
+var material: Material:
+	set(value):
+		# 每条鱼携带当前动画帧纹理；其余水层参数仍从共享模板复制。
+		var instance_material := value.duplicate() as Material if value is ShaderMaterial else value
+		material = instance_material
+		material_override = instance_material
 
 ## 独立于地块批绘制的移动动物。节点 Y 坐标只承担合成排序，offset 把动画画面补偿回真实脚点。
 
@@ -55,7 +66,8 @@ func configure(
 	initial_wait: float,
 	behavior: StringName,
 	movement: Dictionary,
-	configured_foot_offset_y := 0.0
+	configured_foot_offset_y := 0.0,
+	initial_stand_level := 0.0
 ) -> void:
 	species_id = configured_species_id
 	origin_cell = spawn_cell
@@ -63,7 +75,12 @@ func configure(
 	from_cell = spawn_cell
 	target_cell = spawn_cell
 	sprite_frames = frames
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	pixel_size = WORLD_PIXEL_SIZE
+	alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	shaded = false
+	double_sided = true
 	centered = true
 	wait_remaining = initial_wait
 	behavior_mode = behavior
@@ -91,6 +108,8 @@ func configure(
 	_from_sort_y = sort_y
 	_target_sort_y = sort_y
 	_sort_y = sort_y
+	_from_stand_level = initial_stand_level
+	_target_stand_level = initial_stand_level
 	if sprite_frames.has_animation(idle_action):
 		play(idle_action)
 	_apply_render_proxy()
@@ -241,7 +260,8 @@ func _movement_sort_y() -> float:
 
 
 func _apply_render_proxy() -> void:
-	position = Vector2(_visual_position.x, _sort_y)
+	var level := lerpf(_from_stand_level, _target_stand_level, clampf(_move_t, 0.0, 1.0))
+	position = IsoProjection.visual_to_world(_visual_position, level)
 	var frame_texture: Texture2D = null
 	if sprite_frames != null and sprite_frames.has_animation(animation):
 		var frame_count := sprite_frames.get_frame_count(animation)
@@ -249,7 +269,7 @@ func _apply_render_proxy() -> void:
 			frame_texture = sprite_frames.get_frame_texture(animation, mini(frame, frame_count - 1))
 	var frame_height: float = float(frame_texture.get_height()) if frame_texture != null else 0.0
 	# 动画图集允许在单帧底部留透明边距；把实体脚底重新落回地表脚点。
-	offset = Vector2(
-		0.0,
-		_visual_position.y - _sort_y - frame_height * 0.5 + foot_offset_y
-	)
+	offset = Vector2(0.0, -frame_height * 0.5 + foot_offset_y)
+	var water_shader := material_override as ShaderMaterial
+	if water_shader != null and frame_texture != null:
+		water_shader.set_shader_parameter("albedo_texture", frame_texture)

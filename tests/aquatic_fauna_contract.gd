@@ -1,5 +1,6 @@
 extends SceneTree
 
+const AnimalScript = preload("res://scripts/wandering_animal.gd")
 const FISH_SPECIES := [
 	"goldfish",
 	"blue_goldfish",
@@ -106,11 +107,7 @@ func _run() -> void:
 			animal.sprite_frames.get_animation_loop(&"swim"),
 			"自然鱼的 swim 动画没有循环"
 		)
-		var fish_screen_position: Vector2 = (
-			viewport_size * 0.5
-			+ (animal.current_visual_position() - world._player_visual_position)
-			* world._cam.zoom.x
-		)
+		var fish_screen_position: Vector2 = world._cam.unproject_position(animal.global_position)
 		if Rect2(Vector2.ZERO, viewport_size).grow(32.0).has_point(
 			fish_screen_position
 		):
@@ -122,6 +119,31 @@ func _run() -> void:
 		var species_set: Dictionary = species_set_value
 		_expect(species_set.size() == 1, "同一鱼群混入了多个品种")
 
+	var template: ShaderMaterial = world._underwater_animal_material_for_depth(3)
+	var fish_a:AnimatedSprite3D=AnimalScript.new()
+	var fish_b:AnimatedSprite3D=AnimalScript.new()
+	root.add_child(fish_a)
+	root.add_child(fish_b)
+	var frames_a:=SpriteFrames.new()
+	var frames_b:=SpriteFrames.new()
+	var image_a:=Image.create(2,2,false,Image.FORMAT_RGBA8)
+	image_a.fill(Color.RED)
+	var image_b:=Image.create(2,2,false,Image.FORMAT_RGBA8)
+	image_b.fill(Color.BLUE)
+	var texture_a:=ImageTexture.create_from_image(image_a)
+	var texture_b:=ImageTexture.create_from_image(image_b)
+	for pair in [[frames_a,texture_a],[frames_b,texture_b]]:
+		pair[0].add_animation("idle")
+		pair[0].add_frame("idle",pair[1])
+	fish_a.material=template
+	fish_b.material=template
+	fish_a.configure("a",Vector2i.ZERO,frames_a,Vector2.ZERO,0,0,&"wander",{},0,6)
+	fish_b.configure("b",Vector2i.ONE,frames_b,Vector2.ONE,0,0,&"wander",{},0,6)
+	_expect(fish_a.material!=fish_b.material,"fish materials must be independent")
+	_expect(is_equal_approx(float(fish_a.material.get_shader_parameter("submerged_visibility")),0.7),"submerged visibility was not copied from the depth template")
+	_expect(fish_a.material.get_shader_parameter("albedo_texture")==texture_a and fish_b.material.get_shader_parameter("albedo_texture")==texture_b,"fish frame textures leaked between instances")
+	fish_a.queue_free()
+	fish_b.queue_free()
 	var shore_water := Vector2i(1000000, 1000000)
 	var interior_water := Vector2i(1000000, 1000000)
 	var nearby_land := Vector2i(1000000, 1000000)
@@ -237,9 +259,9 @@ func _run() -> void:
 
 
 func _water_surface_block(world, cell: Vector2i) -> Dictionary:
-	if not world._cells.has(cell):
+	if not world._cell_states.has(cell):
 		return {}
-	for block_value in world._cells[cell]._blocks:
+	for block_value in world._cell_states[cell].render_blocks:
 		var block: Dictionary = block_value
 		if block.get("water_part", &"") == &"surface":
 			return block

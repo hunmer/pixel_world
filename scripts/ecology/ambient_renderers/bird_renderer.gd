@@ -447,7 +447,13 @@ func _apply_grounded_pose(entry: Dictionary) -> void:
 		+ float(entry.get("elapsed", 0.0)) * float(entry.get("speed", 1.0))
 	)
 	var radius := float(entry.get("radius", 0.0))
-	sprite.position = Vector2(entry.get("base_position", Vector2.ZERO)) + Vector2(
+	var base := Vector2(entry.get("base_position", Vector2.ZERO))
+	var host := _entry_host(entry)
+	var cell: Vector2i = entry.get("cell", Vector2i.ZERO)
+	if host != null and host.has_method("_grid_to_screen") and host.has_method("cell_stand_level"):
+		base = host._grid_to_screen(cell, float(host.cell_stand_level(cell))) \
+			+ Vector2(entry.get("member_jitter", Vector2.ZERO)) + _ground_visual_offset
+	sprite.position = base + Vector2(
 		sin(angle) * radius,
 		0.0
 	)
@@ -761,6 +767,8 @@ func _schedule_next_flyover() -> void:
 
 
 func _observer_scale(context: Dictionary) -> Vector2:
+	if context.has("camera_3d"):
+		return Vector2.ONE
 	var zoom_value: Variant = context.get("zoom", Vector2.ONE)
 	if zoom_value is Vector2:
 		var zoom: Vector2 = zoom_value
@@ -774,6 +782,8 @@ func _observer_scale(context: Dictionary) -> Vector2:
 ## current Camera2D values supplied by main; Viewport.canvas_transform can still
 ## describe the previous camera frame while camera smoothing is being updated.
 func _world_to_screen(world_position: Vector2, context: Dictionary) -> Vector2:
+	if context.has("camera_3d"):
+		return world_position
 	var viewport_size: Vector2 = context.get("viewport_size", Vector2.ZERO)
 	var camera_world_position: Vector2 = context.get(
 		"camera_world_position",
@@ -784,6 +794,8 @@ func _world_to_screen(world_position: Vector2, context: Dictionary) -> Vector2:
 
 
 func _screen_to_world(screen_position: Vector2, context: Dictionary) -> Vector2:
+	if context.has("camera_3d"):
+		return screen_position
 	var viewport_size: Vector2 = context.get("viewport_size", Vector2.ZERO)
 	var camera_world_position: Vector2 = context.get(
 		"camera_world_position",
@@ -800,7 +812,7 @@ func _screen_velocity_to_world(
 	screen_velocity: Vector2,
 	context: Dictionary
 ) -> Vector2:
-	var zoom := _observer_scale(context)
+	var zoom := Vector2.ONE if context.has("camera_3d") else _observer_scale(context)
 	return Vector2(screen_velocity.x / zoom.x, screen_velocity.y / zoom.y)
 
 

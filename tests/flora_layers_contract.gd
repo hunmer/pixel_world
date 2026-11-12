@@ -325,7 +325,7 @@ func _run() -> void:
 	var streamed_flora_max := 0
 	for cell_value in world._cells:
 		var flora_count := 0
-		for block in world._cells[cell_value].get("_blocks"):
+		for block in world._cell_states[cell_value].render_blocks:
 			if block.has("flora_species_id"):
 				flora_count += 1
 		streamed_flora_max = maxi(streamed_flora_max, flora_count)
@@ -343,7 +343,7 @@ func _run() -> void:
 		await process_frame
 		var rendered_species := ""
 		if world._cells.has(example_cell):
-			for block in world._cells[example_cell].get("_blocks"):
+			for block in world._cell_states[example_cell].render_blocks:
 				if block.has("flora_species_id"):
 					rendered_species = String(block["flora_species_id"])
 					break

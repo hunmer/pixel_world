@@ -17,6 +17,8 @@ class_name BattlefieldRenderer
 extends Node2D
 
 const ColumnBatchScript = preload("res://scripts/isometric_column_batch.gd")
+const Terrain3DScript = preload("res://scripts/iso/isometric_terrain_3d.gd")
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 const TerrainMaterialRegistryScript = preload("res://scripts/world/terrain_material_registry.gd")
 
 ## 材质配置来源（只读 materials 段，不加载整套生态配置）
@@ -67,7 +69,8 @@ const SORT_DIAGONAL_STRIDE := 128.0
 const PICK_MAX_LEVEL := 8
 
 var grid: GridSystem = null
-var _columns: Dictionary = {}  # Vector2i -> ColumnBatch
+var _columns: Dictionary = {}  # 2D 编辑器: Vector2i -> ColumnBatch；3D: cell -> block 记录
+var _terrain_3d: Node3D = null
 
 ## ---- 材质/贴图缓存（battle 与 editor 场景共享，静态避免重复加载） ----
 static var _shared_registry: TerrainMaterialRegistry = null
@@ -76,9 +79,22 @@ static var _shared_water: Dictionary = {}      # face -> Texture2D
 static var _shared_props: Dictionary = {}      # path -> Texture2D
 
 
+func _active_camera() -> Camera3D:
+	var viewport := get_viewport()
+	return viewport.get_camera_3d() if viewport != null else null
+
+
 func _ready() -> void:
-	y_sort_enabled = true
 	name = "TerrainLayer"
+	if _active_camera() != null:
+		_ensure_terrain_3d()
+
+func _ensure_terrain_3d() -> void:
+	if _terrain_3d != null:
+		return
+	_terrain_3d = Terrain3DScript.new()
+	_terrain_3d.name = "BattlefieldTerrain3D"
+	add_child(_terrain_3d)
 
 
 ## 构建整张地图的地形柱。grid: GridSystem。
@@ -90,7 +106,9 @@ func setup(p_grid: GridSystem) -> void:
 	for y in range(grid.height):
 		for x in range(grid.width):
 			_build_column(Vector2i(x, y))
-	print("[battlefield-render] 等距方块渲染完成: %dx%d, %d 柱" % [
+	if _terrain_3d != null:
+		_terrain_3d.flush()
+	print("[battlefield-render] 等距 3D 方块渲染完成: %dx%d, %d 柱" % [
 		grid.width, grid.height, _columns.size()
 	])
 
@@ -104,11 +122,16 @@ func rebuild_all() -> void:
 func refresh_cell(x: int, y: int) -> void:
 	var cell := Vector2i(x, y)
 	if _columns.has(cell):
-		var old: Node = _columns[cell]
+		var old: Variant = _columns[cell]
 		_columns.erase(cell)
-		old.queue_free()
+		if old is Node:
+			old.queue_free()
+		elif _terrain_3d != null:
+			_terrain_3d.remove_cell(cell)
 	if grid != null and _in_bounds(cell):
 		_build_column(cell)
+	if _terrain_3d != null:
+		_terrain_3d.flush()
 
 
 func column_count() -> int:
@@ -117,6 +140,9 @@ func column_count() -> int:
 
 ## 格心屏幕坐标（含站立层高度）——供 range_overlay / 单位定位
 func coord_for(x: int, y: int) -> Vector2:
+	var camera := _active_camera()
+	if camera != null:
+		return IsoProjection.world_to_screen(camera, IsoProjection.grid_to_world(Vector2i(x, y), stand_level(x, y)))
 	return IsoCoords.to_screen(x, y, stand_level(x, y))
 
 
@@ -133,11 +159,21 @@ func stand_level(x: int, y: int) -> int:
 	return int(style["height"])
 
 
-## 屏幕坐标 → 格子（多高度感知）。签名对齐 IsoBoard.pick_cell。
+## 屏幕坐标 → 格子。共享真实顶面射线，按正向距离而非高度顺序选择遮挡面。
 func pick_cell(screen_pos: Vector2, _viewport_size: Vector2) -> Vector2i:
+	var camera := _active_camera()
+	if camera != null:
+		var hit := IsoProjection.pick_top_face(
+			camera, screen_pos, 0, PICK_MAX_LEVEL, Callable(self, "_pick_stand_level")
+		)
+		return hit.get("cell", Vector2i(-1, -1)) as Vector2i
 	var canvas := get_viewport().get_canvas_transform()
 	var world := canvas.affine_inverse() * screen_pos
 	return pick_world(world)
+
+
+func _pick_stand_level(cell: Vector2i) -> float:
+	return float(stand_level(cell.x, cell.y)) if _in_bounds(cell) else -1.0
 
 
 ## 全局（viewport canvas）坐标 → 格子。逐层尝试：命中层的投影点落在该格柱顶。
@@ -185,6 +221,11 @@ func _build_column(cell: Vector2i) -> void:
 		if not prop.is_empty():
 			blocks.append(prop)
 
+	if _active_camera() != null:
+		_ensure_terrain_3d()
+		_columns[cell] = {"_blocks": blocks, "stand_level": height}
+		_terrain_3d.set_cell(cell, blocks, height)
+		return
 	var column: Node2D = ColumnBatchScript.new()
 	add_child(column)
 	column.configure(
@@ -279,9 +320,11 @@ func _water_block(texture: Texture2D, level: int, alpha: float, part: StringName
 
 
 func _clear_columns() -> void:
+	if _terrain_3d != null:
+		_terrain_3d.clear()
 	for cell in _columns.keys():
-		var column: Node = _columns[cell]
-		if is_instance_valid(column):
+		var column: Variant = _columns[cell]
+		if column is Node and is_instance_valid(column):
 			column.queue_free()
 	_columns.clear()
 

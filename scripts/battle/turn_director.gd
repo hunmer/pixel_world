@@ -251,13 +251,12 @@ func _enemy_act(enemy: Dictionary) -> void:
 
 
 # ============================================================
-# 单位沿路径 tween 移动（2D 版：tween Node2D.global_position）
+# 单位沿路径 tween 移动（共享 Camera3D 世界坐标）
 # ============================================================
-## us 类型从 Node3D 改为 Node2D（UnitSprite3D 现在继承 Node2D）。
-## IsoCoords.to_screen 返回 Vector2，直接赋给 Node2D.global_position。
-func _tween_move(us: Node2D, path: Array) -> void:
+## UnitSprite3D 继承 Node3D；B1/B2 都返回真实地形表面的 Vector3。
+func _tween_move(us: UnitSprite3D, path: Array) -> void:
 	for cell in path:
-		var w := IsoCoords.to_screen(cell.x, cell.y)
+		var target := us._world_cell_world(cell) if us.is_world_mode() else us._b2_cell_world(cell)
 		var tw := create_tween()
-		tw.tween_property(us, "global_position", w, 0.15)
+		tw.tween_property(us, "global_position", target, 0.15)
 		await tw.finished

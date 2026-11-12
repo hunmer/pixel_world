@@ -1,31 +1,33 @@
-shader_type canvas_item;
-render_mode unshaded;
+shader_type spatial;
+render_mode unshaded, cull_disabled, depth_draw_never;
 
-// The terrain batch cannot insert a moving sprite between its lakebed and
-// surface draw calls. Reapplying the same water colour over aquatic sprites
-// reproduces that missing foreground water layer without adding one CanvasItem
-// for every water cell.
-uniform vec4 water_colour : source_color = vec4(0.07, 0.32, 0.52, 1.0);
-uniform float fin_coverage : hint_range(0.0, 0.5) = 0.10;
-uniform float body_coverage : hint_range(0.0, 0.85) = 0.58;
-uniform float waterline : hint_range(0.1, 0.8) = 0.30;
-uniform float visibility : hint_range(0.5, 1.0) = 0.94;
-
-varying vec4 sprite_tint;
+// 每一水柱深度的前景水层。该材质由 spawn 按实际水深配置，鱼仍由真实 3D 深度遮挡。
+uniform vec4 water_colour : source_color = vec4(0.25, 0.58, 0.62, 0.42);
+uniform float fin_coverage : hint_range(0.0, 1.0) = 0.88;
+uniform float body_coverage : hint_range(0.0, 1.0) = 0.62;
+uniform float waterline : hint_range(0.0, 1.0) = 0.62;
+uniform float submerged_visibility : hint_range(0.0, 1.0) = 0.88;
+uniform sampler2D albedo_texture : source_color, filter_nearest, repeat_disable;
 
 void vertex() {
-	sprite_tint = COLOR;
+	// 自定义 spatial shader 不继承 BaseMaterial3D 的 billboard 分支。
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
+		INV_VIEW_MATRIX[0],
+		INV_VIEW_MATRIX[1],
+		INV_VIEW_MATRIX[2],
+		MODEL_MATRIX[3]
+	);
 }
 
 void fragment() {
-	vec4 sprite = texture(TEXTURE, UV) * sprite_tint;
-	float submerged_mask = smoothstep(
-		waterline - 0.025,
-		waterline + 0.025,
-		UV.y
-	);
-	float foreground_water = mix(fin_coverage, body_coverage, submerged_mask);
-	vec3 submerged = mix(sprite.rgb, water_colour.rgb, foreground_water);
-	float submerged_visibility = mix(1.0, visibility, submerged_mask);
-	COLOR = vec4(submerged, sprite.a * submerged_visibility);
+	vec4 sprite_tint = COLOR;
+	vec4 sprite = texture(albedo_texture, UV) * sprite_tint;
+	float submerged_part = 1.0 - smoothstep(waterline - 0.055, waterline + 0.055, UV.y);
+	float above_part = 1.0 - submerged_part;
+	vec3 water_tint = mix(water_colour.rgb, water_colour.rgb * 1.08, above_part);
+	float tint_amount = mix(body_coverage, fin_coverage, above_part);
+	vec3 submerged = mix(sprite.rgb, water_tint * max(sprite.rgb, vec3(0.34)), tint_amount);
+	float visibility = mix(submerged_visibility, 1.0, above_part);
+	ALBEDO = submerged;
+	ALPHA = sprite.a * visibility;
 }

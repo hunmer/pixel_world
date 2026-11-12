@@ -86,7 +86,7 @@ func _cell_is_open(world, cell: Vector2i) -> bool:
 	var q: int = world._quantize(cell.x, cell.y)
 	if q <= world.WATER_MAX or not world._cells.has(cell):
 		return false
-	for block in world._cells[cell].get("_blocks"):
+	for block in world._cell_states[cell].render_blocks:
 		if int(block["render_priority"]) >= 8:
 			return false
 	return true

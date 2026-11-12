@@ -12,6 +12,7 @@
 extends Node2D
 
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 
 var grid: GridSystem
 var turn: TurnManager
@@ -121,7 +122,7 @@ func _setup_b2_render() -> void:
 	add_child(range_overlay)
 	range_overlay.setup_world(
 		board, grid, block_titles,
-		Callable(renderer, "coord_for"),
+		Callable(self, "_b2_cell_to_screen"),
 		Callable(renderer, "sort_for"),
 		Callable(renderer, "stand_level")
 	)
@@ -141,11 +142,15 @@ func _setup_b1_render() -> void:
 	# B1 不画 terrain fallback（main.gd 已有真实地形）
 
 
+func _b2_cell_to_screen(x: int, y: int, level := -1.0) -> Vector2:
+	return board.cell_to_screen(x, y, float(renderer.stand_level(x, y)) if level < 0.0 else level)
+
+
 ## B1 坐标转换：战场局部 cell (x,y) → 屏幕坐标（供 range_overlay 用）
-func _b1_cell_to_screen(x: int, y: int) -> Vector2:
+func _b1_cell_to_screen(x: int, y: int, level := -1.0) -> Vector2:
 	var world_cell: Vector2i = _world_origin + Vector2i(x, y)
-	var lvl: int = _world.cell_stand_level(world_cell)
-	return _world._grid_to_screen(world_cell, float(lvl))
+	var lvl: float = float(_world.cell_stand_level(world_cell)) if level < 0.0 else level
+	return _world._grid_to_screen(world_cell, lvl)
 
 
 ## B1 sort_y 转换：战场局部 cell (x,y) → sort_y（供 range_overlay 用）
@@ -302,7 +307,17 @@ func _debug_print_unit_alignment() -> void:
 		var lvl := 0
 		if renderer != null:
 			lvl = renderer.stand_level(pos.x, pos.y)
-		var screen := IsoCoords.to_screen(pos.x, pos.y, lvl)
+		var projection_pos := pos
+		var projection_camera: Camera3D = null
+		if _b1_mode:
+			projection_pos += _world_origin
+			projection_camera = _world._cam
+			lvl = _world.cell_stand_level(projection_pos)
+		elif board != null:
+			projection_camera = board.camera
+		if projection_camera == null:
+			continue
+		var screen := IsoProjection.world_to_screen(projection_camera, IsoProjection.grid_to_world(projection_pos, float(lvl)))
 		print("[DEBUG-unit-align] id=%s name=%s cell=%s screen=%s actual=%s" % [
 			str(u.id), str(u.name), str(pos), str(screen), str(us.global_position)
 		])
@@ -368,6 +383,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				KEY_ESCAPE: _on_cancel()
 				KEY_ENTER, KEY_Z: _on_confirm()
 				KEY_E: _on_end_turn()
+				KEY_Q:
+					if not _b1_mode:
+						board.camera.rotate_step(-1)
+				KEY_X:
+					if not _b1_mode:
+						board.camera.rotate_step(1)
+				KEY_R:
+					if not _b1_mode:
+						board.camera.reset_rotation()
 				KEY_UP: _move_cursor(0, -1)
 				KEY_DOWN: _move_cursor(0, 1)
 				KEY_LEFT: _move_cursor(-1, 0)
@@ -413,7 +437,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		if _panning and not _b1_mode:
-			board.pan(mm.position.x - _pan_last.x, mm.position.y - _pan_last.y)
+			if mm.ctrl_pressed:
+				board.camera.drag_by(Vector2(mm.position.x - _pan_last.x, 0.0))
+			else:
+				board.pan(mm.position.x - _pan_last.x, mm.position.y - _pan_last.y)
 			_pan_last = mm.position
 			if mm.relative.length() > 3:
 				_dragged = true
@@ -676,9 +703,9 @@ func _resolve_combat(attacker: Dictionary, defender: Dictionary, on_done: Callab
 		attacker.name, defender.name, attacker.hp, defender.hp])
 	var atk_us: UnitSprite3D = _unit_sprites[attacker.id]
 	var def_us: UnitSprite3D = _unit_sprites[defender.id]
-	# 2D 版：向目标冲一步（保留完整 2D 方向，原版 dir.y=0 是为了清除 3D 高度偏移）
-	var start: Vector2 = atk_us.global_position
-	var dir := (def_us.global_position - start).normalized() * 12.0   # 像素幅度
+	# 真实 3D 冲撞：12 个美术像素对应 12/32 世界单位。
+	var start: Vector3 = atk_us.global_position
+	var dir := (def_us.global_position - start).normalized() * (12.0 / 32.0)
 	var tween := create_tween()
 	tween.tween_property(atk_us, "global_position", start + dir, 0.12)
 	tween.tween_property(atk_us, "global_position", start, 0.12)
@@ -722,26 +749,16 @@ func _spawn_float_text(u: Dictionary, text: String, color: Color, font_size: int
 	lbl.add_theme_color_override("font_color", color)
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	lbl.add_theme_constant_override("outline_size", 4)
-	# 定位到单位屏幕坐标（cell 世界坐标 → canvas 投影 → 屏幕坐标）
-	# B1：用 main.gd 的世界坐标（含 origin + stand_level）；B2：用 IsoCoords 局部坐标
-	var world_pos: Vector2
+	# 单位脚点由当前 Camera3D 投影到屏幕，再抬升 50px。
+	var screen: Vector2
 	if _b1_mode:
 		var world_cell: Vector2i = _world_origin + u.position
 		var lvl: int = _world.cell_stand_level(world_cell)
-		world_pos = _world._grid_to_screen(world_cell, float(lvl)) + Vector2(0, -50)
+		screen = _world._grid_to_screen(world_cell, float(lvl))
 	else:
-		world_pos = IsoCoords.to_screen(u.position.x, u.position.y) + Vector2(0, -50)
-	# canvas 投影：B1 用 main.gd 的 viewport/transform；B2 用 board 的
-	var canvas: Transform2D
-	var node_transform: Transform2D
-	if _b1_mode:
-		canvas = _world.get_viewport().get_canvas_transform()
-		node_transform = _world.get_global_transform()
-	else:
-		canvas = board.get_viewport().get_canvas_transform()
-		node_transform = board.get_global_transform()
-	var screen := canvas * (node_transform * world_pos)
-	lbl.position = screen - Vector2(20, 30)
+		var lvl: int = renderer.stand_level(u.position.x, u.position.y) if renderer != null else 0
+		screen = board.cell_to_screen(u.position.x, u.position.y, float(lvl))
+	lbl.position = screen + Vector2(0, -50) - Vector2(20, 30)
 	battle_ui.get_float_text_container().add_child(lbl)
 	var tw := create_tween()
 	tw.tween_property(lbl, "position:y", lbl.position.y - 30, 0.7)
@@ -764,8 +781,8 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 	if atk_us != null and not targets.is_empty():
 		var first_us: UnitSprite3D = _unit_sprites.get(targets[0].id)
 		if first_us != null:
-			var start: Vector2 = atk_us.global_position
-			var dir := (first_us.global_position - start).normalized() * 12.0
+			var start: Vector3 = atk_us.global_position
+			var dir := (first_us.global_position - start).normalized() * (12.0 / 32.0)
 			var tween := create_tween()
 			tween.tween_property(atk_us, "global_position", start + dir, 0.12)
 			tween.tween_property(atk_us, "global_position", start, 0.12)
@@ -821,11 +838,11 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 		return
 	mode = Mode.ANIMATING
 	var us: UnitSprite3D = _unit_sprites.get(user.id)
-	# 简短使用动画（轻微上抬；2D 版用像素幅度 6px 代替原世界单位 0.15）
+	# 简短使用动画：沿真实世界 Y 轴上抬 6 个美术像素。
 	if us != null:
-		var start: Vector2 = us.global_position
+		var start: Vector3 = us.global_position
 		var tween := create_tween()
-		tween.tween_property(us, "global_position", start + Vector2(0, -6), 0.12)
+		tween.tween_property(us, "global_position", start + Vector3(0, 6.0 / 32.0, 0), 0.12)
 		tween.tween_property(us, "global_position", start, 0.12)
 		await tween.finished
 	var result := ItemSystem.execute(user, targets, item_entry)
@@ -864,12 +881,14 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 	_check_battle_end()
 
 
-func _shake(us: Node2D) -> void:
-	# 2D 版抖动：原版 Vector3(0.1,0,0) → 2D 用 4px 水平抖
-	var orig: Vector2 = us.global_position
+func _shake(us: Node3D) -> void:
+	# 在相机右方向水平抖动 4 个美术像素。
+	var orig: Vector3 = us.global_position
+	var camera := get_viewport().get_camera_3d()
+	var right := camera.global_basis.x if camera != null else Vector3.RIGHT
 	var tw := create_tween()
 	for i in range(4):
-		tw.tween_property(us, "global_position", orig + Vector2(4, 0) * (1.0 if i % 2 == 0 else -1.0), 0.04)
+		tw.tween_property(us, "global_position", orig + right * (4.0 / 32.0) * (1.0 if i % 2 == 0 else -1.0), 0.04)
 	tw.tween_property(us, "global_position", orig, 0.04)
 
 

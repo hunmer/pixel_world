@@ -238,6 +238,7 @@ func _activate(key: Vector3i, cluster: Dictionary) -> void:
 		"sprite": sprite,
 		"host_ref": weakref(host),
 		"base_position": Vector2(cluster["local_surface_position"]),
+		"cell": cell,
 		"seed": seed,
 		"phase": _rand01(base_seed) * TAU_F,
 		"phase_secondary": _rand01(_instance_seed(cell, key.z, seed, 3)) * TAU_F,
@@ -273,6 +274,10 @@ func _animate_entry(entry: Dictionary, sprite: Sprite2D) -> void:
 		sin(_elapsed * 1.31 + phase) * 0.65
 	)
 	var base_position: Vector2 = entry["base_position"]
+	var host := _entry_host(entry)
+	var cell: Vector2i = entry.get("cell", Vector2i.ZERO)
+	if host != null and host.has_method("_grid_to_screen") and host.has_method("cell_stand_level"):
+		base_position = host._grid_to_screen(cell, float(host.cell_stand_level(cell)))
 	var cluster_offset: Vector2 = entry["cluster_offset"]
 	sprite.position = (
 		base_position
@@ -493,7 +498,8 @@ func _animate_cluster_lights() -> void:
 		var average_position := Vector2(accumulator["position_sum"]) / float(count)
 		var average_flicker := float(accumulator["flicker_sum"]) / float(count)
 		var peak_flicker := float(accumulator["flicker_peak"])
-		var surface_position := Vector2(light_entry["base_position"])
+		var surface_position := _cluster_screen_position(cell)
+		light_entry["base_position"] = surface_position
 		# 光团略向地表下沉，让邻近地块被照亮，而不是只围绕空中的亮点。
 		light.position = average_position.lerp(surface_position, 0.68)
 		# 簇光跟随最亮个体，同时混入平均亮度，避免多个异步个体把光照摊薄成常亮。
@@ -656,6 +662,8 @@ func _cluster_screen_position(cell: Vector2i) -> Vector2:
 	var viewport := get_viewport()
 	if viewport == null:
 		return Vector2(1.0e20, 1.0e20)
+	if host.has_method("_grid_to_screen") and host.has_method("cell_stand_level"):
+		return host._grid_to_screen(cell, float(host.cell_stand_level(cell)))
 	var world_position := host.to_global(Vector2(cluster["local_surface_position"]))
 	return viewport.get_canvas_transform() * world_position
 

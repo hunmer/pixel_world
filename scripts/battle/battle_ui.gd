@@ -407,15 +407,11 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		btn_count += 1
 	var panel := Panel.new()
 	panel.size = Vector2(120, 40 + btn_count * 28)
-	# 2D 版：cell 世界坐标 → 屏幕坐标（经 canvas transform 投影）
-	# board 在场景树中，IsoCoords.to_screen 给出 board 局部坐标；
-	# board 若无平移，局部=全局；CanvasLayer 上的 panel 用屏幕坐标定位。
+	# Camera3D 直接给出 viewport 屏幕坐标；菜单位于 CanvasLayer。
 	var menu_level := 0
 	if level_fn.is_valid():
 		menu_level = int(level_fn.call(at_pos.x, at_pos.y))
-	var world_pos := IsoCoords.to_screen(at_pos.x, at_pos.y, menu_level)
-	var canvas := board.get_viewport().get_canvas_transform()
-	var screen := canvas * (board.get_global_transform() * world_pos)
+	var screen := board.cell_to_screen(at_pos.x, at_pos.y, float(menu_level))
 	panel.position = screen - panel.size / 2.0 + Vector2(40, -40)
 	panel.add_theme_stylebox_override("panel", _make_panel_style())
 	menu_container.add_child(panel)

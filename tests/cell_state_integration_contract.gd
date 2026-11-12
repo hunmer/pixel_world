@@ -59,8 +59,7 @@ func _run() -> void:
 			"only_if_flora_missed=false 时可通行地被格仍拒绝动物出生"
 		)
 		var before: bool = ground_state.blocks_movement()
-		var view = world._cells[ground_cover_cell]
-		for block in view.get("_blocks"):
+		for block in ground_state.render_blocks:
 			block["render_priority"] = 99999
 		_expect(
 			ground_state.blocks_movement() == before,

@@ -1,5 +1,7 @@
 extends SceneTree
 
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
+
 var failures: Array[String] = []
 
 
@@ -38,10 +40,13 @@ func _run() -> void:
 		# 玩家真实视觉位置相对平滑相机偏移时，焦平面必须跟随玩家屏幕 Y，
 		# 不能固定在屏幕中心或读取仅用于遮挡排序的 Sprite.position。
 		var viewport_size: Vector2 = world.get_viewport_rect().size
-		world._player_visual_position = (
-			world._cam.position
-			+ Vector2(0.0, viewport_size.y * 0.2) / world._cam.zoom
+		var player_level: float = world._player_current_stand_level()
+		var player_world: Variant = IsoProjection.screen_to_world(
+			world._cam, Vector2(viewport_size.x * 0.5, viewport_size.y * 0.7), player_level
 		)
+		_expect(player_world != null, "景深测试无法构造玩家屏幕位置")
+		if player_world != null:
+			world._player.global_position = player_world
 		world._sync_depth_of_field_focus()
 		_expect(
 			is_equal_approx(depth._target_focus_y, 0.7),
