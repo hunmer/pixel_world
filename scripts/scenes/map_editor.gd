@@ -6,9 +6,9 @@
 ##      含沙地/雪地/草原/碎石地共 11 种）+ 画笔/填充/橡皮
 ##   3. 添加阵营角色：阵营（我方/敌方）+ 8 职业头像网格（48×48，缺图回退职业
 ##      首字）+ 等级 + 姓名放置，左键放置/再点删除
-## 布局容器化（根 VBox 锚点全矩形：顶栏1/顶栏2/主体(侧栏+画布)/状态栏），
-## 1280×800 与 1024×640 自适应；侧栏内容超高走 ScrollContainer 滚动；
-## 三大分区（工具/地形/角色放置）可折叠，角色放置默认收起降低拥挤。
+## 布局（右侧 Tabs 面板版）：全部 UI 收进右侧固定宽面板（标题 + Tab 页 +
+## 状态栏），左侧画布伸展填充最大化；Tab 共 5 页 —— 文件/生成/工具/地形/角色，
+## 内容超高走 ScrollContainer 纵向滚动；1280×800 与 1024×640 自适应。
 ## 图标：at-icons 矢量 SVG（res://addons/at-icons/control/，16×16），加载失败
 ## 自动回退文字标签。保存为 res://data/battlefields/<id>.json（loader schema，
 ## 保存即回读校验），战场列表（O 键）立即可见可开战。
@@ -89,24 +89,43 @@ func _unhandled_input(event: InputEvent) -> void:
 # ============================================================
 
 func _build_ui() -> void:
-	# ---- 根：顶栏1 / 顶栏2 / 主体(侧栏+画布) / 状态栏 ----
-	var root := VBoxContainer.new()
+	# ---- 根：画布（左，伸展填充） + 右侧 Tabs 面板（固定宽） ----
+	var root := HBoxContainer.new()
 	root.name = "EditorRoot"
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.offset_left = 8
 	root.offset_top = 6
 	root.offset_right = -8
 	root.offset_bottom = -6
-	root.add_theme_constant_override("separation", 6)
+	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
-	# ---- 顶栏 1：标题 / id / 名称 / hosting / 读取 / 保存 / 返回 ----
-	var bar1 := HBoxContainer.new()
-	bar1.name = "TopBar1"
-	bar1.add_theme_constant_override("separation", 6)
-	bar1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	root.add_child(bar1)
-	# 标题：at-icons 扳手图标 + 文字（图标缺失只显示文字）
+	# ---- 画布（等距方块渲染，内部自带平移/缩放；先加=最左，吃满剩余宽度） ----
+	_canvas = EditorCanvasScript.new()
+	_canvas.name = "EditorCanvas"
+	_canvas.cell_pressed.connect(_on_cell_pressed)
+	_canvas.cell_dragged.connect(_on_cell_dragged)
+	_canvas.custom_minimum_size = Vector2(320, 240)
+	_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(_canvas)
+
+	# ---- 右侧面板：标题 / 5 个 Tab / 状态栏 ----
+	var side := PanelContainer.new()
+	side.name = "SidePanel"
+	side.custom_minimum_size = Vector2(260, 0)
+	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	side.add_theme_stylebox_override("panel", _panel_style())
+	root.add_child(side)
+
+	var sv := VBoxContainer.new()
+	sv.name = "SideVBox"
+	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sv.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sv.add_theme_constant_override("separation", 6)
+	side.add_child(sv)
+
+	# 标题行：at-icons 扳手图标 + 文字（图标缺失只显示文字）
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 6)
 	var wrench: Texture2D = _icon("wrench")
@@ -120,123 +139,188 @@ func _build_ui() -> void:
 		tw.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		title_row.add_child(tw)
 	title_row.add_child(_label("战场编辑器", 16, ACCENT))
-	bar1.add_child(title_row)
-	bar1.add_child(_label("id:", 11, TEXT_DIM))
+	sv.add_child(title_row)
+
+	# ---- 5 个 Tab：文件 / 生成 / 工具 / 地形 / 角色 ----
+	var tabs := TabContainer.new()
+	tabs.name = "ToolTabs"
+	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tabs.add_theme_font_size_override("font_size", 13)
+	tabs.add_theme_stylebox_override("panel", _tab_panel_style())
+	_tab_styles(tabs)
+	sv.add_child(tabs)
+	_build_file_tab(tabs)
+	_build_generate_tab(tabs)
+	_build_tools_tab(tabs)
+	_build_terrain_tab(tabs)
+	_build_units_tab(tabs)
+
+	# ---- 状态栏（贴面板底部，自动换行） ----
+	_status_label = _label("就绪 — 左键操作画布；同种子+同尺寸生成结果确定", 11, TEXT_DIM)
+	_status_label.name = "StatusLabel"
+	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sv.add_child(_status_label)
+
+	_refresh_canvas()
+
+# ============================================================
+# Tab 构建（每页 ScrollContainer 只纵向滚 + VBox，与旧侧栏滚动策略一致）
+# ============================================================
+
+## 新建一个 Tab：ScrollContainer(只纵向滚) + VBox；设标题与可选图标，返回内容 VBox
+func _new_tab(tabs: TabContainer, title: String, icon_name := "") -> VBoxContainer:
+	var scroll := ScrollContainer.new()
+	scroll.name = "%sScroll" % title
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tabs.add_child(scroll)
+	var v := VBoxContainer.new()
+	v.name = "%sTab" % title
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 6)
+	scroll.add_child(v)
+	var idx := tabs.get_tab_count() - 1
+	tabs.set_tab_title(idx, title)
+	if icon_name != "":
+		var icon: Texture2D = _icon(icon_name)
+		if icon != null:
+			tabs.set_tab_icon(idx, icon)
+	return v
+
+
+## Tab【文件】：id / 名称 / 托管 / 读取 / 保存 / 返回
+func _build_file_tab(tabs: TabContainer) -> void:
+	var tab := _new_tab(tabs, "文件", "floppy_disk")
+	var id_row := HBoxContainer.new()
+	id_row.add_theme_constant_override("separation", 4)
+	id_row.add_child(_label("id:", 11, TEXT_DIM))
 	_id_edit = LineEdit.new()
 	_id_edit.text = "custom_map"
-	_id_edit.custom_minimum_size = Vector2(110, 28)
 	_id_edit.placeholder_text = "snake_case"
-	bar1.add_child(_id_edit)
-	bar1.add_child(_label("名称:", 11, TEXT_DIM))
+	_id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	id_row.add_child(_id_edit)
+	tab.add_child(id_row)
+	_center_row(id_row)
+
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 4)
+	name_row.add_child(_label("名称:", 11, TEXT_DIM))
 	_name_edit = LineEdit.new()
 	_name_edit.text = "自定义战场"
-	_name_edit.custom_minimum_size = Vector2(130, 28)
-	bar1.add_child(_name_edit)
+	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_row.add_child(_name_edit)
+	tab.add_child(name_row)
+	_center_row(name_row)
+
 	_hosting_check = CheckButton.new()
 	_hosting_check.text = "托管"
 	_hosting_check.tooltip_text = "开启后战斗自动托管运行（AI 对 AI），调试观察用"
-	bar1.add_child(_hosting_check)
-	_load_box = OptionButton.new()
-	_load_box.custom_minimum_size = Vector2(170, 28)
-	_refresh_load_box()
-	bar1.add_child(_load_box)
-	var load_btn := _action_btn("读取", _load_selected, "folder_open")
-	bar1.add_child(load_btn)
-	var save_btn := _action_btn("保存", _save, "floppy_disk")
-	bar1.add_child(save_btn)
-	var back_btn := _action_btn("返回(Esc)", _back_to_world, "doorway_exit")
-	bar1.add_child(back_btn)
-	_center_row(bar1)
+	tab.add_child(_hosting_check)
 
-	# ---- 顶栏 2：种子 / 尺寸 / 生成 / 清空 ----
-	var bar2 := HBoxContainer.new()
-	bar2.name = "TopBar2"
-	bar2.add_theme_constant_override("separation", 6)
-	bar2.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	root.add_child(bar2)
-	bar2.add_child(_label("种子:", 11, TEXT_DIM))
+	_load_box = OptionButton.new()
+	_load_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_refresh_load_box()
+	tab.add_child(_load_box)
+
+	var io_row := HBoxContainer.new()
+	io_row.add_theme_constant_override("separation", 4)
+	var load_btn := _action_btn("读取", _load_selected, "folder_open")
+	load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	io_row.add_child(load_btn)
+	var save_btn := _action_btn("保存", _save, "floppy_disk")
+	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	io_row.add_child(save_btn)
+	tab.add_child(io_row)
+
+	var back_btn := _action_btn("返回(Esc)", _back_to_world, "doorway_exit")
+	back_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tab.add_child(back_btn)
+
+
+## Tab【生成】：种子 / 随机种子 / 宽高 / 生成 / 清空地形
+func _build_generate_tab(tabs: TabContainer) -> void:
+	var tab := _new_tab(tabs, "生成", "dice")
+	var seed_row := HBoxContainer.new()
+	seed_row.add_theme_constant_override("separation", 4)
+	seed_row.add_child(_label("种子:", 11, TEXT_DIM))
 	_seed_edit = LineEdit.new()
 	_seed_edit.text = "demo"
-	_seed_edit.custom_minimum_size = Vector2(130, 28)
 	_seed_edit.placeholder_text = "任意文本，同种子同地图"
-	bar2.add_child(_seed_edit)
+	_seed_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	seed_row.add_child(_seed_edit)
+	tab.add_child(seed_row)
+	_center_row(seed_row)
+
 	var dice_btn := _action_btn("随机种子", func():
 		_seed_edit.text = str(Time.get_unix_time_from_system()).sha1_text().substr(0, 8)
 		_generate(), "dice")
-	bar2.add_child(dice_btn)
-	bar2.add_child(_label("宽:", 11, TEXT_DIM))
+	dice_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tab.add_child(dice_btn)
+
+	var size_row := HBoxContainer.new()
+	size_row.add_theme_constant_override("separation", 4)
+	size_row.add_child(_label("宽:", 11, TEXT_DIM))
 	_width_box = SpinBox.new()
 	_width_box.min_value = BattlefieldDocScript.MIN_SIZE
 	_width_box.max_value = BattlefieldDocScript.MAX_SIZE
 	_width_box.value = model.width
 	_width_box.value_changed.connect(func(_v: float): _on_resize())
-	bar2.add_child(_width_box)
-	bar2.add_child(_label("高:", 11, TEXT_DIM))
+	_width_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_row.add_child(_width_box)
+	size_row.add_child(_label("高:", 11, TEXT_DIM))
 	_height_box = SpinBox.new()
 	_height_box.min_value = BattlefieldDocScript.MIN_SIZE
 	_height_box.max_value = BattlefieldDocScript.MAX_SIZE
 	_height_box.value = model.height
 	_height_box.value_changed.connect(func(_v: float): _on_resize())
-	bar2.add_child(_height_box)
+	_height_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_row.add_child(_height_box)
+	tab.add_child(size_row)
+	_center_row(size_row)
+
+	var gen_row := HBoxContainer.new()
+	gen_row.add_theme_constant_override("separation", 4)
 	var gen_btn := _action_btn("生成", _generate, "sprout")
-	bar2.add_child(gen_btn)
+	gen_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gen_row.add_child(gen_btn)
 	var clear_btn := _action_btn("清空地形", func():
 		model.rows = BattlefieldDocScript.create_empty(model.width, model.height).rows
 		_refresh_canvas()
 		_status("地形已清空（单位保留）"), "trash_can")
-	bar2.add_child(clear_btn)
-	_center_row(bar2)
+	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gen_row.add_child(clear_btn)
+	tab.add_child(gen_row)
 
-	# ---- 主体：左侧栏（固定宽、可滚动） + 画布（伸展填充） ----
-	var body := HBoxContainer.new()
-	body.name = "BodyRow"
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 8)
-	root.add_child(body)
 
-	var side := PanelContainer.new()
-	side.name = "SidePanel"
-	side.custom_minimum_size = Vector2(230, 0)
-	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side.add_theme_stylebox_override("panel", _panel_style())
-	body.add_child(side)
-
-	# 11 种地形缩略图 x 3 行 96px 必然超出一屏 -> 侧栏整体套 ScrollContainer（只纵向滚）
-	var scroll := ScrollContainer.new()
-	scroll.name = "SideScroll"
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side.add_child(scroll)
-
-	var sv := VBoxContainer.new()
-	sv.name = "SideVBox"
-	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sv.add_theme_constant_override("separation", 6)
-	scroll.add_child(sv)
-
-	# ---- 三大可折叠分组：工具 / 地形 / 角色放置（角色放置默认收起降拥挤） ----
-	var sec_tools := _fold_section(sv, "工具", "wrench", true)
+## Tab【工具】：画笔 / 填充 / 橡皮 / 角色（ButtonGroup 单选）
+func _build_tools_tab(tabs: TabContainer) -> void:
+	var tab := _new_tab(tabs, "工具", "paintbrush")
 	var tool_group := ButtonGroup.new()
 	tool_group.pressed.connect(func(btn: Button):
 		current_tool = btn.get_meta("tool")
 		_on_tool_changed())
-	_add_tool_btn(sec_tools, tool_group, Tool.PAINT, "画笔", "paintbrush")
-	_add_tool_btn(sec_tools, tool_group, Tool.FILL, "填充", "bucket_fill")
-	_add_tool_btn(sec_tools, tool_group, Tool.ERASE, "橡皮", "eraser")
-	_add_tool_btn(sec_tools, tool_group, Tool.UNIT, "角色", "person")
+	_add_tool_btn(tab, tool_group, Tool.PAINT, "画笔", "paintbrush")
+	_add_tool_btn(tab, tool_group, Tool.FILL, "填充", "bucket_fill")
+	_add_tool_btn(tab, tool_group, Tool.ERASE, "橡皮", "eraser")
+	_add_tool_btn(tab, tool_group, Tool.UNIT, "角色", "person")
 	_tool_buttons[Tool.PAINT].button_pressed = true
 
-	# ---- 地形调色板：数据驱动遍历 TERRAIN_GLYPH（W1 扩链自动生效，11 种） ----
-	var sec_terrain := _fold_section(sv, "地形（画笔/填充）", "sprout", true)
+
+## Tab【地形】：数据驱动遍历 TERRAIN_GLYPH（W1 扩链自动生效，11 种）
+func _build_terrain_tab(tabs: TabContainer) -> void:
+	var tab := _new_tab(tabs, "地形", "sprout")
 	var terrain_group := ButtonGroup.new()
 	terrain_group.pressed.connect(func(btn: Button):
 		current_terrain = btn.get_meta("terrain"))
 	var tgrid := GridContainer.new()
+	tgrid.name = "TerrainGrid"
 	tgrid.columns = 4
 	tgrid.add_theme_constant_override("h_separation", 2)
 	tgrid.add_theme_constant_override("v_separation", 2)
-	sec_terrain.add_child(tgrid)
+	tab.add_child(tgrid)
 	# 图片调色板：每格一等距方块柱缩略图（无文字），悬停提示地形名
 	for t: StringName in BattlefieldDocScript.TERRAIN_GLYPH:
 		var tb := _terrain_btn(t, terrain_group)
@@ -244,8 +328,10 @@ func _build_ui() -> void:
 		_terrain_buttons[t] = tb
 	_terrain_buttons[current_terrain].button_pressed = true
 
-	# ---- 角色放置：阵营 + 8 职业头像网格 + 等级/姓名（默认收起） ----
-	var sec_unit := _fold_section(sv, "角色放置（角色工具）", "person", false)
+
+## Tab【角色】：阵营 + 8 职业头像网格 + 等级/姓名
+func _build_units_tab(tabs: TabContainer) -> void:
+	var tab := _new_tab(tabs, "角色", "person")
 	var faction_row := HBoxContainer.new()
 	faction_row.add_theme_constant_override("separation", 4)
 	var faction_group := ButtonGroup.new()
@@ -253,7 +339,8 @@ func _build_ui() -> void:
 		selected_faction = btn.get_meta("faction"))
 	faction_row.add_child(_faction_btn("player", "我方", "shield", faction_group))
 	faction_row.add_child(_faction_btn("enemy", "敌方", "skull", faction_group))
-	sec_unit.add_child(faction_row)
+	tab.add_child(faction_row)
+
 	var class_group := ButtonGroup.new()
 	class_group.pressed.connect(func(btn: Button):
 		selected_class = btn.get_meta("class"))
@@ -262,44 +349,60 @@ func _build_ui() -> void:
 	pgrid.columns = 4
 	pgrid.add_theme_constant_override("h_separation", 4)
 	pgrid.add_theme_constant_override("v_separation", 4)
-	sec_unit.add_child(pgrid)
+	tab.add_child(pgrid)
 	# 头像网格：8 职业 4×2、48×48（ProfessionVisual.portrait_path，缺图回退职业首字）
 	for cid: String in CLASS_IDS:
 		var pb := _class_btn(cid, class_group)
 		pgrid.add_child(pb)
 		_class_buttons[cid] = pb
 	_class_buttons[selected_class].button_pressed = true
+
 	var lv_row := HBoxContainer.new()
+	lv_row.add_theme_constant_override("separation", 4)
 	lv_row.add_child(_label("等级:", 11, TEXT_DIM))
 	_level_box = SpinBox.new()
 	_level_box.min_value = 1
 	_level_box.max_value = 9
 	_level_box.value = 3
+	_level_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lv_row.add_child(_level_box)
 	lv_row.add_child(_label("姓名:", 11, TEXT_DIM))
 	_unit_name_edit = LineEdit.new()
-	_unit_name_edit.custom_minimum_size = Vector2(80, 26)
 	_unit_name_edit.placeholder_text = "自动"
+	_unit_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lv_row.add_child(_unit_name_edit)
-	sec_unit.add_child(lv_row)
+	tab.add_child(lv_row)
 	_center_row(lv_row)
 
-	# ---- 画布（等距方块渲染，内部自带平移/缩放；尺寸由 BodyRow 容器分配） ----
-	_canvas = EditorCanvasScript.new()
-	_canvas.name = "EditorCanvas"
-	_canvas.cell_pressed.connect(_on_cell_pressed)
-	_canvas.cell_dragged.connect(_on_cell_dragged)
-	_canvas.custom_minimum_size = Vector2(320, 240)
-	_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_child(_canvas)
-	_refresh_canvas()
 
-	# ---- 状态栏 ----
-	_status_label = _label("就绪 — 左键操作画布；同种子+同尺寸生成结果确定", 11, TEXT_DIM)
-	_status_label.name = "StatusLabel"
-	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.add_child(_status_label)
+## TabContainer 内容区样式（深色半透明，与 world side_panel.gd 一致）
+func _tab_panel_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.02, 0.03, 0.045, 0.55)
+	sb.border_color = PANEL_BORDER
+	sb.border_width_left = 1
+	sb.border_width_right = 1
+	sb.border_width_bottom = 1
+	return sb
+
+
+## TabContainer 页签三态深色样式（选中页签提亮 + ACCENT 底边线）
+func _tab_styles(tabs: TabContainer) -> void:
+	var un := _flat_style(BG, Color(0, 0, 0, 0), 0, 0)
+	var hov := _flat_style(BTN_BG_HOVER, Color(0, 0, 0, 0), 0, 0)
+	var sel := _flat_style(BTN_BG_PRESSED, ACCENT, 0, 0)
+	sel.border_width_bottom = 2
+	for sb: StyleBoxFlat in [un, hov, sel]:
+		sb.content_margin_left = 10
+		sb.content_margin_right = 10
+		sb.content_margin_top = 4
+		sb.content_margin_bottom = 4
+	tabs.add_theme_stylebox_override("tab_unselected", un)
+	tabs.add_theme_stylebox_override("tab_hovered", hov)
+	tabs.add_theme_stylebox_override("tab_selected", sel)
+	tabs.add_theme_color_override("font_selected_color", TEXT_MAIN)
+	tabs.add_theme_color_override("font_unselected_color", TEXT_DIM)
+	tabs.add_theme_color_override("font_hovered_color", TEXT_MAIN)
 
 
 # ============================================================
@@ -310,10 +413,6 @@ func _build_ui() -> void:
 func _center_row(row: HBoxContainer) -> void:
 	for c in row.get_children():
 		c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-
-
-func _section_label(text: String) -> Label:
-	return _label(text, 12, ACCENT)
 
 
 func _flat_style(bg: Color, border: Color, border_w: int = 1, radius: int = 6) -> StyleBoxFlat:
@@ -352,7 +451,7 @@ func _add_tool_btn(parent: Node, group: ButtonGroup, tool: int, text: String, ic
 	_tool_buttons[tool] = b
 
 
-## 动作按钮；icon_name 提供时为纯图标紧凑形态（tooltip=完整文字），图标缺失回退文字
+## 动作按钮：图标 + 文字并排（图标缺失只显示文字）
 func _action_btn(text: String, cb: Callable, icon_name := "") -> Button:
 	var b := Button.new()
 	b.text = text
@@ -361,8 +460,6 @@ func _action_btn(text: String, cb: Callable, icon_name := "") -> Button:
 		icon = _icon(icon_name)
 	if icon != null:
 		b.icon = icon
-		b.text = ""
-		b.tooltip_text = text
 	_btn_styles(b)
 	b.pressed.connect(cb)
 	return b
@@ -375,56 +472,6 @@ func _icon(name: String) -> Texture2D:
 		return null
 	var tex: Texture2D = load(path)
 	return tex
-
-
-## 可折叠分组：头部按钮（图标+标题+右缘三角箭头）点击切换 body 显隐；返回 body
-## body 仍由调用方填充内容；箭头用 resized 回调贴右缘（Button 非 Container）
-func _fold_section(parent: Node, title: String, icon_name: String, default_open: bool) -> VBoxContainer:
-	var wrap := VBoxContainer.new()
-	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	wrap.add_theme_constant_override("separation", 2)
-	parent.add_child(wrap)
-	var header := Button.new()
-	header.text = title
-	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var icon: Texture2D = null
-	if icon_name != "":
-		icon = _icon(icon_name)
-	if icon != null:
-		header.icon = icon
-	header.tooltip_text = "点击展开/折叠"
-	_btn_styles(header)
-	header.add_theme_font_size_override("font_size", 12)
-	header.add_theme_color_override("font_color", ACCENT)
-	header.add_theme_color_override("font_hover_color", ACCENT)
-	header.add_theme_color_override("font_pressed_color", ACCENT)
-	header.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	wrap.add_child(header)
-	var body := VBoxContainer.new()
-	body.visible = default_open
-	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 6)
-	wrap.add_child(body)
-	var arrow := TextureRect.new()
-	var tri: Texture2D = _icon("triangle")
-	if tri != null:
-		arrow.texture = tri
-		arrow.custom_minimum_size = Vector2(10, 10)
-		arrow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		arrow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		arrow.size = Vector2(10, 10)
-		arrow.pivot_offset = Vector2(5, 5)
-		arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		arrow.rotation = PI if default_open else PI * 0.5  # 下=展开 右=收起（triangle 默认朝上）
-		header.add_child(arrow)
-		var place := func() -> void:
-			arrow.position = Vector2(header.size.x - arrow.size.x - 8.0, (header.size.y - arrow.size.y) * 0.5)
-		header.resized.connect(place)
-		place.call()
-	header.pressed.connect(func():
-		body.visible = not body.visible
-		arrow.rotation = PI if body.visible else PI * 0.5)
-	return body
 
 
 ## 阵营切换按钮（盾=我方 / 骷髅=敌方，ButtonGroup 单选；缺图回退纯文字）
