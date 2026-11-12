@@ -12,6 +12,7 @@ const LEVEL_H := 10  ## 方块侧壁高度：与 32x32 等距地块的侧壁高�
 const ColumnBatchScript = preload("res://scripts/isometric_column_batch.gd")
 const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 const IsometricCamera3DScript = preload("res://scripts/iso/isometric_camera_3d.gd")
+const WorldCameraNavigationScript = preload("res://scripts/iso/world_camera_navigation.gd")
 const IsometricTerrain3DScript = preload("res://scripts/iso/isometric_terrain_3d.gd")
 const WanderingAnimalScript = preload("res://scripts/wandering_animal.gd")
 const IsometricDepthSort = preload("res://scripts/isometric_depth_sort.gd")
@@ -201,6 +202,7 @@ var _view_drag_last_x := 0.0
 var _zoom_index := DEFAULT_ZOOM_INDEX
 var _pinch_factor := 1.0
 var _camera_smooth_position := Vector2.ZERO
+var _world_camera_navigation := WorldCameraNavigationScript.new()
 
 # ---- B1 就地战斗模式字段（_battle_active=false 时全部不影响原行为）----
 var _battle_active := false            # 战斗模式开关（照搬 is_world_map_open 范式）
@@ -1031,6 +1033,7 @@ func _regenerate(new_seed: int) -> void:
 	_move_t = 1.0
 	_set_player_render_position(_player_visual_position, _move_sort_to)
 	_update_player_occlusion(0.0)
+	_world_camera_navigation.reset()
 	_snap_camera_position(_player_visual_position)
 	_reveal()
 	_update_minimap()
@@ -3341,7 +3344,7 @@ func _process(delta: float) -> void:
 			_player_visual_position,
 			camera_blend
 		)
-		_set_camera_position(_camera_smooth_position)
+		_set_camera_position(_camera_smooth_position + _world_camera_navigation.offset)
 	_sync_depth_of_field_focus()
 	if _ambient_registry != null:
 		var viewport_size := get_viewport_rect().size
@@ -3526,6 +3529,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		# 地图是模态 UI；鼠标缩放、触控手势和背景快捷键都不应穿透。
 		get_viewport().set_input_as_handled()
 		return
+	if not _battle_active and _world_camera_navigation.handle_input(event, _cam):
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		_view_dragging = event.pressed
 		if event.pressed:
@@ -3540,10 +3546,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_zoom_step(1)
+			_zoom_step(1, event.position)
 			get_viewport().set_input_as_handled()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_zoom_step(-1)
+			_zoom_step(-1, event.position)
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMagnifyGesture:
 		_pinch_factor *= event.factor
@@ -3759,18 +3765,41 @@ func _on_weather_water_impact(
 		_terrain.spawn_water_ripple(cell, offset_cells, kind, strength, maximum_radius)
 
 
-func _zoom_step(delta: int) -> void:
+func _zoom_step(delta: int, anchor_screen: Vector2 = Vector2.INF) -> void:
 	var next_index := clampi(_zoom_index + delta, 0, ZOOM_LEVELS.size() - 1)
 	if next_index == _zoom_index:
 		return
+	var anchor_before: Variant = null
+	var anchor_level: float = 0.0
+	if anchor_screen.is_finite():
+		anchor_level = float(cell_stand_level(screen_to_cell(anchor_screen)))
+		anchor_before = IsoProjection.screen_to_world(_cam, anchor_screen, anchor_level)
 	_zoom_index = next_index
 	_apply_zoom()
+	if anchor_before == null:
+		return
+	var anchor_after: Variant = IsoProjection.screen_to_world(_cam, anchor_screen, anchor_level)
+	if anchor_after == null:
+		return
+	var displacement: Vector2 = IsoProjection.world_to_grid_position(
+		(anchor_before as Vector3) - (anchor_after as Vector3)
+	)
+	if _battle_active:
+		_battle_focus_world_pos += displacement
+		_set_camera_position(_battle_camera_focus())
+	else:
+		_world_camera_navigation.offset += displacement
+		_set_camera_position(_camera_smooth_position + _world_camera_navigation.offset)
+	_sync_depth_of_field_focus()
 
 
 func _apply_zoom() -> void:
 	var value := ZOOM_LEVELS[_zoom_index]
 	_cam.zoom = value
-	_set_camera_position(_camera_smooth_position)
+	_set_camera_position(
+		_battle_camera_focus() if _battle_active
+		else _camera_smooth_position + _world_camera_navigation.offset
+	)
 	_sync_depth_of_field_focus()
 	if _weather != null:
 		_weather.refresh_particle_field()
@@ -3915,6 +3944,7 @@ func _open_map_editor() -> void:
 
 ## 进入就地战斗：备份相机/玩家状态 → 实例化 BattleSystem → 聚焦战场
 func _enter_battle_inline(chapter: Dictionary) -> void:
+	_world_camera_navigation.cancel_drag()
 	# 1. 备份世界探索状态
 	_cam_pos_backup = _camera_smooth_position
 	_zoom_index_backup = _zoom_index
@@ -3959,7 +3989,7 @@ func _exit_battle(result: StringName) -> void:
 	_zoom_index = _zoom_index_backup
 	_apply_zoom()
 	_camera_smooth_position = _cam_pos_backup
-	_set_camera_position(_cam_pos_backup)
+	_set_camera_position(_cam_pos_backup + _world_camera_navigation.offset)
 
 
 ## 战斗输入分发：把世界探索的输入事件转发给 BattleSystem。
