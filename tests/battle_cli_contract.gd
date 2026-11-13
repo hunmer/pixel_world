@@ -20,6 +20,7 @@ func _run() -> void:
 	_test_cli_ok(project)
 	_test_cli_seed_override(project)
 	_test_cli_bad_args(project)
+	_test_cli_bad_difficulty_type(project)
 	_test_cli_assertion_fail(project)
 	_test_cli_illegal_action(project)
 	_test_cli_stalemate_exit3(project)
@@ -166,6 +167,28 @@ func _test_cli_illegal_action(project: String) -> void:
 			_expect(false, "result.json 可解析")
 	else:
 		_expect(false, "result.json 已生成（非法操作也写盘）")
+
+
+## 畸形 difficulty 类型（数字/布尔）：loader 类型安全 → 干净 exit 2，子进程正常退出不挂起。
+## 注：OS.execute 对非 0 退出码子进程只回收引擎横幅（read_stderr 亦然，探针已证），
+## 错误文本断言由 battle_automation/battle_ai_difficulty 契约的进程内 loader 直测覆盖；
+## 退出码恰为 2 = 走到 quit(EXIT_INPUT) = 干净失败而非崩溃/挂起。
+func _test_cli_bad_difficulty_type(project: String) -> void:
+	print("[cli 畸形 difficulty 类型 exit 2]")
+	var tmp := ProjectSettings.globalize_path("user://") + "cli_bad_difficulty_scenario.json"
+	for bad in [123, true]:
+		var f := FileAccess.open(tmp, FileAccess.WRITE)
+		f.store_string(JSON.stringify({
+			"version": 1, "id": "cli_bad_difficulty", "seed": 5,
+			"battlefield": "res://data/battlefields/arena_1v1.json",
+			"factions": {"player": {"mode": "ai"}, "enemy": {"mode": "ai", "ai_pref": {"difficulty": bad}}},
+		}))
+		f.close()
+		var r := _run_cli(project, ["--scenario", tmp])
+		var kind := "数字" if (bad is int or bad is float) else "布尔"
+		_expect(int(r["code"]) == 2,
+			"difficulty=%s → 干净 exit 2（实际 %d；尾输出 %s）" % [kind, int(r["code"]), r["stdout"].substr(-160).replace("\n", " ")])
+	DirAccess.open(tmp.get_base_dir()).remove(tmp.get_file())
 
 
 ## 僵持保护：max_turns 到达（双方打不死）→ 子进程 exit 3，战报仍写盘。

@@ -49,6 +49,7 @@ func _run() -> void:
 	_test_priority_semantics()
 	_test_focus_unified()
 	_test_nonauto_fallback_pursue()
+	_test_priority_limits_skills()
 	if _failures > 0:
 		push_error("[battle_ai_difficulty_contract] FAILED: %d 处断言未过" % _failures)
 		quit(1)
@@ -570,3 +571,86 @@ func _test_nonauto_fallback_pursue() -> void:
 		{&"strategy": &"aggressive", &"difficulty": &"normal"})
 	_expect(d_nrm[&"moveTarget"] != null,
 		"aggressive+normal：够不着 → 朝最近敌移动")
+
+
+# ============================================================
+# 组 14：优先目标约束技能/物品候选（穿透回归）
+# ============================================================
+
+## 决策者（玩家 mage 托管）：普攻 rng[1,2]、fireball(blizzard) rng[1,3]、shuriken rng[1,3]。
+## 敌方 kf=优先目标（res5 hp16）、mf=诱饵（res0 hp30 满血，技能/普攻分更高）。
+func _priority_host() -> Dictionary:
+	var host := _mk_unit(
+		&"u_p_host", &"player", 2, 2, _wpn("anima", 5, 90, 0),
+		{&"mag": 10, &"str": 1, &"skl": 1, &"spd": 1, &"luk": 1, &"def": 5, &"res": 5},
+		30, [1, 2]
+	)
+	host[&"mp"] = 30
+	host[&"items"] = [{ &"id": &"shuriken", &"uses": 2 }]
+	return host
+
+
+func _test_priority_limits_skills() -> void:
+	print("[14] 优先目标约束技能/物品")
+
+	# --- 局面 A：单体技能收紧。kf(0,2)/mf(4,2) 距 host 均 2（都在 fireball rng[1,3]）。
+	# 带 priority=kf：fireball（targetType=enemy 单体语义）目标集收紧为 [kf]（27 分）
+	# 仍压过普攻 kf(19) 与 shuriken[kf](16)；修复前 targets 是射程内全集 [kf,mf]
+	# 含 mf → 单体攻击越过优先目标。
+	var host := _priority_host()
+	host[&"skills"] = [&"fireball"]
+	var kf := _mk_unit(&"u_e_kf", &"enemy", 0, 2, _wpn("lance", 5, 80, 0),
+		{&"str": 1, &"def": 5, &"res": 5}, 16, [1, 1])
+	var mf := _mk_unit(&"u_e_mf", &"enemy", 4, 2, _wpn("anima", 5, 90, 0),
+		{&"mag": 20, &"def": 0, &"res": 0}, 30, [1, 2])
+	var grid_a := _mk_grid([host, kf, mf])
+	var d_a: Dictionary = PlayerAI.decide(host, grid_a, [kf, mf],
+		{&"priorityTargetId": "u_e_kf"})
+	var act_a: Dictionary = d_a.get(&"action", {})
+	var tg_a: Array = act_a.get(&"targets", [])
+	var has_mf := false
+	for t in tg_a:
+		if (t as Dictionary).get(&"id", &"") == &"u_e_mf":
+			has_mf = true
+	_expect(String(act_a.get(&"type", &"")) == &"skill"
+		and tg_a.size() == 1
+		and (tg_a[0] as Dictionary).get(&"id", &"") == &"u_e_kf"
+		and not has_mf,
+		"单体技能收紧：priority=kf → fireball 只打 kf（targets=%d，含 mf=%s）" % [tg_a.size(), has_mf])
+
+	# --- 局面 B：AOE 覆盖优先目标可保留（波及 mf 允许）。
+	# skills=[blizzard, fireball]：blizzard(aoe_enemy) 覆盖 kf+mf → 保留全集（分最高）。
+	var host_b := _priority_host()
+	host_b[&"skills"] = [&"fireball", &"blizzard"]
+	var grid_b := _mk_grid([host_b, kf, mf])
+	var d_b: Dictionary = PlayerAI.decide(host_b, grid_b, [kf, mf],
+		{&"priorityTargetId": "u_e_kf"})
+	var act_b: Dictionary = d_b.get(&"action", {})
+	var tg_b: Array = act_b.get(&"targets", [])
+	var has_kf_b := false
+	for t in tg_b:
+		if (t as Dictionary).get(&"id", &"") == &"u_e_kf":
+			has_kf_b = true
+	_expect(String(act_b.get(&"type", &"")) == &"skill"
+		and StringName(act_b.get(&"skillId", &"")) == &"blizzard"
+		and has_kf_b,
+		"AOE 覆盖优先目标：blizzard 保留（含 kf，波及 mf 允许）")
+
+	# --- 局面 C：AOE 完全不命中优先目标 → 候选全灭，不得绕开。
+	# 7x7：host(3,3)、mf(0,3) 距 3（技能射程内）、kf(6,6) 距 9（一切攻击射程外）。
+	# priority=kf：单体技能 ∩=空 丢弃；AOE 不含 kf 丢弃；普攻枚举 [kf] 超程 →
+	# 无攻击候选 → fallback 朝 kf 移动。修复前 blizzard 会选中打 mf（完全绕开）。
+	var host_c := _priority_host()
+	host_c[&"skills"] = [&"fireball", &"blizzard"]
+	var kf_c := _mk_unit(&"u_e_kf", &"enemy", 6, 6, _wpn("lance", 5, 80, 0),
+		{&"str": 1, &"def": 5, &"res": 5}, 16, [1, 1])
+	var mf_c := _mk_unit(&"u_e_mf", &"enemy", 0, 3, _wpn("anima", 5, 90, 0),
+		{&"mag": 20, &"def": 0, &"res": 0}, 30, [1, 2])
+	var grid_c := _mk_grid([host_c, mf_c, kf_c], 7, 7)
+	var d_c: Dictionary = PlayerAI.decide(host_c, grid_c, [kf_c, mf_c],
+		{&"priorityTargetId": "u_e_kf"})
+	var act_c: Dictionary = d_c.get(&"action", {})
+	_expect(d_c[&"attackTarget"].is_empty()
+		and String(act_c.get(&"type", &"")) == &"normal"
+		and d_c[&"moveTarget"] != null,
+		"AOE/单体均够不到 kf：不绕打 mf，朝 kf 移动（attackTarget 空 + moveTarget 非 null）")

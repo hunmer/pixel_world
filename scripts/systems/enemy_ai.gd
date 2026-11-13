@@ -27,9 +27,13 @@ const AIDifficultyScoring := preload("res://scripts/systems/ai_difficulty_scorin
 
 
 ## AI 决策。players = 要攻击的目标列表（敌方阵营）。difficulty = 难度档名。
+## limit_targets = 优先目标集（空 = 不限定）。非空时技能/物品等从 grid 重取目标的
+## 候选必须命中优先目标：单体攻击候选只打优先目标；AOE 候选需覆盖至少一个优先目标
+## （波及其他敌人允许）；heal/buff 等友方候选不受约束（不构成"越过优先目标攻击"）。
 static func decide(
 	enemy: Dictionary, grid: GridSystem, players: Array,
-	difficulty: StringName = AIDifficulty.DEFAULT
+	difficulty: StringName = AIDifficulty.DEFAULT,
+	limit_targets: Array = []
 ) -> Dictionary:
 	if players.is_empty():
 		return { &"moveTarget": null, &"attackTarget": {}, &"action": { &"type": &"normal" } }
@@ -67,9 +71,9 @@ static func decide(
 
 	# 候选 2：技能（需要 enemy 站在 stop 上能用——简单起见假设移动不影响技能射程判断，
 	# 这里以 enemy 当前位置评估技能目标，移动只用来靠近）。
-	_evaluate_skill_candidates(enemy, grid, players, best, ep, prof)
+	_evaluate_skill_candidates(enemy, grid, players, best, ep, prof, limit_targets)
 	# 候选 3：物品
-	_evaluate_item_candidates(enemy, grid, players, best, ep, prof)
+	_evaluate_item_candidates(enemy, grid, players, best, ep, prof, limit_targets)
 
 	if not best.is_empty():
 		var act: Dictionary = best[&"action"]
@@ -104,7 +108,8 @@ static func decide(
 ## 枚举该单位可用技能，评估每个 (skill, targets) 组合的分数。
 static func _evaluate_skill_candidates(
 	caster: Dictionary, grid: GridSystem, _enemies: Array,
-	best: Dictionary, caster_pos: Vector2i, prof: Dictionary
+	best: Dictionary, caster_pos: Vector2i, prof: Dictionary,
+	limit_targets: Array = []
 ) -> void:
 	for sk in SkillData.usable_skills(caster):
 		var sid: StringName = sk[&"id"]
@@ -112,6 +117,7 @@ static func _evaluate_skill_candidates(
 			continue
 		# 技能目标用施法者当前位置评估（移动决策单独做）
 		var targets: Array = SkillSystem.targets_for(caster, sid, grid)
+		targets = _filter_by_limit(targets, String(sk.get(&"targetType", &"")), limit_targets)
 		if targets.is_empty():
 			continue
 		var score: float = _score_skill(caster, sk, targets, prof)
@@ -124,19 +130,49 @@ static func _evaluate_skill_candidates(
 ## 枚举背包可用物品，评估每个 (item, targets) 组合的分数。
 static func _evaluate_item_candidates(
 	user: Dictionary, grid: GridSystem, _enemies: Array,
-	best: Dictionary, user_pos: Vector2i, prof: Dictionary
+	best: Dictionary, user_pos: Vector2i, prof: Dictionary,
+	limit_targets: Array = []
 ) -> void:
 	for ie in ItemData.usable_items(user):
 		var entry: Dictionary = ie[&"entry"]
 		var idef: Dictionary = ie[&"def"]
 		var iid: StringName = idef[&"id"]
 		var targets: Array = ItemSystem.targets_for(user, iid, grid)
+		targets = _filter_by_limit(targets, String(idef.get(&"target", &"")), limit_targets)
 		if targets.is_empty():
 			continue
 		var score: float = _score_item(user, idef, targets, prof)
 		_try_best(best, user_pos, score, {
 			&"type": &"item", &"itemId": iid, &"entry": entry, &"targets": targets,
 		}, prof)
+
+
+## 优先目标过滤（limit_targets 空 = 不限定）：
+##   - 单体攻击（targetType==enemy）：目标集收紧为 ∩ 优先目标（只打优先目标）
+##   - AOE（targetType 含 aoe_enemy）：需覆盖至少一个优先目标，波及其他敌人允许
+##   - 友方/自身候选（heal/buff 等）：不构成"越过优先目标攻击"，原样保留
+static func _filter_by_limit(targets: Array, target_type: String, limit_targets: Array) -> Array:
+	if limit_targets.is_empty() or targets.is_empty():
+		return targets
+	if target_type == "enemy":
+		var kept: Array = []
+		for t in targets:
+			for l in limit_targets:
+				if t == l:
+					kept.append(t)
+					break
+		return kept
+	if target_type.contains("aoe_enemy"):
+		var has_priority := false
+		for t in targets:
+			for l in limit_targets:
+				if t == l:
+					has_priority = true
+					break
+			if has_priority:
+				break
+		return targets if has_priority else []
+	return targets
 
 
 ## 技能评分：伤害型按总伤害+击杀；治疗型按恢复量；buff/debuff 按价值。

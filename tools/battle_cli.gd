@@ -32,7 +32,10 @@ func _run() -> void:
 	# 场景加载
 	var scenario_res := _load_scenario(opts)
 	if not scenario_res["ok"]:
+		# 注：Godot Windows 下 quit(非 0) 的子进程经 OS.execute 只能回收到引擎横幅，
+		# 错误文本手工管道可见、OS.execute 不可见——退出码 2 本身即"干净输入失败"信号。
 		push_error("battle_cli: %s" % scenario_res["error"])
+		print("battle_cli: 错误: %s" % String(scenario_res["error"]))
 		_usage()
 		quit(EXIT_INPUT)
 		return

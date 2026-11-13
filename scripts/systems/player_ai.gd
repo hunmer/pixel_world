@@ -46,11 +46,13 @@ static func decide(unit: Dictionary, grid: GridSystem, enemies: Array, pref: Dic
 	var strategy: StringName = pref.get(&"strategy", STRATEGY_AUTO)
 
 	# 显式优先目标：存活则限定目标列表（任何难度/策略下用户意图优先；
-	# 优先目标不可达时 EnemyAI 的 fallback 恰好会朝它移动，语义一致）
+	# 优先目标不可达时 EnemyAI 的 fallback 恰好会朝它移动，语义一致）。
+	# limit_targets 让技能/物品候选同样只打优先目标（EnemyAI 内部从 grid 重取目标，
+	# 仅缩小 enemies 列表拦不住技能/投掷物）。
 	if strategy == STRATEGY_AUTO or pref.is_empty():
 		var prio_auto := _find_alive(enemies, priority_id)
 		if not prio_auto.is_empty():
-			return EnemyAI.decide(unit, grid, [prio_auto], difficulty)
+			return EnemyAI.decide(unit, grid, [prio_auto], difficulty, [prio_auto])
 		return EnemyAI.decide(unit, grid, enemies, difficulty)
 
 	var prof: Dictionary = AIDifficulty.profile(difficulty)
