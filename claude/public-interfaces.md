@@ -46,9 +46,30 @@ battle.gd 另处理鼠标选格、键盘移动光标。B1 相机由 main.gd 处�
 SceneArgs.battle_args = {
     "chapter": <Dictionary>,          # 必填：world_to_chapter 或 battlefield_loader 产物（同构）
     "return_to": "res://main.tscn",   # 可选，B2 结束后回到哪
-    "world": <main.gd 实例>           # 仅 B1 注入；存在则 _b1_mode=true
+    "world": <main.gd 实例>,          # 仅 B1 注入；存在则 _b1_mode=true
+    "save_identity": "bf:res/xxx",    # 可选：战旗持久化身份（GameSession 分配）；空 = 本局不存档
+    "save_state": <Dictionary>,       # 可选：恢复进度的完整状态（GameSession 从存档读出）
+    "save_notice": "..."              # 可选：一次性提示文案（重置 / 内容变更 / 损坏回退）
 }
+SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后回哪（默认世界）
 ```
+
+### `GameSession`（autoload，`scripts/scenes/game_session.gd`）— 战旗会话路由与持久化
+
+| 接口 | 说明 |
+| --- | --- |
+| `prepare_entry() -> Dictionary` | 冷启动决策：`--battlefield`（id/路径/文件名）> 最近存档 > 默认 `plains_skirmish`；消费一次性 `--reset-battle[=id]`（进程内只消费一次）。最近是世界就地战旗（`world:` 身份）时直接按档案快照 resume（B2）。返回 `{mode: resume\|fresh\|list, identity, chapter, state, notice, ...}` |
+| `prepare_entry_for(identity, reset) -> Dictionary` | 战场列表点选进入（同上结构） |
+| `prepare_world_entry(identity, chapter) -> Dictionary` | 世界内按 P：同身份有档案 → resume（内容变更时带提示），无 → fresh（用刚构建的 chapter） |
+| `open_battle(identity, kind, source, initial_chapter)` | 任何入口进战斗前登记（深拷贝 initial 快照 + 内容签名），置 `in_session=true` |
+| `commit(chapter, state) -> Dictionary` | 完整行动边界提交：codec 组装 → store 原子落盘 → 刷新最近索引 |
+| `identity_for_battlefield(info)` | `bf:res|user/<id>`（无 id 旧文件回退 `<file>` 文件名） |
+| `identity_for_world_chapter(seed, origin)` | `world:<seed>/<x>/<y>`（同世界同位置 = 同战旗） |
+| `list_battlefields_checked()` / `reset_battlefield(identity)` | 列表 UI（含存档摘要 peek）/ 手动重置 |
+
+**存档落盘（`scripts/core/battle_save_store.gd` + `battle_save_codec.gd`，version=1）**：`user://battle_saves/`，文件名 = 身份清洗 + sha1 前 8；tmp+bak 两段式原子写，主档损坏回退 `.bak`，索引 `index.json` 损坏时扫描自恢复。内容 = 开局 initial 快照 + 当前 chapter（含死亡单位、冷却、buff、物品次数）+ state（回合/阶段/托管偏好/胜负）。新版本存档（version 更大）拒绝恢复且**不覆盖**，停在战场列表。测试：`tests/battle_save_contract.gd`、`tests/game_session_contract.gd`。
+
+**命令行参数**：`--battlefield=<id|路径|文件名>` 显式进入某战场（优先级最高）；`--reset-battle` / `--reset-battle=<id|路径>` 一次性重置目标档案（其余档案保留，命令行参数不持久化、天然单次生效）。
 
 ### `Settings`（autoload）— 用户偏好
 

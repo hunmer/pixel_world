@@ -3,11 +3,12 @@
 ## 引擎入口
 
 - **`project.godot`** — Godot 工程配置。
-  - `run/main_scene = "res://main.tscn"` → 直接运行项目时进入世界（**主入口**）。
-  - `[autoload]` 注册 **4 个**全局单例（启动即存在，跨场景存活）：
+  - `run/main_scene = "res://scenes/Game.tscn"` → 直接运行项目时进入**战旗会话入口**（默认自动续玩最近战旗，见下）。
+  - `[autoload]` 注册 **5 个**全局单例（启动即存在，跨场景存活）：
     | Autoload | 脚本 | 作用 |
     | --- | --- | --- |
-    | `SceneArgs` | `scripts/scenes/scene_args.gd` | 跨场景传参暂存（`battle_args`、`pending_level_id`） |
+    | `SceneArgs` | `scripts/scenes/scene_args.gd` | 跨场景传参暂存（`battle_args`、`pending_level_id`、`map_editor_return_to`） |
+    | `GameSession` | `scripts/scenes/game_session.gd` | 战旗会话路由：启动决策（`--battlefield` > 最近存档 > 默认 plains_skirmish）、稳定身份、分战场存档提交（详见下节） |
     | `Settings` | `scripts/settings.gd` | 用户偏好，`ConfigFile` 持久化到 `user://settings.cfg`（`battle_inline_mode`） |
     | `BreakpointRuntimeBridge` | `addons/breakpoint_mcp/runtime_bridge.gd`（uid） | 调试运行时桥（loopback 9081，插件启用时） |
     | `Panku` | `addons/panku_console/console.tscn` | 运行时调试控制台（`~` 呼出表达式 REPL） |
@@ -19,12 +20,13 @@
 
 - **运行环境**：Godot 4.7.2 stable；本机可执行文件 `D:/Godot/Godot_v4.7.2-stable_win64.exe`（不在 PATH；console 版为 `..._console.exe`）。项目目录 `E:/pixel_world`（**已从 G:/ 迁移**）。
 
-## 场景入口（6 个 .tscn + 1 探针）
+## 场景入口（7 个 .tscn + 1 探针）
 
 | `.tscn` | 脚本 | 角色 | 进入方式 |
 | --- | --- | --- | --- |
-| `main.tscn` | `main.gd` | 世界根场景（Node2D "Main" + 子节点 "DebugConsoleCommands"） | `project.godot` 主场景；`Title` 的"进入世界"按钮 |
-| `scenes/Title.tscn` | `scripts/scenes/title.gd` | 标题屏（Control） | 可选手动运行；按钮 → `change_scene_to_file("res://main.tscn")` |
+| `scenes/Game.tscn` | `scripts/scenes/game_entry.gd` | **默认主入口**：冷启动自动续玩最近战旗；从战斗返回时显示战场列表 | `project.godot` 主场景；`Title` 的"开始"按钮 |
+| `main.tscn` | `main.gd` | 世界根场景（Node2D "Main" + 子节点 "DebugConsoleCommands"） | `Game` 列表的"生态世界"按钮；编辑器手动运行 |
+| `scenes/Title.tscn` | `scripts/scenes/title.gd` | 标题屏（Control） | 可选手动运行；按钮 → `change_scene_to_file("res://scenes/Game.tscn")` |
 | `scenes/Battle.tscn` | `scripts/scenes/battle.gd` | 战斗独立场景（B2，世界地形） | `inline_mode=false` 按 P；**JSON 战场固定走此场景**（O 键选择） |
 | `scenes/MapEditor.tscn` | `scripts/scenes/map_editor.gd` | 战场地图编辑器 | 世界内按 `E`；HUD 按钮；`MapEditor.tscn` 依赖编辑器参数，一般不直启 |
 | `scenes/Isometric3DTest.tscn` | `scripts/scenes/isometric_3d_test.gd` | 最小 3D 柱网格 + 90° 相机旋转验证 | 编辑器手动运行 |
@@ -54,8 +56,10 @@ _ready()
 ## 战斗 / 战场 / 编辑器入口
 
 详见 `module-responsibilities.md` 的"战棋数据流"。关键：
-- `main.gd._unhandled_input`：`KEY_P` → `_enter_battle()`（B1/B2 由 Settings 分流）；`KEY_O` → HUD 战场列表面板（`battlefield_picked` → `_enter_battlefield(path)`，固定 B2）；`KEY_E`（非战斗时）→ `_open_map_editor()`。
-- 编辑器保存的 JSON 进入 `res://data/battlefields/` 或 `user://battlefields/`，立即出现在 O 列表。
+- **冷启动（`Game.tscn`）**：`GameSession.prepare_entry()` 决策 → `--battlefield=<id|路径|文件名>` 显式指定 > 最近存档（`user://battle_saves/index.json`）> 默认 `plains_skirmish`；有进度则带 `save_state` 恢复进入 `Battle.tscn`。`--reset-battle[=id]` 一次性清目标档后新开（每个战旗独立档案，互不影响；进程内只消费一次）。最近是**世界就地战旗**（`world:seed/x/y`）时冷启动直接按档案快照以 B2 恢复。
+- 从战斗退出（⏏ 按钮 / 胜负返回）回 `Game.tscn` 时因 `GameSession.in_session` 停在战场列表：继续最近 / 选择战场 / 重置 / 战场编辑器 / 生态世界。
+- `main.gd._unhandled_input`：`KEY_P` → `_enter_battle()`（B1/B2 由 Settings 分流；先经 `GameSession.prepare_world_entry` —— 同身份（种子+起点）有档案则恢复进度，无则新开并 `open_battle` 登记）；`KEY_O` → HUD 战场列表面板（`battlefield_picked` → `_enter_battlefield(path)`，固定 B2）；`KEY_E`（非战斗时）→ `_open_map_editor()`。
+- 编辑器保存的 JSON 进入 `res://data/battlefields/` 或 `user://battlefields/`，立即出现在 O 列表与 Game 列表。
 
 ## 构建与导出
 

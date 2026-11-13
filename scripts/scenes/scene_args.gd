@@ -10,3 +10,6 @@ var pending_level_id: String = ""
 
 ## LevelSelect 用：编辑器传回的来源场景
 var level_select_return_to: String = "res://scenes/Title.tscn"
+
+## MapEditor 用：返回的来源场景（Game 入口设为 Game.tscn；世界 E 键保持默认回世界）
+var map_editor_return_to: String = "res://main.tscn"

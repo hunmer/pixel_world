@@ -3910,16 +3910,29 @@ func _enter_battle() -> void:
 	print("[world] 进入战棋（按 P）→ 中心=%s 模式=%s" % [
 		str(_player_cell), "就地" if Settings.battle_inline_mode else "独立场景"])
 	var chapter := WorldToChapter.world_to_chapter(_terrain_sampler, _player_cell, 10, _current_seed)
+	# 战旗记录：世界就地战旗身份 = 种子 + 战场起点（同一世界同一位置 = 同一战旗）。
+	# 同身份已有记录 → 从记录恢复进度（任务：退出后再进入自动恢复状态）。
+	var save_identity := GameSession.identity_for_world_chapter(
+		_current_seed, chapter.get("world_origin", Vector2i.ZERO))
+	var decision := GameSession.prepare_world_entry(save_identity, chapter)
+	chapter = decision.get("chapter", chapter)
+	var save_state: Dictionary = decision.get("state", {})
+	# 登记 initial 快照（commit 组装记录要用；恢复时沿用档案里的开局快照）
+	GameSession.open_battle(save_identity, "world", "world",
+		decision.get("initial", chapter))
 	if Settings.battle_inline_mode:
 		# B1 就地模式：不切场景，在 main.gd 下挂战斗层
-		_enter_battle_inline(chapter)
+		_enter_battle_inline(chapter, save_identity, save_state)
 		return
 	# B2 独立场景模式：切到 Battle.tscn
 	SceneArgs.battle_args = {
 		"chapter": chapter,
 		"return_to": "res://main.tscn",
 		"hosting": false,
+		"save_identity": save_identity,
 	}
+	if not save_state.is_empty():
+		SceneArgs.battle_args["save_state"] = save_state
 	_change_to_battle_scene()
 
 
@@ -3955,17 +3968,37 @@ func _enter_battlefield(path: String) -> void:
 		return
 	var chapter: Dictionary = result["chapter"]
 	var info: Dictionary = result["info"]
+	# 战旗记录：JSON 战场按「命名空间/id」登记；同战场已有档案 → 恢复进度
+	var identity := GameSession.identity_for_battlefield(info)
+	var decision := GameSession.prepare_entry_for(identity)
+	if String(decision.get("mode", "")) == "list":
+		# 档案版本更新等无法恢复 → 不开新局覆盖，提示后留在世界
+		if _hud != null:
+			_hud.show_battlefield_error(String(decision.get("notice", "存档无法恢复")))
+		return
+	chapter = decision.get("chapter", chapter)
+	var save_state: Dictionary = decision.get("state", {})
 	# L1 埋点：JSON 战场入口（按 AGENTS.md 调试埋点强制原则）
-	print("[world] 加载 JSON 战场: %s（%dx%d, 我方%d/敌方%d, hosting=%s）→ 独立场景模式" % [
+	print("[world] 加载 JSON 战场: %s（%dx%d, 我方%d/敌方%d, hosting=%s, %s）→ 独立场景模式" % [
 		info.get("name", path), chapter.width, chapter.height,
 		(chapter.playerUnits as Array).size(), (chapter.enemyUnits as Array).size(),
-		str(info.get("hosting", false)),
+		str(decision.get("hosting", info.get("hosting", false))),
+		"恢复进度" if not save_state.is_empty() else "新开局",
 	])
 	SceneArgs.battle_args = {
 		"chapter": chapter,
 		"return_to": "res://main.tscn",
-		"hosting": bool(info.get("hosting", false)),
+		"hosting": bool(decision.get("hosting", info.get("hosting", false))),
+		"save_identity": identity,
 	}
+	if not save_state.is_empty():
+		SceneArgs.battle_args["save_state"] = save_state
+	var notice := String(decision.get("notice", ""))
+	if notice != "":
+		SceneArgs.battle_args["save_notice"] = notice
+	# 登记 initial 快照（commit 组装记录要用；恢复时沿用档案里的开局快照）
+	GameSession.open_battle(identity, "battlefield", String(path),
+		decision.get("initial", chapter))
 	_change_to_battle_scene()
 
 
@@ -3986,7 +4019,7 @@ func _open_map_editor() -> void:
 # ============================================================
 
 ## 进入就地战斗：备份相机/玩家状态 → 实例化 BattleSystem → 聚焦战场
-func _enter_battle_inline(chapter: Dictionary) -> void:
+func _enter_battle_inline(chapter: Dictionary, save_identity: String = "", save_state: Dictionary = {}) -> void:
 	_world_camera_navigation.cancel_drag()
 	# 1. 备份世界探索状态
 	_cam_pos_backup = _camera_smooth_position
@@ -4009,7 +4042,10 @@ func _enter_battle_inline(chapter: Dictionary) -> void:
 		"chapter": chapter,
 		"world": self,                  # B1 标记：main.gd 引用
 		"hosting": false,
+		"save_identity": save_identity, # 战旗记录身份（空 = 调试直启，不存档）
 	}
+	if not save_state.is_empty():
+		SceneArgs.battle_args["save_state"] = save_state # 同身份档案恢复进度
 	_battle_system = _BattleScript.new()
 	_battle_system.name = "BattleSystem"
 	_battle_system.battle_finished.connect(_exit_battle)

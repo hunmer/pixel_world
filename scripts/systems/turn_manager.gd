@@ -57,6 +57,13 @@ func end_turn() -> void:
 		start_player_phase()
 
 
+## 恢复进度用：只赋值阶段与轮数。不复位列标志、不 tick 冷却/buff ——
+## 那些状态由存档的单位数据承载，重跑会破坏「读档不二次结算」。
+func restore_state(p_phase: StringName, p_turn_number: int) -> void:
+	phase = &"enemy" if p_phase == &"enemy" else &"player"
+	turn_number = maxi(1, p_turn_number)
+
+
 ## 玩家方是否所有单位都行动完毕
 func all_player_acted() -> bool:
 	for u in units:

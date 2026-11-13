@@ -49,5 +49,5 @@ func _ready() -> void:
 
 
 func _on_start() -> void:
-	# 进入 pixel_world 生态世界（在世界里按 P 进战棋）
-	get_tree().change_scene_to_file("res://main.tscn")
+	# 新默认入口：Game.tscn 自动续玩最近战旗（冷启动无记录则进默认战场）
+	get_tree().change_scene_to_file("res://scenes/Game.tscn")

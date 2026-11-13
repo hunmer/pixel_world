@@ -1289,7 +1289,8 @@ func save_current() -> Dictionary:
 
 
 func _back_to_world() -> void:
-	get_tree().change_scene_to_file("res://main.tscn")
+	# 返回来源场景：Game 入口启动时回到 Game（战场列表）；世界 E 键启动时回到世界
+	get_tree().change_scene_to_file(SceneArgs.map_editor_return_to)
 
 
 func _status(text: String, is_error: bool = false) -> void:

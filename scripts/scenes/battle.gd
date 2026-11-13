@@ -79,6 +79,13 @@ var _pending_move_undo: Dictionary = {}
 # 仅本场战斗有效，偏好存 turn_director 内（key=unitId → {priorityTargetId, strategy}）。
 var turn_director: TurnDirector = null
 
+# ---- 战旗持久化（GameSession 自动存档）----
+# save_identity 非空 → 本场战斗在完整行动边界自动提交；save_state 非空 → 恢复进度。
+# _last_committed 缓存最近一次完整快照：演出中途退出时用它补落盘（防半行动丢失）。
+var _save_identity: String = ""
+var _save_state: Dictionary = {}
+var _last_committed: Dictionary = {}
+
 
 func _ready() -> void:
 	# 从 SceneArgs 读战斗参数（由 main.gd._enter_battle 设置）
@@ -89,12 +96,17 @@ func _ready() -> void:
 	# B1 就地模式：main.gd 通过 SceneArgs.battle_args["world"] 注入自身引用
 	_world = SceneArgs.battle_args.get("world", null)
 	_b1_mode = _world != null
+	# 战旗记录参数：save_identity 非空开启自动存档；save_state 非空表示恢复进度
+	_save_identity = String(SceneArgs.battle_args.get("save_identity", ""))
+	_save_state = SceneArgs.battle_args.get("save_state", {})
+	var _save_notice := String(SceneArgs.battle_args.get("save_notice", ""))
 	if _b1_mode:
 		_world_origin = chapter.get("world_origin", Vector2i.ZERO)
-	# 1. 网格 + 单位 + 回合（与模式无关）
+	# 1. 网格 + 单位 + 回合（与模式无关）；死亡单位只在恢复局出现——不放入 grid
 	grid = GridSystem.new(chapter.width, chapter.height, chapter.map)
 	for u in chapter.playerUnits + chapter.enemyUnits:
-		grid.place_unit(u, u.position.x, u.position.y)
+		if not u.isDead:
+			grid.place_unit(u, u.position.x, u.position.y)
 	turn = TurnManager.new(chapter.playerUnits + chapter.enemyUnits)
 	add_child(turn)
 	# 1b. 回合编排器（敌方 AI + 玩家方托管）
@@ -112,6 +124,11 @@ func _ready() -> void:
 	# 3. UI 层（屏幕空间，两种模式共用）
 	_build_ui()
 	turn_director.update_host_btn_text()
+	# 有存档身份的 B2 战斗提供「退出战斗」按钮（B1 由 main.gd 自己接管）
+	if not _save_identity.is_empty() and not _b1_mode:
+		battle_ui.set_exit_callback(_on_exit_to_list)
+	if _save_notice != "":
+		battle_ui.show_toast(_save_notice)
 	# 4. 单位
 	for u in grid.units.values():
 		_spawn_unit_sprite(u)
@@ -146,7 +163,13 @@ func _ready() -> void:
 	set_process_unhandled_input(true)
 	print("[Battle] BattleReady units=%d" % _unit_sprites.size())
 	battle_ready.emit()
-	turn.start_player_phase()
+	if not _save_state.is_empty():
+		# 恢复进度：不复位列标志/不重跑开局 tick，直接进保存时的阶段
+		var resume: Dictionary = _save_state
+		_save_state = {}
+		_apply_resume_state(resume)
+	else:
+		turn.start_player_phase()
 
 
 func _play_encounter_opening() -> void:
@@ -254,6 +277,11 @@ func _setup_b2_render() -> void:
 		Callable(renderer, "stand_level")
 	)
 	board.center_on_map(chapter.width, chapter.height)
+	# B2 相机按侧栏宽度预留右侧取景（与 B1 世界相机的预留对齐；battle_ui 侧栏同宽覆盖）。
+	# 预留换算用名义 size（isometric_camera_3d._reserved_lateral_world），不受 ActionAnim
+	# 推近影响，strike 相位相机位移仍只来自 presentation_offset（演出契约保持）。
+	if board.camera != null:
+		board.camera.reserved_right_px = BattleUI.SIDEBAR_WIDTH
 
 
 ## B1 就地模式渲染初始化：不创建 IsoBoard，单位/范围层挂 main.gd 下
@@ -312,6 +340,8 @@ func _inject_turn_director_callables() -> void:
 	turn_director.on_clear_range_highlight = _clear_range_highlight
 	turn_director.on_clear_selection = _clear_selection
 	turn_director.on_set_mode = _set_mode_from_director
+	# 敌方/托管每个单位行动完成后提交一次完整快照
+	turn_director.on_action_committed = _commit_snapshot
 
 
 func _clear_selection() -> void:
@@ -391,6 +421,7 @@ func _on_player_phase(turn_num: int) -> void:
 	mode = Mode.IDLE
 	battle_ui.set_phase_text("第 %d 轮 · 我方行动" % turn_num, Color(0.29, 0.87, 0.50))
 	_refresh_all_units()
+	_commit_snapshot()
 	# 托管模式下不需要手动选中（托管自己驱动），跳过 debug_auto_select 避免范围墙未入树报错
 	if SceneArgs.battle_args.get("debug_auto_select_first_player", false) and not turn_director.is_hosting():
 		SceneArgs.battle_args.erase("debug_auto_select_first_player")
@@ -413,8 +444,81 @@ func _on_enemy_phase(turn_num: int) -> void:
 	_clear_range_highlight()
 	# TurnManager 已在信号前复位敌方行动状态；立即恢复存活单位亮度与顶部状态。
 	_refresh_all_units()
+	_commit_snapshot()
 
 	turn_director.start_enemy_phase()
+
+
+# ============================================================
+# 战旗持久化（完整行动边界提交；演出中退出回退上一完整快照）
+# ============================================================
+## 收集恢复所需的运行态（回合/阶段/托管/偏好/胜负）。
+func _capture_battle_state(result: StringName = &"") -> Dictionary:
+	return {
+		"turn_number": int(turn.turn_number),
+		"phase": turn.phase,
+		"hosting": turn_director.is_hosting(),
+		"prefs": turn_director.get_prefs().duplicate(true),
+		"result": result,
+	}
+
+
+## 在完整行动边界提交（回合开始 / 行动收尾 / 终局）。result 非空表示终局记录。
+func _commit_snapshot(result: StringName = &"") -> void:
+	if _save_identity.is_empty():
+		return
+	_last_committed = {
+		"chapter": chapter.duplicate(true),
+		"state": _capture_battle_state(result),
+	}
+	_flush_save()
+
+
+## 落盘最近一次完整快照（幂等；_exit_tree 用它补防半途退出）。
+func _flush_save() -> void:
+	if _save_identity.is_empty() or _last_committed.is_empty():
+		return
+	var res: Dictionary = GameSession.commit(_last_committed["chapter"], _last_committed["state"])
+	if not res.get("ok", false):
+		battle_ui.show_toast("保存失败：%s" % String(res.get("error", "")))
+
+
+## 恢复进度：不复位行动标志、不重跑开局 tick（冷却/buff 由存档单位数据承载）。
+## 保存时若已分胜负则直接重演结算画面。
+func _apply_resume_state(state: Dictionary) -> void:
+	var phase: StringName = state.get("phase", &"player")
+	turn.restore_state(phase, int(state.get("turn_number", 1)))
+	turn_director.restore_prefs(state.get("prefs", {}))
+	turn_director.set_hosting(bool(state.get("hosting", false)))
+	var result: StringName = state.get("result", &"")
+	print("[battle] Resume turn=%d phase=%s hosting=%s result=%s" % [
+		turn.turn_number, String(phase), str(turn_director.is_hosting()), String(result)])
+	if result == &"win" or result == &"lose":
+		_battle_ended = true
+		mode = Mode.ANIMATING
+		_restore_result_visuals()
+		_present_result(result)
+		return
+	if phase == &"player":
+		_on_player_phase(turn.turn_number)
+	else:
+		battle_ui.set_phase_text("第 %d 轮 · 敌方行动" % turn.turn_number, Color(0.97, 0.44, 0.44))
+		mode = Mode.ENEMY_TURN
+		_clear_range_highlight()
+		_refresh_all_units()
+		turn_director.start_enemy_phase()
+
+
+## 「退出战斗」按钮：回到 return_to_scene；落盘由 _exit_tree 的 flush 兜底。
+func _on_exit_to_list() -> void:
+	if mode == Mode.ANIMATING and not _battle_ended:
+		return  # 行动演出中不允许退出（防半行动快照）
+	if mode == Mode.ENEMY_TURN:
+		return  # 敌方回合推进中不允许退出
+	battle_ui.close_menu()
+	var tree := get_tree()
+	if tree != null:
+		tree.change_scene_to_file(return_to_scene)
 
 
 # ============================================================
@@ -872,8 +976,9 @@ func _perform_attack_from_current(u: Dictionary, target: Dictionary) -> void:
 	
 	_resolve_combat(u, target, func():
 		selected_unit = {}
-		
+
 		mode = Mode.IDLE
+		_commit_snapshot()
 		_check_battle_end()
 	)
 
@@ -1110,6 +1215,7 @@ func _gain_exp(u: Dictionary, amount: int) -> void:
 func _finish_player_action(_u: Dictionary) -> void:
 	selected_unit = {}
 	mode = Mode.IDLE
+	_commit_snapshot()
 	_check_battle_end()
 	if turn.all_player_acted():
 		await get_tree().create_timer(0.3).timeout
@@ -1297,6 +1403,12 @@ func _check_battle_end() -> void:
 	_battle_ended = true
 	mode = Mode.ANIMATING
 	_restore_result_visuals()
+	_commit_snapshot(result)  # 终局记录先行落盘：结算演出中断也不丢胜负
+	_present_result(result)
+
+
+## 结算演出（_check_battle_end 与恢复局共用）。
+func _present_result(result: StringName) -> void:
 	var data := {
 		"loot": chapter.get("loot", []),
 		"exp": int(chapter.get("exp", 0)),
@@ -1492,6 +1604,7 @@ func _alive_count(faction: StringName) -> int:
 # ============================================================
 func _exit_tree() -> void:
 	_restore_result_visuals()
+	_flush_save()  # 防半途退出：用最近一次完整快照补落盘（幂等）
 	if _presentation_audio != null:
 		_presentation_audio.stop()
 	if _action_camera_kick_tween != null and _action_camera_kick_tween.is_valid():

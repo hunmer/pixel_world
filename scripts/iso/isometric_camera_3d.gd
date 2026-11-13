@@ -153,7 +153,11 @@ func _reserved_lateral_world() -> Vector3:
 		-cos(yaw_radians) * horizontal
 	).normalized()
 	var right := view_dir.cross(Vector3.UP).normalized()
-	var world_per_px := size / _viewport_size.y
+	# world_per_px 用名义换算 1/(TILE_PIXELS*zoom)（无演出推近时与 size/viewport.y 数学等价）。
+	# ActionAnim 推近直接改写 camera.size：若按实际 size 换算，预留列的世界位移会随推近
+	# 漂移，违反「strike 相位相机位置只允许 presentation_offset 写入」的演出契约
+	# （tests/battle_presentation_hooks_contract）。名义换算让预留列的屏幕宽度恒定。
+	var world_per_px := 1.0 / (IsoProjection.TILE_PIXELS * zoom)
 	return right * (net_px * world_per_px)
 
 

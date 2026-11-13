@@ -53,6 +53,8 @@ var on_check_battle_end: Callable
 var on_clear_range_highlight: Callable
 var on_clear_selection: Callable
 var on_set_mode: Callable
+## 敌方/托管每个单位完整行动后回调（battle.gd 用来提交战旗快照）。
+var on_action_committed: Callable
 
 # ---- 托管状态（原 battle.gd 的 hosting_active / _auto_prefs / _hosting_running）----
 # hosting_active=true 时玩家回合自动跑 start_player_auto_phase，手动输入路径被锁。
@@ -104,6 +106,15 @@ func set_pref(unit_id, key: StringName, value) -> void:
 	var p: Dictionary = _auto_prefs.get(unit_id, PlayerAI.default_pref())
 	p[key] = value
 	_auto_prefs[unit_id] = p
+
+
+## 恢复托管偏好（GameSession 读档传入；键为单位 id 字符串）。
+func restore_prefs(prefs: Dictionary) -> void:
+	_auto_prefs.clear()
+	for k in prefs.keys():
+		var v: Variant = prefs[k]
+		if v is Dictionary:
+			_auto_prefs[StringName(k)] = (v as Dictionary).duplicate(true)
 
 
 func set_enemy_animation(speed: float, skipped: bool) -> void:
@@ -187,6 +198,9 @@ func start_player_auto_phase() -> void:
 			on_check_battle_end.call()
 			_hosting_running = false
 			return
+		# 单位完整行动完成 → 提交快照（battle.gd 注入；无身份时是空操作）
+		if on_action_committed.is_valid():
+			on_action_committed.call()
 	await get_tree().create_timer(0.3).timeout
 	_hosting_running = false
 	if turn.phase == &"player":
@@ -253,6 +267,8 @@ func start_enemy_phase() -> void:
 	for enemy in enemies:
 		if enemy.isDead:
 			continue
+		if enemy.hasActed:
+			continue  # 恢复进度：只推进本回合未行动的敌方单位
 		await _enemy_act(enemy)
 		# 没有可攻击目标也算完成行动；同步立绘与顶部状态，不能留到下一轮误显示。
 		if not enemy.isDead:
@@ -260,6 +276,9 @@ func start_enemy_phase() -> void:
 			var us: UnitSprite3D = unit_sprites.get(enemy.id)
 			if us != null:
 				us.update_state()
+		# 单位完整行动完成 → 提交快照（battle.gd 注入；无身份时是空操作）
+		if on_action_committed.is_valid():
+			on_action_committed.call()
 	await get_tree().create_timer(0.4).timeout
 	on_check_battle_end.call()
 	if turn.phase == &"enemy":

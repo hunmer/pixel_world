@@ -11,13 +11,14 @@ config_version=5
 [application]
 
 config/name="pixel_world"
-run/main_scene="res://main.tscn"
+run/main_scene="res://scenes/Game.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
 SceneArgs="*res://scripts/scenes/scene_args.gd"
+GameSession="*res://scripts/scenes/game_session.gd"
 Settings="*res://scripts/settings.gd"
 GameCursor="*res://scripts/game_cursor.gd"
 BreakpointRuntimeBridge="*uid://37hq7s0ufjxo"

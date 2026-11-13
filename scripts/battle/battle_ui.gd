@@ -1,13 +1,14 @@
 ## battle/battle_ui.gd — 战场屏幕空间 UI（从 scenes/battle.gd 抽出）
 ##
 ## 职责：
-##   - HUD 构建（回合标签 / 结束回合按钮 / 信息面板 / 托管按钮 / 偏好按钮 / 菜单&预览容器）
-##   - 单位信息悬浮显示（show_info_at）
+##   - HUD 构建：右侧固定宽多 Tab 侧边栏（map_editor 风格，Tab=回合/情报/托管）
+##     —— 回合标签 / 阵营状态 / 结束回合按钮 / 悬停信息 / 托管与偏好 / 退出战斗
+##   - 单位信息悬浮显示（show_info_at → 侧栏【情报】Tab）
 ##   - 单位行动菜单（攻击/技能/物品/等待）+ 各级目标选择 picker
-##   - 战斗预览面板 / 技能预览面板
+##   - 战斗预览面板 / 技能预览面板（贴侧栏左侧，避开右侧栏）
 ##   - 开战名牌/Boss 横幅与胜利/失败/章节末结算演出（ResultPresentation）
 ##   - 结果横幅（旧 show_result_banner 兼容入口）
-##   - 通用面板样式 _make_panel_style
+##   - 侧栏/tab 深色样式辅助 + 通用面板样式 _make_panel_style
 ##
 ## 设计：从 battle.gd 抽出的 CanvasLayer（屏幕空间 UI 根）。不持有父场景引用；
 ## board / grid / unit_sprites / turn 由 battle.gd 在 setup() 注入；
@@ -90,12 +91,31 @@ var end_turn_btn: Button
 var info_label: Label
 var menu_container: Control
 var preview_container: Control
-var turn_status_panel: PanelContainer
 var _turn_status_labels: Dictionary = {}
 var _turn_status_signature := ""
 var result_presentation: ResultPresentationScript
 # 单位详情面板（右键查看任意单位完整信息；与行动菜单 menu_container 独立）
 var _unit_detail_panel: Control = null
+# 右侧多 Tab 侧栏（map_editor 风格）
+var _sidebar: PanelContainer = null
+# 【托管】Tab 内容盒（退出战斗按钮按需追加到这里）
+var _host_tab: VBoxContainer = null
+
+# ---- 侧边栏样式（照搬 map_editor.gd 配色，与世界 side_panel.gd 同系） ----
+## 侧栏宽度：与世界 side_panel.PANEL_WIDTH 对齐 —— B1 就地模式下世界相机已按
+## 该宽度预留右侧取景（main.gd: _cam.reserved_right_px = GameHud.SIDE_PANEL_WIDTH），
+## 战斗侧栏同宽覆盖世界侧栏，取景刚好对齐；B2 由 battle.gd 设置 reserved_right_px。
+const SIDEBAR_WIDTH := 360.0
+const ICON_DIR := "res://addons/at-icons/control/"
+const BG := Color(0.05, 0.07, 0.10, 0.97)
+const PANEL_BORDER := Color(0.25, 0.37, 0.43, 0.9)
+const TEXT_MAIN := Color(0.88, 0.93, 0.95)
+const TEXT_DIM := Color(0.56, 0.68, 0.71)
+const ACCENT := Color(0.40, 0.86, 0.76)
+# 统一样式系统：按钮三态底色，pressed 描边统一走 ACCENT
+const BTN_BG := Color(0.08, 0.11, 0.14, 0.95)
+const BTN_BG_HOVER := Color(0.13, 0.18, 0.22, 0.98)
+const BTN_BG_PRESSED := Color(0.10, 0.26, 0.23, 1.0)
 
 # battle.gd 的 Mode 枚举镜像（on_set_mode 传 int；与 battle.gd enum Mode 保持一致）
 const MODE_IDLE := 0
@@ -127,20 +147,11 @@ func _process(_delta: float) -> void:
 	refresh_turn_status()
 
 
-func _build_turn_status_panel() -> void:
-	turn_status_panel = PanelContainer.new()
-	turn_status_panel.name = "TurnStatus"
-	turn_status_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	turn_status_panel.offset_left = 230.0
-	turn_status_panel.offset_top = 10.0
-	turn_status_panel.offset_right = -230.0
-	turn_status_panel.offset_bottom = 78.0
-	turn_status_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	turn_status_panel.add_theme_stylebox_override("panel", _make_panel_style())
-	var rows := VBoxContainer.new()
-	rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rows.add_theme_constant_override("separation", 2)
-	turn_status_panel.add_child(rows)
+## 阵营状态行（挂侧栏【回合】Tab）：按阵营存在性建「我方/敌方」两行 Label。
+## turn 未注入（headless 契约测试直接 build）时不建行，refresh_turn_status 自然跳过。
+func _add_turn_status_rows(parent: VBoxContainer) -> void:
+	if turn == null:
+		return
 	for faction: StringName in [&"player", &"enemy"]:
 		var has_faction := false
 		for u: Dictionary in turn.units:
@@ -155,9 +166,8 @@ func _build_turn_status_panel() -> void:
 		label.add_theme_font_size_override("font_size", 13)
 		label.add_theme_color_override("font_color", FACTION_COLOR[faction])
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rows.add_child(label)
+		parent.add_child(label)
 		_turn_status_labels[faction] = label
-	add_child(turn_status_panel)
 	refresh_turn_status()
 
 
@@ -196,38 +206,10 @@ func refresh_turn_status() -> void:
 # ============================================================
 func build(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pref_cb: Callable) -> void:
 	name = "UI"
-	# 回合标签
-	phase_label = Label.new()
-	phase_label.text = "第 1 轮 · 我方行动"
-	phase_label.add_theme_font_size_override("font_size", 22)
-	phase_label.position = Vector2(16, 12)
-	add_child(phase_label)
-	_build_turn_status_panel()
-	# 结束回合按钮
-	end_turn_btn = Button.new()
-	end_turn_btn.text = "结束回合 (E)"
-	end_turn_btn.position = Vector2(16, 50)
-	end_turn_btn.pressed.connect(end_turn_cb)
-	add_child(end_turn_btn)
-	# 信息面板（加大高度以容纳 MP/技能/物品/状态）
-	info_label = Label.new()
-	info_label.add_theme_font_size_override("font_size", 13)
-	info_label.position = Vector2(16, 92)
-	info_label.size = Vector2(360, 240)
-	add_child(info_label)
-	# 托管按钮 + 偏好按钮（top-left 簇，info_label 下方）
-	var host_btn := Button.new()
-	host_btn.position = Vector2(16, 340)
-	host_btn.pressed.connect(toggle_hosting_cb)
-	add_child(host_btn)
-	# 把 host_btn 引用交给 turn_director（它负责更新按钮文字）—— 通过注入回调
-	if _on_set_host_btn.is_valid():
-		_on_set_host_btn.call(host_btn)
-	var pref_btn := Button.new()
-	pref_btn.text = "托管偏好"
-	pref_btn.position = Vector2(120, 340)
-	pref_btn.pressed.connect(open_pref_cb)
-	add_child(pref_btn)
+	# B1 就地模式：世界 HUD（GameHud，layer=100，含右侧 side_panel）仍在树上，
+	# 战斗侧栏与之同宽对齐并压在其上；B2 独立场景无世界 HUD，直接独占右侧。
+	layer = 101
+	_build_sidebar(end_turn_cb, toggle_hosting_cb, open_pref_cb)
 	# 菜单/预览容器（屏幕空间，用于动态添加）
 	menu_container = Control.new()
 	menu_container.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -240,10 +222,161 @@ func build(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pref_cb: Cal
 	_ensure_result_presentation()
 
 
+## 右侧固定宽多 Tab 侧边栏（map_editor 布局范式：标题行 + TabContainer + 底部提示行）。
+## 三个 Tab：回合（阶段/阵营状态/结束回合）· 情报（悬停信息）· 托管（托管/偏好/退出）。
+func _build_sidebar(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pref_cb: Callable) -> void:
+	_sidebar = PanelContainer.new()
+	_sidebar.name = "BattleSidePanel"
+	_sidebar.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	_sidebar.offset_left = -SIDEBAR_WIDTH
+	_sidebar.mouse_filter = Control.MOUSE_FILTER_STOP
+	_sidebar.add_theme_stylebox_override("panel", _sidebar_panel_style())
+	add_child(_sidebar)
+
+	var sv := VBoxContainer.new()
+	sv.name = "SideVBox"
+	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sv.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sv.add_theme_constant_override("separation", 6)
+	_sidebar.add_child(sv)
+
+	# 标题行：双剑图标 + 文字（图标缺失只显示文字）
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 6)
+	var swords: Texture2D = _icon("swords")
+	if swords != null:
+		var icon_rect := TextureRect.new()
+		icon_rect.texture = swords
+		icon_rect.custom_minimum_size = Vector2(18, 18)
+		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title_row.add_child(icon_rect)
+	title_row.add_child(_label("战场情报", 16, ACCENT))
+	sv.add_child(title_row)
+
+	var tabs := TabContainer.new()
+	tabs.name = "InfoTabs"
+	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tabs.add_theme_font_size_override("font_size", 13)
+	tabs.add_theme_stylebox_override("panel", _tab_panel_style())
+	_tab_styles(tabs)
+	sv.add_child(tabs)
+
+	# ---- Tab【回合】：阶段 / 阵营状态 / 结束回合 ----
+	var turn_tab := _new_tab(tabs, "回合", "swords")
+	phase_label = _label("第 1 轮 · 我方行动", 18, TEXT_MAIN)
+	turn_tab.add_child(phase_label)
+	_add_turn_status_rows(turn_tab)
+	end_turn_btn = Button.new()
+	end_turn_btn.text = "结束回合 (E)"
+	end_turn_btn.pressed.connect(end_turn_cb)
+	_btn_styles(end_turn_btn)
+	turn_tab.add_child(end_turn_btn)
+	turn_tab.add_child(_label("存活单位实时 HP 与行动状态；全部行动后自动结束回合。", 10, TEXT_DIM))
+
+	# ---- Tab【情报】：悬停单位 / 地形详情（show_info_at 更新） ----
+	var info_tab := _new_tab(tabs, "情报", "info")
+	info_label = _label("（鼠标悬停单位或地形查看详情）", 13, TEXT_DIM)
+	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_tab.add_child(info_label)
+	info_tab.add_child(_label("右键单位打开完整详情；方向键移动光标同样刷新。", 10, TEXT_DIM))
+
+	# ---- Tab【托管】：托管 / 偏好 /（按需）退出战斗 ----
+	_host_tab = _new_tab(tabs, "托管", "gears")
+	var host_btn := Button.new()
+	host_btn.pressed.connect(toggle_hosting_cb)
+	_btn_styles(host_btn)
+	_host_tab.add_child(host_btn)
+	# 把 host_btn 引用交给 turn_director（它负责更新按钮文字）—— 通过注入回调
+	if _on_set_host_btn.is_valid():
+		_on_set_host_btn.call(host_btn)
+	var pref_btn := Button.new()
+	pref_btn.text = "托管偏好"
+	pref_btn.pressed.connect(open_pref_cb)
+	_btn_styles(pref_btn)
+	_host_tab.add_child(pref_btn)
+	_host_tab.add_child(_label("托管 = 本场战斗自动代打（敌方回合本就自动）；偏好按单位配置目标与策略。", 10, TEXT_DIM))
+
+	# 底部提示行（贴面板底部，自动换行）
+	var hint := _label("Q/Z·E/X 旋转视角 · R 复位 · 中键拖拽平移 · ESC 取消", 10, TEXT_DIM)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sv.add_child(hint)
+
+
+## 新建一个侧栏 Tab：ScrollContainer(只纵向滚) + VBox；设标题与可选图标，返回内容 VBox
+func _new_tab(tabs: TabContainer, title: String, icon_name := "") -> VBoxContainer:
+	var scroll := ScrollContainer.new()
+	scroll.name = "%sScroll" % title
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tabs.add_child(scroll)
+	var v := VBoxContainer.new()
+	v.name = "%sTab" % title
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 6)
+	scroll.add_child(v)
+	var idx := tabs.get_tab_count() - 1
+	tabs.set_tab_title(idx, title)
+	if icon_name != "":
+		var icon: Texture2D = _icon(icon_name)
+		if icon != null:
+			tabs.set_tab_icon(idx, icon)
+	return v
+
+
 ## battle.gd 注入：把 host_btn 交给 turn_director（battle.gd 持有 director 引用）。
 var _on_set_host_btn: Callable
 func set_host_btn_callback(cb: Callable) -> void:
 	_on_set_host_btn = cb
+
+
+# ---- 战旗持久化辅助 UI ----
+var _exit_btn: Button = null
+var _toast: Label = null
+
+## battle.gd 注入「退出战斗」回调：有存档身份的 B2 战斗显示（返回 return_to 场景）。
+## 按钮追加到侧栏【托管】Tab；侧栏未建好时兜底直接挂层。
+func set_exit_callback(cb: Callable) -> void:
+	if not cb.is_valid():
+		return
+	_exit_btn = Button.new()
+	_exit_btn.text = "⏏ 退出战斗"
+	_exit_btn.pressed.connect(cb)
+	_btn_styles(_exit_btn)
+	if _host_tab != null:
+		_host_tab.add_child(_exit_btn)
+	else:
+		add_child(_exit_btn)
+
+
+## 顶部居中提示条（保存失败 / 续玩通知等），3 秒后自动淡出。
+func show_toast(text: String) -> void:
+	if _toast != null and is_instance_valid(_toast):
+		_toast.queue_free()
+	_toast = Label.new()
+	_toast.text = text
+	_toast.add_theme_font_size_override("font_size", 13)
+	_toast.add_theme_color_override("font_color", Color(1.0, 0.72, 0.4))
+	_toast.add_theme_color_override("font_outline_color", Color.BLACK)
+	_toast.add_theme_constant_override("outline_size", 4)
+	_toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_toast.offset_left = -280.0
+	_toast.offset_right = 280.0
+	_toast.offset_top = 12.0
+	_toast.offset_bottom = 52.0
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	add_child(_toast)
+	var tw := _toast.create_tween()
+	tw.tween_interval(3.0)
+	tw.tween_property(_toast, "modulate:a", 0.0, 1.0)
+	tw.tween_callback(_toast.queue_free)
 
 
 ## 偏好面板容器（由 battle.gd _open_pref_panel 使用，因为偏好数据在 turn_director）。
@@ -270,7 +403,8 @@ func is_over_ui(screen_pos: Vector2) -> bool:
 func _hit_ui(node: Node, screen_pos: Vector2) -> bool:
 	var interactive := node is Button or node is OptionButton or node is ItemList \
 		or node is ScrollContainer or node is Slider or node is SpinBox \
-		or node is LineEdit or node is TextEdit or node is Panel
+		or node is LineEdit or node is TextEdit or node is Panel \
+		or node is PanelContainer  # 侧栏本体（mouse_filter=STOP）要拦截战场点击
 	if interactive and (node as Control).is_visible_in_tree():
 		if (node as Control).get_global_rect().has_point(screen_pos):
 			return true
@@ -662,7 +796,8 @@ func _show_skill_preview(caster: Dictionary, target: Dictionary, skill_id: Strin
 	var prev := SkillSystem.preview(caster, target, skill_id)
 	var panel := Panel.new()
 	panel.size = Vector2(230, 110)
-	panel.position = Vector2(get_viewport().get_visible_rect().size.x - 250, 60)
+	# 贴侧栏左侧（避开右侧 360 宽侧栏）
+	panel.position = Vector2(get_viewport().get_visible_rect().size.x - 250.0 - SIDEBAR_WIDTH, 60)
 	panel.add_theme_stylebox_override("panel", _make_panel_style())
 	preview_container.add_child(panel)
 	var lines: Array = [
@@ -794,7 +929,8 @@ func _show_preview_panel(attacker: Dictionary, defender: Dictionary, prev: Dicti
 	close_preview()
 	var panel := Panel.new()
 	panel.size = Vector2(210, 150)
-	panel.position = Vector2(get_viewport().get_visible_rect().size.x - 230, 60)
+	# 贴侧栏左侧（避开右侧 360 宽侧栏）
+	panel.position = Vector2(get_viewport().get_visible_rect().size.x - 230.0 - SIDEBAR_WIDTH, 60)
 	panel.add_theme_stylebox_override("panel", _make_panel_style())
 	preview_container.add_child(panel)
 	var lines := [
@@ -843,6 +979,80 @@ func _make_panel_style() -> StyleBoxFlat:
 	sb.set_corner_radius_all(4)
 	sb.set_content_margin_all(4)
 	return sb
+
+
+# ============================================================
+# 侧栏 / Tab 样式辅助（照搬 map_editor.gd 的配色与做法）
+# ============================================================
+## 通用扁平样式盒（侧栏系样式的基础）
+func _flat_style(bg: Color, border: Color, border_width := 1, corner_radius := 6) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(border_width)
+	sb.set_corner_radius_all(corner_radius)
+	sb.set_content_margin_all(6)
+	return sb
+
+
+## 侧栏本体：不透明深底 + 细边
+func _sidebar_panel_style() -> StyleBoxFlat:
+	var sb := _flat_style(BG, PANEL_BORDER, 1, 0)
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
+	return sb
+
+
+## TabContainer 内容区底色（半透明深色，与 map_editor tab panel 一致）
+func _tab_panel_style() -> StyleBoxFlat:
+	return _flat_style(Color(0.02, 0.03, 0.045, 0.55), PANEL_BORDER, 1, 4)
+
+
+## TabContainer 页签三态：常态暗、hover 提亮、选中 ACCENT 底边线
+func _tab_styles(tabs: TabContainer) -> void:
+	var normal := _flat_style(Color(0.05, 0.07, 0.09, 0.7), PANEL_BORDER, 1, 4)
+	var hover := _flat_style(Color(0.09, 0.13, 0.16, 0.9), PANEL_BORDER, 1, 4)
+	var selected := _flat_style(Color(0.02, 0.03, 0.045, 0.95), ACCENT, 1, 4)
+	# 选中态底边线（map_editor 同款：border_width_bottom=2 + ACCENT）
+	selected.border_color = ACCENT
+	selected.border_width_bottom = 2
+	tabs.add_theme_stylebox_override("tab_selected", selected)
+	tabs.add_theme_stylebox_override("tab_unselected", normal)
+	tabs.add_theme_stylebox_override("tab_hovered", hover)
+
+
+## 侧栏系按钮三态（pressed 描边 ACCENT）
+func _btn_styles(b: Button) -> void:
+	b.add_theme_stylebox_override("normal", _flat_style(BTN_BG, PANEL_BORDER))
+	b.add_theme_stylebox_override("hover", _flat_style(BTN_BG_HOVER, PANEL_BORDER))
+	b.add_theme_stylebox_override("pressed", _flat_style(BTN_BG_PRESSED, ACCENT))
+	b.add_theme_stylebox_override("focus", _flat_style(Color.TRANSPARENT, ACCENT, 1, 6))
+	b.add_theme_stylebox_override("disabled", _flat_style(Color(0.06, 0.07, 0.08, 0.7), Color(0.2, 0.24, 0.26, 0.6)))
+	b.add_theme_color_override("font_color", TEXT_MAIN)
+	b.add_theme_color_override("font_hover_color", TEXT_MAIN)
+	b.add_theme_color_override("font_pressed_color", ACCENT)
+	b.add_theme_color_override("font_disabled_color", TEXT_DIM)
+	b.add_theme_color_override("font_focus_color", ACCENT)
+
+
+## 侧栏系 Label 工厂（默认字号 12，TEXT_DIM）
+func _label(text_value: String, font_size := 12, color := TEXT_DIM) -> Label:
+	var l := Label.new()
+	l.text = text_value
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", color)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+
+## 加载 at-icons 图标；失败返回 null（调用方回退纯文字）
+func _icon(icon_name: String) -> Texture2D:
+	var path := ICON_DIR + icon_name + ".svg"
+	if ResourceLoader.exists(path):
+		return load(path) as Texture2D
+	return null
 
 
 # ============================================================
