@@ -1,9 +1,11 @@
-## dialogue_demo.gd — 独立对话演示场景：左右立绘占位 + 发言者名称 + 逐字台词
+## dialogue_demo.gd — 独立对话演示场景：上方左右立绘+名称牌，下方台词逐字
 ##
 ## 与世界 / 战棋完全解耦，直接运行 res://scenes/DialogueDemo.tscn 即可。
 ## 数据：res://data/dialogue/demo_intro.json（speakers 表 + lines 序列，立绘路径可替换）。
 ## 交互：鼠标点击 / 触摸 / ui_accept（空格、回车）。
 ##   打字中 → 补全本句；句毕 → 推进下一句；结束 → 明确提示 + 重播按钮。
+## 布局：PortraitRow（标题栏下、DialoguePanel 上）承载左右立绘列与名称牌；
+##   名称牌常驻两侧，发言侧用角色色高亮、非发言侧压暗。
 ## 样式：只读复用 scripts/ui/ui_factory.gd 与 scripts/ui/ui_theme.gd，不改动共享 UI 底层。
 extends Control
 
@@ -24,13 +26,14 @@ var _line_index := -1
 var _state: int = State.ENDED
 var _typed_chars := 0.0
 
-var _name_label: Label
-var _title_label: Label
 var _text_label: Label
 var _hint_label: Label
+var _name_left: Label
+var _name_right: Label
 var _portrait_left: PanelContainer
 var _portrait_right: PanelContainer
 var _end_overlay: Control
+var _speaker_name := ""
 
 
 func _ready() -> void:
@@ -101,12 +104,8 @@ func _build_ui() -> void:
 	top.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(top)
 
-	_portrait_left = _build_portrait("PortraitLeft", "hero", Control.PRESET_BOTTOM_LEFT,
-		48, -400, 368, -80)
-	_portrait_right = _build_portrait("PortraitRight", "elf", Control.PRESET_BOTTOM_RIGHT,
-		-368, -400, -48, -80)
-	add_child(_portrait_left)
-	add_child(_portrait_right)
+	_portrait_left = _build_portrait_column("PortraitLeft", "hero", true)
+	_portrait_right = _build_portrait_column("PortraitRight", "elf", false)
 
 	var panel := PanelContainer.new()
 	panel.name = "DialoguePanel"
@@ -124,14 +123,6 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
 
-	_name_label = UIFactoryScript.label("", 22, UIThemeScript.TEXT_MAIN)
-	_name_label.name = "NameLabel"
-	vbox.add_child(_name_label)
-
-	_title_label = UIFactoryScript.label("", 13, UIThemeScript.TEXT_DIM)
-	_title_label.name = "SpeakerTitleLabel"
-	vbox.add_child(_title_label)
-
 	_text_label = UIFactoryScript.label("", 22, UIThemeScript.TEXT_MAIN)
 	_text_label.name = "TextLabel"
 	_text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -148,15 +139,52 @@ func _build_ui() -> void:
 	add_child(_end_overlay)
 
 
-func _build_portrait(node_name: String, speaker_id: String, preset: int,
-		off_left: float, off_top: float, off_right: float, off_bottom: float) -> PanelContainer:
+## 上方立绘行：标题栏之下、DialoguePanel 之上，满宽自适应高度。
+## 每列 = 名称牌 + 称号 + 立绘（立绘可压缩），列间弹性间隔保证窄窗不重叠。
+func _build_portrait_column(node_name: String, speaker_id: String, is_left: bool) -> PanelContainer:
+	var row := get_node_or_null("PortraitRow") as HBoxContainer
+	if row == null:
+		row = HBoxContainer.new()
+		row.name = "PortraitRow"
+		row.set_anchors_preset(Control.PRESET_FULL_RECT)
+		row.offset_left = 48
+		row.offset_top = 56
+		row.offset_right = -48
+		row.offset_bottom = -302
+		row.add_theme_constant_override("separation", 24)
+		add_child(row)
+
+	var column := VBoxContainer.new()
+	column.name = node_name + "Column"
+	column.custom_minimum_size = Vector2(180, 0)
+	column.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if is_left else Control.SIZE_SHRINK_END
+	row.add_child(column)
+	if not is_left:
+		# 右列需要先加入弹性垫片才能靠右
+		var spacer := Control.new()
+		spacer.name = "MiddleSpacer"
+		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.move_child(spacer, row.get_child_count() - 2)
+
+	var speaker: Dictionary = _speakers.get(speaker_id, {})
+	var name_l := UIFactoryScript.label(String(speaker.get("name", "???")), 22,
+		Color(String(speaker.get("color", "#FFFFFF"))))
+	name_l.name = "NameLabel"
+	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(name_l)
+	if is_left:
+		_name_left = name_l
+	else:
+		_name_right = name_l
+
+	var title_l := UIFactoryScript.label(String(speaker.get("title", "")), 13, UIThemeScript.TEXT_DIM)
+	title_l.name = "SpeakerTitleLabel"
+	title_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(title_l)
+
 	var wrap := PanelContainer.new()
 	wrap.name = node_name
-	wrap.set_anchors_preset(preset)
-	wrap.offset_left = off_left
-	wrap.offset_top = off_top
-	wrap.offset_right = off_right
-	wrap.offset_bottom = off_bottom
+	wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	wrap.add_theme_stylebox_override("panel", UIThemeScript.flat_style(
 		Color(0.07, 0.10, 0.14, 0.92), UIThemeScript.PANEL_BORDER, 2, 10, 8))
 
@@ -164,11 +192,11 @@ func _build_portrait(node_name: String, speaker_id: String, preset: int,
 	tex.name = "PortraitTexture"
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	var speaker: Dictionary = _speakers.get(speaker_id, {})
 	var portrait_path := String(speaker.get("portrait", ""))
 	if not portrait_path.is_empty() and ResourceLoader.exists(portrait_path):
 		tex.texture = load(portrait_path)
 	wrap.add_child(tex)
+	column.add_child(wrap)
 	return wrap
 
 
@@ -219,9 +247,8 @@ func _advance() -> void:
 	var line: Dictionary = _lines[_line_index]
 	var speaker_id := String(line.get("speaker", ""))
 	var speaker: Dictionary = _speakers.get(speaker_id, {})
-	_name_label.text = String(speaker.get("name", "???"))
-	_name_label.add_theme_color_override("font_color", Color(String(speaker.get("color", "#FFFFFF"))))
-	_title_label.text = String(speaker.get("title", ""))
+	_speaker_name = String(speaker.get("name", "???"))
+	_apply_speaker_highlight(speaker_id)
 	_typed_chars = 0.0
 	_text_label.text = String(line.get("text", ""))
 	_text_label.visible_characters = 0
@@ -245,11 +272,12 @@ func _enter_waiting() -> void:
 func _finish_dialogue() -> void:
 	_state = State.ENDED
 	_hint_label.text = ""
-	_name_label.text = ""
-	_title_label.text = ""
+	_speaker_name = ""
 	_text_label.text = ""
 	_portrait_left.modulate = END_MODULATE
 	_portrait_right.modulate = END_MODULATE
+	_name_left.add_theme_color_override("font_color", UIThemeScript.TEXT_DIM)
+	_name_right.add_theme_color_override("font_color", UIThemeScript.TEXT_DIM)
 	_end_overlay.show()
 	(_end_overlay.get_node("EndBox/ReplayButton") as Button).grab_focus()
 
@@ -258,12 +286,15 @@ func _on_replay() -> void:
 	_start_dialogue()
 
 
-## 发言者一侧立绘全亮，另一侧压暗。
+## 发言者一侧立绘全亮 + 名称牌用角色色，另一侧立绘压暗 + 名称灰显。
 func _apply_speaker_highlight(speaker_id: String) -> void:
 	var speaker: Dictionary = _speakers.get(speaker_id, {})
+	var color := Color(String(speaker.get("color", "#FFFFFF")))
 	var left_speaking := String(speaker.get("side", "")) == "left"
 	_portrait_left.modulate = FULL_MODULATE if left_speaking else DIM_MODULATE
 	_portrait_right.modulate = FULL_MODULATE if not left_speaking else DIM_MODULATE
+	_name_left.add_theme_color_override("font_color", color if left_speaking else UIThemeScript.TEXT_DIM)
+	_name_right.add_theme_color_override("font_color", UIThemeScript.TEXT_DIM if left_speaking else color)
 
 
 # ---------------------------------------------------------------- 调试钩子（仅供 MCP 运行态验证）
@@ -278,5 +309,5 @@ func debug_state() -> Dictionary:
 		"line_index": _line_index,
 		"typed_chars": _typed_chars,
 		"full_len": _text_label.text.length(),
-		"name": _name_label.text,
+		"name": _speaker_name,
 	}
