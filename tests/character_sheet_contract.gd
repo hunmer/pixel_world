@@ -104,8 +104,8 @@ func _run() -> void:
 	# 5) 纯逻辑朝向规则（等距约定：dx/dy 同号=朝向/远离相机轴 → front/back；
 	#    异号=横切轴 → side+镜像。4 向网格移动在 45° 族 yaw 下恒为对角位移，
 	#    最近主轴量化会恒 side，必须按符号分开两条对角轴）。
-	# 映射表（yaw=PI/4 实测屏幕位移）：W(-z)=(+,+)→front、S(+z)=(-,-)→back、
-	# D(+x)=(+,-)→side flip、A(-x)=(-,+)→side 不翻。
+	# 映射表（yaw=PI/4 运行时实测）：E(+x)=(+,+)→front、W(-x)=(-,-)→back、
+	# S(+z)=(-,+)→side 不翻、N(-z)=(+,-)→side flip。
 	var diag_down_right := CharacterSheet.resolve_facing(Vector2(10, 4))  # 朝向相机对角
 	_expect(diag_down_right[&"frame"] == CharacterSheet.FRAME_FRONT and diag_down_right[&"flip"] == false,
 		"resolve_facing(朝相机对角 +,+) 应 front 不翻转")

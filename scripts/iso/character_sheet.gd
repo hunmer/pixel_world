@@ -86,8 +86,8 @@ static func pixel_size() -> float:
 ##   dx/dy 同号（朝向/远离相机的对角轴）：dy>0（朝向相机）→ front，否则 → back；
 ##   dx/dy 异号（横切对角轴）→ side，flip = dx>0（side 原图朝左）。
 ## 退化（对角世界朝向/未来 8 向移动）：dy≈0 → side；dx≈0 → front/back。
-## 映射表（yaw=PI/4）：W(-z)=front、S(+z)=back、D(+x)=side flip、A(-x)=side 不翻；
-## 相机每转 90° 同一世界方向换屏侧，映射随屏幕位移自动跟随。
+## 映射表（yaw=PI/4 运行时实测）：E(+x)=front、W(-x)=back、S(+z)=side 不翻、
+## N(-z)=side flip；相机每转 90° 同一世界方向换屏侧，映射随屏幕位移自动跟随。
 static func resolve_facing(screen_delta: Vector2) -> Dictionary:
 	var dx := screen_delta.x
 	var dy := screen_delta.y
