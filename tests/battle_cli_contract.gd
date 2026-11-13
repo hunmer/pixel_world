@@ -22,6 +22,8 @@ func _run() -> void:
 	_test_cli_bad_args(project)
 	_test_cli_assertion_fail(project)
 	_test_cli_illegal_action(project)
+	_test_cli_stalemate_exit3(project)
+	_test_cli_output_fail_exit4(project)
 	if _failures > 0:
 		push_error("[battle_cli_contract] FAILED: %d 处断言未过" % _failures)
 		quit(1)
@@ -164,3 +166,46 @@ func _test_cli_illegal_action(project: String) -> void:
 			_expect(false, "result.json 可解析")
 	else:
 		_expect(false, "result.json 已生成（非法操作也写盘）")
+
+
+## 僵持保护：max_turns 到达（双方打不死）→ 子进程 exit 3，战报仍写盘。
+func _test_cli_stalemate_exit3(project: String) -> void:
+	print("[cli 僵持上限 exit 3]")
+	_clean_dir("battle_reports/test_cli_contract/stalemate")
+	var out_dir := ProjectSettings.globalize_path("user://") + "battle_reports/test_cli_contract/stalemate"
+	var tmp := ProjectSettings.globalize_path("user://") + "cli_stalemate_scenario.json"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	f.store_string(JSON.stringify({
+		"version": 1, "id": "cli_stalemate", "seed": 42,
+		"battlefield": "res://data/battlefields/arena_1v1.json",
+		"limits": {"max_turns": 1},
+		"overrides": {"u_p_0": {"hp": 999}, "u_e_0": {"hp": 999}},
+		"factions": {"player": {"mode": "ai"}, "enemy": {"mode": "ai"}},
+	}))
+	f.close()
+	var r := _run_cli(project, ["--scenario", tmp, "--out", out_dir])
+	_expect(int(r["code"]) == 3, "max_turns 僵持 → exit 3")
+	var res_path := out_dir + "/result.json"
+	if FileAccess.file_exists(res_path):
+		var parsed = JSON.parse_string(FileAccess.open(res_path, FileAccess.READ).get_as_text())
+		if parsed is Dictionary:
+			_expect(String((parsed as Dictionary).get("outcome", {}).get("stop_reason", "")) == "max_turns", "stop_reason==max_turns")
+		else:
+			_expect(false, "result.json 可解析")
+	else:
+		_expect(false, "result.json 已生成（僵持也写盘）")
+
+
+## 输出失败：--out 指向一个已存在的普通文件 → 建目录失败 → exit 4。
+func _test_cli_output_fail_exit4(project: String) -> void:
+	print("[cli 输出失败 exit 4]")
+	var base := ProjectSettings.globalize_path("user://") + "battle_reports/test_cli_contract"
+	DirAccess.make_dir_recursive_absolute(base)
+	var block_path := base + "/blockfile"
+	var f := FileAccess.open(block_path, FileAccess.WRITE)
+	f.store_string("not a directory")
+	f.close()
+	var r := _run_cli(project, ["--scenario", FIXTURE_QUICK_DUEL, "--out", block_path])
+	_expect(int(r["code"]) == 4, "--out 指向已存在文件 → exit 4（%s）" % r["stdout"].substr(-160).replace("\n", " "))
+	# 清理阻塞文件
+	DirAccess.open(base).remove("blockfile")

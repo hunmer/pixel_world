@@ -107,7 +107,7 @@
 
 输出目录：`--out <dir>`，缺省 `user://battle_reports/<scenario_id>/run_<seed>/`（独立快照，不覆盖）。
 
-- **events.jsonl** —— 每行一个事件的 JSON。公共字段：`seq`（全局序号）、`turn`、`phase`、`actor`、`source`（`script` / `ai` / `runner` / `resolver`）。事件类型：`battle_start`（seed + 初始地图 + 全部单位快照）、`phase_start`、`move`（from/to/path）、`attack`（命中/未命中/必杀/反击/追击/双方伤害与血量）、`skill`（MP 扣减/冷却/逐目标命中）、`item`（剩余次数/HP·MP 变化）、`death`、`exp`、`level_up`、`wait`、`turn_end`、`battle_end`（winner）、`stop`（停止原因）。
+- **events.jsonl** —— 每行一个事件的 JSON。公共字段：`seq`（全局序号）、`turn`、`phase`、`actor`、`source`（`script` / `ai` / `runner` / `resolver`）。事件类型：`battle_start`（seed + 初始地图 + 全部单位快照）、`phase_start`、`move`（from/to/path）、`attack`（命中/未命中/必杀/反击/追击/双方伤害与血量）、`skill`（MP 扣减/冷却/逐目标命中）、`item`（剩余次数/HP·MP 变化）、`death`、`exp`、`level_up`（升到几级 + `gains` 各属性成长明细）、`wait`、`turn_end`、`battle_end`（winner）、`stop`（停止原因）。
 - **result.json** —— 版本 / seed / 来源 / outcome（winner、battle_over、stop_reason、turns、steps）/ limits / 初始与最终全体单位快照（含死亡单位）/ 逐条断言评估（passed + 实际值 + 人读 summary）。
 - **summary.txt** —— 人读摘要（事件流水 + 最终单位 + 断言结果）。
 

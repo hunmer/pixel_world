@@ -446,7 +446,15 @@ func _emit_deaths_and_exp(actor: Dictionary, outcome: Dictionary) -> void:
 			"levels": int((exp.get(&"levels", []) as Array).size()),
 		})
 		for lv in (exp.get(&"levels", []) as Array):
-			_emit({"type": &"level_up", "actor": actor[&"id"], "level": int(lv), "source": &"resolver"})
+			# resolver 的 levels 元素是 {level:int, gains:{stat:{from,to}}}（不是裸 int）
+			var lv_info: Dictionary = lv if lv is Dictionary else {}
+			_emit({
+				"type": &"level_up",
+				"actor": actor[&"id"],
+				"level": int(lv_info.get("level", 0)),
+				"gains": lv_info.get("gains", {}),
+				"source": &"resolver",
+			})
 	_check_battle_end()
 
 
