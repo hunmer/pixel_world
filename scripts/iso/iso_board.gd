@@ -47,7 +47,8 @@ func pan(dx_screen: float, dy_screen: float) -> void:
 	camera.focus_position -= to - from
 
 func zoom_by(factor: float, anchor_screen: Vector2, _viewport_size: Vector2) -> void:
-	var step := -1 if factor < 1.0 else 1
+	# factor<1 = 放大（调用方约定：滚轮上/捏合张开传 1/factor<1），与世界 _zoom_step(+1) 同向。
+	var step := 1 if factor < 1.0 else -1
 	var new_idx := clampi(_zoom_index + step, 0, ZOOM_LEVELS.size() - 1)
 	if new_idx == _zoom_index:
 		return

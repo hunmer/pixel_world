@@ -627,23 +627,25 @@ func _input(event: InputEvent) -> void:
 				_space_pan_active = false
 			get_viewport().set_input_as_handled()
 			return
-		elif event is InputEventMagnifyGesture:
-			var g := event as InputEventMagnifyGesture
-			if battle_ui.is_over_ui(g.position):
-				return
-			var factor := clampf(1.0 / g.factor, 0.5, 2.0)
+	# 捏合/滚动手势分支必须与上面的 Key 分支平级——
+	# 曾误写成 elif 挂在 `if event is InputEventKey` 内，手势事件永远不可能是 Key，整段成为死代码。
+	if event is InputEventMagnifyGesture:
+		var g := event as InputEventMagnifyGesture
+		if battle_ui.is_over_ui(g.position):
+			return
+		var factor := clampf(1.0 / g.factor, 0.5, 2.0)
+		board.zoom_by(factor, g.position, get_viewport().get_visible_rect().size)
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventPanGesture:
+		var g := event as InputEventPanGesture
+		if battle_ui.is_over_ui(g.position):
+			return
+		if absf(g.delta.y) > absf(g.delta.x):
+			var factor := clampf(1.0 + g.delta.y * 0.08, 0.75, 1.25)
 			board.zoom_by(factor, g.position, get_viewport().get_visible_rect().size)
 			get_viewport().set_input_as_handled()
-			return
-		elif event is InputEventPanGesture:
-			var g := event as InputEventPanGesture
-			if battle_ui.is_over_ui(g.position):
-				return
-			if absf(g.delta.y) > absf(g.delta.x):
-				var factor := clampf(1.0 + g.delta.y * 0.08, 0.75, 1.25)
-				board.zoom_by(factor, g.position, get_viewport().get_visible_rect().size)
-				get_viewport().set_input_as_handled()
-			return
+		return
 
 
 func _unhandled_input(event: InputEvent) -> void:
