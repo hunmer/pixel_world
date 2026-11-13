@@ -191,7 +191,7 @@ func coord_for(x: int, y: int) -> Vector2:
 ## 真实顶面中心：2D 与贴图 TOP_CENTER_OFFSET 对齐；3D 与实际单块/柱顶同层。
 ## coord_for 保留旧战斗站立层契约，编辑器高光/锚点/拾取统一改用这里。
 func top_center_for(x: int, y: int) -> Vector2:
-	var level := _visual_top_level(x, y)
+	var level := visual_top_level(x, y)
 	var camera := _active_camera()
 	if camera != null:
 		return IsoProjection.world_to_screen(camera, IsoProjection.grid_to_world(Vector2i(x, y), level))
@@ -201,7 +201,7 @@ func top_center_for(x: int, y: int) -> Vector2:
 ## 顶面多边形（上、右、下、左），与 isometric_column_batch._terrain_top_corners 同构。
 func top_polygon_for(x: int, y: int) -> PackedVector2Array:
 	var cell := Vector2i(x, y)
-	var level := _visual_top_level(x, y)
+	var level := visual_top_level(x, y)
 	var camera := _active_camera()
 	if camera != null:
 		var center := IsoProjection.grid_to_world(cell, level)
@@ -223,9 +223,14 @@ func top_polygon_for(x: int, y: int) -> PackedVector2Array:
 	])
 
 
-func _visual_top_level(x: int, y: int) -> int:
+## 单位/描边/菜单锚定的可视顶面层（各格最上块顶面）。
+## 显式 block_layout 单层块顶面=cell_z；旧柱体模式陆地=stand_level-1（柱只建
+## 0..height-1 块）、水面=stand_level。
+func visual_top_level(x: int, y: int) -> int:
 	if has_explicit_block_layout():
 		return stand_level(x, y)
+	if not _in_bounds(Vector2i(x, y)):
+		return 0
 	# 旧陆柱最上块 level=height-1；旧水面 block.level=height。
 	return stand_level(x, y) - (0 if _tile_type(x, y) == &"water" else 1)
 
@@ -260,7 +265,7 @@ func pick_cell(screen_pos: Vector2, _viewport_size: Vector2) -> Vector2i:
 
 func _pick_visual_top_level(cell: Vector2i) -> float:
 	# 拾取必须落在玩家实际看到的顶面；旧陆柱站立层比最上块高一层。
-	return float(_visual_top_level(cell.x, cell.y)) if _in_bounds(cell) else -1.0
+	return float(visual_top_level(cell.x, cell.y)) if _in_bounds(cell) else -1.0
 
 
 ## 全局（viewport canvas）坐标 → 格子。逐层尝试：命中层的投影点落在该格柱顶。
@@ -283,7 +288,7 @@ func pick_world(world: Vector2) -> Vector2i:
 		var candidate := IsoCoords.to_cell(
 			local - ColumnBatchScript.TOP_CENTER_OFFSET + Vector2(0.0, lvl * IsoCoords.LEVEL_H)
 		)
-		if _in_bounds(candidate) and _visual_top_level(candidate.x, candidate.y) == lvl:
+		if _in_bounds(candidate) and visual_top_level(candidate.x, candidate.y) == lvl:
 			return candidate
 	var fallback := IsoCoords.to_cell(local)
 	if _in_bounds(fallback):

@@ -282,7 +282,7 @@ func _setup_b2_render() -> void:
 		board, grid, block_titles,
 		Callable(self, "_b2_cell_to_screen"),
 		Callable(renderer, "sort_for"),
-		Callable(renderer, "stand_level")
+		Callable(renderer, "visual_top_level")
 	)
 	board.center_on_map(chapter.width, chapter.height)
 	# B2 相机按侧栏宽度预留右侧取景（与 B1 世界相机的预留对齐；battle_ui 侧栏同宽覆盖）。
@@ -373,7 +373,7 @@ func _build_ui() -> void:
 	battle_ui.setup(board, grid, _unit_sprites, turn)
 	# B1 没有 IsoBoard；菜单定位与范围层共用同一套真实顶面投影。
 	battle_ui.cell_screen_fn = Callable(self, "_b1_cell_to_screen" if _b1_mode else "_b2_cell_to_screen")
-	battle_ui.level_fn = Callable(self, "_b1_cell_level") if _b1_mode else Callable(renderer, "stand_level")
+	battle_ui.level_fn = Callable(self, "_b1_cell_level") if _b1_mode else Callable(renderer, "visual_top_level")
 	add_child(battle_ui)
 	_presentation_audio = AudioStreamPlayer.new()
 	_presentation_audio.name = "PresentationAudio"
@@ -541,9 +541,9 @@ func _spawn_unit_sprite(u: Dictionary) -> void:
 		_world.add_child(us)
 		us.setup_world(u, _world, stand_level, _world_origin)
 	else:
-		# B2 切场景模式：挂 board 下，注入 renderer.stand_level 支持柱顶站立
+		# B2 切场景模式：挂 board 下，注入 renderer.visual_top_level 站上可视柱顶
 		board.add_child(us)
-		us.setup(u, board, Callable(renderer, "stand_level"))
+		us.setup(u, board, Callable(renderer, "visual_top_level"))
 	_unit_sprites[u.id] = us
 
 
@@ -554,10 +554,10 @@ func _debug_print_unit_alignment() -> void:
 		if us == null:
 			continue
 		var pos: Vector2i = u.position
-		# B2 等距渲染下单位站在地形高度上（renderer.stand_level）；B1 就地模式无 renderer，退回 0 层
+		# B2 等距渲染下单位站在可视柱顶（renderer.visual_top_level）；B1 就地模式无 renderer，退回 0 层
 		var lvl := 0
 		if renderer != null:
-			lvl = renderer.stand_level(pos.x, pos.y)
+			lvl = renderer.visual_top_level(pos.x, pos.y)
 		var projection_pos := pos
 		var projection_camera: Camera3D = null
 		if _b1_mode:
@@ -1055,7 +1055,7 @@ func _spawn_float_text(u: Dictionary, text: String, color: Color, font_size: int
 		var lvl: int = _world.cell_stand_level(world_cell)
 		screen = _world._grid_to_screen(world_cell, float(lvl))
 	else:
-		var lvl: int = renderer.stand_level(u.position.x, u.position.y) if renderer != null else 0
+		var lvl: int = renderer.visual_top_level(u.position.x, u.position.y) if renderer != null else 0
 		screen = board.cell_to_screen(u.position.x, u.position.y, float(lvl))
 	lbl.position = screen + Vector2(0, -50) - Vector2(20, 30)
 	battle_ui.get_float_text_container().add_child(lbl)

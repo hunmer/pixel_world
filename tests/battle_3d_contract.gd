@@ -138,9 +138,9 @@ func _run() -> void:
 	var first_unit: Dictionary = b2.grid.units.values()[0]
 	var first_sprite: Node3D = b2._unit_sprites[first_unit.id]
 	var expected_world := IsoProjection.grid_to_world(
-		first_unit.position, float(b2.renderer.stand_level(first_unit.position.x, first_unit.position.y))
+		first_unit.position, float(b2.renderer.visual_top_level(first_unit.position.x, first_unit.position.y))
 	)
-	_expect(first_sprite.global_position.distance_to(expected_world) < 0.001, "B2 单位未落在柱顶")
+	_expect(first_sprite.global_position.distance_to(expected_world) < 0.001, "B2 单位未落在可视柱顶")
 	var cell_screen: Vector2 = b2.renderer.top_center_for(first_unit.position.x, first_unit.position.y)
 	_expect(b2.renderer.pick_cell(cell_screen, root.get_visible_rect().size) == first_unit.position,
 		"B2 Camera3D 柱顶拾取失败")

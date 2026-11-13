@@ -65,7 +65,7 @@ signal presentation_finished(kind: StringName, skipped: bool)
 
 # ---- 注入的只读引用 ----
 var board: IsoBoard
-## 可选：柱顶高度函数（BattlefieldRenderer.stand_level，B2 等距方块模式注入）
+## 可选：柱顶高度函数（BattlefieldRenderer.visual_top_level，B2 等距方块模式注入）
 var level_fn: Callable = Callable()
 ## B1/B2 统一注入 cell → 屏幕坐标，避免 B1 没有 IsoBoard 时菜单定位中断。
 var cell_screen_fn: Callable = Callable()
