@@ -7,10 +7,14 @@ extends PanelContainer
 
 const PANEL_WIDTH := 360.0
 
-const HELP_BG := Color(0.035, 0.055, 0.075, 0.90)
-const BORDER := Color(0.25, 0.37, 0.43, 0.88)
-const TEXT_SECONDARY := Color(0.56, 0.68, 0.71)
-const ACCENT := Color(0.40, 0.86, 0.76)
+const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+
+## 配色常量统一取自 ui_theme.gd（本文件别名保持既有引用不变）。
+const HELP_BG := UIThemeScript.HELP_BG
+const BORDER := UIThemeScript.BORDER
+const TEXT_SECONDARY := UIThemeScript.TEXT_SECONDARY
+const ACCENT := UIThemeScript.ACCENT
 
 var _tabs: TabContainer
 var _log_label: RichTextLabel
@@ -26,24 +30,20 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
 	offset_left = -PANEL_WIDTH
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	add_theme_stylebox_override("panel", _panel_style())
+	add_theme_stylebox_override("panel", UIThemeScript.dock_panel_style())
 	_build_tabs()
 	_attach_panku()
 
 
 func _build_tabs() -> void:
+	# Tab 样式统一走 ui_theme（页签三态与面板底）
 	_tabs = TabContainer.new()
 	_tabs.name = "SideTabs"
 	_tabs.custom_minimum_size = Vector2(PANEL_WIDTH - 16.0, 0.0)
 	_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_tabs.add_theme_font_size_override("font_size", 13)
-	var tab_panel := StyleBoxFlat.new()
-	tab_panel.bg_color = Color(0.02, 0.03, 0.045, 0.55)
-	tab_panel.border_color = BORDER
-	tab_panel.border_width_left = 1
-	tab_panel.border_width_right = 1
-	tab_panel.border_width_bottom = 1
-	_tabs.add_theme_stylebox_override("panel", tab_panel)
+	_tabs.add_theme_stylebox_override("panel", UIThemeScript.tab_panel_style())
+	UIThemeScript.apply_tab_styles(_tabs)
 	add_child(_tabs)
 
 	var output_tab := VBoxContainer.new()
@@ -57,38 +57,23 @@ func _build_tabs() -> void:
 	toolbar.name = "OutputToolbar"
 	toolbar.add_theme_constant_override("separation", 8)
 	output_tab.add_child(toolbar)
-	var clear_btn := Button.new()
+	var clear_btn := UIFactoryScript.button("清空", _clear_log)
 	clear_btn.name = "ClearLogBtn"
-	clear_btn.text = "清空"
 	clear_btn.tooltip_text = "清空日志（同步清空 Panku native_logger 缓冲）"
-	clear_btn.add_theme_font_size_override("font_size", 12)
-	clear_btn.pressed.connect(_clear_log)
 	toolbar.add_child(clear_btn)
-	var source_label := Label.new()
+	var source_label := UIFactoryScript.label("引擎日志 · info/warning/error", 10, TEXT_SECONDARY)
 	source_label.name = "LogSource"
-	source_label.text = "引擎日志 · info/warning/error"
 	source_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	source_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	source_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	source_label.add_theme_font_size_override("font_size", 10)
-	source_label.add_theme_color_override("font_color", TEXT_SECONDARY)
 	toolbar.add_child(source_label)
 
-	# 日志正文：与原左上角覆盖层同一份 bbcode
-	_log_label = RichTextLabel.new()
-	_log_label.name = "LogLabel"
-	_log_label.bbcode_enabled = true
-	_log_label.scroll_following = true
+	# 日志正文：与原左上角覆盖层同一份 bbcode（统一走 ui_factory.log_label）
+	_log_label = UIFactoryScript.log_label()
 	_log_label.scroll_active = true
-	_log_label.selection_enabled = true
 	_log_label.context_menu_enabled = true
 	_log_label.shortcut_keys_enabled = true
-	_log_label.focus_mode = Control.FOCUS_CLICK
-	_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_log_label.add_theme_font_size_override("normal_font_size", 12)
-	_log_label.add_theme_color_override("default_color", Color(0.85, 0.9, 0.9))
-	_log_label.text = "（等待日志…）"
 	output_tab.add_child(_log_label)
 
 
@@ -146,17 +131,3 @@ func _clear_log() -> void:
 		_logger_module.logger_ui.clear_all()
 	else:
 		_log_label.text = ""
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	# 不透明停靠面板：作为右侧栏窗格，不透出底下的游戏画面（分栏布局），
-	# 无圆角/阴影（贴边停靠，不做悬浮卡片效果）。
-	style.bg_color = Color(0.035, 0.055, 0.075, 1.0)
-	style.border_color = BORDER
-	style.border_width_left = 1
-	style.content_margin_left = 7.0
-	style.content_margin_top = 3.0
-	style.content_margin_right = 7.0
-	style.content_margin_bottom = 3.0
-	return style

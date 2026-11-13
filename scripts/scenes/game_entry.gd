@@ -6,6 +6,9 @@
 
 extends Control
 
+const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+
 const GAME_SCENE := "res://scenes/Game.tscn"
 const BATTLE_SCENE := "res://scenes/Battle.tscn"
 const EDITOR_SCENE := "res://scenes/MapEditor.tscn"
@@ -71,17 +74,13 @@ func _build_list(notice: String) -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	var title := Label.new()
-	title.text = "战旗 · 选择战场"
-	title.add_theme_font_size_override("font_size", 26)
+	var title := UIFactoryScript.label("战旗 · 选择战场", 26, UIThemeScript.TEXT_MAIN)
 	title.position = Vector2(24, 16)
 	add_child(title)
 
 	if notice != "":
-		_notice_label = Label.new()
-		_notice_label.text = notice.strip_edges()
-		_notice_label.add_theme_font_size_override("font_size", 13)
-		_notice_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.4))
+		_notice_label = UIFactoryScript.label(
+			notice.strip_edges(), 13, UIThemeScript.TOAST_COLOR)
 		_notice_label.position = Vector2(24, 58)
 		_notice_label.size = Vector2(760, 44)
 		_notice_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -109,27 +108,20 @@ func _add_row(item: Dictionary) -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 10)
 
-	var name := Label.new()
-	name.text = String(info.get("name", info.get("file", "?")))
+	var name := UIFactoryScript.label(
+		String(info.get("name", info.get("file", "?"))), 16, UIThemeScript.TEXT_MAIN)
 	name.custom_minimum_size = Vector2(170, 0)
 	hb.add_child(name)
 
-	var st := Label.new()
+	var st := UIFactoryScript.label(_save_summary(save), 12, Color(0.6, 0.75, 0.6))
 	st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	st.text = _save_summary(save)
-	st.add_theme_font_size_override("font_size", 12)
-	st.add_theme_color_override("font_color", Color(0.6, 0.75, 0.6))
 	hb.add_child(st)
 
-	var enter := Button.new()
-	enter.text = "进入"
-	enter.pressed.connect(_on_enter.bind(item))
+	var enter := UIFactoryScript.button("进入", _on_enter.bind(item))
 	hb.add_child(enter)
 
 	if bool(save.get("exists", false)):
-		var reset := Button.new()
-		reset.text = "重置"
-		reset.pressed.connect(_on_reset.bind(item))
+		var reset := UIFactoryScript.button("重置", _on_reset.bind(item))
 		hb.add_child(reset)
 
 	row.add_child(hb)
@@ -156,19 +148,13 @@ func _add_side_buttons() -> void:
 	box.add_theme_constant_override("separation", 12)
 	add_child(box)
 
-	var latest := Button.new()
-	latest.text = "↻ 继续最近战旗"
-	latest.pressed.connect(_on_continue_latest)
+	var latest := UIFactoryScript.button("↻ 继续最近战旗", _on_continue_latest)
 	box.add_child(latest)
 
-	var editor := Button.new()
-	editor.text = "🗺 战场编辑器"
-	editor.pressed.connect(_on_open_editor)
+	var editor := UIFactoryScript.button("🗺 战场编辑器", _on_open_editor)
 	box.add_child(editor)
 
-	var world := Button.new()
-	world.text = "🌍 生态世界"
-	world.pressed.connect(_on_open_world)
+	var world := UIFactoryScript.button("🌍 生态世界", _on_open_world)
 	box.add_child(world)
 
 

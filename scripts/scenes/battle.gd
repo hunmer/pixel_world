@@ -19,6 +19,8 @@ const EncounterTransitionScript = preload("res://scripts/battle/encounter_transi
 const BattlePresentationScript = preload("res://scripts/battle/battle_presentation.gd")
 const ActionAnimScript = preload("res://scripts/battle/action_anim.gd")
 const BattleActionResolver = preload("res://scripts/battle/battle_action_resolver.gd")
+const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 
 var action_anim: Node = null
 var _action_camera_kick_tween: Tween = null
@@ -1044,12 +1046,7 @@ func _spawn_action_float_text(unit_id: StringName, text: String, color: Color, f
 
 ## 通用飘字（ActionAnim/物品用：治疗绿、伤害红、buff 黄、回 MP 蓝）。
 func _spawn_float_text(u: Dictionary, text: String, color: Color, font_size: int = 18) -> void:
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", font_size)
-	lbl.add_theme_color_override("font_color", color)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 4)
+	var lbl := UIFactoryScript.outline_label(text, font_size, color, 4)
 	# 单位脚点由当前 Camera3D 投影到屏幕，再抬升 50px。
 	var screen: Vector2
 	if _b1_mode:
@@ -1229,16 +1226,6 @@ func _cancel_move() -> void:
 	_select_unit(u)
 
 
-func _make_panel_style() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0, 0, 0, 0.88)
-	sb.border_color = Color.WHITE
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(4)
-	sb.set_content_margin_all(4)
-	return sb
-
-
 # ============================================================
 # 托管开关（薄封装：实际状态/编排在 turn_director）
 # ============================================================
@@ -1273,7 +1260,7 @@ func _open_pref_panel() -> void:
 	var panel := Panel.new()
 	panel.size = Vector2(440, 60 + player_units.size() * 34)
 	panel.position = (viewport_size - panel.size) / 2.0
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	pref_panel.add_child(panel)
 
 	var vbox := VBoxContainer.new()
@@ -1281,9 +1268,7 @@ func _open_pref_panel() -> void:
 	vbox.offset_left = 10; vbox.offset_top = 8; vbox.offset_right = -10; vbox.offset_bottom = -8
 	panel.add_child(vbox)
 
-	var title := Label.new()
-	title.text = "托管偏好（仅本场战斗有效）"
-	title.add_theme_font_size_override("font_size", 14)
+	var title := UIFactoryScript.label("托管偏好（仅本场战斗有效）", 14, UIThemeScript.TEXT_MAIN)
 	vbox.add_child(title)
 
 	var scroll := ScrollContainer.new()
@@ -1306,13 +1291,14 @@ func _open_pref_panel() -> void:
 		var row := HBoxContainer.new()
 		list.add_child(row)
 
-		var name_lbl := Label.new()
-		name_lbl.text = "%s [%s]" % [String(u.name), String(ProfessionData.profession_name(u.classId))]
+		var name_lbl := UIFactoryScript.label(
+			"%s [%s]" % [String(u.name), String(ProfessionData.profession_name(u.classId))],
+			16, UIThemeScript.TEXT_MAIN)
 		name_lbl.custom_minimum_size = Vector2(150, 0)
 		row.add_child(name_lbl)
 
 		# 优先目标下拉
-		var target_opt := OptionButton.new()
+		var target_opt := UIFactoryScript.option_button()
 		target_opt.add_item("（无，按策略）", 0)
 		var cur_pref: Dictionary = turn_director.get_pref(u.id)
 		var cur_priority = cur_pref.get(&"priorityTargetId", "")
@@ -1328,7 +1314,7 @@ func _open_pref_panel() -> void:
 		row.add_child(target_opt)
 
 		# 策略下拉
-		var strat_opt := OptionButton.new()
+		var strat_opt := UIFactoryScript.option_button()
 		for i in range(strat_ids.size()):
 			strat_opt.add_item(strat_labels[i], i)
 		var cur_strat = cur_pref.get(&"strategy", PlayerAI.STRATEGY_AUTO)
@@ -1342,9 +1328,7 @@ func _open_pref_panel() -> void:
 		strat_opt.item_selected.connect(_on_pref_strategy_changed.bind(u.id, strat_opt, strat_ids))
 		row.add_child(strat_opt)
 
-	var close_btn := Button.new()
-	close_btn.text = "关闭"
-	close_btn.pressed.connect(_close_pref_panel)
+	var close_btn := UIFactoryScript.button("关闭", _close_pref_panel)
 	vbox.add_child(close_btn)
 
 	pref_panel.visible = true

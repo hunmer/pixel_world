@@ -8,6 +8,8 @@ const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.g
 const SidePanelScript = preload("res://scripts/side_panel.gd")
 const HintBarScript = preload("res://scripts/hint_bar.gd")
 const AIDifficultyScript = preload("res://scripts/systems/ai_difficulty.gd")
+const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 ## 侧栏占用的窗口右侧列宽；main.gd 用它让 3D 视锥让出该列。
 const SIDE_PANEL_WIDTH := SidePanelScript.PANEL_WIDTH
 ## 左侧停靠竖栏宽度（不透明，装战场/设置按钮）；窗口分栏 = 左栏 + 中间舞台 + 右侧栏。
@@ -19,11 +21,12 @@ signal battlefield_picked(path: String)
 ## 用户请求打开地图编辑器（main.gd 接收后切 MapEditor.tscn）
 signal editor_requested()
 
-const HELP_BG := Color(0.035, 0.055, 0.075, 0.90)
-const BORDER := Color(0.25, 0.37, 0.43, 0.88)
-const TEXT_SECONDARY := Color(0.56, 0.68, 0.71)
-const ACCENT := Color(0.40, 0.86, 0.76)
-const ERROR_COLOR := Color(1.0, 0.45, 0.42)
+## 配色常量统一取自 ui_theme.gd（本文件别名保持既有引用不变）。
+const HELP_BG := UIThemeScript.HELP_BG
+const BORDER := UIThemeScript.BORDER
+const TEXT_SECONDARY := UIThemeScript.TEXT_SECONDARY
+const ACCENT := UIThemeScript.ACCENT
+const ERROR_COLOR := UIThemeScript.ERROR
 
 var _bottom_area: VBoxContainer
 ## 战场选择面板（懒创建；null = 关闭）
@@ -113,7 +116,7 @@ func _build_ui() -> void:
 	left_rail.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
 	left_rail.offset_right = LEFT_RAIL_WIDTH
 	left_rail.mouse_filter = Control.MOUSE_FILTER_STOP
-	left_rail.add_theme_stylebox_override("panel", _rail_style())
+	left_rail.add_theme_stylebox_override("panel", UIThemeScript.rail_style())
 	root.add_child(left_rail)
 
 	var left_bar := VBoxContainer.new()
@@ -123,23 +126,19 @@ func _build_ui() -> void:
 	left_rail.add_child(left_bar)
 
 	# 「战场」按钮（JSON 战场加载列表，调试入口）
-	var battlefield_btn := Button.new()
+	var battlefield_btn := UIFactoryScript.button("⚔", toggle_battlefield_panel)
 	battlefield_btn.name = "BattlefieldBtn"
-	battlefield_btn.text = "⚔"
 	battlefield_btn.tooltip_text = "战场列表（O）"
 	battlefield_btn.custom_minimum_size = Vector2(42.0, 42.0)
 	battlefield_btn.add_theme_font_size_override("font_size", 18)
-	battlefield_btn.pressed.connect(toggle_battlefield_panel)
 	left_bar.add_child(battlefield_btn)
 
 	# 「设置」按钮
-	var settings_btn := Button.new()
+	var settings_btn := UIFactoryScript.button("⚙", _open_settings)
 	settings_btn.name = "SettingsBtn"
-	settings_btn.text = "⚙"
 	settings_btn.tooltip_text = "设置"
 	settings_btn.custom_minimum_size = Vector2(42.0, 42.0)
 	settings_btn.add_theme_font_size_override("font_size", 18)
-	settings_btn.pressed.connect(_open_settings)
 	left_bar.add_child(settings_btn)
 
 	# 右侧常驻多 Tab 面板：【输出】tab 承接原左上角屏幕日志（见 side_panel.gd）
@@ -160,7 +159,7 @@ func _open_settings() -> void:
 	panel.name = "SettingsPanel"
 	panel.custom_minimum_size = Vector2(280, 200)
 	panel.position = (vp - panel.custom_minimum_size) / 2.0
-	panel.add_theme_stylebox_override("panel", _panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.float_panel_style())
 	$"HUDRoot".add_child(panel)
 	var vbox := VBoxContainer.new()
 	vbox.offset_left = 12; vbox.offset_top = 8
@@ -168,15 +167,15 @@ func _open_settings() -> void:
 	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
 	# 标题
-	var title := _label("设置", 14, ACCENT)
+	var title := UIFactoryScript.shadow_label("设置", 14, ACCENT)
 	vbox.add_child(title)
 	# 战斗模式选项
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	vbox.add_child(row)
-	var lbl := _label("战斗模式", 12, TEXT_SECONDARY)
+	var lbl := UIFactoryScript.shadow_label("战斗模式", 12, TEXT_SECONDARY)
 	row.add_child(lbl)
-	var opt := OptionButton.new()
+	var opt := UIFactoryScript.option_button()
 	opt.add_item("就地（B1）", 0)
 	opt.add_item("独立场景（B2）", 1)
 	opt.select(0 if Settings.battle_inline_mode else 1)
@@ -189,9 +188,7 @@ func _open_settings() -> void:
 	vbox.add_child(_difficulty_row("敌方 AI 难度", Settings.enemy_ai_difficulty, "enemy"))
 	vbox.add_child(_difficulty_row("托管 AI 难度", Settings.host_ai_difficulty, "host"))
 	# 关闭按钮
-	var close_btn := Button.new()
-	close_btn.text = "关闭"
-	close_btn.pressed.connect(func():
+	var close_btn := UIFactoryScript.button("关闭", func():
 		var p := get_node_or_null("HUDRoot/SettingsPanel")
 		if p != null: p.queue_free()
 	)
@@ -202,9 +199,9 @@ func _open_settings() -> void:
 func _difficulty_row(label_text: String, current: String, kind: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
-	var lbl := _label(label_text, 12, TEXT_SECONDARY)
+	var lbl := UIFactoryScript.shadow_label(label_text, 12, TEXT_SECONDARY)
 	row.add_child(lbl)
-	var opt := OptionButton.new()
+	var opt := UIFactoryScript.option_button()
 	var cur_idx := 0
 	for i in AIDifficultyScript.OPTIONS.size():
 		var entry: Dictionary = AIDifficultyScript.OPTIONS[i]
@@ -255,7 +252,7 @@ func _open_battlefield_panel() -> void:
 	panel.name = "BattlefieldPanel"
 	panel.custom_minimum_size = Vector2(500.0, 0.0)
 	panel.position = Vector2((vp.x - 500.0) / 2.0, 90.0)
-	panel.add_theme_stylebox_override("panel", _panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.float_panel_style())
 	$"HUDRoot".add_child(panel)
 	_battlefield_panel = panel
 
@@ -272,15 +269,13 @@ func _open_battlefield_panel() -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 8)
 	vbox.add_child(head)
-	var title := _label("加载战场（JSON）", 14, ACCENT)
+	var title := UIFactoryScript.shadow_label("加载战场（JSON）", 14, ACCENT)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	var close_btn := Button.new()
-	close_btn.text = "✕ 关闭"
-	close_btn.pressed.connect(close_battlefield_panel)
+	var close_btn := UIFactoryScript.button("✕ 关闭", close_battlefield_panel)
 	head.add_child(close_btn)
 
-	var subtitle := _label("data/battlefields/*.json · 独立场景模式 · O/ESC 关闭", 10, TEXT_SECONDARY)
+	var subtitle := UIFactoryScript.shadow_label("data/battlefields/*.json · 独立场景模式 · O/ESC 关闭", 10, TEXT_SECONDARY)
 	vbox.add_child(subtitle)
 
 	# 可滚动列表
@@ -296,23 +291,21 @@ func _open_battlefield_panel() -> void:
 	scroll.add_child(list)
 
 	# 错误提示行（加载失败时由 main.gd 回填）
-	_battlefield_error_label = _label("", 11, ERROR_COLOR)
+	_battlefield_error_label = UIFactoryScript.shadow_label("", 11, ERROR_COLOR)
 	_battlefield_error_label.visible = false
 	vbox.add_child(_battlefield_error_label)
 
 	# 编辑器入口：打开战场地图编辑器（种子生成地形 / 涂地形 / 放阵营角色，保存即出现在本列表）
-	var editor_btn := Button.new()
+	var editor_btn := UIFactoryScript.button("🛠 打开地图编辑器",
+		func(): editor_requested.emit())
 	editor_btn.name = "OpenEditorBtn"
-	editor_btn.text = "🛠 打开地图编辑器"
-	editor_btn.add_theme_font_size_override("font_size", 12)
-	editor_btn.pressed.connect(func(): editor_requested.emit())
 	vbox.add_child(editor_btn)
 
 	# 填充列表（L1 埋点：面板打开时打印条目数，方便确认扫描正常）
 	var battlefields: Array = BattlefieldLoaderScript.list_battlefields()
 	print("[hud] 战场列表打开：data/battlefields/ 共 %d 个" % battlefields.size())
 	if battlefields.is_empty():
-		list.add_child(_label("（data/battlefields/ 下没有 *.json）", 11, TEXT_SECONDARY))
+		list.add_child(UIFactoryScript.shadow_label("（data/battlefields/ 下没有 *.json）", 11, TEXT_SECONDARY))
 		return
 	for entry in battlefields:
 		list.add_child(_make_battlefield_entry(entry))
@@ -323,7 +316,7 @@ func _make_battlefield_entry(entry: Dictionary) -> Control:
 	var item := VBoxContainer.new()
 	item.add_theme_constant_override("separation", 1)
 
-	var btn := Button.new()
+	var btn := UIFactoryScript.button()
 	btn.text = "%s   （%d×%d · 我方%d/敌方%d）" % [
 		entry.get("name", ""), entry.get("width", 0), entry.get("height", 0),
 		entry.get("players", 0), entry.get("enemies", 0),
@@ -344,7 +337,7 @@ func _make_battlefield_entry(entry: Dictionary) -> Control:
 	if not err.is_empty():
 		desc = "⚠ " + err
 	if not desc.is_empty():
-		item.add_child(_label("    " + desc, 10, ERROR_COLOR if not err.is_empty() else TEXT_SECONDARY))
+		item.add_child(UIFactoryScript.shadow_label("    " + desc, 10, ERROR_COLOR if not err.is_empty() else TEXT_SECONDARY))
 	return item
 
 
@@ -354,50 +347,3 @@ func show_battlefield_error(message: String) -> void:
 		return
 	_battlefield_error_label.text = "加载失败：" + message
 	_battlefield_error_label.visible = true
-
-
-func _label(text_value: String, font_size: int, color: Color) -> Label:
-	var result := Label.new()
-	result.text = text_value
-	result.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	result.add_theme_font_size_override("font_size", font_size)
-	result.add_theme_color_override("font_color", color)
-	result.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.75))
-	result.add_theme_constant_override("shadow_offset_x", 1)
-	result.add_theme_constant_override("shadow_offset_y", 1)
-	return result
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = HELP_BG
-	style.border_color = BORDER
-	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_left = 6
-	style.corner_radius_bottom_right = 6
-	style.content_margin_left = 7.0
-	style.content_margin_top = 3.0
-	style.content_margin_right = 7.0
-	style.content_margin_bottom = 3.0
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
-	style.shadow_size = 4
-	style.shadow_offset = Vector2(0.0, 2.0)
-	return style
-
-
-## 左侧停靠竖栏样式：不透明、贴边、无圆角/阴影（真分栏窗格，不透出游戏画面）
-func _rail_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.035, 0.055, 0.075, 1.0)
-	style.border_color = BORDER
-	style.border_width_right = 1
-	style.content_margin_left = 7.0
-	style.content_margin_top = 10.0
-	style.content_margin_right = 7.0
-	style.content_margin_bottom = 10.0
-	return style

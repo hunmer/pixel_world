@@ -5,6 +5,7 @@
 ## ESC 退出。
 extends Control
 
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 const Registry := preload("res://addons/pixelfx/fx/registry.gd")
 const Categories := preload("res://addons/pixelfx/fx/categories.gd")
 const Baker := preload("res://addons/pixelfx/bake/baker.gd")
@@ -138,13 +139,10 @@ func _build_ui() -> void:
 	top.add_theme_constant_override("separation", 10)
 	add_child(top)
 
-	var title := Label.new()
-	title.text = "pixelfx 画廊"
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", Color(0.95, 0.85, 0.55))
+	var title := UIFactoryScript.label("pixelfx 画廊", 18, Color(0.95, 0.85, 0.55))
 	top.add_child(title)
 
-	_category_option = OptionButton.new()
+	_category_option = UIFactoryScript.option_button()
 	_category_option.add_item("全部分类", 0)
 	_category_option.set_item_metadata(0, "")
 	for i in Categories.categories.size():
@@ -154,13 +152,12 @@ func _build_ui() -> void:
 	_category_option.item_selected.connect(func(_i: int) -> void: _rebuild_grid())
 	top.add_child(_category_option)
 
-	_search_edit = LineEdit.new()
-	_search_edit.placeholder_text = "搜索 id / 名称…"
+	_search_edit = UIFactoryScript.line_edit("搜索 id / 名称…")
 	_search_edit.custom_minimum_size = Vector2(190, 30)
 	_search_edit.text_changed.connect(func(_t: String) -> void: _rebuild_grid())
 	top.add_child(_search_edit)
 
-	_palette_option = OptionButton.new()
+	_palette_option = UIFactoryScript.option_button()
 	_palette_option.add_item("原色", 0)
 	_palette_option.set_item_metadata(0, "")
 	var pal_keys: Array = Px.PAL.keys()
@@ -170,8 +167,7 @@ func _build_ui() -> void:
 	_palette_option.item_selected.connect(_on_palette_selected)
 	top.add_child(_palette_option)
 
-	_count_label = Label.new()
-	_count_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.66))
+	_count_label = UIFactoryScript.label("", 16, Color(0.6, 0.6, 0.66))
 	top.add_child(_count_label)
 
 	_scroll = ScrollContainer.new()
@@ -217,9 +213,8 @@ func _build_ui() -> void:
 	pvbg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_preview_host.add_child(pvbg)
 
-	_preview_info = Label.new()
+	_preview_info = UIFactoryScript.label("", 13, Color.WHITE)
 	_preview_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_preview_info.add_theme_font_size_override("font_size", 13)
 	_preview_info.custom_minimum_size = Vector2(0, 92)
 	v.add_child(_preview_info)
 
@@ -227,31 +222,25 @@ func _build_ui() -> void:
 	row.add_theme_constant_override("separation", 8)
 	v.add_child(row)
 
-	var replay := Button.new()
-	replay.text = "重播"
-	replay.pressed.connect(func() -> void:
+	var replay := UIFactoryScript.button("重播", func() -> void:
 		if _preview_fx:
 			_preview_fx.play())
 	row.add_child(replay)
 	_replay_btn = replay
 
-	var flip_btn := Button.new()
-	flip_btn.text = "翻转"
+	var flip_btn := UIFactoryScript.button("翻转")
 	flip_btn.toggle_mode = true
 	flip_btn.toggled.connect(func(on: bool) -> void:
 		_preview_flip = on
 		_show_preview(_preview_id))
 	row.add_child(flip_btn)
 
-	var seed_btn := Button.new()
-	seed_btn.text = "换种子"
-	seed_btn.pressed.connect(func() -> void:
+	var seed_btn := UIFactoryScript.button("换种子", func() -> void:
 		_preview_seed = randi() % 1000
 		_show_preview(_preview_id))
 	row.add_child(seed_btn)
 
-	_act_toggle = CheckButton.new()
-	_act_toggle.text = "完整演出"
+	_act_toggle = UIFactoryScript.check_button("完整演出")
 	_act_toggle.button_pressed = _preview_act_mode
 	_act_toggle.toggled.connect(func(on: bool) -> void:
 		_preview_act_mode = on

@@ -26,6 +26,9 @@ const DEFEAT_FADE_DURATION := 0.55
 const RESULT_WIN := &"win"
 const RESULT_LOSE := &"lose"
 
+const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+
 const _DEFEAT_SHADER_CODE := """
 shader_type canvas_item;
 uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_nearest;
@@ -81,15 +84,13 @@ func _ensure_widgets() -> void:
 	_stage.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_stage)
-	_skip_button = Button.new()
+	_skip_button = UIFactoryScript.button("跳过演出 (Space)", skip)
 	_skip_button.name = "SkipButton"
-	_skip_button.text = "跳过演出 (Space)"
 	_skip_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_skip_button.offset_left = -186.0
 	_skip_button.offset_top = -58.0
 	_skip_button.offset_right = -18.0
 	_skip_button.offset_bottom = -18.0
-	_skip_button.pressed.connect(skip)
 	add_child(_skip_button)
 	_skip_button.hide()
 
@@ -265,10 +266,8 @@ func _build_opening() -> void:
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_theme_stylebox_override("panel", _panel_style(Color(0.06, 0.08, 0.12, 0.94), _faction_color(unit)))
 		list.add_child(row)
-		var label := Label.new()
-		label.text = _nameplate_text(unit)
-		label.add_theme_font_size_override("font_size", 18)
-		label.add_theme_color_override("font_color", _faction_color(unit))
+		var label := UIFactoryScript.label(
+			_nameplate_text(unit), 18, _faction_color(unit))
 		row.add_child(label)
 		_nameplate_rows.append(row)
 		_nameplate_sent.append(false)
@@ -287,19 +286,14 @@ func _build_opening() -> void:
 	center.add_child(_boss_panel)
 	var boss_box := VBoxContainer.new()
 	_boss_panel.add_child(boss_box)
-	var boss_title := Label.new()
+	var boss_title := UIFactoryScript.label(
+		"BOSS · %s" % String(_boss.get(&"title", "强敌")), 16, Color(0.95, 0.75, 0.25))
 	boss_title.name = "BossTitle"
 	boss_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	boss_title.text = "BOSS · %s" % String(_boss.get(&"title", "强敌"))
-	boss_title.add_theme_font_size_override("font_size", 16)
-	boss_title.add_theme_color_override("font_color", Color(0.95, 0.75, 0.25))
 	boss_box.add_child(boss_title)
-	var boss_name := Label.new()
+	var boss_name := UIFactoryScript.label(_unit_name(_boss), 36, Color(1.0, 0.88, 0.52))
 	boss_name.name = "BossName"
 	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	boss_name.text = _unit_name(_boss)
-	boss_name.add_theme_font_size_override("font_size", 36)
-	boss_name.add_theme_color_override("font_color", Color(1.0, 0.88, 0.52))
 	boss_box.add_child(boss_name)
 
 
@@ -416,30 +410,25 @@ func _build_result(kind: StringName) -> void:
 	box.add_theme_constant_override("separation", 10)
 	panel.add_child(box)
 
-	var title := Label.new()
+	var title := UIFactoryScript.label(
+		String(_result_data.get(&"title", "胜利！" if kind == RESULT_WIN else "败北…")), 42,
+		Color(0.55, 0.95, 0.66) if kind == RESULT_WIN else Color(0.95, 0.48, 0.48))
 	title.name = "ResultTitle"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.text = String(_result_data.get(&"title", "胜利！" if kind == RESULT_WIN else "败北…"))
-	title.add_theme_font_size_override("font_size", 42)
-	title.add_theme_color_override("font_color", Color(0.55, 0.95, 0.66) if kind == RESULT_WIN else Color(0.95, 0.48, 0.48))
 	box.add_child(title)
 
 	if kind == RESULT_WIN:
 		_build_victory_widgets(box)
 	else:
-		var hint := Label.new()
+		var hint := UIFactoryScript.label(
+			String(_result_data.get(&"return_hint", "战斗结束 · 返回战场…")), 18, Color.WHITE)
 		hint.name = "ReturnHint"
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		hint.text = String(_result_data.get(&"return_hint", "战斗结束 · 返回战场…"))
-		hint.add_theme_font_size_override("font_size", 18)
 		box.add_child(hint)
 
 
 func _build_victory_widgets(box: VBoxContainer) -> void:
-	var loot_title := Label.new()
-	loot_title.text = "战利品"
-	loot_title.add_theme_font_size_override("font_size", 17)
-	loot_title.add_theme_color_override("font_color", Color(0.95, 0.80, 0.43))
+	var loot_title := UIFactoryScript.label("战利品", 17, Color(0.95, 0.80, 0.43))
 	box.add_child(loot_title)
 	var loot_list := VBoxContainer.new()
 	loot_list.name = "LootList"
@@ -453,15 +442,12 @@ func _build_victory_widgets(box: VBoxContainer) -> void:
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.09, 0.12, 0.96), Color(0.35, 0.40, 0.50), 7))
 		loot_list.add_child(row)
-		var label := Label.new()
-		label.text = _loot_text(_loot_entries[index])
-		label.add_theme_font_size_override("font_size", 18)
+		var label := UIFactoryScript.label(_loot_text(_loot_entries[index]), 18, UIThemeScript.TEXT_MAIN)
 		row.add_child(label)
 		_loot_rows.append(row)
 		_loot_sent.append(false)
 	if _loot_entries.is_empty():
-		var empty := Label.new()
-		empty.text = "（无）"
+		var empty := UIFactoryScript.label("（无）", 16, UIThemeScript.TEXT_MAIN)
 		loot_list.add_child(empty)
 
 	var stats := HBoxContainer.new()
@@ -480,16 +466,13 @@ func _build_victory_widgets(box: VBoxContainer) -> void:
 	box.add_child(_chapter_card)
 	var chapter_box := VBoxContainer.new()
 	_chapter_card.add_child(chapter_box)
-	var chapter_title := Label.new()
+	var chapter_title := UIFactoryScript.label("章节完成", 24, Color(1.0, 0.86, 0.48))
 	chapter_title.name = "ChapterTitle"
-	chapter_title.text = "章节完成"
 	chapter_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	chapter_title.add_theme_font_size_override("font_size", 24)
-	chapter_title.add_theme_color_override("font_color", Color(1.0, 0.86, 0.48))
 	chapter_box.add_child(chapter_title)
-	var chapter_name := Label.new()
+	var chapter_name := UIFactoryScript.label(
+		String(_result_data.get(&"chapter_title", "")), 16, Color.WHITE)
 	chapter_name.name = "ChapterName"
-	chapter_name.text = String(_result_data.get(&"chapter_title", ""))
 	chapter_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	chapter_box.add_child(chapter_name)
 
@@ -497,15 +480,11 @@ func _build_victory_widgets(box: VBoxContainer) -> void:
 func _add_reward_counter(parent: HBoxContainer, caption: String, value_name: String) -> Label:
 	var pair := HBoxContainer.new()
 	parent.add_child(pair)
-	var caption_label := Label.new()
-	caption_label.text = caption
-	caption_label.add_theme_font_size_override("font_size", 18)
+	var caption_label := UIFactoryScript.label(caption, 18, UIThemeScript.TEXT_MAIN)
 	pair.add_child(caption_label)
-	var value := Label.new()
+	var value := UIFactoryScript.label("", 24, Color(1.0, 0.90, 0.55))
 	value.name = value_name
 	value.custom_minimum_size = Vector2(76, 0)
-	value.add_theme_font_size_override("font_size", 24)
-	value.add_theme_color_override("font_color", Color(1.0, 0.90, 0.55))
 	pair.add_child(value)
 	return value
 
@@ -695,10 +674,5 @@ func _faction_color(unit: Dictionary) -> Color:
 
 
 func _panel_style(background: Color, border: Color, margin: int = 10) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(5)
-	style.set_content_margin_all(margin)
-	return style
+	# 卡片配色随演出内容变化，结构统一走 ui_theme.flat_style（1px 边 / 圆角 5）
+	return UIThemeScript.flat_style(background, border, 1, 5, float(margin))

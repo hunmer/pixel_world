@@ -176,6 +176,7 @@ func play(event: Dictionary, anim_speed: float = 1.0, skipped: bool = false) -> 
 		direction.y = 0.0
 		direction = direction.normalized()
 		var step_position := start + direction * (IsoProjection.GRID_STEP * 0.5)
+		attacker.set_pose(CharacterSheet.POSE_RUN, direction)
 		await _main_property(attacker, "global_position", step_position, STEP_SKILL if skill else STEP_NORMAL)
 	else:
 		await _wait(STEP_SKILL if skill else STEP_NORMAL)
@@ -184,6 +185,8 @@ func play(event: Dictionary, anim_speed: float = 1.0, skipped: bool = false) -> 
 		return
 
 	phase_started.emit(PHASE_STRIKE, event)
+	if attacker != null:
+		attacker.set_pose(CharacterSheet.POSE_ATTACK)
 	_spawn_template(event, attacker_id, target_id)
 	_camera_push(attacker, target, strike_seconds, bool(event.get(&"weakness", false)))
 	await _wait(strike_seconds)
@@ -280,6 +283,7 @@ func _capture_visual_states(event: Dictionary) -> void:
 			&"position": sprite.global_position,
 			&"scale": sprite.scale,
 			&"modulate": sprite.portrait.modulate if sprite.portrait != null else Color.WHITE,
+			&"pose": sprite.get_pose(),
 		}
 
 
@@ -502,6 +506,8 @@ func _react_to_impact(impact: Dictionary) -> void:
 		sprite.portrait.modulate = Color(2.0, 2.0, 2.0, original_modulate.a)
 	var start := sprite.global_position
 	var direction: Vector3 = _impact_world_direction(impact)
+	# hurt 单帧朝左：把朝向设为攻击来源方向，镜像后即为"面朝攻击者后仰"。
+	sprite.set_pose(CharacterSheet.POSE_HURT, -direction)
 	var weakness := bool(impact.get(&"weakness", false))
 	var tween := _effect_tween()
 	if weakness:
@@ -629,6 +635,7 @@ func _restore_visuals() -> void:
 			continue
 		sprite.global_position = state[&"position"]
 		sprite.scale = state[&"scale"]
+		sprite.set_pose(state.get(&"pose", CharacterSheet.POSE_IDLE))
 		if sprite.portrait != null:
 			sprite.portrait.modulate = state[&"modulate"]
 

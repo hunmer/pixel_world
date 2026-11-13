@@ -18,6 +18,25 @@ func _expect(condition: bool, message: String) -> void:
 	push_error(message)
 
 
+## 移动结束后（idle 姿态）立绘呈现必须与最后一步移动朝向一致：
+## 新精灵图按 CharacterSheet 等距约定（front/back/side+镜像）解析；
+## 旧立绘回退路径保持"按屏幕水平方向翻转"的原有约定。
+func _expect_unit_facing_matches_last_step(sprite: UnitSprite3D, label: String) -> void:
+	var cam: Camera3D = sprite._active_camera()
+	var delta := CharacterSheet.facing_screen_delta(cam, sprite.global_position, sprite._facing_world)
+	if sprite._using_sheet:
+		var expected := CharacterSheet.resolve_facing(delta)
+		var frame: int = expected[&"frame"]
+		var atlas := sprite.portrait.texture as AtlasTexture
+		_expect(atlas != null and atlas.region.position.x == frame * CharacterSheet.CELL_SIZE,
+			"%s 移动后朝向帧与最后一步不一致（应 frame=%d）" % [label, frame])
+		_expect(sprite.portrait.flip_h == expected[&"flip"],
+			"%s 移动后镜像与等距朝向约定不一致（delta=%s）" % [label, str(delta)])
+	elif absf(delta.x) > UnitSprite3D.SCREEN_HORIZONTAL_EPSILON:
+		_expect(sprite.portrait.flip_h == ((delta.x > 0.0) != UnitSprite3D.SOURCE_FACES_RIGHT),
+			"%s 移动后未按屏幕水平方向翻转立绘" % label)
+
+
 func _run() -> void:
 	await _run_b2()
 	await _run_b1()
@@ -97,9 +116,7 @@ func _run_b2() -> void:
 	_expect(battle.range_overlay.threat_arrow_count() == 0,
 		"进入移动后行动菜单时应清除威胁抛物线")
 	var sprite: UnitSprite3D = battle._unit_sprites[player.id]
-	if absf(target_screen.x - start_screen.x) > UnitSprite3D.SCREEN_HORIZONTAL_EPSILON:
-		_expect(sprite.portrait.flip_h == ((target_screen.x > start_screen.x) != UnitSprite3D.SOURCE_FACES_RIGHT),
-			"B2 移动后未按屏幕水平方向翻转立绘")
+	_expect_unit_facing_matches_last_step(sprite, "B2")
 	player.hasActed = true
 	battle.battle_ui.update_unit_sprite(player)
 	await process_frame
@@ -168,9 +185,7 @@ func _run_b1() -> void:
 		_expect(battle.mode == battle.Mode.MENU and battle.battle_ui.has_open_menu(),
 			"B1 跨高度移动完成后行动菜单未打开")
 		var sprite: UnitSprite3D = battle._unit_sprites[player.id]
-		if absf(target_screen.x - start_screen.x) > UnitSprite3D.SCREEN_HORIZONTAL_EPSILON:
-			_expect(sprite.portrait.flip_h == ((target_screen.x > start_screen.x) != UnitSprite3D.SOURCE_FACES_RIGHT),
-				"B1 移动后未按屏幕水平方向翻转立绘")
+		_expect_unit_facing_matches_last_step(sprite, "B1")
 		player.hasActed = true
 		battle.battle_ui.update_unit_sprite(player)
 		await process_frame

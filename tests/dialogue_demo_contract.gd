@@ -55,13 +55,12 @@ func _run() -> void:
 	var text_label: Label = scene.get_node("DialoguePanel/DialogueBox/TextLabel")
 	var hint_label: Label = scene.get_node("DialoguePanel/DialogueBox/HintLabel")
 	var panel: Control = scene.get_node("DialoguePanel")
-	var row: Control = scene.get_node("PortraitRow")
-	var left_col: Control = scene.get_node("PortraitRow/PortraitLeftColumn")
-	var right_col: Control = scene.get_node("PortraitRow/PortraitRightColumn")
-	var name_left: Label = scene.get_node("PortraitRow/PortraitLeftColumn/NameLabel")
-	var name_right: Label = scene.get_node("PortraitRow/PortraitRightColumn/NameLabel")
-	var left: Control = scene.get_node("PortraitRow/PortraitLeftColumn/PortraitLeft")
-	var right: Control = scene.get_node("PortraitRow/PortraitRightColumn/PortraitRight")
+	var plate_left: Control = scene.get_node("NamePlateLeft")
+	var plate_right: Control = scene.get_node("NamePlateRight")
+	var name_left: Label = scene.get_node("NamePlateLeft/PlateBox/NameLabel")
+	var name_right: Label = scene.get_node("NamePlateRight/PlateBox/NameLabel")
+	var left: Control = scene.get_node("PortraitLeft")
+	var right: Control = scene.get_node("PortraitRight")
 	var overlay: Control = scene.get_node("EndOverlay")
 
 	var hero_color := Color(scene._speakers["hero"]["color"])
@@ -161,17 +160,32 @@ func _run() -> void:
 	_check(not overlay.visible, "重播后结束层隐藏")
 	_check(name_left.get_theme_color("font_color") == hero_color, "重播后左名称牌恢复高亮")
 
-	# ---- 11. 宽窗口布局（真实视口）：面板贴底宽=视口-80；立绘行在面板上方且不重叠
+	# ---- 11. 宽窗口布局（真实视口）：面板贴底宽=视口-80；立绘贴两侧边、
+	#         底边在对话框上方；名称牌悬浮在对话框上边沿（tab 压边 <=12px）
 	var vsize: Vector2 = scene.get_viewport_rect().size
 	_check(is_equal_approx(panel.size.x, vsize.x - 80.0), "宽窗口面板宽度=视口-80")
 	_check(panel.global_position.y + panel.size.y <= vsize.y + 0.5, "宽窗口面板不越出底边")
 	_check(panel.global_position.x >= 0.0, "宽窗口面板左边不越界")
-	_check(row.global_position.y + row.size.y <= panel.global_position.y + 0.5,
-		"宽窗口立绘行整体在对话框上方（不重叠）")
-	_check(_rect_inside_viewport(name_left, vsize) and _rect_inside_viewport(name_right, vsize),
-		"宽窗口两侧名称牌不被裁切")
+	_check(is_equal_approx(left.global_position.x, 48.0), "宽窗口左立绘贴左边距 48")
+	_check(is_equal_approx(right.global_position.x + right.size.x, vsize.x - 48.0),
+		"宽窗口右立绘贴右边距 48")
+	_check(left.global_position.y + left.size.y <= panel.global_position.y + 0.5
+		and right.global_position.y + right.size.y <= panel.global_position.y + 0.5,
+		"宽窗口立绘底边在对话框上方（不重叠）")
 	_check(_rect_inside_viewport(left, vsize) and _rect_inside_viewport(right, vsize),
 		"宽窗口两侧立绘不被裁切")
+	_check(_rect_inside_viewport(plate_left, vsize) and _rect_inside_viewport(plate_right, vsize),
+		"宽窗口两侧名称牌不被裁切")
+	_check(plate_left.global_position.y < panel.global_position.y
+		and plate_right.global_position.y < panel.global_position.y,
+		"宽窗口名称牌主体在对话框上方")
+	print("  dbg - plate_l=%s plate_r=%s panel_top_y=%.1f vsize=%s" % [
+		str(Rect2(plate_left.global_position, plate_left.size)),
+		str(Rect2(plate_right.global_position, plate_right.size)),
+		panel.global_position.y, str(vsize)])
+	_check(plate_left.global_position.y + plate_left.size.y <= panel.global_position.y + 12.5
+		and plate_right.global_position.y + plate_right.size.y <= panel.global_position.y + 12.5,
+		"宽窗口名称牌仅 tab 压边（<=12px）")
 
 	# ---- 12. 窄窗口布局：挂进 620x420 模拟父容器，锚点自适应不越界
 	var shell := Control.new()
@@ -191,12 +205,18 @@ func _run() -> void:
 	var text_rect := Rect2(text_label.global_position, text_label.size)
 	var panel_rect := Rect2(panel.global_position, panel.size)
 	_check(panel_rect.encloses(text_rect), "窄窗口文本框包含在面板内")
-	var left_rect := Rect2(left_col.global_position, left_col.size)
-	var right_rect := Rect2(right_col.global_position, right_col.size)
-	_check(not left_rect.intersects(right_rect), "窄窗口左右立绘列不重叠")
-	_check(row.global_position.y + row.size.y <= panel.global_position.y + 0.5,
-		"窄窗口立绘行在对话框上方（不重叠）")
-	_check(_rect_inside_viewport(name_left, shell.size) and _rect_inside_viewport(name_right, shell.size),
+	var left_rect := Rect2(left.global_position, left.size)
+	var right_rect := Rect2(right.global_position, right.size)
+	_check(not left_rect.intersects(right_rect), "窄窗口左右立绘不重叠")
+	_check(is_equal_approx(right.global_position.x + right.size.x, shell.size.x - 48.0),
+		"窄窗口右立绘仍贴右缘")
+	_check(left.global_position.y + left.size.y <= panel.global_position.y + 0.5
+		and right.global_position.y + right.size.y <= panel.global_position.y + 0.5,
+		"窄窗口立绘底边在对话框上方（不重叠）")
+	_check(plate_left.global_position.y + plate_left.size.y <= panel.global_position.y + 12.5
+		and plate_right.global_position.y + plate_right.size.y <= panel.global_position.y + 12.5,
+		"窄窗口名称牌仅 tab 压边（<=12px）")
+	_check(_rect_inside_viewport(plate_left, shell.size) and _rect_inside_viewport(plate_right, shell.size),
 		"窄窗口两侧名称牌不被裁切")
 
 	# ---- 13. 窄窗口长句自动换行（第三句为 70+ 字长句）

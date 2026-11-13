@@ -113,17 +113,19 @@ var _logger_module = null
 ## 侧栏宽度：与世界 side_panel.PANEL_WIDTH 对齐 —— B1 就地模式下世界相机已按
 ## 该宽度预留右侧取景（main.gd: _cam.reserved_right_px = GameHud.SIDE_PANEL_WIDTH），
 ## 战斗侧栏同宽覆盖世界侧栏，取景刚好对齐；B2 由 battle.gd 设置 reserved_right_px。
+const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+## 配色常量统一取自 ui_theme.gd（本文件别名保持既有引用不变）。
 const SIDEBAR_WIDTH := 360.0
-const ICON_DIR := "res://addons/at-icons/control/"
-const BG := Color(0.05, 0.07, 0.10, 0.97)
-const PANEL_BORDER := Color(0.25, 0.37, 0.43, 0.9)
-const TEXT_MAIN := Color(0.88, 0.93, 0.95)
-const TEXT_DIM := Color(0.56, 0.68, 0.71)
-const ACCENT := Color(0.40, 0.86, 0.76)
+const BG := UIThemeScript.BG
+const PANEL_BORDER := UIThemeScript.PANEL_BORDER
+const TEXT_MAIN := UIThemeScript.TEXT_MAIN
+const TEXT_DIM := UIThemeScript.TEXT_DIM
+const ACCENT := UIThemeScript.ACCENT
 # 统一样式系统：按钮三态底色，pressed 描边统一走 ACCENT
-const BTN_BG := Color(0.08, 0.11, 0.14, 0.95)
-const BTN_BG_HOVER := Color(0.13, 0.18, 0.22, 0.98)
-const BTN_BG_PRESSED := Color(0.10, 0.26, 0.23, 1.0)
+const BTN_BG := UIThemeScript.BTN_BG
+const BTN_BG_HOVER := UIThemeScript.BTN_BG_HOVER
+const BTN_BG_PRESSED := UIThemeScript.BTN_BG_PRESSED
 
 # battle.gd 的 Mode 枚举镜像（on_set_mode 传 int；与 battle.gd enum Mode 保持一致）
 const MODE_IDLE := 0
@@ -243,7 +245,7 @@ func _build_sidebar(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pre
 	_sidebar.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
 	_sidebar.offset_left = -SIDEBAR_WIDTH
 	_sidebar.mouse_filter = Control.MOUSE_FILTER_STOP
-	_sidebar.add_theme_stylebox_override("panel", _sidebar_panel_style())
+	_sidebar.add_theme_stylebox_override("panel", UIThemeScript.dock_panel_style())
 	add_child(_sidebar)
 
 	var sv := VBoxContainer.new()
@@ -256,7 +258,7 @@ func _build_sidebar(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pre
 	# 标题行：双剑图标 + 文字（图标缺失只显示文字）
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 6)
-	var swords: Texture2D = _icon("swords")
+	var swords: Texture2D = UIThemeScript.icon("swords")
 	if swords != null:
 		var icon_rect := TextureRect.new()
 		icon_rect.texture = swords
@@ -266,114 +268,74 @@ func _build_sidebar(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pre
 		icon_rect.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		title_row.add_child(icon_rect)
-	title_row.add_child(_label("战场情报", 16, ACCENT))
+	title_row.add_child(UIFactoryScript.label("战场情报", 16, ACCENT))
 	sv.add_child(title_row)
 
-	var tabs := TabContainer.new()
-	tabs.name = "InfoTabs"
+	# Tab 样式统一走 ui_factory.tab_container（含页签三态与面板底）
+	var tabs := UIFactoryScript.tab_container("InfoTabs")
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	tabs.add_theme_font_size_override("font_size", 13)
-	tabs.add_theme_stylebox_override("panel", _tab_panel_style())
-	_tab_styles(tabs)
 	sv.add_child(tabs)
 
 	# ---- Tab【回合】：阶段 / 阵营状态 / 结束回合 ----
-	var turn_tab := _new_tab(tabs, "回合", "swords")
-	phase_label = _label("第 1 轮 · 我方行动", 18, TEXT_MAIN)
+	var turn_tab := UIFactoryScript.add_tab(tabs, "回合", "swords")
+	phase_label = UIFactoryScript.label("第 1 轮 · 我方行动", 18, TEXT_MAIN)
 	turn_tab.add_child(phase_label)
 	_add_turn_status_rows(turn_tab)
-	end_turn_btn = Button.new()
+	end_turn_btn = UIFactoryScript.button()
 	end_turn_btn.text = "结束回合 (E)"
 	end_turn_btn.pressed.connect(end_turn_cb)
-	_btn_styles(end_turn_btn)
 	turn_tab.add_child(end_turn_btn)
-	turn_tab.add_child(_label("存活单位实时 HP 与行动状态；全部行动后自动结束回合。", 10, TEXT_DIM))
+	turn_tab.add_child(UIFactoryScript.label("存活单位实时 HP 与行动状态；全部行动后自动结束回合。", 10, TEXT_DIM))
 
 	# ---- Tab【情报】：悬停单位 / 地形详情（show_info_at 更新） ----
-	var info_tab := _new_tab(tabs, "情报", "info")
-	info_label = _label("（鼠标悬停单位或地形查看详情）", 13, TEXT_DIM)
+	var info_tab := UIFactoryScript.add_tab(tabs, "情报", "info")
+	info_label = UIFactoryScript.label("（鼠标悬停单位或地形查看详情）", 13, TEXT_DIM)
 	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_tab.add_child(info_label)
-	info_tab.add_child(_label("右键单位打开完整详情；方向键移动光标同样刷新。", 10, TEXT_DIM))
+	info_tab.add_child(UIFactoryScript.label("右键单位打开完整详情；方向键移动光标同样刷新。", 10, TEXT_DIM))
 
 	# ---- Tab【托管】：托管 / 偏好 /（按需）退出战斗 ----
-	_host_tab = _new_tab(tabs, "托管", "gears")
-	var host_btn := Button.new()
+	_host_tab = UIFactoryScript.add_tab(tabs, "托管", "gears")
+	var host_btn := UIFactoryScript.button()
 	host_btn.pressed.connect(toggle_hosting_cb)
-	_btn_styles(host_btn)
 	_host_tab.add_child(host_btn)
 	# 把 host_btn 引用交给 turn_director（它负责更新按钮文字）—— 通过注入回调
 	if _on_set_host_btn.is_valid():
 		_on_set_host_btn.call(host_btn)
-	var pref_btn := Button.new()
+	var pref_btn := UIFactoryScript.button()
 	pref_btn.text = "托管偏好"
 	pref_btn.pressed.connect(open_pref_cb)
-	_btn_styles(pref_btn)
 	_host_tab.add_child(pref_btn)
-	_host_tab.add_child(_label("托管 = 本场战斗自动代打（敌方回合本就自动）；偏好按单位配置目标与策略。", 10, TEXT_DIM))
+	_host_tab.add_child(UIFactoryScript.label("托管 = 本场战斗自动代打（敌方回合本就自动）；偏好按单位配置目标与策略。", 10, TEXT_DIM))
 
 	# ---- Tab【日志】：引擎/战斗日志（接管 Panku native_logger，浮层不再挂左侧） ----
-	var log_tab := _new_tab(tabs, "日志", "file_terminal")
+	var log_tab := UIFactoryScript.add_tab(tabs, "日志", "file_terminal")
 	var log_toolbar := HBoxContainer.new()
 	log_toolbar.add_theme_constant_override("separation", 8)
 	log_tab.add_child(log_toolbar)
-	var clear_btn := Button.new()
+	var clear_btn := UIFactoryScript.button()
 	clear_btn.text = "清空"
 	clear_btn.tooltip_text = "清空日志（同步清空 Panku native_logger 缓冲）"
-	clear_btn.add_theme_font_size_override("font_size", 12)
 	clear_btn.pressed.connect(_clear_log)
-	_btn_styles(clear_btn)
 	log_toolbar.add_child(clear_btn)
-	var log_source := _label("引擎日志 · info/warning/error", 10, TEXT_DIM)
+	var log_source := UIFactoryScript.label("引擎日志 · info/warning/error", 10, TEXT_DIM)
 	log_source.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	log_source.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	log_toolbar.add_child(log_source)
-	_log_label = RichTextLabel.new()
-	_log_label.name = "LogLabel"
-	_log_label.bbcode_enabled = true
-	_log_label.scroll_following = true
+	_log_label = UIFactoryScript.log_label()
 	_log_label.scroll_active = true
-	_log_label.selection_enabled = true
 	_log_label.context_menu_enabled = true
 	_log_label.shortcut_keys_enabled = true
-	_log_label.focus_mode = Control.FOCUS_CLICK
-	_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_log_label.add_theme_font_size_override("normal_font_size", 12)
-	_log_label.add_theme_color_override("default_color", Color(0.85, 0.9, 0.9))
-	_log_label.text = "（等待日志…）"
 	log_tab.add_child(_log_label)
 	_attach_panku_logger()
 
 	# 底部提示行（贴面板底部，自动换行）
-	var hint := _label("Q/Z·E/X 旋转视角 · R 复位 · 中键拖拽平移 · ESC 取消", 10, TEXT_DIM)
+	var hint := UIFactoryScript.label("Q/Z·E/X 旋转视角 · R 复位 · 中键拖拽平移 · ESC 取消", 10, TEXT_DIM)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sv.add_child(hint)
-
-
-## 新建一个侧栏 Tab：ScrollContainer(只纵向滚) + VBox；设标题与可选图标，返回内容 VBox
-func _new_tab(tabs: TabContainer, title: String, icon_name := "") -> VBoxContainer:
-	var scroll := ScrollContainer.new()
-	scroll.name = "%sScroll" % title
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	tabs.add_child(scroll)
-	var v := VBoxContainer.new()
-	v.name = "%sTab" % title
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_theme_constant_override("separation", 6)
-	scroll.add_child(v)
-	var idx := tabs.get_tab_count() - 1
-	tabs.set_tab_title(idx, title)
-	if icon_name != "":
-		var icon: Texture2D = _icon(icon_name)
-		if icon != null:
-			tabs.set_tab_icon(idx, icon)
-	return v
-
 
 ## 接管 Panku native_logger（照搬 side_panel.gd._attach_panku）：
 ## 把原生屏幕浮层切成 NeverShow（B2 从 Game.tscn 进来没人关它，会挂在页面左侧），
@@ -442,10 +404,9 @@ var _toast: Label = null
 func set_exit_callback(cb: Callable) -> void:
 	if not cb.is_valid():
 		return
-	_exit_btn = Button.new()
+	_exit_btn = UIFactoryScript.button()
 	_exit_btn.text = "⏏ 退出战斗"
 	_exit_btn.pressed.connect(cb)
-	_btn_styles(_exit_btn)
 	if _host_tab != null:
 		_host_tab.add_child(_exit_btn)
 	else:
@@ -456,12 +417,7 @@ func set_exit_callback(cb: Callable) -> void:
 func show_toast(text: String) -> void:
 	if _toast != null and is_instance_valid(_toast):
 		_toast.queue_free()
-	_toast = Label.new()
-	_toast.text = text
-	_toast.add_theme_font_size_override("font_size", 13)
-	_toast.add_theme_color_override("font_color", Color(1.0, 0.72, 0.4))
-	_toast.add_theme_color_override("font_outline_color", Color.BLACK)
-	_toast.add_theme_constant_override("outline_size", 4)
+	_toast = UIFactoryScript.outline_label(text, 13, UIThemeScript.TOAST_COLOR, 4)
 	_toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_toast.offset_left = -280.0
 	_toast.offset_right = 280.0
@@ -593,7 +549,7 @@ func open_unit_detail(u: Dictionary) -> void:
 	# 详情面板挂在 preview_container（屏幕空间，FULL_RECT）
 	var panel := PanelContainer.new()
 	panel.name = "UnitDetailPanel"
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	panel.position = (viewport_size - Vector2(360, 420)) * 0.5
 	panel.custom_minimum_size = Vector2(360, 0)
 	panel.size = Vector2(360, 420)
@@ -610,20 +566,20 @@ func open_unit_detail(u: Dictionary) -> void:
 
 	var faction_text: String = FACTION_NAME.get(u.faction, "")
 	# 标题：阵营色 + 名字 + 职业 + 等级
-	var title := _detail_label(
+	var title := UIFactoryScript.outline_label(
 		"%s · %s [%s] Lv.%d" % [faction_text, String(u.name),
 			ProfessionData.profession_name(u.classId), int(u.level)],
 		18, FACTION_COLOR.get(u.faction, Color.WHITE))
 	vbox.add_child(title)
 
 	# 状态行：HP/MP/经验
-	vbox.add_child(_detail_label(
+	vbox.add_child(UIFactoryScript.outline_label(
 		"HP %d / %d    MP %d / %d    EXP %d" % [
 			int(u.hp), int(s.hp), int(u.get(&"mp", 0)), int(s.get(&"mp", 0)),
 			int(u.get(&"exp", 0))], 14, Color(0.92, 0.95, 0.98)))
 
 	# 全部基础属性
-	vbox.add_child(_detail_label(
+	vbox.add_child(UIFactoryScript.outline_label(
 		("力 %d   魔 %d   技 %d   速 %d\n" +
 		 "防 %d   魔防 %d   运 %d   移动 %d") % [
 			int(s.get(&"str", 0)), int(s.get(&"mag", 0)), int(s.get(&"skl", 0)), int(s.spd),
@@ -631,7 +587,7 @@ func open_unit_detail(u: Dictionary) -> void:
 		14, Color(0.88, 0.93, 0.96)))
 
 	# 攻击范围
-	vbox.add_child(_detail_label(
+	vbox.add_child(UIFactoryScript.outline_label(
 		"攻击射程 %s" % str(ProfessionData.unit_attack_range(u)),
 		14, Color(0.88, 0.93, 0.96)))
 
@@ -639,7 +595,7 @@ func open_unit_detail(u: Dictionary) -> void:
 	var weapon = u.get(&"weapon", null)
 	if weapon is Dictionary and not (weapon as Dictionary).is_empty():
 		var wd: Dictionary = weapon
-		vbox.add_child(_detail_label(
+		vbox.add_child(UIFactoryScript.outline_label(
 			"武器：%s" % String(wd.get(&"name", String(wd.get(&"id", &"")))),
 			14, Color(0.96, 0.84, 0.40)))
 
@@ -655,8 +611,8 @@ func open_unit_detail(u: Dictionary) -> void:
 				skill_lines.append("  • %s（冷却 %d）" % [sn, c])
 			else:
 				skill_lines.append("  • %s" % sn)
-		vbox.add_child(_detail_label("技能：", 14, Color(0.75, 0.92, 0.78)))
-		vbox.add_child(_detail_label("\n".join(skill_lines), 13, Color(0.82, 0.90, 0.84)))
+		vbox.add_child(UIFactoryScript.outline_label("技能：", 14, Color(0.75, 0.92, 0.78)))
+		vbox.add_child(UIFactoryScript.outline_label("\n".join(skill_lines), 13, Color(0.82, 0.90, 0.84)))
 
 	# 背包（含 uses）
 	var items: Array = u.get(&"items", [])
@@ -665,8 +621,8 @@ func open_unit_detail(u: Dictionary) -> void:
 		for ie in items:
 			var iname := ItemData.item_name(ie.get(&"id", &""))
 			item_lines.append("  • %s ×%d" % [iname, int(ie.get(&"uses", 0))])
-		vbox.add_child(_detail_label("背包：", 14, Color(0.74, 0.84, 0.96)))
-		vbox.add_child(_detail_label("\n".join(item_lines), 13, Color(0.80, 0.88, 0.95)))
+		vbox.add_child(UIFactoryScript.outline_label("背包：", 14, Color(0.74, 0.84, 0.96)))
+		vbox.add_child(UIFactoryScript.outline_label("\n".join(item_lines), 13, Color(0.80, 0.88, 0.95)))
 
 	# buff 状态
 	var buffs: Array = u.get(&"buffs", [])
@@ -675,11 +631,11 @@ func open_unit_detail(u: Dictionary) -> void:
 		for b in buffs:
 			buff_lines.append("  • %s %+d（%d 回合）" % [
 				String(b.get(&"stat", &"")), int(b.get(&"value", 0)), int(b.get(&"turns", 0))])
-		vbox.add_child(_detail_label("状态：", 14, Color(0.98, 0.84, 0.30)))
-		vbox.add_child(_detail_label("\n".join(buff_lines), 13, Color(0.95, 0.86, 0.50)))
+		vbox.add_child(UIFactoryScript.outline_label("状态：", 14, Color(0.98, 0.84, 0.30)))
+		vbox.add_child(UIFactoryScript.outline_label("\n".join(buff_lines), 13, Color(0.95, 0.86, 0.50)))
 
 	# 关闭按钮
-	var close_btn := Button.new()
+	var close_btn := UIFactoryScript.button()
 	close_btn.text = "关闭 (ESC)"
 	close_btn.pressed.connect(close_unit_detail)
 	vbox.add_child(close_btn)
@@ -695,19 +651,6 @@ func close_unit_detail() -> void:
 
 func is_unit_detail_open() -> bool:
 	return _unit_detail_panel != null and is_instance_valid(_unit_detail_panel)
-
-
-## 详情面板用的小 Label 工厂（带描边，可指定颜色/字号）。
-func _detail_label(text_value: String, font_size: int, color: Color) -> Label:
-	var lbl := Label.new()
-	lbl.text = text_value
-	lbl.add_theme_font_size_override("font_size", font_size)
-	lbl.add_theme_color_override("font_color", color)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 3)
-	return lbl
-
-
 
 func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> void:
 	on_set_mode.call(MODE_MENU)
@@ -746,14 +689,14 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 	elif board != null:
 		screen = board.cell_to_screen(at_pos.x, at_pos.y, float(menu_level))
 	panel.position = screen - panel.size / 2.0 + Vector2(40, -40)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	menu_container.add_child(panel)
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
 	panel.add_child(vbox)
 	if not targets.is_empty():
-		var b := Button.new()
+		var b := UIFactoryScript.button()
 		b.text = "攻击"
 		b.pressed.connect(func():
 			close_menu()
@@ -763,7 +706,7 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		)
 		vbox.add_child(b)
 	if not usable_skills.is_empty():
-		var bs := Button.new()
+		var bs := UIFactoryScript.button()
 		bs.text = "技能"
 		bs.pressed.connect(func():
 			close_menu()
@@ -772,7 +715,7 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		)
 		vbox.add_child(bs)
 	if not usable_items.is_empty():
-		var bi := Button.new()
+		var bi := UIFactoryScript.button()
 		bi.text = "物品"
 		bi.pressed.connect(func():
 			close_menu()
@@ -780,7 +723,7 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 			_open_item_picker(u)
 		)
 		vbox.add_child(bi)
-	var bwait := Button.new()
+	var bwait := UIFactoryScript.button()
 	bwait.text = "等待"
 	bwait.pressed.connect(func():
 		close_menu()
@@ -813,7 +756,7 @@ func _open_skill_picker(u: Dictionary) -> void:
 	panel.size = Vector2(280, 40 + usable.size() * 44)
 	var vp := get_viewport().get_visible_rect().size
 	panel.position = Vector2(vp.x / 2 - 140, vp.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	menu_container.add_child(panel)
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -824,7 +767,7 @@ func _open_skill_picker(u: Dictionary) -> void:
 		if int(sk[&"cooldown"]) > 0:
 			info += " 冷却%d" % int(sk[&"cooldown"])
 		info += ")"
-		var b := Button.new()
+		var b := UIFactoryScript.button()
 		b.text = info
 		b.custom_minimum_size = Vector2(0, 40)
 		b.tooltip_text = String(sk[&"desc"])
@@ -860,14 +803,14 @@ func _open_skill_target_picker(u: Dictionary, targets: Array, skill_id: StringNa
 	var panel := Panel.new()
 	panel.size = Vector2(150, 30 + targets.size() * 28)
 	panel.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 75, get_viewport().get_visible_rect().size.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	menu_container.add_child(panel)
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
 	panel.add_child(vbox)
 	for t in targets:
-		var b := Button.new()
+		var b := UIFactoryScript.button()
 		b.text = "▸ " + String(t.name)
 		b.pressed.connect(func():
 			close_menu()
@@ -896,7 +839,7 @@ func _show_skill_preview(caster: Dictionary, target: Dictionary, skill_id: Strin
 	panel.size = Vector2(230, 110)
 	# 贴侧栏左侧（避开右侧 360 宽侧栏）
 	panel.position = Vector2(get_viewport().get_visible_rect().size.x - 250.0 - SIDEBAR_WIDTH, 60)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	preview_container.add_child(panel)
 	var lines: Array = [
 		"%s · %s" % [String(sk[&"name"]), String(sk[&"type"])],
@@ -922,7 +865,7 @@ func _open_item_picker(u: Dictionary) -> void:
 	panel.size = Vector2(280, 40 + usable.size() * 40)
 	var vp := get_viewport().get_visible_rect().size
 	panel.position = Vector2(vp.x / 2 - 140, vp.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	menu_container.add_child(panel)
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -931,7 +874,7 @@ func _open_item_picker(u: Dictionary) -> void:
 	for ie in usable:
 		var entry: Dictionary = ie[&"entry"]
 		var idef: Dictionary = ie[&"def"]
-		var b := Button.new()
+		var b := UIFactoryScript.button()
 		b.text = "%s ×%d" % [String(idef[&"name"]), int(entry.get(&"uses", 0))]
 		b.custom_minimum_size = Vector2(0, 36)
 		b.tooltip_text = String(idef[&"desc"])
@@ -967,14 +910,14 @@ func _open_item_target_picker(u: Dictionary, targets: Array, _item_id: StringNam
 	var panel := Panel.new()
 	panel.size = Vector2(150, 30 + targets.size() * 28)
 	panel.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 75, get_viewport().get_visible_rect().size.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	menu_container.add_child(panel)
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
 	panel.add_child(vbox)
 	for t in targets:
-		var b := Button.new()
+		var b := UIFactoryScript.button()
 		b.text = "▸ " + String(t.name)
 		b.pressed.connect(func():
 			close_menu()
@@ -991,14 +934,14 @@ func _open_attack_target_picker(u: Dictionary, targets: Array) -> void:
 	var panel := Panel.new()
 	panel.size = Vector2(150, 30 + targets.size() * 28)
 	panel.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 75, get_viewport().get_visible_rect().size.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	menu_container.add_child(panel)
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
 	panel.add_child(vbox)
 	for t in targets:
-		var b := Button.new()
+		var b := UIFactoryScript.button()
 		b.text = "▸ " + String(t.name)
 		b.pressed.connect(func():
 			close_menu()
@@ -1029,7 +972,7 @@ func _show_preview_panel(attacker: Dictionary, defender: Dictionary, prev: Dicti
 	panel.size = Vector2(210, 150)
 	# 贴侧栏左侧（避开右侧 360 宽侧栏）
 	panel.position = Vector2(get_viewport().get_visible_rect().size.x - 230.0 - SIDEBAR_WIDTH, 60)
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
 	preview_container.add_child(panel)
 	var lines := [
 		"%s → %s" % [String(attacker.name), String(defender.name)],
@@ -1068,91 +1011,9 @@ var _on_menu_closed: Callable
 func set_menu_closed_callback(cb: Callable) -> void:
 	_on_menu_closed = cb
 
-
-func _make_panel_style() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0, 0, 0, 0.88)
-	sb.border_color = Color.WHITE
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(4)
-	sb.set_content_margin_all(4)
-	return sb
-
-
 # ============================================================
 # 侧栏 / Tab 样式辅助（照搬 map_editor.gd 的配色与做法）
 # ============================================================
-## 通用扁平样式盒（侧栏系样式的基础）
-func _flat_style(bg: Color, border: Color, border_width := 1, corner_radius := 6) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(border_width)
-	sb.set_corner_radius_all(corner_radius)
-	sb.set_content_margin_all(6)
-	return sb
-
-
-## 侧栏本体：不透明深底 + 细边
-func _sidebar_panel_style() -> StyleBoxFlat:
-	var sb := _flat_style(BG, PANEL_BORDER, 1, 0)
-	sb.content_margin_left = 10
-	sb.content_margin_right = 10
-	sb.content_margin_top = 8
-	sb.content_margin_bottom = 8
-	return sb
-
-
-## TabContainer 内容区底色（半透明深色，与 map_editor tab panel 一致）
-func _tab_panel_style() -> StyleBoxFlat:
-	return _flat_style(Color(0.02, 0.03, 0.045, 0.55), PANEL_BORDER, 1, 4)
-
-
-## TabContainer 页签三态：常态暗、hover 提亮、选中 ACCENT 底边线
-func _tab_styles(tabs: TabContainer) -> void:
-	var normal := _flat_style(Color(0.05, 0.07, 0.09, 0.7), PANEL_BORDER, 1, 4)
-	var hover := _flat_style(Color(0.09, 0.13, 0.16, 0.9), PANEL_BORDER, 1, 4)
-	var selected := _flat_style(Color(0.02, 0.03, 0.045, 0.95), ACCENT, 1, 4)
-	# 选中态底边线（map_editor 同款：border_width_bottom=2 + ACCENT）
-	selected.border_color = ACCENT
-	selected.border_width_bottom = 2
-	tabs.add_theme_stylebox_override("tab_selected", selected)
-	tabs.add_theme_stylebox_override("tab_unselected", normal)
-	tabs.add_theme_stylebox_override("tab_hovered", hover)
-
-
-## 侧栏系按钮三态（pressed 描边 ACCENT）
-func _btn_styles(b: Button) -> void:
-	b.add_theme_stylebox_override("normal", _flat_style(BTN_BG, PANEL_BORDER))
-	b.add_theme_stylebox_override("hover", _flat_style(BTN_BG_HOVER, PANEL_BORDER))
-	b.add_theme_stylebox_override("pressed", _flat_style(BTN_BG_PRESSED, ACCENT))
-	b.add_theme_stylebox_override("focus", _flat_style(Color.TRANSPARENT, ACCENT, 1, 6))
-	b.add_theme_stylebox_override("disabled", _flat_style(Color(0.06, 0.07, 0.08, 0.7), Color(0.2, 0.24, 0.26, 0.6)))
-	b.add_theme_color_override("font_color", TEXT_MAIN)
-	b.add_theme_color_override("font_hover_color", TEXT_MAIN)
-	b.add_theme_color_override("font_pressed_color", ACCENT)
-	b.add_theme_color_override("font_disabled_color", TEXT_DIM)
-	b.add_theme_color_override("font_focus_color", ACCENT)
-
-
-## 侧栏系 Label 工厂（默认字号 12，TEXT_DIM）
-func _label(text_value: String, font_size := 12, color := TEXT_DIM) -> Label:
-	var l := Label.new()
-	l.text = text_value
-	l.add_theme_font_size_override("font_size", font_size)
-	l.add_theme_color_override("font_color", color)
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return l
-
-
-## 加载 at-icons 图标；失败返回 null（调用方回退纯文字）
-func _icon(icon_name: String) -> Texture2D:
-	var path := ICON_DIR + icon_name + ".svg"
-	if ResourceLoader.exists(path):
-		return load(path) as Texture2D
-	return null
-
-
 # ============================================================
 # 开战 / 胜负 / 章节末演出（公开给 battle.gd 集成）
 # ============================================================

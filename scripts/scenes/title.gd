@@ -2,6 +2,8 @@
 
 extends Control
 
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+
 var start_btn: Button
 
 
@@ -14,12 +16,7 @@ func _ready() -> void:
 	bg.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	add_child(bg)
 	# 标题
-	var title := Label.new()
-	title.text = "TACTICS RPG\n战旗 · 觉醒之章"
-	title.add_theme_font_size_override("font_size", 48)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	title.add_theme_color_override("font_outline_color", Color.BLACK)
-	title.add_theme_constant_override("outline_size", 10)
+	var title := UIFactoryScript.outline_label("TACTICS RPG\n战旗 · 觉醒之章", 48, Color.WHITE, 10)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -31,17 +28,13 @@ func _ready() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	vbox.position = Vector2(get_viewport_rect().size.x / 2 - 130, get_viewport_rect().size.y / 2 + 20)
 	add_child(vbox)
-	start_btn = Button.new()
-	start_btn.text = "进入世界"
+	start_btn = UIFactoryScript.button("进入世界", _on_start)
 	start_btn.custom_minimum_size = Vector2(260, 60)
 	start_btn.add_theme_font_size_override("font_size", 24)
-	start_btn.pressed.connect(_on_start)
 	vbox.add_child(start_btn)
 	# 底部版权
-	var foot := Label.new()
-	foot.text = "pixel_world × 战旗融合 · Godot 4.7"
-	foot.add_theme_font_size_override("font_size", 11)
-	foot.add_theme_color_override("font_color", Color(0.8, 0.83, 0.88))
+	var foot := UIFactoryScript.label(
+		"pixel_world × 战旗融合 · Godot 4.7", 11, Color(0.8, 0.83, 0.88))
 	foot.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	foot.position.y = -28

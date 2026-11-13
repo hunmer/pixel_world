@@ -18,6 +18,8 @@
 ## 图标：at-icons 矢量 SVG（res://addons/at-icons/control/，16×16），加载失败
 ## 自动回退文字标签。保存为 res://data/battlefields/<id>.json（loader schema，
 ## 保存即回读校验），战场列表（O 键）立即可见可开战。
+## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
+## 本文件不再自带样式 helper；领域按钮工厂（_add_tool_btn 等）保留。
 ##
 ## 入口：世界内 E 键 / 战场面板「打开编辑器」按钮；返回 -> res://main.tscn。
 
@@ -34,16 +36,19 @@ const HintBarScript = preload("res://scripts/hint_bar.gd")
 const Tool = { PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5 }
 const TAB_BLOCK := 3
 
-const BG := Color(0.05, 0.07, 0.10, 0.97)
-const PANEL_BORDER := Color(0.25, 0.37, 0.43, 0.9)
-const TEXT_MAIN := Color(0.88, 0.93, 0.95)
-const TEXT_DIM := Color(0.56, 0.68, 0.71)
-const ACCENT := Color(0.40, 0.86, 0.76)
-const ERR := Color(1.0, 0.45, 0.42)
-# 统一样式系统：按钮三态底色，pressed 描边统一走 ACCENT
-const BTN_BG := Color(0.08, 0.11, 0.14, 0.95)
-const BTN_BG_HOVER := Color(0.13, 0.18, 0.22, 0.98)
-const BTN_BG_PRESSED := Color(0.10, 0.26, 0.23, 1.0)
+const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+
+## 配色常量统一取自 ui_theme.gd（本文件别名保持既有引用不变）。
+const BG := UIThemeScript.BG
+const PANEL_BORDER := UIThemeScript.PANEL_BORDER
+const TEXT_MAIN := UIThemeScript.TEXT_MAIN
+const TEXT_DIM := UIThemeScript.TEXT_DIM
+const ACCENT := UIThemeScript.ACCENT
+const ERR := UIThemeScript.ERROR
+const BTN_BG := UIThemeScript.BTN_BG
+const BTN_BG_HOVER := UIThemeScript.BTN_BG_HOVER
+const BTN_BG_PRESSED := UIThemeScript.BTN_BG_PRESSED
 
 const CLASS_IDS: Array[String] = [
 	"swordsman", "knight", "archer", "mage", "berserker", "assassin", "lancer", "priest",
@@ -53,9 +58,6 @@ const PORTRAIT_BTN_SIZE := Vector2(48, 48)
 const SIDEBAR_WIDTH := 320
 ## 撤销栈上限（快照式：rows+units 深拷贝，画笔整笔拖动合并为一步）
 const UNDO_LIMIT := 100
-## at-icons 矢量图标（16×16 SVG，control 绿色系）；加载失败调用方回退文字
-const ICON_DIR := "res://addons/at-icons/control/"
-
 var model: Dictionary = {}
 var current_tool: int = Tool.PAINT
 var current_terrain: StringName = &"mountain"
@@ -188,7 +190,7 @@ func _build_ui() -> void:
 	side.custom_minimum_size = Vector2(SIDEBAR_WIDTH, 0)
 	side.size_flags_horizontal = Control.SIZE_FILL
 	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side.add_theme_stylebox_override("panel", _panel_style())
+	side.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
 	root.add_child(side)
 
 	var sv := VBoxContainer.new()
@@ -201,7 +203,7 @@ func _build_ui() -> void:
 	# 标题行：at-icons 扳手图标 + 文字（图标缺失只显示文字）
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 6)
-	var wrench: Texture2D = _icon("wrench")
+	var wrench: Texture2D = UIThemeScript.icon("wrench")
 	if wrench != null:
 		var tw := TextureRect.new()
 		tw.texture = wrench
@@ -211,18 +213,15 @@ func _build_ui() -> void:
 		tw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		tw.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		title_row.add_child(tw)
-	title_row.add_child(_label("战场编辑器", 16, ACCENT))
+	title_row.add_child(UIFactoryScript.label("战场编辑器", 16, ACCENT))
 	sv.add_child(title_row)
 
 	# ---- 6 个 Tab：文件 / 生成 / 地形 / 方块 / 角色 / 历史 ----
-	var tabs := TabContainer.new()
-	tabs.name = "ToolTabs"
+	# Tab 样式统一走 ui_factory.tab_container（含页签三态与面板底）
+	var tabs := UIFactoryScript.tab_container("ToolTabs")
 	_tabs = tabs
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	tabs.add_theme_font_size_override("font_size", 13)
-	tabs.add_theme_stylebox_override("panel", _tab_panel_style())
-	_tab_styles(tabs)
 	tabs.tab_changed.connect(_on_tab_changed)
 	sv.add_child(tabs)
 	_build_file_tab(tabs)
@@ -233,7 +232,7 @@ func _build_ui() -> void:
 	_build_history_tab(tabs)
 
 	# ---- 状态栏（贴面板底部，自动换行） ----
-	_status_label = _label("就绪 — 左键操作画布；同种子+同尺寸生成结果确定", 11, TEXT_DIM)
+	_status_label = UIFactoryScript.label("就绪 — 左键操作画布；同种子+同尺寸生成结果确定", 11, TEXT_DIM)
 	_status_label.name = "StatusLabel"
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -244,52 +243,29 @@ func _build_ui() -> void:
 # ============================================================
 # Tab 构建（每页 ScrollContainer 只纵向滚 + VBox，与旧侧栏滚动策略一致）
 # ============================================================
-
-## 新建一个 Tab：ScrollContainer(只纵向滚) + VBox；设标题与可选图标，返回内容 VBox
-func _new_tab(tabs: TabContainer, title: String, icon_name := "") -> VBoxContainer:
-	var scroll := ScrollContainer.new()
-	scroll.name = "%sScroll" % title
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	tabs.add_child(scroll)
-	var v := VBoxContainer.new()
-	v.name = "%sTab" % title
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_theme_constant_override("separation", 6)
-	scroll.add_child(v)
-	var idx := tabs.get_tab_count() - 1
-	tabs.set_tab_title(idx, title)
-	if icon_name != "":
-		var icon: Texture2D = _icon(icon_name)
-		if icon != null:
-			tabs.set_tab_icon(idx, icon)
-	return v
-
-
 ## Tab【文件】：id / 名称 / 托管 / 读取 / 保存 / 返回
 func _build_file_tab(tabs: TabContainer) -> void:
-	var tab := _new_tab(tabs, "文件", "floppy_disk")
+	var tab := UIFactoryScript.add_tab(tabs, "文件", "floppy_disk")
 	var id_row := HBoxContainer.new()
 	id_row.add_theme_constant_override("separation", 4)
-	id_row.add_child(_label("id:", 11, TEXT_DIM))
-	_id_edit = LineEdit.new()
+	id_row.add_child(UIFactoryScript.label("id:", 11, TEXT_DIM))
+	_id_edit = UIFactoryScript.line_edit()
 	_id_edit.text = "custom_map"
 	_id_edit.placeholder_text = "snake_case"
 	_id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	id_row.add_child(_id_edit)
 	tab.add_child(id_row)
-	_center_row(id_row)
+	UIFactoryScript.center_row(id_row)
 
 	var name_row := HBoxContainer.new()
 	name_row.add_theme_constant_override("separation", 4)
-	name_row.add_child(_label("名称:", 11, TEXT_DIM))
-	_name_edit = LineEdit.new()
+	name_row.add_child(UIFactoryScript.label("名称:", 11, TEXT_DIM))
+	_name_edit = UIFactoryScript.line_edit()
 	_name_edit.text = "自定义战场"
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_row.add_child(_name_edit)
 	tab.add_child(name_row)
-	_center_row(name_row)
+	UIFactoryScript.center_row(name_row)
 
 	_hosting_check = CheckButton.new()
 	_hosting_check.text = "托管"
@@ -318,17 +294,17 @@ func _build_file_tab(tabs: TabContainer) -> void:
 
 ## Tab【生成】：种子 / 随机种子 / 宽高 / 生成 / 清空地形
 func _build_generate_tab(tabs: TabContainer) -> void:
-	var tab := _new_tab(tabs, "生成", "dice")
+	var tab := UIFactoryScript.add_tab(tabs, "生成", "dice")
 	var seed_row := HBoxContainer.new()
 	seed_row.add_theme_constant_override("separation", 4)
-	seed_row.add_child(_label("种子:", 11, TEXT_DIM))
-	_seed_edit = LineEdit.new()
+	seed_row.add_child(UIFactoryScript.label("种子:", 11, TEXT_DIM))
+	_seed_edit = UIFactoryScript.line_edit()
 	_seed_edit.text = "demo"
 	_seed_edit.placeholder_text = "任意文本，同种子同地图"
 	_seed_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	seed_row.add_child(_seed_edit)
 	tab.add_child(seed_row)
-	_center_row(seed_row)
+	UIFactoryScript.center_row(seed_row)
 
 	var dice_btn := _action_btn("随机种子", func():
 		_seed_edit.text = str(Time.get_unix_time_from_system()).sha1_text().substr(0, 8)
@@ -338,7 +314,7 @@ func _build_generate_tab(tabs: TabContainer) -> void:
 
 	var size_row := HBoxContainer.new()
 	size_row.add_theme_constant_override("separation", 4)
-	size_row.add_child(_label("宽:", 11, TEXT_DIM))
+	size_row.add_child(UIFactoryScript.label("宽:", 11, TEXT_DIM))
 	_width_box = SpinBox.new()
 	_width_box.min_value = BattlefieldDocScript.MIN_SIZE
 	_width_box.max_value = BattlefieldDocScript.MAX_SIZE
@@ -346,7 +322,7 @@ func _build_generate_tab(tabs: TabContainer) -> void:
 	_width_box.value_changed.connect(func(_v: float): _on_resize())
 	_width_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_row.add_child(_width_box)
-	size_row.add_child(_label("高:", 11, TEXT_DIM))
+	size_row.add_child(UIFactoryScript.label("高:", 11, TEXT_DIM))
 	_height_box = SpinBox.new()
 	_height_box.min_value = BattlefieldDocScript.MIN_SIZE
 	_height_box.max_value = BattlefieldDocScript.MAX_SIZE
@@ -355,7 +331,7 @@ func _build_generate_tab(tabs: TabContainer) -> void:
 	_height_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_row.add_child(_height_box)
 	tab.add_child(size_row)
-	_center_row(size_row)
+	UIFactoryScript.center_row(size_row)
 
 	var gen_row := HBoxContainer.new()
 	gen_row.add_theme_constant_override("separation", 4)
@@ -380,7 +356,7 @@ func _build_tool_bar() -> Control:
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	bar.offset_left = 8
 	bar.offset_top = 8
-	bar.add_theme_stylebox_override("panel", _panel_style())
+	bar.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
 	var box := VBoxContainer.new()
 	box.name = "ToolBox"
 	box.add_theme_constant_override("separation", 4)
@@ -407,8 +383,8 @@ func _build_cell_info() -> Control:
 	panel.offset_top = -38
 	panel.offset_right = 250
 	panel.offset_bottom = -8
-	panel.add_theme_stylebox_override("panel", _panel_style())
-	_cell_info_label = _label("未选中格子", 11, TEXT_MAIN)
+	panel.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
+	_cell_info_label = UIFactoryScript.label("未选中格子", 11, TEXT_MAIN)
 	_cell_info_label.name = "CellInfoLabel"
 	_cell_info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(_cell_info_label)
@@ -446,7 +422,7 @@ func _build_hint_bar() -> Control:
 ## 每张贴图一个独立 tile，选中后画笔在格子上放置该具体植物（模型 props 层）。
 ## 全部按钮共用一个 ButtonGroup（选地形清空 current_prop，选植物反之）。
 func _build_terrain_tab(tabs: TabContainer) -> void:
-	var tab := _new_tab(tabs, "地形", "sprout")
+	var tab := UIFactoryScript.add_tab(tabs, "地形", "sprout")
 	var terrain_group := ButtonGroup.new()
 	terrain_group.pressed.connect(func(btn: Button):
 		if btn.has_meta("terrain"):
@@ -455,7 +431,7 @@ func _build_terrain_tab(tabs: TabContainer) -> void:
 		elif btn.has_meta("prop"):
 			current_prop = btn.get_meta("prop"))
 	# ---- 地形组（单块 tile，不叠装饰物/高塔）----
-	tab.add_child(_label("地形", 12, TEXT_DIM))
+	tab.add_child(UIFactoryScript.label("地形", 12, TEXT_DIM))
 	var tgrid := GridContainer.new()
 	tgrid.name = "TerrainGrid"
 	tgrid.columns = 4
@@ -468,7 +444,7 @@ func _build_terrain_tab(tabs: TabContainer) -> void:
 		_terrain_buttons[t] = tb
 	# ---- 植物组：全部素材按目录分三小节（树木/植物/装饰）----
 	for group_title: String in BattlefieldDocScript.PLANT_DIRS:
-		tab.add_child(_label("%s（%d）" % [group_title, _prop_paths[group_title].size()], 12, TEXT_DIM))
+		tab.add_child(UIFactoryScript.label("%s（%d）" % [group_title, _prop_paths[group_title].size()], 12, TEXT_DIM))
 		var pgrid := GridContainer.new()
 		pgrid.name = "%sGrid" % group_title
 		pgrid.columns = 4
@@ -483,12 +459,12 @@ func _build_terrain_tab(tabs: TabContainer) -> void:
 
 ## Tab【方块】：只编辑当前选格的独立高度，不修改同列/其他格。
 func _build_block_tab(tabs: TabContainer) -> void:
-	var tab := _new_tab(tabs, "方块", "cube")
-	tab.add_child(_label("用「选择」工具点选格子；拖动其他工具不会改变选择。", 11, TEXT_DIM))
+	var tab := UIFactoryScript.add_tab(tabs, "方块", "cube")
+	tab.add_child(UIFactoryScript.label("用「选择」工具点选格子；拖动其他工具不会改变选择。", 11, TEXT_DIM))
 	var row := HBoxContainer.new()
 	row.name = "BlockZRow"
 	row.add_theme_constant_override("separation", 6)
-	row.add_child(_label("所在 z:", 12, TEXT_MAIN))
+	row.add_child(UIFactoryScript.label("所在 z:", 12, TEXT_MAIN))
 	_block_z_box = SpinBox.new()
 	_block_z_box.name = "BlockZSpin"
 	_block_z_box.min_value = BattlefieldDocScript.BLOCK_MIN_Z
@@ -501,8 +477,8 @@ func _build_block_tab(tabs: TabContainer) -> void:
 	_block_z_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_block_z_box)
 	tab.add_child(row)
-	_center_row(row)
-	tab.add_child(_label("每格只有一个独立方块；z=0 为统一平面。", 10, TEXT_DIM))
+	UIFactoryScript.center_row(row)
+	tab.add_child(UIFactoryScript.label("每格只有一个独立方块；z=0 为统一平面。", 10, TEXT_DIM))
 
 
 ## 扫描植物素材目录（BattlefieldDoc.PLANT_DIRS）→ { 组名: [res://路径] }（排序）
@@ -532,7 +508,7 @@ func _plant_btn(path: String, group: ButtonGroup) -> Button:
 	tb.custom_minimum_size = Vector2(46, 96)
 	tb.tooltip_text = path.get_file().get_basename()
 	tb.set_meta("prop", path)
-	_btn_styles(tb)
+	UIThemeScript.style_button(tb)
 	var prev := TilePreviewScript.new(&"plain", false, path)
 	tb.add_child(prev)
 	prev.position = (tb.custom_minimum_size - prev.size) * 0.5
@@ -541,7 +517,7 @@ func _plant_btn(path: String, group: ButtonGroup) -> Button:
 
 ## Tab【角色】：阵营 + 8 职业头像网格 + 等级/姓名
 func _build_units_tab(tabs: TabContainer) -> void:
-	var tab := _new_tab(tabs, "角色", "person")
+	var tab := UIFactoryScript.add_tab(tabs, "角色", "person")
 	var faction_row := HBoxContainer.new()
 	faction_row.add_theme_constant_override("separation", 4)
 	var faction_group := ButtonGroup.new()
@@ -569,25 +545,25 @@ func _build_units_tab(tabs: TabContainer) -> void:
 
 	var lv_row := HBoxContainer.new()
 	lv_row.add_theme_constant_override("separation", 4)
-	lv_row.add_child(_label("等级:", 11, TEXT_DIM))
+	lv_row.add_child(UIFactoryScript.label("等级:", 11, TEXT_DIM))
 	_level_box = SpinBox.new()
 	_level_box.min_value = 1
 	_level_box.max_value = 9
 	_level_box.value = 3
 	_level_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lv_row.add_child(_level_box)
-	lv_row.add_child(_label("姓名:", 11, TEXT_DIM))
-	_unit_name_edit = LineEdit.new()
+	lv_row.add_child(UIFactoryScript.label("姓名:", 11, TEXT_DIM))
+	_unit_name_edit = UIFactoryScript.line_edit()
 	_unit_name_edit.placeholder_text = "自动"
 	_unit_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lv_row.add_child(_unit_name_edit)
 	tab.add_child(lv_row)
-	_center_row(lv_row)
+	UIFactoryScript.center_row(lv_row)
 
 
 ## Tab【历史】：动作时间线（点击任意记录跳转到该状态）
 func _build_history_tab(tabs: TabContainer) -> void:
-	var tab := _new_tab(tabs, "历史", "clock")
+	var tab := UIFactoryScript.add_tab(tabs, "历史", "clock")
 	_history_list = ItemList.new()
 	_history_list.name = "HistoryList"
 	_history_list.custom_minimum_size = Vector2(0, 240)
@@ -597,80 +573,22 @@ func _build_history_tab(tabs: TabContainer) -> void:
 		if not _syncing_history:
 			_jump_history(idx))
 	tab.add_child(_history_list)
-	tab.add_child(_label("点击记录跳转到该状态；Ctrl+Z / Ctrl+Y 撤销重做", 10, TEXT_DIM))
+	tab.add_child(UIFactoryScript.label("点击记录跳转到该状态；Ctrl+Z / Ctrl+Y 撤销重做", 10, TEXT_DIM))
 
 
 ## 切 Tab 时封存上一动作（画笔拖动在换页瞬间定格为一步）
 func _on_tab_changed(_idx: int) -> void:
 	_seal_pending()
-
-
-## TabContainer 内容区样式（深色半透明，与 world side_panel.gd 一致）
-func _tab_panel_style() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.02, 0.03, 0.045, 0.55)
-	sb.border_color = PANEL_BORDER
-	sb.border_width_left = 1
-	sb.border_width_right = 1
-	sb.border_width_bottom = 1
-	return sb
-
-
-## TabContainer 页签三态深色样式（选中页签提亮 + ACCENT 底边线）
-func _tab_styles(tabs: TabContainer) -> void:
-	var un := _flat_style(BG, Color(0, 0, 0, 0), 0, 0)
-	var hov := _flat_style(BTN_BG_HOVER, Color(0, 0, 0, 0), 0, 0)
-	var sel := _flat_style(BTN_BG_PRESSED, ACCENT, 0, 0)
-	sel.border_width_bottom = 2
-	for sb: StyleBoxFlat in [un, hov, sel]:
-		sb.content_margin_left = 10
-		sb.content_margin_right = 10
-		sb.content_margin_top = 4
-		sb.content_margin_bottom = 4
-	tabs.add_theme_stylebox_override("tab_unselected", un)
-	tabs.add_theme_stylebox_override("tab_hovered", hov)
-	tabs.add_theme_stylebox_override("tab_selected", sel)
-	tabs.add_theme_color_override("font_selected_color", TEXT_MAIN)
-	tabs.add_theme_color_override("font_unselected_color", TEXT_DIM)
-	tabs.add_theme_color_override("font_hovered_color", TEXT_MAIN)
-
-
 # ============================================================
 # UI 构建辅助（统一样式系统 + 控件工厂）
 # ============================================================
-
-## HBox 内子控件统一垂直居中（LineEdit/SpinBox/Button 默认高度不一，避免顶对齐参差）
-func _center_row(row: HBoxContainer) -> void:
-	for c in row.get_children():
-		c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-
-
-func _flat_style(bg: Color, border: Color, border_w: int = 1, radius: int = 6) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(border_w)
-	sb.set_corner_radius_all(radius)
-	return sb
-
-
-## 统一按钮三态样式（normal/hover/pressed；pressed 描边 ACCENT，焦点框留空）
-func _btn_styles(b: Button) -> void:
-	b.add_theme_stylebox_override("normal", _flat_style(BTN_BG, PANEL_BORDER))
-	b.add_theme_stylebox_override("hover", _flat_style(BTN_BG_HOVER, PANEL_BORDER))
-	b.add_theme_stylebox_override("pressed", _flat_style(BTN_BG_PRESSED, ACCENT))
-	b.add_theme_stylebox_override("hover_pressed", _flat_style(BTN_BG_PRESSED, ACCENT))
-	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	b.add_theme_font_size_override("font_size", 12)
-
-
 func _add_tool_btn(parent: Node, group: ButtonGroup, tool: int, text: String, icon_name := "") -> void:
 	var b := Button.new()
 	b.toggle_mode = true
 	b.button_group = group
 	var icon: Texture2D = null
 	if icon_name != "":
-		icon = _icon(icon_name)
+		icon = UIThemeScript.icon(icon_name)
 	if icon != null:
 		# 垂直工具条：只显示图标（tooltip 提示名称），固定方形按钮
 		b.icon = icon
@@ -682,7 +600,7 @@ func _add_tool_btn(parent: Node, group: ButtonGroup, tool: int, text: String, ic
 		b.text = text
 		b.tooltip_text = text
 	b.set_meta("tool", tool)
-	_btn_styles(b)
+	UIThemeScript.style_button(b)
 	parent.add_child(b)
 	_tool_buttons[tool] = b
 
@@ -693,22 +611,12 @@ func _action_btn(text: String, cb: Callable, icon_name := "") -> Button:
 	b.text = text
 	var icon: Texture2D = null
 	if icon_name != "":
-		icon = _icon(icon_name)
+		icon = UIThemeScript.icon(icon_name)
 	if icon != null:
 		b.icon = icon
-	_btn_styles(b)
+	UIThemeScript.style_button(b)
 	b.pressed.connect(cb)
 	return b
-
-
-## at-icons 图标加载（16×16 SVG，control 绿色系）；不存在/失败返回 null，调用方回退文字
-func _icon(name: String) -> Texture2D:
-	var path := ICON_DIR + name + ".svg"
-	if not ResourceLoader.exists(path):
-		return null
-	var tex: Texture2D = load(path)
-	return tex
-
 
 ## 阵营切换按钮（盾=我方 / 骷髅=敌方，ButtonGroup 单选；缺图回退纯文字）
 func _faction_btn(faction: String, label: String, icon_name: String, group: ButtonGroup) -> Button:
@@ -720,11 +628,11 @@ func _faction_btn(faction: String, label: String, icon_name: String, group: Butt
 	b.custom_minimum_size = Vector2(104, 30)
 	var icon: Texture2D = null
 	if icon_name != "":
-		icon = _icon(icon_name)
+		icon = UIThemeScript.icon(icon_name)
 	if icon != null:
 		b.icon = icon
 	b.text = label
-	_btn_styles(b)
+	UIThemeScript.style_button(b)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.button_pressed = faction == selected_faction
 	return b
@@ -742,7 +650,7 @@ func _terrain_btn(t: StringName, group: ButtonGroup, plant := false) -> Button:
 		String(BattlefieldDocScript.TERRAIN_GLYPH[t]),
 	]
 	tb.set_meta("terrain", t)
-	_btn_styles(tb)
+	UIThemeScript.style_button(tb)
 	var prev := TilePreviewScript.new(t, plant)
 	tb.add_child(prev)
 	# Button 不是 Container：手动按按钮最小尺寸居中（anchors 在无父时会烤错）。
@@ -759,7 +667,7 @@ func _class_btn(cid: String, group: ButtonGroup) -> Button:
 	var cn := ProfessionDataScript.profession_name(StringName(cid))
 	b.tooltip_text = "%s %s" % [cn, cid]
 	b.set_meta("class", cid)
-	_btn_styles(b)
+	UIThemeScript.style_button(b)
 	if ProfessionVisualScript.portrait_exists(StringName(cid)):
 		var tex: Texture2D = load(ProfessionVisualScript.portrait_path(StringName(cid)))
 		var tr := TextureRect.new()
@@ -775,25 +683,6 @@ func _class_btn(cid: String, group: ButtonGroup) -> Button:
 		b.text = cn.substr(0, 1)
 		b.add_theme_font_size_override("font_size", 14)
 	return b
-
-
-func _label(text: String, size: int, color: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", color)
-	return l
-
-
-func _panel_style() -> StyleBoxFlat:
-	var sb := _flat_style(BG, PANEL_BORDER)
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
-	sb.content_margin_top = 4
-	sb.content_margin_bottom = 4
-	return sb
-
-
 # ============================================================
 # 编辑操作（canvas 信号 + 可测方法；生效工具由激活 Tab 决定）
 # ============================================================

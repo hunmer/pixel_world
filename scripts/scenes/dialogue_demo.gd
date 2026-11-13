@@ -4,8 +4,8 @@
 ## 数据：res://data/dialogue/demo_intro.json（speakers 表 + lines 序列，立绘路径可替换）。
 ## 交互：鼠标点击 / 触摸 / ui_accept（空格、回车）。
 ##   打字中 → 补全本句；句毕 → 推进下一句；结束 → 明确提示 + 重播按钮。
-## 布局：PortraitRow（标题栏下、DialoguePanel 上）承载左右立绘列与名称牌；
-##   名称牌常驻两侧，发言侧用角色色高亮、非发言侧压暗。
+## 布局：左右立绘锚定屏幕两侧半宽区（贴边、窄窗不重叠）；
+##   名称牌悬浮在 DialoguePanel 上边沿（VN 名牌 tab），发言侧角色色高亮。
 ## 样式：只读复用 scripts/ui/ui_factory.gd 与 scripts/ui/ui_theme.gd，不改动共享 UI 底层。
 extends Control
 
@@ -30,6 +30,8 @@ var _text_label: Label
 var _hint_label: Label
 var _name_left: Label
 var _name_right: Label
+var _name_plate_left: PanelContainer
+var _name_plate_right: PanelContainer
 var _portrait_left: PanelContainer
 var _portrait_right: PanelContainer
 var _end_overlay: Control
@@ -104,8 +106,10 @@ func _build_ui() -> void:
 	top.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(top)
 
-	_portrait_left = _build_portrait_column("PortraitLeft", "hero", true)
-	_portrait_right = _build_portrait_column("PortraitRight", "elf", false)
+	_portrait_left = _build_portrait("PortraitLeft", "hero", true)
+	_portrait_right = _build_portrait("PortraitRight", "elf", false)
+	add_child(_portrait_left)
+	add_child(_portrait_right)
 
 	var panel := PanelContainer.new()
 	panel.name = "DialoguePanel"
@@ -135,56 +139,34 @@ func _build_ui() -> void:
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	vbox.add_child(_hint_label)
 
+	_name_plate_left = _build_name_plate("NamePlateLeft", "hero", true)
+	_name_plate_right = _build_name_plate("NamePlateRight", "elf", false)
+	add_child(_name_plate_left)
+	add_child(_name_plate_right)
+
 	_end_overlay = _build_end_overlay()
 	add_child(_end_overlay)
 
 
-## 上方立绘行：标题栏之下、DialoguePanel 之上，满宽自适应高度。
-## 每列 = 名称牌 + 称号 + 立绘（立绘可压缩），列间弹性间隔保证窄窗不重叠。
-func _build_portrait_column(node_name: String, speaker_id: String, is_left: bool) -> PanelContainer:
-	var row := get_node_or_null("PortraitRow") as HBoxContainer
-	if row == null:
-		row = HBoxContainer.new()
-		row.name = "PortraitRow"
-		row.set_anchors_preset(Control.PRESET_FULL_RECT)
-		row.offset_left = 48
-		row.offset_top = 56
-		row.offset_right = -48
-		row.offset_bottom = -302
-		row.add_theme_constant_override("separation", 24)
-		add_child(row)
-
-	var column := VBoxContainer.new()
-	column.name = node_name + "Column"
-	column.custom_minimum_size = Vector2(180, 0)
-	column.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if is_left else Control.SIZE_SHRINK_END
-	row.add_child(column)
-	if not is_left:
-		# 右列需要先加入弹性垫片才能靠右
-		var spacer := Control.new()
-		spacer.name = "MiddleSpacer"
-		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.move_child(spacer, row.get_child_count() - 2)
-
-	var speaker: Dictionary = _speakers.get(speaker_id, {})
-	var name_l := UIFactoryScript.label(String(speaker.get("name", "???")), 22,
-		Color(String(speaker.get("color", "#FFFFFF"))))
-	name_l.name = "NameLabel"
-	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(name_l)
-	if is_left:
-		_name_left = name_l
-	else:
-		_name_right = name_l
-
-	var title_l := UIFactoryScript.label(String(speaker.get("title", "")), 13, UIThemeScript.TEXT_DIM)
-	title_l.name = "SpeakerTitleLabel"
-	title_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(title_l)
-
+## 立绘区：锚定屏幕左/右半宽区（边距 48/12），高度在标题栏与对话框之间。
+## 半宽锚点保证右侧贴右缘，且任意窗口宽度下左右立绘不重叠。
+func _build_portrait(node_name: String, speaker_id: String, is_left: bool) -> PanelContainer:
 	var wrap := PanelContainer.new()
 	wrap.name = node_name
-	wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	if is_left:
+		wrap.anchor_left = 0.0
+		wrap.anchor_right = 0.5
+		wrap.offset_left = 48
+		wrap.offset_right = -12
+	else:
+		wrap.anchor_left = 0.5
+		wrap.anchor_right = 1.0
+		wrap.offset_left = 12
+		wrap.offset_right = -48
+	wrap.anchor_top = 0.0
+	wrap.anchor_bottom = 1.0
+	wrap.offset_top = 56
+	wrap.offset_bottom = -310
 	wrap.add_theme_stylebox_override("panel", UIThemeScript.flat_style(
 		Color(0.07, 0.10, 0.14, 0.92), UIThemeScript.PANEL_BORDER, 2, 10, 8))
 
@@ -192,12 +174,54 @@ func _build_portrait_column(node_name: String, speaker_id: String, is_left: bool
 	tex.name = "PortraitTexture"
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var speaker: Dictionary = _speakers.get(speaker_id, {})
 	var portrait_path := String(speaker.get("portrait", ""))
 	if not portrait_path.is_empty() and ResourceLoader.exists(portrait_path):
 		tex.texture = load(portrait_path)
 	wrap.add_child(tex)
-	column.add_child(wrap)
 	return wrap
+
+
+## 名称牌：悬浮在对话框上边沿的小浮签（压住面板顶边 10px），左右各一。
+func _build_name_plate(node_name: String, speaker_id: String, is_left: bool) -> PanelContainer:
+	var plate := PanelContainer.new()
+	plate.name = node_name
+	plate.anchor_left = 0.0 if is_left else 1.0
+	plate.anchor_right = plate.anchor_left
+	plate.anchor_top = 1.0
+	plate.anchor_bottom = 1.0
+	plate.offset_top = -344
+	plate.offset_bottom = -276
+	if is_left:
+		plate.offset_left = 56
+		plate.offset_right = 56 + 220
+	else:
+		plate.offset_left = -(56 + 220)
+		plate.offset_right = -56
+	plate.add_theme_stylebox_override("panel", UIThemeScript.flat_style(
+		Color(0.05, 0.075, 0.11, 0.97), UIThemeScript.PANEL_BORDER, 2, 8, 10))
+
+	var speaker: Dictionary = _speakers.get(speaker_id, {})
+	var vbox := VBoxContainer.new()
+	vbox.name = "PlateBox"
+	vbox.add_theme_constant_override("separation", 2)
+	plate.add_child(vbox)
+
+	var name_l := UIFactoryScript.label(String(speaker.get("name", "???")), 22,
+		Color(String(speaker.get("color", "#FFFFFF"))))
+	name_l.name = "NameLabel"
+	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(name_l)
+	if is_left:
+		_name_left = name_l
+	else:
+		_name_right = name_l
+
+	var title_l := UIFactoryScript.label(String(speaker.get("title", "")), 12, UIThemeScript.TEXT_DIM)
+	title_l.name = "SpeakerTitleLabel"
+	title_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title_l)
+	return plate
 
 
 func _build_end_overlay() -> Control:

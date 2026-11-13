@@ -50,6 +50,11 @@ const SORT_REBASE_DISTANCE := 4096
 
 const ANIMAL_SORT_BIAS := WanderingAnimalScript.SORT_BIAS
 const PLAYER_SORT_BIAS := 0.5
+## 世界玩家使用的职业精灵图（data/professions.json 8 职业 id 之一；缺图回退占位红点）。
+const PLAYER_SHEET_CLASS := &"swordsman"
+## 精灵图内容包围盒（像素）：脚底=节点原点；用于植物遮挡屏幕包围盒，
+## 与贴图画布尺寸解耦（288 格含大量透明留白，直接量贴图会误淡化周围植物）。
+const PLAYER_SHEET_CONTENT_SIZE := Vector2(224.0, 240.0)
 ## 植物锚点比人物更靠近镜头超过该深度余量才判定为遮挡（植物 billboard 有厚度）。
 const PLAYER_PROP_OCCLUSION_DEPTH_MARGIN := 0.05
 ## 静止时遮挡集合的定期重算间隔（秒）：防御检测抖动后的卡死状态。
@@ -230,6 +235,10 @@ const _BattleScript := preload("res://scripts/scenes/battle.gd")
 const _EncounterTransitionScript := preload("res://scripts/battle/encounter_transition.gd")
 
 var _player: Sprite3D
+var _player_facing := Vector3(0.0, 0.0, 1.0)
+var _player_pose: StringName = CharacterSheet.POSE_IDLE
+var _player_uses_sheet := false
+var _player_last_yaw := 1.0e20
 var _player_cell := Vector2i.ZERO
 var _move_from_cell := Vector2i.ZERO
 var _move_from := Vector2.ZERO
@@ -3111,15 +3120,20 @@ func _setup_terrain() -> void:
 
 func _setup_player() -> void:
 	_player = Sprite3D.new()
-	var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
-	for y in 8:
-		for x in 8:
-			var border := x == 0 or y == 0 or x == 7 or y == 7
-			img.set_pixel(x, y, Color(0.5, 0.08, 0.1) if border else Color(0.95, 0.35, 0.3))
-	_player.texture = ImageTexture.create_from_image(img)
+	if CharacterSheet.sheet_exists(PLAYER_SHEET_CLASS):
+		_player.texture = CharacterSheet.frame_texture(PLAYER_SHEET_CLASS, CharacterSheet.FRAME_FRONT)
+		_player.pixel_size = CharacterSheet.pixel_size()
+		_player_uses_sheet = true
+	else:
+		var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+		for y in 8:
+			for x in 8:
+				var border := x == 0 or y == 0 or x == 7 or y == 7
+				img.set_pixel(x, y, Color(0.5, 0.08, 0.1) if border else Color(0.95, 0.35, 0.3))
+		_player.texture = ImageTexture.create_from_image(img)
+		_player.pixel_size = 1.0 / 32.0
 	_player.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	_player.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_player.pixel_size = 1.0 / 32.0
 	_player.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 	_player.shaded = false
 	add_child(_player)
@@ -3128,7 +3142,40 @@ func _setup_player() -> void:
 ## 玩家使用真实 3D 脚点；sort_y 仅保留给旧调试接口，不再参与 Canvas 排序。
 func _set_player_render_position(visual_position: Vector2, _sort_y: float) -> void:
 	_player.position = IsoProjection.visual_to_world(visual_position, _player_current_stand_level())
-	_player.offset = Vector2(0, -_player.texture.get_height() / 2.0)
+	# 精灵图锚点 bottom-center：格中心在脚底上方 140px，offset 上抬对齐脚点。
+	if _player_uses_sheet:
+		_player.offset = Vector2(0, -CharacterSheet.FEET_FROM_CENTER_PX)
+	else:
+		_player.offset = Vector2(0, -_player.texture.get_height() / 2.0)
+
+
+## 玩家姿态 API：idle 按相机朝向解析 front/back/side 三视图；run 在朝向/远离
+## 相机轴用 front/back 帧、横切轴用单帧 run+镜像（CharacterSheet.resolve_pose）。
+func _set_player_pose(pose: StringName) -> void:
+	_player_pose = pose
+	_refresh_player_visual()
+
+
+## 相机旋转后同一世界朝向的屏幕解析会变：yaw 变化时重算 idle 帧。
+func _track_player_camera_yaw() -> void:
+	if not _player_uses_sheet or _player_pose != CharacterSheet.POSE_IDLE or not is_instance_valid(_cam):
+		return
+	var yaw: float = _cam.yaw_radians
+	if absf(yaw - _player_last_yaw) < 0.001:
+		return
+	_player_last_yaw = yaw
+	_refresh_player_visual()
+
+
+func _refresh_player_visual() -> void:
+	if not _player_uses_sheet or _player == null:
+		return
+	var delta := Vector2.ZERO
+	if is_instance_valid(_cam):
+		delta = CharacterSheet.facing_screen_delta(_cam, _player.global_position, _player_facing)
+	var resolved := CharacterSheet.resolve_pose(_player_pose, delta)
+	_player.texture = CharacterSheet.frame_texture(PLAYER_SHEET_CLASS, resolved[&"frame"])
+	_player.flip_h = resolved[&"flip"]
 
 
 func _player_movement_sort_y() -> float:
@@ -3196,7 +3243,12 @@ func _collect_player_prop_occluders() -> Dictionary:
 		return result
 	var viewport_height := maxf(get_viewport_rect().size.y, 1.0)
 	var px_per_world := viewport_height / maxf(_cam.size, 0.0001)
-	var sprite_size := _player.texture.get_size() * _player.pixel_size
+	# 精灵图画布含大量透明留白，遮挡包围盒按内容尺寸计算，避免误淡化周围植物。
+	var sprite_size := (
+		PLAYER_SHEET_CONTENT_SIZE * _player.pixel_size
+		if _player_uses_sheet
+		else _player.texture.get_size() * _player.pixel_size
+	)
 	var center_world := _player.global_position + Vector3.UP * (sprite_size.y * 0.5)
 	var center_screen := _cam.unproject_position(center_world)
 	var core := Rect2(
@@ -3334,6 +3386,8 @@ func _try_move(d: Vector2i) -> void:
 	_move_sort_from = _column_sort_y(_move_from_cell) + PLAYER_SORT_BIAS
 	_move_sort_to = _column_sort_y(_player_cell) + PLAYER_SORT_BIAS
 	_move_t = 0.0
+	_player_facing = Vector3(float(d.x), 0.0, float(d.y))
+	_set_player_pose(CharacterSheet.POSE_RUN)
 	_set_player_render_position(_player_visual_position, _player_movement_sort_y())
 	_stream_center = _player_cell
 	_update_streaming()
@@ -3344,6 +3398,7 @@ func _try_move(d: Vector2i) -> void:
 func _process(delta: float) -> void:
 	if is_instance_valid(_cam):
 		_cam.advance(delta)
+		_track_player_camera_yaw()
 	if _move_t < 1.0:
 		var speed := fast_multiplier if Input.is_physical_key_pressed(KEY_SHIFT) else 1.0
 		_move_t = minf(1.0, _move_t + delta / move_time * speed)
@@ -3352,6 +3407,8 @@ func _process(delta: float) -> void:
 			_player_visual_position,
 			_player_movement_sort_y()
 		)
+		if _move_t >= 1.0:
+			_set_player_pose(CharacterSheet.POSE_IDLE)
 	else:
 		if not is_world_map_open():
 			var d := _input_dir()
