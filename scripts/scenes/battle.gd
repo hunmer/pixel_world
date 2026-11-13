@@ -21,6 +21,7 @@ const ActionAnimScript = preload("res://scripts/battle/action_anim.gd")
 const BattleActionResolver = preload("res://scripts/battle/battle_action_resolver.gd")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+const PixelFx2DScript = preload("res://addons/pixelfx/nodes/pixel_fx_2d.gd")
 
 var action_anim: Node = null
 var _action_camera_kick_tween: Tween = null
@@ -149,6 +150,8 @@ func _ready() -> void:
 	)
 	action_anim.phase_started.connect(_on_action_phase_started)
 	action_anim.finished.connect(_on_action_anim_finished)
+	# 受伤特效：impacts 带 hp_before/hp_after，比 float_text 回调信息全。
+	action_anim.impact_presented.connect(_on_impact_presented)
 	await get_tree().process_frame
 	_debug_print_unit_alignment()
 	# 5. 输入 + 回合
@@ -546,6 +549,8 @@ func _spawn_unit_sprite(u: Dictionary) -> void:
 		# B2 切场景模式：挂 board 下，注入 renderer.visual_top_level 站上可视柱顶
 		board.add_child(us)
 		us.setup(u, board, Callable(renderer, "visual_top_level"))
+	# 战斗中隐藏常驻头顶血条：实际受伤改由 pixelfx 伤害数字 + 血条受击特效表达。
+	us.set_persistent_bar_visible(false)
 	_unit_sprites[u.id] = us
 
 
@@ -1044,8 +1049,11 @@ func _spawn_action_float_text(unit_id: StringName, text: String, color: Color, f
 	_spawn_float_text(unit, text, color, font_size)
 
 
-## 通用飘字（ActionAnim/物品用：治疗绿、伤害红、buff 黄、回 MP 蓝）。
+## 通用飘字（ActionAnim/物品用：治疗绿、buff 黄、回 MP 蓝；伤害红已由 pixelfx 接管）。
 func _spawn_float_text(u: Dictionary, text: String, color: Color, font_size: int = 18) -> void:
+	# 伤害数字（"-N"）统一走 pixelfx damage-number + health-bar-hit，不再叠标签飘字。
+	if text.begins_with("-"):
+		return
 	var lbl := UIFactoryScript.outline_label(text, font_size, color, 4)
 	# 单位脚点由当前 Camera3D 投影到屏幕，再抬升 50px。
 	var screen: Vector2
@@ -1062,6 +1070,55 @@ func _spawn_float_text(u: Dictionary, text: String, color: Color, font_size: int
 	tw.tween_property(lbl, "position:y", lbl.position.y - 30, 0.7)
 	tw.parallel().tween_property(lbl, "modulate:a", 0.0, 0.7)
 	tw.tween_callback(lbl.queue_free)
+
+
+## ActionAnim 每次 impact 回调一次：实际受伤（命中且 damage>0）播 pixelfx 伤害数字 + 血条受击特效。
+## 零伤害 / 未命中 / 治疗 / 纯 buff 均不触发。
+func _on_impact_presented(impact: Dictionary) -> void:
+	if not bool(impact.get(&"hit", false)):
+		return
+	var damage := int(impact.get(&"damage", 0))
+	if damage <= 0:
+		return
+	var unit_id := StringName(impact.get(&"target_id", &""))
+	var u: Dictionary = grid.units.get(unit_id, {})
+	if u.is_empty():
+		return
+	_spawn_damage_fx(u, damage, int(impact.get(&"hp_before", int(u.get(&"hp", 0)))), int(impact.get(&"hp_after", int(u.get(&"hp", 0)))))
+
+
+## 伤害特效：damage-number 绑头顶（实际伤害数字），health-bar-hit 绑同锚点（from=伤前 to=伤后 占最大生命比）。
+func _spawn_damage_fx(u: Dictionary, damage: int, hp_before: int, hp_after: int) -> void:
+	if damage <= 0:
+		return
+	var us: UnitSprite3D = _unit_sprites.get(u.get(&"id", &""))
+	if us == null:
+		return
+	var camera: Camera3D = null
+	if _b1_mode:
+		camera = _world._cam
+	elif board != null:
+		camera = board.camera
+	if camera == null:
+		return
+	var head := camera.unproject_position(us.global_position + Vector3(0.0, us.get_bar_y(), 0.0))
+	var dn: Node2D = PixelFx2DScript.new()
+	dn.effect = "ui/damage-number"
+	dn.options = {"text": "-%d" % damage}
+	dn.free_when_done = true
+	dn.position = head + Vector2(0, -10)
+	battle_ui.get_float_text_container().add_child(dn)
+	var hit_fx: Node2D = PixelFx2DScript.new()
+	hit_fx.effect = "ui/health-bar-hit"
+	var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
+	hit_fx.options = {
+		"from": clampf(float(hp_before) / float(max_hp), 0.0, 1.0),
+		"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),
+	}
+	hit_fx.free_when_done = true
+	# 特效画布 origin=(80,30)：让血条中心落在头顶上方 10px。
+	hit_fx.position = head + Vector2(-80, -40)
+	battle_ui.get_float_text_container().add_child(hit_fx)
 
 
 # ============================================================
@@ -1130,7 +1187,8 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 		if delta > 0:
 			_spawn_float_text(t, "+%d" % delta, Color(0.29, 0.87, 0.50))
 		elif delta < 0:
-			_spawn_float_text(t, "%d" % delta, Color(0.97, 0.44, 0.44))
+			var hp_after := int(t.get(&"hp", 0))
+			_spawn_damage_fx(t, -delta, hp_after - delta, hp_after)
 			if _unit_sprites.get(t.id) != null:
 				_shake(_unit_sprites[t.id])
 	# MP 恢复飘字（蓝）

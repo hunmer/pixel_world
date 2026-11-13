@@ -23,6 +23,9 @@ var _hp_bar_y: float = _HP_BAR_Y / 32.0
 ## 上次计算血条 Y 时的立绘签名（贴图 id + pixel_size + position.y），变化即重算：
 ## 动画/姿态系统换贴图或缩放后血条跟随新的可见头顶，无需关心初始化顺序。
 var _hp_bar_y_key := ""
+## 常驻血条显隐：战斗中隐藏（受击改用 pixelfx 演出），退出战斗恢复。
+## update_state / fade_alpha 只动 modulate，不得让被隐藏的血条复活。
+var _persistent_bar_visible := true
 var _world: Node2D = null
 var _stand_level: int = 0
 var _world_origin: Vector2i = Vector2i.ZERO
@@ -263,6 +266,25 @@ func _refresh_hp_bar_y() -> void:
 	_hp_bar_y_key = key
 	_hp_bar_y = _visible_top_world() + _HP_BAR_GAP_PX / 32.0
 
+## 常驻血条显隐开关。恢复时按当前 hp 重新推导填充条可见性（满血隐藏填充条）。
+func set_persistent_bar_visible(visible_: bool) -> void:
+	_persistent_bar_visible = visible_
+	if _hp_bg != null:
+		_hp_bg.visible = visible_
+	if _hp_bar == null:
+		return
+	if not visible_:
+		_hp_bar.visible = false
+		return
+	# 恢复时按当前 hp 重新推导填充条可见性（与 update_state 同一规则）。
+	var stats: Dictionary = unit.get(&"stats", {})
+	var ratio: float = clampf(float(unit.get(&"hp", 0)) / float(max(1, int(stats.get(&"hp", 1)))), 0.0, 1.0)
+	_hp_bar.visible = _HP_BAR_W * ratio > 0.0
+
+## 血条锚点 Y（可见头顶 + 间距，世界单位）：战斗伤害特效按同一头顶定位。
+func get_bar_y() -> float:
+	return _hp_bar_y
+
 
 func update_state() -> void:
 	if is_world_mode():
@@ -275,7 +297,8 @@ func update_state() -> void:
 	var ratio: float = clampf(float(unit[&"hp"]) / float(max(1, stats[&"hp"])), 0.0, 1.0)
 	var fill_w := _HP_BAR_W * ratio
 	_hp_bar.modulate = _hp_bar_color(ratio)
-	_hp_bar.visible = fill_w > 0.0
+	# 常驻血条被隐藏（战斗中）时，状态更新不得让其复活。
+	_hp_bar.visible = _persistent_bar_visible and fill_w > 0.0
 	_hp_bar.scale.x = fill_w
 	# Sprite3D.offset 也受 scale.x 影响，除回去才能保持左边缘固定。
 	_hp_bar.offset = Vector2(-(40.0 - fill_w) * 0.5 / maxf(fill_w, 0.0001), 0.0)
