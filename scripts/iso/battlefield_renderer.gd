@@ -229,10 +229,13 @@ func top_polygon_for(x: int, y: int) -> PackedVector2Array:
 func visual_top_level(x: int, y: int) -> int:
 	if has_explicit_block_layout():
 		return stand_level(x, y)
-	if not _in_bounds(Vector2i(x, y)):
+	if grid == null:
 		return 0
+	# 越界钳到边缘格：地图边缘描边的顶点沿用本格高度，避免幻影 0 层造成倾斜。
+	var cx := clampi(x, 0, grid.width - 1)
+	var cy := clampi(y, 0, grid.height - 1)
 	# 旧陆柱最上块 level=height-1；旧水面 block.level=height。
-	return stand_level(x, y) - (0 if _tile_type(x, y) == &"water" else 1)
+	return stand_level(cx, cy) - (0 if _tile_type(cx, cy) == &"water" else 1)
 
 
 ## Y-sort 深度（与世界 main.gd._column_sort_y 同构）
