@@ -50,6 +50,7 @@ class_name BattleUI
 extends CanvasLayer
 
 const ResultPresentationScript = preload("res://scripts/battle/result_presentation.gd")
+const BattleSettingsTabScript = preload("res://scripts/battle/battle_settings_tab.gd")
 # 用预加载脚本作类型，避免干净 headless 尚未生成 global class cache 时无法解析。
 
 ## 开战/结算演出事件；场景集成者连接这些信号驱动音效与单位视觉钩子。
@@ -62,6 +63,7 @@ signal presentation_sound_requested(cue: StringName)
 signal opening_finished(skipped: bool)
 signal result_finished(result: StringName, skipped: bool)
 signal presentation_finished(kind: StringName, skipped: bool)
+signal immersive_presentation_changed(enabled: bool)
 
 # ---- 注入的只读引用 ----
 var board: IsoBoard
@@ -92,6 +94,7 @@ var end_turn_btn: Button
 var info_label: Label
 var menu_container: Control
 var preview_container: Control
+var immersive_toggle: CheckButton = null
 var _turn_status_labels: Dictionary = {}
 var _turn_status_signature := ""
 var result_presentation: ResultPresentationScript
@@ -216,6 +219,12 @@ func refresh_turn_status() -> void:
 		label.visible = not parts.is_empty()
 
 
+func _on_immersive_presentation_toggled(enabled: bool) -> void:
+	Settings.set_battle_immersive_presentation(enabled)
+	immersive_presentation_changed.emit(enabled)
+	print("[BattleUI] 沉浸式演出 → %s" % ("开启" if enabled else "关闭"))
+
+
 # ============================================================
 # HUD 构建
 # ============================================================
@@ -308,6 +317,14 @@ func _build_sidebar(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pre
 	pref_btn.pressed.connect(open_pref_cb)
 	_host_tab.add_child(pref_btn)
 	_host_tab.add_child(UIFactoryScript.label("托管 = 本场战斗自动代打（敌方回合本就自动）；偏好按单位配置目标与策略。", 10, TEXT_DIM))
+
+	# ---- Tab【战场设置】：真实交战镜头偏好；切换立即作用于当前/下一次演出 ----
+	var settings_tab := UIFactoryScript.add_tab(tabs, "战场设置", "settings")
+	immersive_toggle = BattleSettingsTabScript.populate(
+		settings_tab,
+		Settings.battle_immersive_presentation,
+		_on_immersive_presentation_toggled
+	)
 
 	# ---- Tab【日志】：引擎/战斗日志（接管 Panku native_logger，浮层不再挂左侧） ----
 	var log_tab := UIFactoryScript.add_tab(tabs, "日志", "file_terminal")

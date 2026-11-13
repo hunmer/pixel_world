@@ -18,6 +18,7 @@ const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
 const EncounterTransitionScript = preload("res://scripts/battle/encounter_transition.gd")
 const BattlePresentationScript = preload("res://scripts/battle/battle_presentation.gd")
 const ActionAnimScript = preload("res://scripts/battle/action_anim.gd")
+const ImmersiveCameraScript = preload("res://scripts/battle/immersive_camera.gd")
 const BattleActionResolver = preload("res://scripts/battle/battle_action_resolver.gd")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
@@ -25,6 +26,7 @@ const PixelFx2DScript = preload("res://addons/pixelfx/nodes/pixel_fx_2d.gd")
 const PixelFxBakerScript = preload("res://addons/pixelfx/bake/baker.gd")
 
 var action_anim: Node = null
+var _immersive_camera: Node = null
 var _action_camera_kick_tween: Tween = null
 var _action_camera_kick_offset := Vector3.ZERO
 var _action_camera_kick_active := false
@@ -151,6 +153,12 @@ func _ready() -> void:
 	)
 	action_anim.phase_started.connect(_on_action_phase_started)
 	action_anim.finished.connect(_on_action_anim_finished)
+	_immersive_camera = ImmersiveCameraScript.new()
+	_immersive_camera.name = "ImmersiveCamera"
+	add_child(_immersive_camera)
+	_immersive_camera.setup(_world._cam if _b1_mode else board.camera)
+	_immersive_camera.set_enabled(Settings.battle_immersive_presentation)
+	battle_ui.immersive_presentation_changed.connect(_immersive_camera.set_enabled)
 	# 受伤特效：impacts 带 hp_before/hp_after，比 float_text 回调信息全。
 	action_anim.impact_presented.connect(_on_impact_presented)
 	await get_tree().process_frame
@@ -216,6 +224,8 @@ func _process(_delta: float) -> void:
 
 
 func _on_action_phase_started(phase: StringName, event: Dictionary) -> void:
+	if is_instance_valid(_immersive_camera) and _immersive_camera.is_engaged():
+		return
 	if phase != &"strike" and phase != &"return":
 		return
 	var target_offset := Vector3.ZERO
@@ -260,6 +270,11 @@ func _on_action_anim_finished(_event: Dictionary, _skipped: bool) -> void:
 
 
 func _apply_action_camera_kick() -> void:
+	if is_instance_valid(_immersive_camera) and _immersive_camera.is_engaged():
+		# B1 的 additive kick 与沉浸有效焦点互斥；B2 的 presentation_offset 由沉浸模块独占。
+		if _b1_mode and is_instance_valid(_world):
+			_world.set_battle_camera_kick(Vector3.ZERO)
+		return
 	if _b1_mode and is_instance_valid(_world):
 		_world.set_battle_camera_kick(_action_camera_kick_offset)
 	elif is_instance_valid(board) and board.camera != null:
@@ -619,6 +634,14 @@ func _is_presentation_skip_event(event: InputEvent) -> bool:
 	return false
 
 
+func _skip_action_presentation() -> void:
+	# 进入期 ActionAnim 尚未 play：先记录跳过并平滑反向，随后 play 同步完成。
+	if is_instance_valid(_immersive_camera) and _immersive_camera.get_state() == ImmersiveCameraScript.State.ENTERING:
+		_immersive_camera.request_skip()
+	if action_anim != null and action_anim.is_playing():
+		action_anim.skip()
+
+
 ## 手势 / 空格 / 滚轮：用 _input（GUI 处理前）确保一定能收到。
 ## 战场 UI（结束回合按钮 / 菜单面板）命中时让出缩放手势，避免误触。
 ## B1 就地模式下相机由 main.gd 管，这里全部跳过（避免 board 为 null 崩溃）。
@@ -627,8 +650,8 @@ func _input(event: InputEvent) -> void:
 	if mode == Mode.ANIMATING:
 		if battle_ui != null and battle_ui.is_presentation_active() and _is_presentation_skip_event(event):
 			battle_ui.skip_presentation()
-		elif action_anim != null and action_anim.is_playing() and _is_presentation_skip_event(event):
-			action_anim.skip()
+		elif _is_presentation_skip_event(event):
+			_skip_action_presentation()
 		get_viewport().set_input_as_handled()
 		return
 	if _b1_mode:
@@ -669,8 +692,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mode == Mode.ANIMATING:
 		if battle_ui != null and battle_ui.is_presentation_active() and _is_presentation_skip_event(event):
 			battle_ui.skip_presentation()
-		elif action_anim != null and action_anim.is_playing() and _is_presentation_skip_event(event):
-			action_anim.skip()
+		elif _is_presentation_skip_event(event):
+			_skip_action_presentation()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey:
@@ -1039,11 +1062,19 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 	if action_anim != null and not event.is_empty():
 		_prewarm_damage_fx_variants(event.get(&"impacts", []))
 		_set_unit_bars_visible(false)
+		var animation_speed := float(options.get(&"anim_speed", 1.0))
+		var skipped := bool(options.get(&"skip", false))
+		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
+		if not is_inside_tree():
+			return
 		await action_anim.play(
 			event,
-			float(options.get(&"anim_speed", 1.0)),
-			bool(options.get(&"skip", false))
+			animation_speed,
+			skipped or _immersive_camera.consume_skip_request()
 		)
+		await _immersive_camera.end()
+		if not is_inside_tree():
+			return
 	atk_us.update_state()
 	def_us.update_state()
 	# 死亡收尾（isDead 已由 resolver 置位，这里补 grid 移除 + 演出）
@@ -1210,11 +1241,19 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 	if action_anim != null and not event.is_empty():
 		_prewarm_damage_fx_variants(event.get(&"impacts", []))
 		_set_unit_bars_visible(false)
+		var animation_speed := float(options.get(&"anim_speed", 1.0))
+		var skipped := bool(options.get(&"skip", false))
+		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
+		if not is_inside_tree():
+			return true
 		await action_anim.play(
 			event,
-			float(options.get(&"anim_speed", 1.0)),
-			bool(options.get(&"skip", false))
+			animation_speed,
+			skipped or _immersive_camera.consume_skip_request()
 		)
+		await _immersive_camera.end()
+		if not is_inside_tree():
+			return true
 	# 统一刷新施法者与全部目标（命中、未命中、治疗、buff 均由事件负责表现）。
 	if atk_us != null:
 		atk_us.update_state()
@@ -1703,6 +1742,8 @@ func _alive_count(faction: StringName) -> int:
 # 切换场景入口
 # ============================================================
 func _exit_tree() -> void:
+	if is_instance_valid(_immersive_camera):
+		_immersive_camera.cancel()
 	# 防御：退出战斗（含 B1 就地模式）时恢复全部常驻血条。
 	_set_unit_bars_visible(true)
 	_restore_result_visuals()

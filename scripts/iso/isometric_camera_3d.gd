@@ -21,6 +21,11 @@ var presentation_offset := Vector3.ZERO:
 	set(value):
 		presentation_offset = value
 		_apply_view()
+## 演出相机到有效焦点的距离；默认与原战术相机完全一致，仅沉浸式交战时临时缩短。
+var presentation_distance: float = CAMERA_DISTANCE:
+	set(value):
+		presentation_distance = clampf(value, 2.0, CAMERA_DISTANCE)
+		_apply_view()
 var yaw_radians: float = IsoProjection.CAMERA_YAW
 var target_yaw_radians: float = IsoProjection.CAMERA_YAW
 var elevation_radians: float = IsoProjection.CAMERA_ELEVATION
@@ -169,7 +174,7 @@ func _apply_view() -> void:
 		sin(yaw_radians) * horizontal,
 		sin(elevation_radians),
 		cos(yaw_radians) * horizontal
-	) * CAMERA_DISTANCE
+	) * presentation_distance
 	var lateral := _reserved_lateral_world()
 	position = focus_position + offset + lateral + presentation_offset
 	# 演出位移同时移动视点，保持四个正交 yaw/elevation；推近缩放由 ActionAnim 的 size 负责。

@@ -12,6 +12,7 @@ const SECTION_BATTLE := "battle"
 const KEY_INLINE_MODE := "inline_mode"
 const KEY_ENEMY_AI_DIFFICULTY := "enemy_ai_difficulty"
 const KEY_HOST_AI_DIFFICULTY := "host_ai_difficulty"
+const KEY_IMMERSIVE_PRESENTATION := "immersive_presentation"
 
 ## 合法难度名单（与 scripts/systems/ai_difficulty.gd 的 VALID 保持一致）
 const AI_DIFFICULTY_VALID: Array = ["novice", "normal", "hard", "nightmare"]
@@ -23,6 +24,8 @@ var battle_inline_mode: bool = true
 var enemy_ai_difficulty: String = "normal"
 ## 玩家托管 AI 难度档（同上）
 var host_ai_difficulty: String = "normal"
+## 沉浸式交战镜头：默认关闭，保留原战术推近；战斗中也可切换。
+var battle_immersive_presentation: bool = false
 
 
 func _ready() -> void:
@@ -37,6 +40,7 @@ func _load() -> void:
 	battle_inline_mode = cfg.get_value(SECTION_BATTLE, KEY_INLINE_MODE, true)
 	enemy_ai_difficulty = _clamp_difficulty(cfg.get_value(SECTION_BATTLE, KEY_ENEMY_AI_DIFFICULTY, "normal"))
 	host_ai_difficulty = _clamp_difficulty(cfg.get_value(SECTION_BATTLE, KEY_HOST_AI_DIFFICULTY, "normal"))
+	battle_immersive_presentation = bool(cfg.get_value(SECTION_BATTLE, KEY_IMMERSIVE_PRESENTATION, false))
 
 
 func save() -> void:
@@ -44,6 +48,7 @@ func save() -> void:
 	cfg.set_value(SECTION_BATTLE, KEY_INLINE_MODE, battle_inline_mode)
 	cfg.set_value(SECTION_BATTLE, KEY_ENEMY_AI_DIFFICULTY, enemy_ai_difficulty)
 	cfg.set_value(SECTION_BATTLE, KEY_HOST_AI_DIFFICULTY, host_ai_difficulty)
+	cfg.set_value(SECTION_BATTLE, KEY_IMMERSIVE_PRESENTATION, battle_immersive_presentation)
 	var err := cfg.save(PATH)
 	if err != OK:
 		push_warning("[Settings] 保存失败: %s (%d)" % [PATH, err])
@@ -84,3 +89,12 @@ func set_ai_difficulty(kind: String, difficulty: String) -> void:
 			return
 	save()
 	print("[Settings] AI 难度（%s）→ %s" % [kind, difficulty])
+
+
+## 设置沉浸式交战镜头并持久化；false 会请求正在演出的镜头恢复战术视角。
+func set_battle_immersive_presentation(value: bool) -> void:
+	if battle_immersive_presentation == value:
+		return
+	battle_immersive_presentation = value
+	save()
+	print("[Settings] 沉浸式演出 → %s" % ("开启" if value else "关闭"))
