@@ -59,6 +59,7 @@ var _style_pick: StyleBoxFlat
 
 
 func _ready() -> void:
+	_mute_panku_overlays()
 	_make_styles()
 	_build_ui()
 	_rebuild_grid()
@@ -68,6 +69,7 @@ func _ready() -> void:
 	add_child(t)
 	t.start()
 	_show_preview("fire/campfire")
+	tree_exiting.connect(_restore_panku_overlays)
 	print("pixelfx_gallery: ready, %d cells, %d columns" % [_cells.size(), _grid.columns])
 	get_viewport().size_changed.connect(_relayout_columns)
 	for a in OS.get_cmdline_user_args():
@@ -106,6 +108,43 @@ func _shot_mode() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		get_tree().quit()
+
+
+var _panku_overlay_mode_prev: int = -1
+var _panku_notifier_prev_visible := true
+
+
+## 画廊是给人看的展示/截图场景：静音 panku 的屏幕消息展示——
+## native_logger 的 output overlay（默认 AlwaysShow，把 print/警告逐条刷在画面左上角）与
+## screen_notifier 的常驻通知层。只改运行时可见性（直接调 set_overlay_display_mode，绕开 opt 的
+## 持久化 setter，不写 panku 全局配置）；tree_exiting 时恢复原状。
+func _mute_panku_overlays() -> void:
+	var panku := get_node_or_null("/root/Panku")
+	if panku == null:
+		return
+	if panku.module_manager.has_module("native_logger"):
+		var logger: PankuModuleNativeLogger = panku.module_manager.get_module("native_logger")
+		_panku_overlay_mode_prev = logger.output_overlay_display_mode
+		logger.set_overlay_display_mode(PankuModuleNativeLogger.ScreenOverlayDisplayMode.NeverShow)
+	if panku.module_manager.has_module("screen_notifier"):
+		var notifier: PankuModuleScreenNotifier = panku.module_manager.get_module("screen_notifier")
+		_panku_notifier_prev_visible = notifier.notifier_layer.visible
+		notifier.notifier_layer.visible = false
+
+
+func _restore_panku_overlays() -> void:
+	if _panku_overlay_mode_prev < 0:
+		return
+	var panku := get_node_or_null("/root/Panku")
+	if panku == null:
+		return
+	if panku.module_manager.has_module("native_logger"):
+		var logger: PankuModuleNativeLogger = panku.module_manager.get_module("native_logger")
+		logger.set_overlay_display_mode(_panku_overlay_mode_prev)
+	if panku.module_manager.has_module("screen_notifier"):
+		var notifier: PankuModuleScreenNotifier = panku.module_manager.get_module("screen_notifier")
+		notifier.notifier_layer.visible = _panku_notifier_prev_visible
+	_panku_overlay_mode_prev = -1
 
 
 func _make_styles() -> void:
@@ -346,9 +385,10 @@ func _make_cell(id: String, meta: Dictionary) -> Dictionary:
 	label.add_theme_color_override("font_color", Color(0.72, 0.72, 0.78))
 	box.add_child(label)
 
-	# 静态代表帧：Sprite2D + 延迟烘焙（_update_visibility 分帧）；重型特效只放占位文字。
+	# 静态代表帧：Sprite2D + 延迟烘焙（_update_visibility 分帧）；重型特效仅在无导出 png 时放占位文字，
+	# 有 png 则照常建 Sprite2D（黑名单自动失效，与 _update_visibility/_bake_cell 的守卫语义一致）。
 	var sp: Sprite2D = null
-	if NO_BAKE_IDS.has(id):
+	if NO_BAKE_IDS.has(id) and _export_dir(id) == "":
 		var hint := Label.new()
 		hint.text = "（点击预览）"
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

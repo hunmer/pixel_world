@@ -1,0 +1,93 @@
+{
+  "meta": {
+    "style": "anime cel-shading, three-view turnaround (front/side/back)",
+    "model": "Lib Image 2.6 Pro",
+    "proportion_rule": "adult 1:7.5, not chibi",
+    "source": "libtv canvas pixel_world_配音音色 (projectId f43636c0a17f41279d0a307adc87f9ff)",
+    "companion": "res://assets/audio/voice/voice_registry.json",
+    "notes": "alt 版本为弃用候选（幼态/缺特征），仅备查"
+  },
+  "characters": {
+    "elf_companion": {
+      "name_cn": "精灵同伴",
+      "turnaround": "res://assets/units/elf_companion/elf_turnaround_adult_v1.png",
+      "size": [
+        2048,
+        1152
+      ],
+      "alt": [
+        "res://assets/units/elf_companion/elf_turnaround_v1.png",
+        "res://assets/units/elf_companion/elf_turnaround_v2.png",
+        "res://assets/units/elf_companion/elf_turnaround_v3.png",
+        "res://assets/units/elf_companion/elf_turnaround_v4.png"
+      ]
+    },
+    "hero": {
+      "name_cn": "主角",
+      "turnaround": "res://assets/units/hero/hero_turnaround_v2.png",
+      "size": [
+        2048,
+        1152
+      ],
+      "alt": [
+        "res://assets/units/hero/hero_turnaround.png"
+      ]
+    },
+    "veteran": {
+      "name_cn": "老将副官",
+      "turnaround": "res://assets/units/veteran/veteran_turnaround.png",
+      "size": [
+        2048,
+        1152
+      ],
+      "alt": []
+    },
+    "mercenary": {
+      "name_cn": "佣兵弓手",
+      "turnaround": "res://assets/units/mercenary/mercenary_turnaround.png",
+      "size": [
+        2048,
+        1152
+      ],
+      "alt": []
+    },
+    "pegasus": {
+      "name_cn": "天马斥候",
+      "turnaround": "res://assets/units/pegasus/pegasus_turnaround.png",
+      "size": [
+        2048,
+        1152
+      ],
+      "alt": []
+    },
+    "priest": {
+      "name_cn": "随军司祭",
+      "turnaround": "res://assets/units/priest/priest_turnaround.png",
+      "size": [
+        2048,
+        1152
+      ],
+      "alt": []
+    },
+    "hierarch": {
+      "name_cn": "神权国圣座",
+      "turnaround": "res://assets/units/hierarch/hierarch_turnaround_v2.png",
+      "size": [
+        2048,
+        1152
+      ],
+      "alt": [
+        "res://assets/units/hierarch/hierarch_turnaround.png"
+      ]
+    },
+    "demon": {
+      "name_cn": "恶魔君主",
+      "turnaround": "res://assets/units/demon/demon_turnaround.png",
+      "size": [
+        2048,
+        1152
+      ],
+      "alt": []
+    }
+  }
+}
