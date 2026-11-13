@@ -1,8 +1,9 @@
 ## battle/battle_ui.gd — 战场屏幕空间 UI（从 scenes/battle.gd 抽出）
 ##
 ## 职责：
-##   - HUD 构建：右侧固定宽多 Tab 侧边栏（map_editor 风格，Tab=回合/情报/托管）
+##   - HUD 构建：右侧固定宽多 Tab 侧边栏（map_editor 风格，Tab=回合/情报/托管/日志）
 ##     —— 回合标签 / 阵营状态 / 结束回合按钮 / 悬停信息 / 托管与偏好 / 退出战斗
+##     / 引擎日志（接管 Panku native_logger，浮层不再挂页面左侧）
 ##   - 单位信息悬浮显示（show_info_at → 侧栏【情报】Tab）
 ##   - 单位行动菜单（攻击/技能/物品/等待）+ 各级目标选择 picker
 ##   - 战斗预览面板 / 技能预览面板（贴侧栏左侧，避开右侧栏）
@@ -100,6 +101,13 @@ var _unit_detail_panel: Control = null
 var _sidebar: PanelContainer = null
 # 【托管】Tab 内容盒（退出战斗按钮按需追加到这里）
 var _host_tab: VBoxContainer = null
+# 【日志】Tab：接管 Panku native_logger（B2 从 Game.tscn 进来时没有世界 side_panel，
+# 不接管的话 Panku 屏幕日志浮层会挂在页面左侧；逻辑照搬 side_panel.gd）
+var _log_label: RichTextLabel = null
+var _pending_log_bbcode := ""
+var _log_update_pending := false
+## PankuModuleNativeLogger 实例（duck-typed；Panku 不在时保持 null）
+var _logger_module = null
 
 # ---- 侧边栏样式（照搬 map_editor.gd 配色，与世界 side_panel.gd 同系） ----
 ## 侧栏宽度：与世界 side_panel.PANEL_WIDTH 对齐 —— B1 就地模式下世界相机已按
@@ -145,6 +153,11 @@ func setup(p_board: IsoBoard, p_grid: GridSystem, p_unit_sprites: Dictionary, p_
 func _process(_delta: float) -> void:
 	# 战斗、技能、物品和AI都可能改HP/行动状态；以签名检测统一刷新，避免遗漏调用链。
 	refresh_turn_status()
+	# 日志镜像：拖选期间挂起，选区清除后再落盘（同 side_panel.gd）。
+	if _log_update_pending and not _log_selection_active():
+		if is_instance_valid(_log_label):
+			_log_label.text = _pending_log_bbcode
+		_log_update_pending = false
 
 
 ## 阵营状态行（挂侧栏【回合】Tab）：按阵营存在性建「我方/敌方」两行 Label。
@@ -300,6 +313,39 @@ func _build_sidebar(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pre
 	_host_tab.add_child(pref_btn)
 	_host_tab.add_child(_label("托管 = 本场战斗自动代打（敌方回合本就自动）；偏好按单位配置目标与策略。", 10, TEXT_DIM))
 
+	# ---- Tab【日志】：引擎/战斗日志（接管 Panku native_logger，浮层不再挂左侧） ----
+	var log_tab := _new_tab(tabs, "日志", "file_terminal")
+	var log_toolbar := HBoxContainer.new()
+	log_toolbar.add_theme_constant_override("separation", 8)
+	log_tab.add_child(log_toolbar)
+	var clear_btn := Button.new()
+	clear_btn.text = "清空"
+	clear_btn.tooltip_text = "清空日志（同步清空 Panku native_logger 缓冲）"
+	clear_btn.add_theme_font_size_override("font_size", 12)
+	clear_btn.pressed.connect(_clear_log)
+	_btn_styles(clear_btn)
+	log_toolbar.add_child(clear_btn)
+	var log_source := _label("引擎日志 · info/warning/error", 10, TEXT_DIM)
+	log_source.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	log_source.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	log_toolbar.add_child(log_source)
+	_log_label = RichTextLabel.new()
+	_log_label.name = "LogLabel"
+	_log_label.bbcode_enabled = true
+	_log_label.scroll_following = true
+	_log_label.scroll_active = true
+	_log_label.selection_enabled = true
+	_log_label.context_menu_enabled = true
+	_log_label.shortcut_keys_enabled = true
+	_log_label.focus_mode = Control.FOCUS_CLICK
+	_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_log_label.add_theme_font_size_override("normal_font_size", 12)
+	_log_label.add_theme_color_override("default_color", Color(0.85, 0.9, 0.9))
+	_log_label.text = "（等待日志…）"
+	log_tab.add_child(_log_label)
+	_attach_panku_logger()
+
 	# 底部提示行（贴面板底部，自动换行）
 	var hint := _label("Q/Z·E/X 旋转视角 · R 复位 · 中键拖拽平移 · ESC 取消", 10, TEXT_DIM)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -327,6 +373,58 @@ func _new_tab(tabs: TabContainer, title: String, icon_name := "") -> VBoxContain
 		if icon != null:
 			tabs.set_tab_icon(idx, icon)
 	return v
+
+
+## 接管 Panku native_logger（照搬 side_panel.gd._attach_panku）：
+## 把原生屏幕浮层切成 NeverShow（B2 从 Game.tscn 进来没人关它，会挂在页面左侧），
+## 并镜像 logger_view 的完整 bbcode 到【日志】Tab。B1 下世界 side_panel 可能已接管过，
+## 再切一次幂等；content_updated 多消费者并存，各自维护自己的文本。
+func _attach_panku_logger() -> void:
+	var panku := get_node_or_null("/root/Panku")
+	if panku == null:
+		if is_instance_valid(_log_label):
+			_log_label.text = "（Panku 未加载，无日志源）"
+		return
+	var module_manager = panku.get("module_manager")
+	if module_manager == null or not module_manager.has_method("get_module"):
+		return
+	if not module_manager.has_module("native_logger"):
+		return
+	_logger_module = module_manager.get_module("native_logger")
+	# 1) 屏幕浮层关闭（仅本会话；不写回 panku 持久化配置）
+	_logger_module.set_overlay_display_mode(
+		PankuModuleNativeLogger.ScreenOverlayDisplayMode.NeverShow
+	)
+	# 2) 镜像 logger_view 的完整 bbcode（自带去重 / 条数上限 / 时间戳着色）
+	var logger_ui: Node = _logger_module.logger_ui
+	logger_ui.content_updated.connect(_on_log_content_updated)
+
+
+func _log_selection_active() -> bool:
+	if not is_instance_valid(_log_label):
+		return false
+	return not _log_label.get_selected_text().is_empty() \
+		or (_log_label.has_focus() and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+
+
+func _on_log_content_updated(bbcode: String) -> void:
+	if _log_selection_active():
+		_pending_log_bbcode = bbcode
+		_log_update_pending = true
+		return
+	if is_instance_valid(_log_label):
+		_log_label.text = bbcode
+
+
+func _clear_log() -> void:
+	if not is_instance_valid(_log_label):
+		return
+	_log_label.deselect()
+	if _logger_module != null and is_instance_valid(_logger_module):
+		# content_updated 会回传空文本并同步本面板
+		_logger_module.logger_ui.clear_all()
+	else:
+		_log_label.text = ""
 
 
 ## battle.gd 注入：把 host_btn 交给 turn_director（battle.gd 持有 director 引用）。
