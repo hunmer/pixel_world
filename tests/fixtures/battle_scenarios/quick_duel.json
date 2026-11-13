@@ -1,0 +1,35 @@
+{
+	"version": 1,
+	"id": "quick_duel",
+	"description": "引用 arena_1v1 预制战场：玩家方脚本驱动罗兰贴脸强攻，敌方交给 AI；演示 move+attack 复合行动、初始化覆盖与终局断言。",
+	"battlefield": "res://data/battlefields/arena_1v1.json",
+	"seed": 7,
+	"limits": {
+		"max_turns": 6,
+		"max_steps": 60
+	},
+	"overrides": {
+		"u_p_0": { "hp": 999 }
+	},
+	"factions": {
+		"player": {
+			"mode": "script",
+			"script": [
+				{ "unit": "u_p_0", "move": { "x": 2, "y": 2 }, "attack": "u_e_0" },
+				{ "unit": "u_p_0", "attack": "u_e_0" },
+				{ "unit": "u_p_0", "attack": "u_e_0" },
+				{ "unit": "u_p_0", "attack": "u_e_0" }
+			],
+			"script_exhausted": "wait"
+		},
+		"enemy": {
+			"mode": "ai"
+		}
+	},
+	"assertions": [
+		{ "type": "winner", "op": "==", "value": "player" },
+		{ "type": "unit_alive", "unit": "u_p_0", "op": "==", "value": true },
+		{ "type": "battle_over", "op": "==", "value": true },
+		{ "type": "turn_number", "op": "<=", "value": 6 }
+	]
+}

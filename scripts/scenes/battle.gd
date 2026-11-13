@@ -17,6 +17,7 @@ const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
 const EncounterTransitionScript = preload("res://scripts/battle/encounter_transition.gd")
 const BattlePresentationScript = preload("res://scripts/battle/battle_presentation.gd")
 const ActionAnimScript = preload("res://scripts/battle/action_anim.gd")
+const BattleActionResolver = preload("res://scripts/battle/battle_action_resolver.gd")
 
 var action_anim: Node = null
 var _action_camera_kick_tween: Tween = null
@@ -162,14 +163,17 @@ func _ready() -> void:
 	set_process_input(true)
 	set_process_unhandled_input(true)
 	print("[Battle] BattleReady units=%d" % _unit_sprites.size())
-	battle_ready.emit()
 	if not _save_state.is_empty():
 		# 恢复进度：不复位列标志/不重跑开局 tick，直接进保存时的阶段
 		var resume: Dictionary = _save_state
 		_save_state = {}
 		_apply_resume_state(resume)
 	else:
+		# 首个玩家回合必须在 battle_ready 之前启动：battle_ready 语义 = 完全就绪
+		# （含首回合复位/冷却/buff tick）。监听方恢复后会立即行动结算，
+		# 若 start_player_phase 仍在其后执行，复位 hasActed 会覆盖已落地的结算置位。
 		turn.start_player_phase()
+	battle_ready.emit()
 
 
 func _play_encounter_opening() -> void:
@@ -1000,8 +1004,9 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 		attacker.name, defender.name, attacker.hp, defender.hp])
 	var atk_us: UnitSprite3D = _unit_sprites[attacker.id]
 	var def_us: UnitSprite3D = _unit_sprites[defender.id]
-	var def_tile := grid.tile_at(defender.position.x, defender.position.y)
-	var result := CombatSystem.execute(attacker, defender, def_tile.avoid_bonus, def_tile.def_bonus)
+	# 结算（execute+死亡标志+hasActed+经验）走共享 resolver；演出在结算后播放。
+	var outcome := BattleActionResolver.resolve_attack(attacker, defender, grid)
+	var result: Dictionary = outcome[&"combat"]
 	var event: Dictionary = result.get(&"attack_event", {})
 	var options := turn_director.get_action_anim_options(attacker.id)
 	print("[combat-event] impacts=%d anim_speed=%.2f skip=%s" % [
@@ -1017,18 +1022,10 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 		)
 	atk_us.update_state()
 	def_us.update_state()
-	if result.defenderDied:
-		_on_unit_death(defender)
-	if result.attackerDied:
-		_on_unit_death(attacker)
-	attacker.hasActed = true
-	if attacker.faction == &"enemy":
-		attacker.hasMoved = true
+	# 死亡收尾（isDead 已由 resolver 置位，这里补 grid 移除 + 演出）
+	for victim in outcome[&"deaths"]:
+		_on_unit_death(victim)
 	atk_us.update_state()
-	if attacker.faction == &"player" and result.defenderDied:
-		_gain_exp(attacker, WeaponData.exp_for_kill(defender.level))
-	elif attacker.faction == &"player" and result.attackerHits:
-		_gain_exp(attacker, WeaponData.exp_for_hit(defender.level, attacker.level))
 
 
 ## ActionAnim 每个 impact 只回调一次，按权威单位 id 取当前格位，避免重复订阅飘字信号。
@@ -1074,7 +1071,9 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 		return true
 	mode = Mode.ANIMATING
 	var atk_us: UnitSprite3D = _unit_sprites.get(caster.id)
-	var result := SkillSystem.execute(caster, targets, skill_id)
+	# 结算（execute+死亡标志+hasActed+经验）走共享 resolver；演出在结算后播放。
+	var outcome := BattleActionResolver.resolve_skill(caster, targets, skill_id)
+	var result: Dictionary = outcome[&"skill"]
 	var event: Dictionary = result.get(&"attack_event", {})
 	var options := turn_director.get_action_anim_options(caster.id)
 	print("[skill-event] skill=%s impacts=%d skip=%s" % [
@@ -1096,18 +1095,9 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 		var target_sprite: UnitSprite3D = _unit_sprites.get(target.id)
 		if target_sprite != null:
 			target_sprite.update_state()
-	var killed := 0
-	for h in result[&"hits"]:
-		if bool(h.get(&"died", false)):
-			_on_unit_death(h[&"unit"])
-			killed += 1
-	caster.hasActed = true
-	if caster.faction == &"enemy":
-		caster.hasMoved = true
-	if caster.faction == &"player" and killed > 0:
-		_gain_exp(caster, WeaponData.exp_for_kill(int(targets[0][&"level"])) * killed)
-	elif caster.faction == &"player" and not result[&"hits"].is_empty():
-		_gain_exp(caster, WeaponData.exp_for_hit(int(targets[0][&"level"]), int(caster[&"level"])))
+	# 死亡收尾（isDead 已由 resolver 置位，这里补 grid 移除 + 演出）
+	for victim in outcome[&"deaths"]:
+		_on_unit_death(victim)
 	mode = Mode.IDLE
 	_check_battle_end()
 	return true
@@ -1127,7 +1117,9 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 		tween.tween_property(us, "global_position", start + Vector3(0, 6.0 / 32.0, 0), 0.12)
 		tween.tween_property(us, "global_position", start, 0.12)
 		await tween.finished
-	var result := ItemSystem.execute(user, targets, item_entry)
+	# 结算（execute+死亡标志+hasActed）走共享 resolver。
+	var outcome := BattleActionResolver.resolve_item(user, targets, item_entry)
+	var result: Dictionary = outcome[&"item"]
 	# HP 变化飘字（治疗绿 / 伤害红）
 	for h in result.get(&"hp_deltas", []):
 		var t: Dictionary = h[&"unit"]
@@ -1152,13 +1144,9 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 		if _unit_sprites.get(t.id) != null:
 			(_unit_sprites[t.id] as UnitSprite3D).update_state()
 	await get_tree().create_timer(0.4).timeout
-	# 投掷物致死处理
-	for h in result.get(&"hp_deltas", []):
-		if bool(h.get(&"died", false)):
-			_on_unit_death(h[&"unit"])
-	user.hasActed = true
-	if user.faction == &"enemy":
-		user.hasMoved = true
+	# 结算（execute+死亡标志+hasActed）走共享 resolver；投掷致死在演出后收尾。
+	for victim in outcome[&"deaths"]:
+		_on_unit_death(victim)
 	mode = Mode.IDLE
 	_check_battle_end()
 	return true
@@ -1190,22 +1178,13 @@ func _on_unit_death(u: Dictionary) -> void:
 # ============================================================
 # 经验/升级
 # ============================================================
-func _gain_exp(u: Dictionary, amount: int) -> void:
-	if u.isDead:
-		return
-	u.exp += amount
-	while u.exp >= WeaponData.exp_to_next(u.level) and u.level < 20:
-		u.exp -= WeaponData.exp_to_next(u.level)
-		u.level += 1
-		# 升级随机成长：每属性按 growths% 概率 +1
-		var g: Dictionary = u.growths
-		var s: Dictionary = u.stats
-		for k in g.keys():
-			if randf() * 100.0 < g[k]:
-				s[k] = int(s[k]) + 1
-		u.hp = int(u.stats.hp)  # 升 hp 上限后回满
+## 经验/升级结算已迁入 BattleActionResolver.gain_exp（与 headless automation 共享单一事实源）。
+## 这里保留薄包装：刷新立绘状态，供残留的动态调用兼容。
+func _gain_exp(u: Dictionary, amount: int) -> Dictionary:
+	var info: Dictionary = BattleActionResolver.gain_exp(u, amount)
 	if _unit_sprites.has(u.id):
 		(_unit_sprites[u.id] as UnitSprite3D).update_state()
+	return info
 
 
 # ============================================================

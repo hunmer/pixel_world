@@ -124,8 +124,18 @@ static func load_battlefield(path: String) -> Dictionary:
 	var res := _parse_json_file(path)
 	if not bool(res.get("ok", false)):
 		return { "ok": false, "error": res.get("error", "") }
-	var d: Dictionary = res["data"]
-	var file_id := path.get_file().get_basename()
+	return _build_chapter(res["data"], path.get_file().get_basename())
+
+
+## 内联战场声明（与 data/battlefields/*.json 同 schema 的 dict）→ chapter。
+## 供声明式自动化场景使用：无需落盘文件即可走同一套校验/构建管线。
+static func load_battlefield_inline(d: Dictionary, fallback_id: String = "inline") -> Dictionary:
+	if not (d is Dictionary) or d.is_empty():
+		return { "ok": false, "error": "内联战场声明必须是非空对象" }
+	return _build_chapter(d, fallback_id)
+
+
+static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 	var info := {
 		"id": String(d.get("id", file_id)),
 		"name": String(d.get("name", file_id)),

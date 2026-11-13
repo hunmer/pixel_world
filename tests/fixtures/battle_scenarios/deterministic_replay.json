@@ -1,0 +1,27 @@
+{
+	"version": 1,
+	"id": "deterministic_replay",
+	"description": "arena_1v1 双方全 AI 自动对局：验证同 seed 下战报逐字节可复现（确定性契约的回归锚点）。",
+	"battlefield": "res://data/battlefields/arena_1v1.json",
+	"seed": 42,
+	"limits": {
+		"max_turns": 10,
+		"max_steps": 100
+	},
+	"factions": {
+		"player": {
+			"mode": "ai",
+			"ai_pref": {
+				"strategy": "auto"
+			}
+		},
+		"enemy": {
+			"mode": "ai"
+		}
+	},
+	"assertions": [
+		{ "type": "battle_over", "op": "==", "value": true },
+		{ "type": "turn_number", "op": "<=", "value": 10 },
+		{ "type": "event_count", "op": ">=", "value": 5 }
+	]
+}

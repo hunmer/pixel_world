@@ -1,0 +1,46 @@
+{
+	"version": 1,
+	"id": "scripted_victory",
+	"description": "内联 3x3 战场：魔导师保持射程风筝狂战士，3 轮火球定胜负；演示 inline 战场声明与 HP 覆盖。",
+	"inline": {
+		"rows": [
+			"...",
+			"...",
+			"..."
+		],
+		"playerUnits": [
+			{ "class": "mage", "name": "艾琳", "level": 3, "x": 0, "y": 1 }
+		],
+		"enemyUnits": [
+			{ "class": "berserker", "name": "血斧", "level": 3, "x": 2, "y": 1 }
+		]
+	},
+	"seed": 11,
+	"limits": {
+		"max_turns": 6,
+		"max_steps": 60
+	},
+	"overrides": {
+		"u_p_0": { "hp": 999 }
+	},
+	"factions": {
+		"player": {
+			"mode": "script",
+			"script": [
+				{ "unit": "u_p_0", "attack": "u_e_0" },
+				{ "unit": "u_p_0", "attack": "u_e_0" },
+				{ "unit": "u_p_0", "attack": "u_e_0" },
+				{ "unit": "u_p_0", "attack": "u_e_0" }
+			],
+			"script_exhausted": "wait"
+		},
+		"enemy": {
+			"mode": "ai"
+		}
+	},
+	"assertions": [
+		{ "type": "winner", "op": "==", "value": "player" },
+		{ "type": "unit_alive", "unit": "u_p_0", "op": "==", "value": true },
+		{ "type": "unit_alive", "unit": "u_e_0", "op": "==", "value": false }
+	]
+}
