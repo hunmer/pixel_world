@@ -160,7 +160,7 @@ func _on_canvas_resized() -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMagnifyGesture:
-		# 双指捏合：捏合张开（factor>1）→ 1/factor<1 → 放大一步（B2 同款公式）
+		# 双指捏合：捏合张开（factor>1）→ 1/factor<1 → 放大（B2 同款公式，连续平滑缩放）
 		var mag := event as InputEventMagnifyGesture
 		var factor := clampf(1.0 / mag.factor, 0.5, 2.0)
 		_board.zoom_by(factor, mag.position, get_viewport().get_visible_rect().size)
