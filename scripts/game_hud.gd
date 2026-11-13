@@ -7,6 +7,7 @@ extends CanvasLayer
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const SidePanelScript = preload("res://scripts/side_panel.gd")
 const HintBarScript = preload("res://scripts/hint_bar.gd")
+const AIDifficultyScript = preload("res://scripts/systems/ai_difficulty.gd")
 ## 侧栏占用的窗口右侧列宽；main.gd 用它让 3D 视锥让出该列。
 const SIDE_PANEL_WIDTH := SidePanelScript.PANEL_WIDTH
 ## 左侧停靠竖栏宽度（不透明，装战场/设置按钮）；窗口分栏 = 左栏 + 中间舞台 + 右侧栏。
@@ -157,7 +158,7 @@ func _open_settings() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	var panel := PanelContainer.new()
 	panel.name = "SettingsPanel"
-	panel.custom_minimum_size = Vector2(280, 120)
+	panel.custom_minimum_size = Vector2(280, 200)
 	panel.position = (vp - panel.custom_minimum_size) / 2.0
 	panel.add_theme_stylebox_override("panel", _panel_style())
 	$"HUDRoot".add_child(panel)
@@ -184,6 +185,9 @@ func _open_settings() -> void:
 		Settings.set_battle_inline_mode(idx == 0)
 	)
 	row.add_child(opt)
+	# 敌方 AI 难度 / 托管 AI 难度（四档；缺省 normal，非法存档值已由 Settings 归一）
+	vbox.add_child(_difficulty_row("敌方 AI 难度", Settings.enemy_ai_difficulty, "enemy"))
+	vbox.add_child(_difficulty_row("托管 AI 难度", Settings.host_ai_difficulty, "host"))
 	# 关闭按钮
 	var close_btn := Button.new()
 	close_btn.text = "关闭"
@@ -192,6 +196,29 @@ func _open_settings() -> void:
 		if p != null: p.queue_free()
 	)
 	vbox.add_child(close_btn)
+
+
+## 构造一行「AI 难度」选项（label + OptionButton 四档）。kind: "enemy"/"host"。
+func _difficulty_row(label_text: String, current: String, kind: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var lbl := _label(label_text, 12, TEXT_SECONDARY)
+	row.add_child(lbl)
+	var opt := OptionButton.new()
+	var cur_idx := 0
+	for i in AIDifficultyScript.OPTIONS.size():
+		var entry: Dictionary = AIDifficultyScript.OPTIONS[i]
+		opt.add_item(String(entry.get("label", entry.get("id", "?"))), i)
+		if String(entry.get("id", "")) == current:
+			cur_idx = i
+	opt.select(cur_idx)
+	opt.custom_minimum_size = Vector2(140, 0)
+	opt.item_selected.connect(func(idx: int):
+		var chosen: Dictionary = AIDifficultyScript.OPTIONS[idx]
+		Settings.set_ai_difficulty(kind, String(chosen.get("id", "normal")))
+	)
+	row.add_child(opt)
+	return row
 
 
 ## ---- 战场选择面板（JSON 战场加载列表，调试入口） --------------------------

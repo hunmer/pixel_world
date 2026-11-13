@@ -9,6 +9,10 @@
 ##   6) PlayerAI 托管路径对称（auto 透传 + 非 auto 策略叠加 focus/worst）
 ##   7) 声明式场景 ai_pref.difficulty 注入（runner 进程内 + CLI 子进程 + loader 校验）
 ##   8) 确定性：nightmare 同 seed 双跑事件流一致
+##   10) 类型安全：loader difficulty 非字符串报错；Settings._clamp_difficulty 任意类型宽容
+##   11) 优先目标语义：显式 priorityTargetId 在任何难度（含 novice worst）下都胜出
+##   12) focus 集火统一：伤害型技能/物品评分与普攻同款残血加分
+##   13) 非 auto 策略 fallback：novice 不追击（pursue=false）
 ##
 ## 局面用手工 UnitData 构造（数值完全可控，不依赖职业表），技能/物品置空
 ## 以隔离出普攻评分路径；runner 链路用标准职业（覆盖真实数据面）。
@@ -41,6 +45,10 @@ func _run() -> void:
 	_test_scenario_runner()
 	_test_cli_subprocess()
 	_test_determinism()
+	_test_type_safety()
+	_test_priority_semantics()
+	_test_focus_unified()
+	_test_nonauto_fallback_pursue()
 	if _failures > 0:
 		push_error("[battle_ai_difficulty_contract] FAILED: %d 处断言未过" % _failures)
 		quit(1)
@@ -422,3 +430,143 @@ func _test_determinism() -> void:
 	# 不同 seed：决策本身无 RNG（目标选择不变），事件流仍完整产出
 	_expect(int(run_c["exit_code"]) == 0 and not (run_c["events"] as Array).is_empty(),
 		"seed6 同样 exit 0 且事件流非空（实际 exit %d）" % int(run_c["exit_code"]))
+
+
+# ============================================================
+# 组 10：类型安全（loader 严格 / Settings 宽容）
+# ============================================================
+
+func _test_type_safety() -> void:
+	print("[10] 类型安全")
+	# loader：difficulty 非字符串 → 明确报「必须是字符串」（不做 String() 转换）
+	for bad_val in [123, true, {}]:
+		var sc: Dictionary = _nightmare_scenario()
+		sc["factions"]["enemy"]["ai_pref"]["difficulty"] = bad_val
+		var r: Dictionary = ScenarioLoader.load_from_dict(sc)
+		_expect(not bool(r.get("ok", false))
+			and String(r.get("error", "")).contains("必须是字符串"),
+			"loader：difficulty=%s 报「必须是字符串」" % typeof(bad_val))
+
+	# Settings._clamp_difficulty：任意脏类型宽容回 normal（Node.new 不进树不触发 _ready）
+	var SettingsScript := preload("res://scripts/settings.gd")
+	var st2: Node = SettingsScript.new()
+	for dirty in [123, true, {}, "insane"]:
+		var got: String = st2._clamp_difficulty(dirty)
+		_expect(got == "normal", "Settings 宽容：%s → normal" % typeof(dirty))
+	_expect(st2._clamp_difficulty("hard") == "hard", "Settings 合法值 hard 保留")
+	st2.free()
+
+
+# ============================================================
+# 组 11：优先目标语义（显式 priorityTargetId vs worst 档）
+# ============================================================
+
+func _test_priority_semantics() -> void:
+	print("[11] 优先目标语义")
+	# 组3 局面 faction 反转：玩家弓手 host，敌方 knight_t（低分残血）/mage_t（高分满血）
+	var units := _duel_setup()
+	units[0][&"faction"] = &"player"
+	units[1][&"faction"] = &"enemy"
+	units[2][&"faction"] = &"enemy"
+	var host: Dictionary = units[0]
+	var foes: Array = [units[1], units[2]]
+	var grid := _mk_grid(units)
+
+	# 对照：novice 无优先目标 → worst 选低分 knight
+	_expect(_target_id(PlayerAI.decide(host, grid, foes, {&"difficulty": &"novice"})) == &"u_p_knight",
+		"novice 无优先目标：worst → 低分 knight（对照）")
+	# auto 路径 + 优先目标：限定目标列表（单目标无选择余地）
+	_expect(_target_id(PlayerAI.decide(host, grid, foes,
+		{&"strategy": &"auto", &"priorityTargetId": "u_p_mage"})) == &"u_p_mage",
+		"auto+priority=mage：目标列表限定 → mage（即便 novice worst）")
+	_expect(_target_id(PlayerAI.decide(host, grid, foes,
+		{&"difficulty": &"novice", &"priorityTargetId": "u_p_mage"})) == &"u_p_mage",
+		"无 strategy+priority=mage：auto 限定 → novice 也打 mage")
+	# 非 auto + worst：反转加权推高非优先目标 → 优先目标胜出
+	_expect(_target_id(PlayerAI.decide(host, grid, foes,
+		{&"strategy": &"weakest", &"difficulty": &"novice", &"priorityTargetId": "u_p_mage"})) == &"u_p_mage",
+		"weakest+novice+priority=mage：worst 反转加权 → mage 胜出")
+
+
+# ============================================================
+# 组 12：focus 集火统一（伤害技能/物品 vs 普攻）
+# ============================================================
+
+func _test_focus_unified() -> void:
+	print("[12] focus 集火统一")
+	var prof_hard: Dictionary = AIDifficulty.profile(&"hard")
+	var caster := _mk_unit(
+		&"u_e_magek", &"enemy", 2, 2, _wpn("anima", 5, 90, 0),
+		{&"mag": 10, &"str": 1, &"skl": 1, &"spd": 1, &"luk": 1, &"def": 5, &"res": 5},
+		30, [1, 2]
+	)
+	# hurt/full 同防（res5），火球对两者伤害相同（15），分数差 = 纯 focus；
+	# hurt hp16：15 < 16 不触发击杀加分，missing=14
+	var hurt := _mk_unit(&"u_p_hurt", &"player", 0, 2, _wpn("lance", 5, 80, 0),
+		{&"str": 1, &"def": 5, &"res": 5}, 16, [1, 1])
+	var full := _mk_unit(&"u_p_full", &"player", 4, 2, _wpn("lance", 5, 80, 0),
+		{&"str": 1, &"def": 5, &"res": 5}, 30, [1, 1])
+
+	var fireball: Dictionary = SkillData.get_skill(&"fireball")
+	_expect(not fireball.is_empty(), "fireball 技能存在（懒加载）")
+	var s_hurt: float = EnemyAI._score_skill(caster, fireball, [hurt], prof_hard)
+	var s_full: float = EnemyAI._score_skill(caster, fireball, [full], prof_hard)
+	_expect(absf(s_hurt - s_full - 14.0 * 3.0) < 0.001,
+		"_score_skill：残血加分 = 14×3.0 = 42（差 %.1f）" % (s_hurt - s_full))
+
+	var shuriken: Dictionary = ItemData.get_item(&"shuriken")
+	_expect(not shuriken.is_empty(), "shuriken 物品存在（懒加载）")
+	var i_hurt: float = EnemyAI._score_item(caster, shuriken, [hurt], prof_hard)
+	var i_full: float = EnemyAI._score_item(caster, shuriken, [full], prof_hard)
+	_expect(absf(i_hurt - i_full - 14.0 * 3.0) < 0.001,
+		"_score_item：投掷伤害同样集火加分（差 %.1f）" % (i_hurt - i_full))
+
+	# 行为级：damage 技能的 targets_for 是「射程内全部敌人」（组评分，非单目标选择），
+	# 因此难度不改变技能 targets；行为断言锁定「技能候选不被系统性低估」：
+	# 单敌 hurt=res5 hp16：普攻 10×2-反1=19，火球 15×2-3=27 → 两档都应放火球。
+	# （修复前技能分无 focus：hard 下普攻 19+42=61 vs 技能 27，普攻反超 → 选普攻即缺陷）
+	var king := _mk_unit(
+		&"u_e_magek2", &"enemy", 2, 2, _wpn("anima", 5, 90, 0),
+		{&"mag": 10, &"str": 1, &"skl": 1, &"spd": 1, &"luk": 1, &"def": 5, &"res": 5},
+		30, [1, 2]
+	)
+	king[&"mp"] = 20
+	king[&"skills"] = [&"fireball"]
+	var units := [king, hurt]
+	var grid := _mk_grid(units)
+	var ps: Array = [hurt]
+	var d_n: Dictionary = EnemyAI.decide(king, grid, ps, &"normal")
+	var d_h: Dictionary = EnemyAI.decide(king, grid, ps, &"hard")
+	var act_n: Dictionary = d_n.get(&"action", {})
+	var act_h: Dictionary = d_h.get(&"action", {})
+	_expect(String(act_n.get(&"type", &"")) == &"skill",
+		"normal：火球 27 分 > 普攻 19 → 放技能")
+	_expect(String(act_h.get(&"type", &"")) == &"skill",
+		"hard：火球 27+42=69 > 普攻 19+42=61 → 仍放技能（focus 两边一致，不再低估技能）")
+
+
+# ============================================================
+# 组 13：非 auto 策略 fallback 追击（novice 不追）
+# ============================================================
+
+func _test_nonauto_fallback_pursue() -> void:
+	print("[13] 非 auto fallback 追击")
+	# 组4 局面 faction 反转：玩家 knight 够不着远处敌方 mage
+	var king := _mk_unit(
+		&"u_p_king", &"player", 2, 4, _wpn("lance", 5, 80, 0),
+		{&"str": 1, &"def": 5, &"res": 5}, 30, [1, 1]
+	)
+	var far := _mk_unit(
+		&"u_e_far", &"enemy", 6, 4, _wpn("anima", 5, 90, 0),
+		{&"mag": 3, &"def": 1, &"res": 1}, 30, [1, 2]
+	)
+	var grid := _mk_grid([king, far], 9, 9)
+
+	var d_nov: Dictionary = PlayerAI.decide(king, grid, [far],
+		{&"strategy": &"aggressive", &"difficulty": &"novice"})
+	_expect(d_nov[&"moveTarget"] == null,
+		"aggressive+novice：够不着 → 原地待命（不追击）")
+	var d_nrm: Dictionary = PlayerAI.decide(king, grid, [far],
+		{&"strategy": &"aggressive", &"difficulty": &"normal"})
+	_expect(d_nrm[&"moveTarget"] != null,
+		"aggressive+normal：够不着 → 朝最近敌移动")

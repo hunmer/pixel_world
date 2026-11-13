@@ -151,12 +151,15 @@ static func _score_skill(caster: Dictionary, sk: Dictionary, targets: Array, pro
 				score += preview_dmg * 2.0
 				if preview_dmg >= int(t[&"hp"]):
 					score += skill_kill   # 能击杀
+				# 伤害技能与普攻同款残血集火（hard/nightmare）
+				score += AIDifficultyScoring.focus_bonus(t, prof)
 		&"aoe":
 			for t in targets:
 				var preview_dmg := SkillSystem._skill_damage(caster, t, sk)
 				score += preview_dmg * 2.5   # AOE 多目标加权
 				if preview_dmg >= int(t[&"hp"]):
 					score += skill_kill
+				score += AIDifficultyScoring.focus_bonus(t, prof)
 		&"heal":
 			for t in targets:
 				var missing: int = int(t[&"stats"][&"hp"]) - int(t[&"hp"])
@@ -181,6 +184,8 @@ static func _score_item(_user: Dictionary, idef: Dictionary, targets: Array, pro
 				score += int(idef[&"power"]) * 2.0
 				if int(idef[&"power"]) >= int(t[&"hp"]):
 					score += item_kill
+				# 投掷伤害物品与普攻同款残血集火（hard/nightmare）
+				score += AIDifficultyScoring.focus_bonus(t, prof)
 		&"heal_hp":
 			for t in targets:
 				var missing: int = int(t[&"stats"][&"hp"]) - int(t[&"hp"])

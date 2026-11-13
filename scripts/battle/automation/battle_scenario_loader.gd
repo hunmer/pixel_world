@@ -168,7 +168,11 @@ static func load_from_dict(d: Dictionary, fallback_id: String = "inline", seed_o
 				if not known_pref.has(String(pk)):
 					return _err("factions.%s.ai_pref 含未知字段 \"%s\"（可用: %s）" % [key, String(pk), ", ".join(known_pref)])
 			if raw_pref.has("difficulty"):
-				var dstr := String(raw_pref["difficulty"])
+				# 类型安全：非字符串（数字/bool/对象）明确报输入错误，不做 String() 转换
+				var dval: Variant = raw_pref["difficulty"]
+				if typeof(dval) != TYPE_STRING and typeof(dval) != TYPE_STRING_NAME:
+					return _err("factions.%s.ai_pref.difficulty 必须是字符串（得到 %s）" % [key, type_string(typeof(dval))])
+				var dstr := String(dval)
 				if not AIDifficulty.validate(dstr):
 					return _err("factions.%s.ai_pref.difficulty 非法: \"%s\"（合法: %s）" % [key, dstr, ", ".join(AIDifficulty.VALID)])
 			norm["ai_pref"] = raw_pref

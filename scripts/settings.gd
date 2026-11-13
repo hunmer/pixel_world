@@ -49,8 +49,11 @@ func save() -> void:
 		push_warning("[Settings] 保存失败: %s (%d)" % [PATH, err])
 
 
-## 非法/缺失难度回 "normal"（运行时宽容；声明式 CLI 侧由 loader 严格报错）。
+## 非法/缺失/非字符串难度回 "normal"（运行时宽容；声明式 CLI 侧由 loader 严格报错）。
+## ConfigFile 可能存出任意类型（数字/bool/数组），先 typeof 防御再转字符串。
 func _clamp_difficulty(value) -> String:
+	if typeof(value) != TYPE_STRING and typeof(value) != TYPE_STRING_NAME:
+		return "normal"
 	var s := String(value)
 	return s if AI_DIFFICULTY_VALID.has(s) else "normal"
 
