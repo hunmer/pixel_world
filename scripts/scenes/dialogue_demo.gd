@@ -190,8 +190,8 @@ func _build_name_plate(node_name: String, speaker_id: String, is_left: bool) -> 
 	plate.anchor_right = plate.anchor_left
 	plate.anchor_top = 1.0
 	plate.anchor_bottom = 1.0
-	plate.offset_top = -344
-	plate.offset_bottom = -276
+	plate.offset_top = -350
+	plate.offset_bottom = -278
 	if is_left:
 		plate.offset_left = 56
 		plate.offset_right = 56 + 220

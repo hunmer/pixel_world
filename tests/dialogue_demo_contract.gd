@@ -179,10 +179,6 @@ func _run() -> void:
 	_check(plate_left.global_position.y < panel.global_position.y
 		and plate_right.global_position.y < panel.global_position.y,
 		"宽窗口名称牌主体在对话框上方")
-	print("  dbg - plate_l=%s plate_r=%s panel_top_y=%.1f vsize=%s" % [
-		str(Rect2(plate_left.global_position, plate_left.size)),
-		str(Rect2(plate_right.global_position, plate_right.size)),
-		panel.global_position.y, str(vsize)])
 	_check(plate_left.global_position.y + plate_left.size.y <= panel.global_position.y + 12.5
 		and plate_right.global_position.y + plate_right.size.y <= panel.global_position.y + 12.5,
 		"宽窗口名称牌仅 tab 压边（<=12px）")
