@@ -13,6 +13,7 @@ class_name BattleRunner
 extends RefCounted
 
 const Resolver = preload("res://scripts/battle/battle_action_resolver.gd")
+const AIDifficulty = preload("res://scripts/systems/ai_difficulty.gd")
 
 # 运行态（单次 run 内有效）
 var _grid: GridSystem = null
@@ -176,9 +177,11 @@ func _run_ai_phase(faction: StringName, cfg: Dictionary) -> void:
 			continue
 		var decision: Dictionary
 		if faction == &"player":
-			decision = PlayerAI.decide(u, _grid, foes, cfg["ai_pref"])
+			# 玩家侧：ai_pref 直传（difficulty 键在内，由 PlayerAI 内部 normalize）
+			decision = PlayerAI.decide(u, _grid, foes, cfg.get("ai_pref", {}))
 		else:
-			decision = EnemyAI.decide(u, _grid, foes)
+			# 敌方侧：难度从 ai_pref.difficulty 取（缺省 normal）
+			decision = EnemyAI.decide(u, _grid, foes, StringName(AIDifficulty.normalize(cfg.get("ai_pref", {}).get("difficulty", AIDifficulty.DEFAULT))))
 		_exec_ai_decision(faction, u, decision)
 		_after_step_checks()
 

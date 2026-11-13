@@ -65,6 +65,10 @@ var enemy_anim_speed: float = 1.0
 var skip_enemy_anim: bool = false
 var hosting_anim_speed: float = 1.0
 var skip_hosting_anim: bool = false
+## 敌方 / 玩家托管 AI 难度档（StringName：novice/normal/hard/nightmare）。
+## 缺省 normal；由 battle.gd setup 后从 Settings 注入（本类不直接依赖 autoload）。
+var enemy_difficulty: StringName = &"normal"
+var host_difficulty: StringName = &"normal"
 var _auto_prefs: Dictionary = {}
 var _hosting_running: bool = false  # 防止 start_player_auto_phase 重入
 
@@ -218,7 +222,9 @@ func _player_auto_act(u: Dictionary) -> void:
 		u.hasMoved = true
 		u.hasActed = true
 		return
-	var pref: Dictionary = _auto_prefs.get(u.id, PlayerAI.default_pref())
+	var pref: Dictionary = _auto_prefs.get(u.id, PlayerAI.default_pref()).duplicate()
+	# 场级托管难度覆盖单位 pref 的 difficulty（未单独配置时无该键 → 用场级档）
+	pref[&"difficulty"] = host_difficulty
 	var decision := PlayerAI.decide(u, grid, enemies, pref)
 	var us: UnitSprite3D = unit_sprites.get(u.id)
 	if us == null:
@@ -292,7 +298,7 @@ func _enemy_act(enemy: Dictionary) -> void:
 			players.append(u)
 	if players.is_empty():
 		return
-	var decision := EnemyAI.decide(enemy, grid, players)
+	var decision := EnemyAI.decide(enemy, grid, players, enemy_difficulty)
 	var us: UnitSprite3D = unit_sprites[enemy.id]
 	if us == null:
 		return

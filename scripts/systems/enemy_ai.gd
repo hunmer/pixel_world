@@ -7,23 +7,34 @@
 ##      - 技能：(stop, skill, skill_targets) → 技能效果评分
 ##      - 物品：(stop, item, item_targets) → 物品效果评分
 ##   3. 选全局最高分，返回 {moveTarget, action:{type, ...}}。
-##   4. 无攻击/技能/物品候选时，朝最近敌人移动。
+##   4. 无攻击/技能/物品候选时，朝最近敌人移动（novice 档原地待命）。
 ##
 ## 返回结构：
 ##   { moveTarget: Vector2i|null,
 ##     attackTarget: UnitData|{},              # 向后兼容（普攻目标）
 ##     action: { type: "normal"/"skill"/"item", skillId?, itemId?, targets:[UnitData] } }
 ## 无技能/物品可用时 action.type="normal"，attackTarget 即旧字段。
+##
+## 难度：decide 第 4 参 difficulty（缺省 normal）。评分公式按 AIDifficulty.profile
+## 参数化：normal 与历史行为逐值等价；novice 无击杀意识/无视反击/选最差候选/不追击；
+## hard/nightmare 击杀与反击权重更高并集火残血。
 
 class_name EnemyAI
 extends RefCounted
 
+const AIDifficulty := preload("res://scripts/systems/ai_difficulty.gd")
+const AIDifficultyScoring := preload("res://scripts/systems/ai_difficulty_scoring.gd")
 
-## AI 决策。players = 要攻击的目标列表（敌方阵营）。
-static func decide(enemy: Dictionary, grid: GridSystem, players: Array) -> Dictionary:
+
+## AI 决策。players = 要攻击的目标列表（敌方阵营）。difficulty = 难度档名。
+static func decide(
+	enemy: Dictionary, grid: GridSystem, players: Array,
+	difficulty: StringName = AIDifficulty.DEFAULT
+) -> Dictionary:
 	if players.is_empty():
 		return { &"moveTarget": null, &"attackTarget": {}, &"action": { &"type": &"normal" } }
 
+	var prof: Dictionary = AIDifficulty.profile(difficulty)
 	var ep: Vector2i = enemy[&"position"]
 	var res: Dictionary = grid.compute_attack_range(ep.x, ep.y, enemy)
 	var move_range: Dictionary = res[&"moveRange"]
@@ -51,19 +62,14 @@ static func decide(enemy: Dictionary, grid: GridSystem, players: Array) -> Dicti
 				continue
 			var tile: Dictionary = grid.tile_at(p[&"position"].x, p[&"position"].y)
 			var prev := CombatSystem.preview(enemy, p, tile.get(&"avoid_bonus", 0), tile.get(&"def_bonus", 0))
-			var score: int = prev[&"atkDmg"] * 2 + (prev[&"atkDmg"] if prev[&"doubleAttack"] else 0)
-			# 能击杀大幅加分
-			if prev[&"atkDmg"] >= int(p[&"hp"]):
-				score += 5000
-			# 扣掉会被反击的伤害（保守一点）
-			score -= int(prev[&"defDmg"])
-			_try_best(best, stop, score, { &"type": &"normal", &"targets": [p] })
+			var score: float = AIDifficultyScoring.attack_score(prev, p, prof)
+			_try_best(best, stop, score, { &"type": &"normal", &"targets": [p] }, prof)
 
 	# 候选 2：技能（需要 enemy 站在 stop 上能用——简单起见假设移动不影响技能射程判断，
 	# 这里以 enemy 当前位置评估技能目标，移动只用来靠近）。
-	_evaluate_skill_candidates(enemy, grid, players, best, ep)
+	_evaluate_skill_candidates(enemy, grid, players, best, ep, prof)
 	# 候选 3：物品
-	_evaluate_item_candidates(enemy, grid, players, best, ep)
+	_evaluate_item_candidates(enemy, grid, players, best, ep, prof)
 
 	if not best.is_empty():
 		var act: Dictionary = best[&"action"]
@@ -77,7 +83,9 @@ static func decide(enemy: Dictionary, grid: GridSystem, players: Array) -> Dicti
 			&"action": act,
 		}
 
-	# 无任何行动候选 → 朝最近敌人移动
+	# 无任何行动候选 → 朝最近敌人移动（novice 档原地待命）
+	if not AIDifficultyScoring.should_pursue(prof):
+		return { &"moveTarget": null, &"attackTarget": {}, &"action": { &"type": &"normal" } }
 	var nearest := _nearest_player(ep, players)
 	if nearest.is_empty():
 		return { &"moveTarget": null, &"attackTarget": {}, &"action": { &"type": &"normal" } }
@@ -96,7 +104,7 @@ static func decide(enemy: Dictionary, grid: GridSystem, players: Array) -> Dicti
 ## 枚举该单位可用技能，评估每个 (skill, targets) 组合的分数。
 static func _evaluate_skill_candidates(
 	caster: Dictionary, grid: GridSystem, _enemies: Array,
-	best: Dictionary, caster_pos: Vector2i
+	best: Dictionary, caster_pos: Vector2i, prof: Dictionary
 ) -> void:
 	for sk in SkillData.usable_skills(caster):
 		var sid: StringName = sk[&"id"]
@@ -106,17 +114,17 @@ static func _evaluate_skill_candidates(
 		var targets: Array = SkillSystem.targets_for(caster, sid, grid)
 		if targets.is_empty():
 			continue
-		var score: float = _score_skill(caster, sk, targets)
+		var score: float = _score_skill(caster, sk, targets, prof)
 		# 技能的 moveTarget = 当前位置（不移动，原地施法）；后续 _pick_move_toward 会处理
 		_try_best(best, caster_pos, score, {
 			&"type": &"skill", &"skillId": sid, &"targets": targets,
-		})
+		}, prof)
 
 
 ## 枚举背包可用物品，评估每个 (item, targets) 组合的分数。
 static func _evaluate_item_candidates(
 	user: Dictionary, grid: GridSystem, _enemies: Array,
-	best: Dictionary, user_pos: Vector2i
+	best: Dictionary, user_pos: Vector2i, prof: Dictionary
 ) -> void:
 	for ie in ItemData.usable_items(user):
 		var entry: Dictionary = ie[&"entry"]
@@ -125,14 +133,16 @@ static func _evaluate_item_candidates(
 		var targets: Array = ItemSystem.targets_for(user, iid, grid)
 		if targets.is_empty():
 			continue
-		var score: float = _score_item(user, idef, targets)
+		var score: float = _score_item(user, idef, targets, prof)
 		_try_best(best, user_pos, score, {
 			&"type": &"item", &"itemId": iid, &"entry": entry, &"targets": targets,
-		})
+		}, prof)
 
 
 ## 技能评分：伤害型按总伤害+击杀；治疗型按恢复量；buff/debuff 按价值。
-static func _score_skill(caster: Dictionary, sk: Dictionary, targets: Array) -> float:
+## 击杀加分按难度档（prof.skill_kill_bonus）参数化。
+static func _score_skill(caster: Dictionary, sk: Dictionary, targets: Array, prof: Dictionary) -> float:
+	var skill_kill: int = int(prof[&"skill_kill_bonus"])
 	var score: float = 0.0
 	match sk[&"type"]:
 		&"damage":
@@ -140,13 +150,13 @@ static func _score_skill(caster: Dictionary, sk: Dictionary, targets: Array) -> 
 				var preview_dmg := SkillSystem._skill_damage(caster, t, sk)
 				score += preview_dmg * 2.0
 				if preview_dmg >= int(t[&"hp"]):
-					score += 4000   # 能击杀
+					score += skill_kill   # 能击杀
 		&"aoe":
 			for t in targets:
 				var preview_dmg := SkillSystem._skill_damage(caster, t, sk)
 				score += preview_dmg * 2.5   # AOE 多目标加权
 				if preview_dmg >= int(t[&"hp"]):
-					score += 4000
+					score += skill_kill
 		&"heal":
 			for t in targets:
 				var missing: int = int(t[&"stats"][&"hp"]) - int(t[&"hp"])
@@ -161,14 +171,16 @@ static func _score_skill(caster: Dictionary, sk: Dictionary, targets: Array) -> 
 
 
 ## 物品评分：投掷物按伤害；消耗品按恢复；buff 按价值。物品不耗 MP，优先级略低于强力技能。
-static func _score_item(_user: Dictionary, idef: Dictionary, targets: Array) -> float:
+## 击杀加分按难度档（prof.item_kill_bonus）参数化。
+static func _score_item(_user: Dictionary, idef: Dictionary, targets: Array, prof: Dictionary) -> float:
+	var item_kill: int = int(prof[&"item_kill_bonus"])
 	var score: float = 0.0
 	match idef[&"effect"]:
 		&"damage":
 			for t in targets:
 				score += int(idef[&"power"]) * 2.0
 				if int(idef[&"power"]) >= int(t[&"hp"]):
-					score += 3000
+					score += item_kill
 		&"heal_hp":
 			for t in targets:
 				var missing: int = int(t[&"stats"][&"hp"]) - int(t[&"hp"])
@@ -187,9 +199,9 @@ static func _score_item(_user: Dictionary, idef: Dictionary, targets: Array) -> 
 # 工具
 # ============================================================
 
-## 更新 best（取更高分）。
-static func _try_best(best: Dictionary, stop: Vector2i, score: float, action: Dictionary) -> void:
-	if best.is_empty() or score > float(best[&"score"]):
+## 更新 best（best 档取更高分；novice 的 worst 档取更低分）。
+static func _try_best(best: Dictionary, stop: Vector2i, score: float, action: Dictionary, prof: Dictionary) -> void:
+	if best.is_empty() or AIDifficultyScoring.better(score, float(best[&"score"]), prof):
 		best.clear()
 		best[&"stop"] = stop
 		best[&"score"] = score

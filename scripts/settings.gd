@@ -1,16 +1,28 @@
 ## settings.gd — 全局用户偏好（autoload 单例）
 ##
 ## 用 ConfigFile 持久化到 user://settings.cfg，下次启动自动加载。
-## 目前只存「战斗模式」开关：就地（B1）/ 独立场景（B2）。
+## 存「战斗模式」开关（B1/B2）与 AI 难度档（敌方/玩家托管）。
+## 难度校验用内联名单而非 preload AIDifficulty：autoload 尽量少依赖，且
+## 非法值统一宽容回 "normal"。
 
 extends Node
 
 const PATH := "user://settings.cfg"
 const SECTION_BATTLE := "battle"
 const KEY_INLINE_MODE := "inline_mode"
+const KEY_ENEMY_AI_DIFFICULTY := "enemy_ai_difficulty"
+const KEY_HOST_AI_DIFFICULTY := "host_ai_difficulty"
+
+## 合法难度名单（与 scripts/systems/ai_difficulty.gd 的 VALID 保持一致）
+const AI_DIFFICULTY_VALID: Array = ["novice", "normal", "hard", "nightmare"]
 
 ## 战斗模式：true=就地（B1，单位挂世界场景）/ false=独立场景（B2，切 Battle.tscn）
 var battle_inline_mode: bool = true
+
+## 敌方 AI 难度档（novice/normal/hard/nightmare，缺省 normal=历史行为）
+var enemy_ai_difficulty: String = "normal"
+## 玩家托管 AI 难度档（同上）
+var host_ai_difficulty: String = "normal"
 
 
 func _ready() -> void:
@@ -23,14 +35,24 @@ func _load() -> void:
 	if err != OK:
 		return  # 文件不存在或解析失败，用默认值
 	battle_inline_mode = cfg.get_value(SECTION_BATTLE, KEY_INLINE_MODE, true)
+	enemy_ai_difficulty = _clamp_difficulty(cfg.get_value(SECTION_BATTLE, KEY_ENEMY_AI_DIFFICULTY, "normal"))
+	host_ai_difficulty = _clamp_difficulty(cfg.get_value(SECTION_BATTLE, KEY_HOST_AI_DIFFICULTY, "normal"))
 
 
 func save() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value(SECTION_BATTLE, KEY_INLINE_MODE, battle_inline_mode)
+	cfg.set_value(SECTION_BATTLE, KEY_ENEMY_AI_DIFFICULTY, enemy_ai_difficulty)
+	cfg.set_value(SECTION_BATTLE, KEY_HOST_AI_DIFFICULTY, host_ai_difficulty)
 	var err := cfg.save(PATH)
 	if err != OK:
 		push_warning("[Settings] 保存失败: %s (%d)" % [PATH, err])
+
+
+## 非法/缺失难度回 "normal"（运行时宽容；声明式 CLI 侧由 loader 严格报错）。
+func _clamp_difficulty(value) -> String:
+	var s := String(value)
+	return s if AI_DIFFICULTY_VALID.has(s) else "normal"
 
 
 ## 设置战斗模式并持久化。true=就地, false=独立场景。
@@ -40,3 +62,22 @@ func set_battle_inline_mode(value: bool) -> void:
 	battle_inline_mode = value
 	save()
 	print("[Settings] 战斗模式 → %s" % ("就地" if value else "独立场景"))
+
+
+## 设置 AI 难度档并持久化。kind: "enemy"/"host"；非法难度忽略（不改配置）。
+func set_ai_difficulty(kind: String, difficulty: String) -> void:
+	if not AI_DIFFICULTY_VALID.has(difficulty):
+		return
+	match kind:
+		"enemy":
+			if enemy_ai_difficulty == difficulty:
+				return
+			enemy_ai_difficulty = difficulty
+		"host":
+			if host_ai_difficulty == difficulty:
+				return
+			host_ai_difficulty = difficulty
+		_:
+			return
+	save()
+	print("[Settings] AI 难度（%s）→ %s" % [kind, difficulty])

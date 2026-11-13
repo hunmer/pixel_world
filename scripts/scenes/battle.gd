@@ -12,6 +12,7 @@
 extends Node2D
 
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
+const AIDifficulty = preload("res://scripts/systems/ai_difficulty.gd")
 const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
 const EncounterTransitionScript = preload("res://scripts/battle/encounter_transition.gd")
@@ -113,6 +114,9 @@ func _ready() -> void:
 	# 1b. 回合编排器（敌方 AI + 玩家方托管）
 	turn_director = TurnDirector.new()
 	turn_director.setup(grid, turn, chapter, _unit_sprites)
+	# AI 难度档从全局设置注入（非法/缺失由 normalize 回 normal）
+	turn_director.enemy_difficulty = AIDifficulty.normalize(Settings.enemy_ai_difficulty)
+	turn_director.host_difficulty = AIDifficulty.normalize(Settings.host_ai_difficulty)
 	_inject_turn_director_callables()
 	add_child(turn_director)
 	if SceneArgs.battle_args.get("hosting", false):

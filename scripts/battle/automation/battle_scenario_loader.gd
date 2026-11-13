@@ -37,6 +37,7 @@ class_name BattleScenarioLoader
 extends RefCounted
 
 const Loader = preload("res://scripts/core/battlefield_loader.gd")
+const AIDifficulty = preload("res://scripts/systems/ai_difficulty.gd")
 
 const SUPPORTED_VERSION := 1
 const DEFAULT_MAX_TURNS := 50
@@ -161,7 +162,16 @@ static func load_from_dict(d: Dictionary, fallback_id: String = "inline", seed_o
 		if cfg.has("ai_pref"):
 			if not (cfg["ai_pref"] is Dictionary):
 				return _err("factions.%s.ai_pref 必须是对象" % key)
-			norm["ai_pref"] = cfg["ai_pref"]
+			var raw_pref: Dictionary = cfg["ai_pref"]
+			var known_pref := ["strategy", "priorityTargetId", "difficulty"]
+			for pk in raw_pref:
+				if not known_pref.has(String(pk)):
+					return _err("factions.%s.ai_pref 含未知字段 \"%s\"（可用: %s）" % [key, String(pk), ", ".join(known_pref)])
+			if raw_pref.has("difficulty"):
+				var dstr := String(raw_pref["difficulty"])
+				if not AIDifficulty.validate(dstr):
+					return _err("factions.%s.ai_pref.difficulty 非法: \"%s\"（合法: %s）" % [key, dstr, ", ".join(AIDifficulty.VALID)])
+			norm["ai_pref"] = raw_pref
 		factions[faction] = norm
 	# 6) overrides：单位 ID 必须存在于 chapter 单位
 	var unit_ids := {}

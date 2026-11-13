@@ -83,8 +83,25 @@
 走游戏同款 `EnemyAI` / `PlayerAI`（确定性评分，无随机）。可选 `ai_pref`：
 
 ```jsonc
-"ai_pref": { "strategy": "auto" }   // auto | aggressive | defensive | nearest | weakest；可选 "priorityTargetId": "u_e_1"
+"ai_pref": {
+	"strategy": "auto",          // auto | aggressive | defensive | nearest | weakest（仅玩家侧生效）
+	"priorityTargetId": "u_e_1", // 优先目标（仅玩家侧 strategy 非 auto 时生效）
+	"difficulty": "normal"       // novice | normal | hard | nightmare（两侧阵营通用）
+}
 ```
+
+#### AI 难度档（difficulty）
+
+| 档位 | 击杀加分（普攻/技能/物品） | 反击权重 | 残血集火 | 候选选择 | 无目标时 |
+| --- | --- | --- | --- | --- | --- |
+| `novice` 新手 | 0 / 0 / 0 | ×0（无视反击） | 无 | 选**最差**候选 | 原地待命 |
+| `normal` 普通（缺省） | 5000 / 4000 / 3000 | ×1.0 | 无 | 选最佳 | 朝最近敌移动 |
+| `hard` 困难 | 12000 / 10000 / 8000 | ×2.0 | ×3.0/缺失血 | 选最佳 | 朝最近敌移动 |
+| `nightmare` 噩梦 | 20000 / 16000 / 12000 | ×3.0 | ×8.0/缺失血 | 选最佳 | 朝最近敌移动 |
+
+- `normal` 与历史行为**逐值等价**（缺省不写 = 原样）；残血集火只在目标已损血时生效（满血恒 0）。
+- 敌方（`factions.enemy`）与玩家侧（`factions.player`，托管/`ai` 模式）通用；玩家侧 `strategy` 非 `auto` 时集火分与难度选择同样叠加。
+- 声明式场景里**非法难度名严格报错**（exit 2）；游戏内 `Settings`（`enemy_ai_difficulty` / `host_ai_difficulty`，`user://settings.cfg` `[battle]` 节）宽容回 `normal`。
 
 ### 断言
 

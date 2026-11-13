@@ -1,0 +1,43 @@
+{
+	"version": 1,
+	"id": "ai_difficulty_focus",
+	"description": "AI 难度档演示：敌方 archer 噩梦难度集火残血 knight（focus 8.0×24 缺失血），普通难度则会先打低防 swordsman。玩家空脚本站桩。",
+	"inline": {
+		"rows": [
+			".....",
+			".....",
+			".....",
+			".....",
+			"....."
+		],
+		"playerUnits": [
+			{ "class": "knight", "name": "铁壁", "x": 0, "y": 2 },
+			{ "class": "swordsman", "name": "剑士", "x": 4, "y": 2 }
+		],
+		"enemyUnits": [
+			{ "class": "archer", "name": "猎手", "x": 2, "y": 2 }
+		]
+	},
+	"seed": 5,
+	"limits": {
+		"max_turns": 8,
+		"max_steps": 60
+	},
+	"overrides": {
+		"u_p_0": { "hp": 10 }
+	},
+	"factions": {
+		"player": {
+			"mode": "script",
+			"script": [],
+			"script_exhausted": "wait"
+		},
+		"enemy": {
+			"mode": "ai",
+			"ai_pref": { "difficulty": "nightmare" }
+		}
+	},
+	"assertions": [
+		{ "type": "battle_over", "op": "==", "value": true }
+	]
+}

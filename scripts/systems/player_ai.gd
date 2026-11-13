@@ -1,14 +1,18 @@
 ## systems/player_ai.gd — 玩家方托管决策器
 ##
 ## 与 EnemyAI.decide 阵营中立、签名一致，仅多一个 pref 参数。
-## pref = { priorityTargetId: StringName|"", strategy: StringName }
-## - strategy=auto 或 pref 为空 → 直接退化为 EnemyAI.decide（零侵入复用）。
+## pref = { priorityTargetId: StringName|"", strategy: StringName, difficulty: StringName }
+## - strategy=auto 或 pref 为空 → 直接退化为 EnemyAI.decide（零侵入复用，透传难度）。
 ## - 其它策略在 EnemyAI 的「枚举可停留格 × 可达敌人」基础上，对 CombatSystem.preview 的伤害
-##   按 strategy 加权打分，priorityTargetId 命中加绝对权重。
+##   按 strategy 加权打分，priorityTargetId 命中加绝对权重；难度档的残血集火加分同样生效，
+##   候选选择按难度档 best/worst（novice 选最差）。
 ## 无可攻击目标时，朝优先目标（若存活）或最近敌人移动（复用 EnemyAI fallback）。
 
 class_name PlayerAI
 extends RefCounted
+
+const AIDifficulty := preload("res://scripts/systems/ai_difficulty.gd")
+const AIDifficultyScoring := preload("res://scripts/systems/ai_difficulty_scoring.gd")
 
 const STRATEGY_AUTO       := &"auto"        # 复用 EnemyAI 行为（伤害最大化）
 const STRATEGY_AGGRESSIVE := &"aggressive"  # 优先击杀
@@ -36,12 +40,16 @@ static func decide(unit: Dictionary, grid: GridSystem, enemies: Array, pref: Dic
 	if enemies.is_empty():
 		return { &"moveTarget": null, &"attackTarget": {}, &"action": { &"type": &"normal" } }
 
-	# 无偏好或 auto → 零侵入复用 EnemyAI
+	# 难度档：normalize 非法/缺失回 normal（与 EnemyAI 缺省一致）
+	var difficulty: StringName = AIDifficulty.normalize(pref.get(&"difficulty", AIDifficulty.DEFAULT))
+
+	# 无偏好或 auto → 零侵入复用 EnemyAI（透传难度）
 	var strategy: StringName = pref.get(&"strategy", STRATEGY_AUTO)
 	if strategy == STRATEGY_AUTO or pref.is_empty():
-		return EnemyAI.decide(unit, grid, enemies)
+		return EnemyAI.decide(unit, grid, enemies, difficulty)
 
 	var priority_id = pref.get(&"priorityTargetId", "")
+	var prof: Dictionary = AIDifficulty.profile(difficulty)
 
 	var ep: Vector2i = unit[&"position"]
 	var res: Dictionary = grid.compute_attack_range(ep.x, ep.y, unit)
@@ -71,10 +79,12 @@ static func decide(unit: Dictionary, grid: GridSystem, enemies: Array, pref: Dic
 			var tile: Dictionary = grid.tile_at(p[&"position"].x, p[&"position"].y)
 			var prev := CombatSystem.preview(unit, p, tile.get(&"avoid_bonus", 0), tile.get(&"def_bonus", 0))
 			var score := _score_target(unit, p, prev, dist, strategy)
+			# 难度档：残血集火加分
+			score += AIDifficultyScoring.focus_bonus(p, prof)
 			# 优先目标绝对加权
 			if priority_id != "" and priority_id == p[&"id"]:
 				score += 100000
-			if best.is_empty() or score > best[&"score"]:
+			if best.is_empty() or AIDifficultyScoring.better(score, best[&"score"], prof):
 				best = { &"stop": stop, &"target": p, &"score": score }
 
 	if not best.is_empty():
