@@ -50,7 +50,12 @@ const SORT_REBASE_DISTANCE := 4096
 
 const ANIMAL_SORT_BIAS := WanderingAnimalScript.SORT_BIAS
 const PLAYER_SORT_BIAS := 0.5
-const PLAYER_OCCLUSION_SORT_EPSILON := 0.01
+## 植物锚点比人物更靠近镜头超过该深度余量才判定为遮挡（植物 billboard 有厚度）。
+const PLAYER_PROP_OCCLUSION_DEPTH_MARGIN := 0.05
+## 静止时遮挡集合的定期重算间隔（秒）：防御检测抖动后的卡死状态。
+const PLAYER_OCCLUSION_REFRESH_INTERVAL := 0.5
+## 贴图像素 alpha 命中阈值；低于它视为透明，不触发整格淡化。
+const PROP_TEXTURE_ALPHA_HIT_THRESHOLD := 0.01
 ## block 本身还有半个贴图宽度；0.75 格的命中边距最终呈现约 3x3 的可见窗口。
 const PLAYER_OCCLUSION_SCREEN_MARGIN := Vector2(TILE_W * 0.75, TILE_H * 0.75)
 ## 每个遮挡块保持固定的强透明度；不能按命中块总数继续拆分，否则高山会近乎消失。
@@ -235,12 +240,15 @@ var _move_level_from := 0.0
 var _move_level_to := 0.0
 var _player_visual_position := Vector2.ZERO
 var _move_t := 1.0  ## >= 1 表示静止
-var _player_occluder_cells := {}  ## cell -> 当前需要透明的 block indices
+var _player_occluder_cells := {}  ## cell -> 当前遮挡人物的植物格（调试面板查询）
 var _player_occlusion_fading_cells := {}  ## 包含正在恢复不透明度的格
 var _player_occlusion_dirty := true
+var _player_occlusion_refresh_elapsed := 0.0
 var _player_occlusion_last_visual_position := Vector2(1.0e20, 1.0e20)
-var _player_occlusion_last_sort_y := 1.0e20
+var _player_occlusion_last_yaw := 1.0e20
+var _player_occlusion_last_zoom := 1.0e20
 var _player_occlusion_last_stand_level := 1.0e20
+var _prop_texture_image_cache := {}  ## prop 贴图 instance_id -> Image（alpha 精测用）
 
 var _minimap_img: Image
 var _minimap_tex: ImageTexture
@@ -1306,7 +1314,10 @@ func _update_streaming() -> void:
 				_spawn_cell(cell)
 	# 每个流式批次只重建受影响的 chunk，而非每格一个 Node。
 	if is_instance_valid(_terrain):
-		_terrain.flush()
+		if _terrain.flush() > 0:
+			# chunk 重建会清掉植物淡化状态（注册表重建），需要重算遮挡集合，
+			# 否则已记录的遮挡格会带着"已处理"标记而永远不再淡化。
+			_player_occlusion_dirty = true
 	# 所有地块与静态生态对象完成后再生成动物群，避免群成员落在尚未加载的树木或装饰上。
 	_spawn_fauna_for_stream()
 	_cleanup_streamed_animals()
@@ -3132,22 +3143,6 @@ func _player_movement_sort_y() -> float:
 	)
 
 
-func _player_occlusion_sort_y() -> float:
-	# 移动中的渲染代理会暂时取两个支撑面的前侧排序键，防止共面地板
-	# 切开人物；落地后遮挡检测必须改用目标格的标准键，不能依赖进入方向。
-	if _move_t >= 1.0:
-		return _move_sort_to
-	return _player.position.y
-
-
-func _player_world_rect() -> Rect2:
-	var texture_size := _player.texture.get_size()
-	return Rect2(
-		_player_visual_position - Vector2(texture_size.x * 0.5, texture_size.y),
-		texture_size
-	).grow(1.0)
-
-
 func _player_current_stand_level() -> float:
 	return lerpf(
 		_move_level_from,
@@ -3156,110 +3151,136 @@ func _player_current_stand_level() -> float:
 	)
 
 
-func _column_draws_after_player(view: Node2D) -> bool:
-	if view.z_index != _player.z_index:
-		return view.z_index > _player.z_index
-	return (
-		view.position.y
-		> _player_occlusion_sort_y() + PLAYER_OCCLUSION_SORT_EPSILON
+func _player_occlusion_needs_rebuild() -> bool:
+	var stand_level := _player_current_stand_level()
+	var moved := (
+		not _player_occlusion_last_visual_position.is_equal_approx(_player_visual_position)
+		or not is_equal_approx(_player_occlusion_last_stand_level, stand_level)
 	)
+	if not moved and is_instance_valid(_cam):
+		# 相机绕焦点旋转时人物可能停在屏幕同一位置，但其他物体的投影全部移动，
+		# 所以门控必须包含视角与缩放。
+		moved = (
+			not is_equal_approx(_player_occlusion_last_yaw, _cam.yaw_radians)
+			or not is_equal_approx(_player_occlusion_last_zoom, _cam.zoom)
+		)
+	return _player_occlusion_dirty or moved
 
 
-func _player_occlusion_screen_rect(core_rect: Rect2) -> Rect2:
-	return Rect2(
-		core_rect.position - PLAYER_OCCLUSION_SCREEN_MARGIN,
-		core_rect.size + PLAYER_OCCLUSION_SCREEN_MARGIN * 2.0
+func _update_player_occlusion(delta: float) -> void:
+	# 静止时也周期性重算：相机/流式稳定期若发生过检测抖动（重建瞬间遮挡判定翻转），
+	# 靠定期 rebuild 自愈，避免"已记录遮挡但淡化状态被恢复"的卡死局面。
+	_player_occlusion_refresh_elapsed += delta
+	if _player_occlusion_refresh_elapsed >= PLAYER_OCCLUSION_REFRESH_INTERVAL:
+		_player_occlusion_refresh_elapsed = 0.0
+		_player_occlusion_dirty = true
+	if _player_occlusion_needs_rebuild():
+		_rebuild_player_prop_occlusion()
+	if is_instance_valid(_terrain):
+		_terrain.advance_prop_fades(delta)
+		_player_occlusion_fading_cells = {}
+		for cell_value in _terrain.get_active_prop_fade_cells():
+			_player_occlusion_fading_cells[cell_value] = true
+
+
+## 收集真正挡住人物的植物格：锚点必须位于镜头与人物之间（更近），
+## billboard 投影与人物包围盒相交，且贴图像素在相交区内确实有 alpha。
+func _collect_player_prop_occluders() -> Dictionary:
+	var result := {}
+	if (
+		_player == null
+		or _player.texture == null
+		or not is_instance_valid(_cam)
+		or not is_instance_valid(_terrain)
+	):
+		return result
+	var viewport_height := maxf(get_viewport_rect().size.y, 1.0)
+	var px_per_world := viewport_height / maxf(_cam.size, 0.0001)
+	var sprite_size := _player.texture.get_size() * _player.pixel_size
+	var center_world := _player.global_position + Vector3.UP * (sprite_size.y * 0.5)
+	var center_screen := _cam.unproject_position(center_world)
+	var core := Rect2(
+		center_screen - sprite_size * 0.5 * px_per_world,
+		sprite_size * px_per_world
+	).grow_individual(
+		PLAYER_OCCLUSION_SCREEN_MARGIN.x,
+		PLAYER_OCCLUSION_SCREEN_MARGIN.y,
+		PLAYER_OCCLUSION_SCREEN_MARGIN.x,
+		PLAYER_OCCLUSION_SCREEN_MARGIN.y
 	)
-
-
-## 完全按最终屏幕投影收集遮挡 block。高山柱即使逻辑锚点离玩家很远，
-## 只要投影落到人物身上，仍会成为 core seed；halo 只负责形成连贯的视觉窗口。
-func _collect_player_occlusion_state() -> Dictionary:
-	var empty_state := {"blocks": {}, "core_block_count": 0}
-	if _player == null or _player.texture == null:
-		return empty_state
-	var core_rect := _player_world_rect()
-	var screen_rect := _player_occlusion_screen_rect(core_rect)
-	var player_stand_level := _player_current_stand_level()
-	var core_cells := {}
-	var halo_blocks := {}
-	var core_block_count := 0
-	for cell_value in _cells.keys():
+	var camera_back := _cam.global_transform.basis.z
+	var player_depth := camera_back.dot(center_world)
+	for cell_value in _terrain.get_prop_cells():
 		var cell: Vector2i = cell_value
-		var view: Node2D = _cells[cell]
-		if not is_instance_valid(view) or not _column_draws_after_player(view):
-			continue
-		var screen_indices: Array[int] = view.player_occluding_block_indices(
-			screen_rect,
-			player_stand_level
-		)
-		if screen_indices.is_empty():
-			continue
-		halo_blocks[cell] = screen_indices
-		var core_indices: Array[int] = view.player_occluding_block_indices(
-			core_rect,
-			player_stand_level
-		)
-		if not core_indices.is_empty():
-			core_cells[cell] = true
-			core_block_count += core_indices.size()
-	if core_cells.is_empty():
-		return empty_state
-
-	# 只沿画面 halo 内的相邻地形扩展；所有真正覆盖人物的 seed 都无条件保留。
-	var selected_blocks := {}
-	var pending: Array[Vector2i] = []
-	for cell_value in core_cells.keys():
-		pending.append(cell_value)
-	while not pending.is_empty():
-		var cell: Vector2i = pending.pop_back()
-		if selected_blocks.has(cell) or not halo_blocks.has(cell):
-			continue
-		selected_blocks[cell] = halo_blocks[cell]
-		for direction_value in ANIMAL_DIRECTIONS:
-			var direction: Vector2i = direction_value
-			var neighbor: Vector2i = cell + direction
-			if halo_blocks.has(neighbor) and not selected_blocks.has(neighbor):
-				pending.append(neighbor)
-	return {
-		"blocks": selected_blocks,
-		"core_block_count": core_block_count,
-	}
-
-
-func _collect_player_occluder_cells() -> Array[Vector2i]:
-	var result: Array[Vector2i] = []
-	var state: Dictionary = _collect_player_occlusion_state()
-	for cell_value in (state["blocks"] as Dictionary).keys():
-		result.append(cell_value)
-	result.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		return a.y < b.y or (a.y == b.y and a.x < b.x)
-	)
+		for block_value in _terrain.get_prop_block_occlusion_data(cell):
+			var block: Dictionary = block_value
+			# camera_back（镜头 +Z）指向观察者：点积越小越远离镜头。
+			# 锚点比人物更远离镜头 → 不可能遮挡（深度测试已保证它画在人物后面）。
+			if camera_back.dot(block["anchor"]) < player_depth - PLAYER_PROP_OCCLUSION_DEPTH_MARGIN:
+				continue
+			var block_half := (block["size_px"] as Vector2) / IsoProjection.TILE_PIXELS * 0.5 * px_per_world
+			var block_rect := Rect2(
+				_cam.unproject_position(block["center"]) - block_half,
+				block_half * 2.0
+			)
+			if not block_rect.intersects(core):
+				continue
+			if _prop_block_covers_player(block, block_rect, core):
+				result[cell] = true
+				break
 	return result
 
 
-func _player_occlusion_target_alpha(core_block_count: int) -> float:
-	if core_block_count <= 0:
-		return 1.0
-	return PLAYER_OCCLUSION_BLOCK_ALPHA
+func _prop_block_covers_player(block: Dictionary, block_rect: Rect2, core: Rect2) -> bool:
+	var overlap := block_rect.intersection(core)
+	if overlap.size.x <= 0.0 or overlap.size.y <= 0.0:
+		return false
+	var image := _prop_texture_image(block["texture"])
+	if image == null or image.is_empty():
+		return true
+	var origin: Vector2 = block.get("origin_px", Vector2.ZERO)
+	var size_px: Vector2 = block["size_px"]
+	var max_x := mini(image.get_width() - 1, maxi(0, ceili(
+		(overlap.end.x - block_rect.position.x) / block_rect.size.x * size_px.x + origin.x
+	)))
+	var max_y := mini(image.get_height() - 1, maxi(0, ceili(
+		(overlap.end.y - block_rect.position.y) / block_rect.size.y * size_px.y + origin.y
+	)))
+	for pixel_y in range(maxi(0, floori(
+		(overlap.position.y - block_rect.position.y) / block_rect.size.y * size_px.y + origin.y
+	)), max_y + 1):
+		for pixel_x in range(maxi(0, floori(
+			(overlap.position.x - block_rect.position.x) / block_rect.size.x * size_px.x + origin.x
+		)), max_x + 1):
+			if image.get_pixel(pixel_x, pixel_y).a > PROP_TEXTURE_ALPHA_HIT_THRESHOLD:
+				return true
+	return false
 
 
-func _player_occlusion_needs_rebuild() -> bool:
-	var stand_level := _player_current_stand_level()
-	var sort_y := _player_occlusion_sort_y()
-	return (
-		_player_occlusion_dirty
-		or not _player_occlusion_last_visual_position.is_equal_approx(_player_visual_position)
-		or not is_equal_approx(_player_occlusion_last_sort_y, sort_y)
-		or not is_equal_approx(_player_occlusion_last_stand_level, stand_level)
-	)
+func _prop_texture_image(texture: Texture2D) -> Image:
+	var key := texture.get_instance_id()
+	if not _prop_texture_image_cache.has(key):
+		_prop_texture_image_cache[key] = texture.get_image()
+	return _prop_texture_image_cache[key]
 
 
-func _update_player_occlusion(_delta: float) -> void:
-	# 真实 3D 深度替代 CanvasItem 遮挡淡出；保留空状态供旧调试面板查询。
-	_player_occluder_cells.clear()
-	_player_occlusion_fading_cells.clear()
+func _rebuild_player_prop_occlusion() -> void:
 	_player_occlusion_dirty = false
+	_player_occlusion_last_visual_position = _player_visual_position
+	_player_occlusion_last_stand_level = _player_current_stand_level()
+	if is_instance_valid(_cam):
+		_player_occlusion_last_yaw = _cam.yaw_radians
+		_player_occlusion_last_zoom = _cam.zoom
+	var occluders := _collect_player_prop_occluders()
+	if is_instance_valid(_terrain):
+		for cell_value in _player_occluder_cells.keys():
+			if not occluders.has(cell_value):
+				_terrain.set_prop_fade_target(cell_value, 1.0)
+		for cell_value in occluders.keys():
+			# 幂等重设：chunk 重建可能已清掉该格的淡化状态，重设目标可让
+			# set_prop_fade_target 重新建代理（仅靠集合 diff 无法发现这种状态丢失）。
+			_terrain.set_prop_fade_target(cell_value, PLAYER_OCCLUSION_BLOCK_ALPHA)
+	_player_occluder_cells = occluders
 
 
 func get_player_occluder_cells() -> Array[Vector2i]:
@@ -3298,6 +3319,10 @@ func _input_dir() -> Vector2i:
 
 func _try_move(d: Vector2i) -> void:
 	if is_world_map_open():
+		return
+	# 树木/装饰类植物按地面占位阻挡移动（与动物 _can_animal_enter 同一占用事实）。
+	var target_cell := _player_cell + d
+	if _cell_states.has(target_cell) and _cell_states[target_cell].blocks_movement():
 		return
 	_move_from_cell = _player_cell
 	_move_level_from = _stand_level(_quantize(_player_cell.x, _player_cell.y))

@@ -131,6 +131,64 @@ func _run() -> void:
 	var probe_chunk: Node3D = probe.get_child(0)
 	_expect(probe_chunk.get_child_count() == 1 and probe_chunk.get_child(0) is MultiMeshInstance3D,
 		"地被/flora 被错误生成为实心柱而非 billboard")
+	# 植物遮挡淡化契约：注册、隐藏原实例、代理缓动、恢复、重建/移除清理。
+	var fade_probe = TerrainScript.new()
+	root.add_child(fade_probe)
+	fade_probe.set_cell(Vector2i(0, 0), [{
+		"level": 1, "texture": texture, "modulate": Color.WHITE,
+		"render_offset": Vector2(0, -16),
+		"flora_species_id": "contract_flora",
+	}], 1.0)
+	fade_probe.set_cell(Vector2i(1, 0), [{
+		"level": 1, "texture": texture, "modulate": Color(1, 1, 1, 0.8),
+		"render_offset": Vector2(0, -16),
+		"flora_species_id": "contract_flora",
+	}], 1.0)
+	fade_probe.flush()
+	var cell_a := Vector2i(0, 0)
+	var cell_b := Vector2i(1, 0)
+	_expect(fade_probe.get_prop_cells().size() == 2, "prop 实例注册表漏登记")
+	var fade_data: Array = fade_probe.get_prop_block_occlusion_data(cell_a)
+	_expect(fade_data.size() == 1 and (fade_data[0]["size_px"] as Vector2) == Vector2(32, 32),
+		"prop 遮挡数据缺贴图尺寸")
+	fade_probe.set_prop_fade_target(cell_a, 0.2)
+	var fade_entries: Array = fade_probe.get_prop_block_occlusion_data(cell_a)
+	# Godot 的 MultiMesh.get_instance_color 读回不可信（返回恒值），用 hidden 记账验证。
+	_expect(fade_entries[0]["hidden"] == true, "淡化格原 multimesh 实例未被隐藏")
+	var neighbor_entries: Array = fade_probe.get_prop_block_occlusion_data(cell_b)
+	_expect(neighbor_entries[0]["hidden"] == false, "共享 multimesh 的其他植物实例被连带隐藏")
+	var fade_layer: Node3D = fade_probe.get_node("PropFadeLayer")
+	_expect(fade_layer.get_child_count() == 1, "淡化代理 Sprite3D 未创建")
+	_expect(fade_probe.get_prop_fade_alpha(cell_a) == 1.0, "淡化起始透明度应为 1.0")
+	fade_probe.advance_prop_fades(0.5)
+	var proxy: Sprite3D = fade_layer.get_child(0)
+	_expect(absf(fade_probe.get_prop_fade_alpha(cell_a) - 0.2) < 0.02, "淡出未在 0.5s 内逼近 0.2")
+	_expect(absf(proxy.modulate.a - 0.2) < 0.02, "代理透明度未跟随缓动")
+	fade_probe.set_prop_fade_target(cell_a, 1.0)
+	for index in range(120):
+		fade_probe.advance_prop_fades(1.0 / 30.0)
+	_expect(fade_probe.get_prop_fade_alpha(cell_a) == 1.0, "恢复后透明度未回到 1.0")
+	_expect(fade_entries[0]["hidden"] == false, "恢复后原实例未解除隐藏")
+	await process_frame
+	_expect(fade_layer.get_child_count() == 0, "恢复后代理 Sprite3D 未释放")
+	# chunk 重建必须清理该格的注册与代理，不泄漏。
+	fade_probe.set_prop_fade_target(cell_a, 0.2)
+	fade_probe.set_cell(cell_a, [{
+		"level": 1, "texture": texture, "modulate": Color.WHITE,
+		"render_offset": Vector2(0, -16),
+		"flora_species_id": "contract_flora",
+	}], 1.0)
+	fade_probe.flush()
+	await process_frame
+	_expect(fade_probe.get_prop_fade_alpha(cell_a) == 1.0, "chunk 重建后残留淡化状态")
+	_expect(fade_probe.get_prop_cells().has(cell_a), "chunk 重建后 prop 注册表丢失")
+	fade_probe.remove_cell(cell_b)
+	fade_probe.flush()
+	_expect(not fade_probe.get_prop_cells().has(cell_b), "remove_cell 未清理 prop 注册表")
+	fade_probe.clear()
+	_expect(fade_probe.get_prop_cells().is_empty(), "clear 未清空 prop 注册表")
+	fade_probe.queue_free()
+	await process_frame
 	probe.clear()
 	probe.set_cell(Vector2i.ZERO, [{
 		"level": 6, "texture": texture, "modulate": Color(1, 1, 1, 0.6),

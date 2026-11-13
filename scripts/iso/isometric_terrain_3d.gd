@@ -10,6 +10,10 @@ const RIPPLE_REDRAW_INTERVAL := 1.0 / 30.0
 const TOP_UV := [Vector2(16, 6), Vector2(32, 14), Vector2(16, 22), Vector2(0, 14)]
 const RIGHT_SIDE_UV := [Vector2(32, 14), Vector2(16, 22), Vector2(16, 32), Vector2(32, 24)]
 const LEFT_SIDE_UV := [Vector2(0, 14), Vector2(16, 22), Vector2(16, 32), Vector2(0, 24)]
+## 植物遮挡淡出的指数缓动速率（每秒）：淡出更快，恢复稍慢，避免抖动。
+const PROP_FADE_OUT_RATE := 14.0
+const PROP_FADE_IN_RATE := 7.0
+const PROP_FADE_SETTLE := 0.001
 
 var _cells: Dictionary = {}
 var _chunks: Dictionary = {}
@@ -19,6 +23,14 @@ var _last_build_ms := 0.0
 var _water_ripples: Array[Dictionary] = []
 var _ripple_redraw_elapsed := 0.0
 var _ripple_instance: MultiMeshInstance3D
+## 植物 prop 实例注册表：cell -> 条目数组（multimesh/index/贴图/尺寸/中心/锚点/色调）。
+## 由 chunk 提交时登记，chunk 重建、remove_cell、clear 时清理；玩家遮挡淡化按格查询。
+var _prop_instances: Dictionary = {}
+## 正在淡化（或待恢复）的植物格：cell -> {target, current, entries, sprites}。
+## 淡化期间原 multimesh 实例颜色置全透明（scissor 丢弃），用逐节点代理 Sprite3D
+## 呈现残余透明度，避免改动共享 prop 材质影响其他植物。
+var _prop_fades: Dictionary = {}
+var _fade_layer: Node3D = null
 
 
 func set_cell(cell: Vector2i, blocks: Array, stand_level: float = 0.0) -> void:
@@ -34,6 +46,7 @@ func remove_cell(cell: Vector2i) -> void:
 		return
 	_cells.erase(cell)
 	_remove_ripples_for_cell(cell)
+	_clear_prop_cell(cell)
 	_mark_chunk_dirty(cell)
 
 
@@ -47,6 +60,7 @@ func clear() -> void:
 		if is_instance_valid(chunk):
 			chunk.free()
 	_chunks.clear()
+	_clear_all_prop_cells()
 
 
 func has_cell(cell: Vector2i) -> bool:
@@ -69,6 +83,79 @@ func mesh_instance_count() -> int:
 			if child is MeshInstance3D or child is MultiMeshInstance3D:
 				count += 1
 	return count
+
+
+## 有植物 prop 实例的格子（遮挡淡化的候选集合）。
+func get_prop_cells() -> Array:
+	return _prop_instances.keys()
+
+
+## 指定格的植物 prop 实例数据（中心世界坐标、地面锚点、贴图与像素尺寸）。
+func get_prop_block_occlusion_data(cell: Vector2i) -> Array:
+	return _prop_instances.get(cell, [])
+
+
+## 指定格当前的淡化透明度（无淡化状态视为 1.0）。
+func get_prop_fade_alpha(cell: Vector2i) -> float:
+	var state: Dictionary = _prop_fades.get(cell, {})
+	return float(state.get("current", 1.0))
+
+
+## 有活动淡化状态的格子（main.gd 用来镜像调试状态）。
+func get_active_prop_fade_cells() -> Array:
+	return _prop_fades.keys()
+
+
+## 设定某格植物的目标透明度：<1 时隐藏原 multimesh 实例（共享材质不受影响），
+## 改为逐节点代理呈现；=1 时恢复到原实例。逐帧调用 advance_prop_fades 驱动缓动。
+func set_prop_fade_target(cell: Vector2i, alpha: float) -> void:
+	var clamped := clampf(alpha, 0.0, 1.0)
+	var state: Dictionary = _prop_fades.get(cell, {})
+	if state.is_empty():
+		if clamped >= 1.0 - PROP_FADE_SETTLE:
+			return
+		var entries: Array = _prop_instances.get(cell, [])
+		if entries.is_empty():
+			return
+		state = {"target": clamped, "current": 1.0, "entries": entries, "sprites": []}
+		var layer := _ensure_fade_layer()
+		for entry_value in entries:
+			var entry: Dictionary = entry_value
+			_hide_prop_instance(entry)
+			var sprite := _make_prop_proxy(entry)
+			layer.add_child(sprite)
+			(state["sprites"] as Array).append(sprite)
+		_prop_fades[cell] = state
+	else:
+		state["target"] = clamped
+
+
+## 推进所有活动植物格淡化的指数缓动；返回 true 表示全部收敛。
+func advance_prop_fades(delta: float) -> bool:
+	var settled := true
+	var finished: Array = []
+	for cell_value in _prop_fades.keys():
+		var cell: Vector2i = cell_value
+		var state: Dictionary = _prop_fades[cell]
+		var target := float(state["target"])
+		var current := float(state["current"])
+		var rate := PROP_FADE_OUT_RATE if target < current else PROP_FADE_IN_RATE
+		current = lerpf(current, target, 1.0 - exp(-rate * maxf(delta, 0.0)))
+		if absf(current - target) <= PROP_FADE_SETTLE:
+			current = target
+		else:
+			settled = false
+		state["current"] = current
+		var entries: Array = state["entries"]
+		var sprites: Array = state["sprites"]
+		for index in sprites.size():
+			var tint: Color = (entries[index] as Dictionary)["tint"]
+			(sprites[index] as Sprite3D).modulate = Color(tint.r, tint.g, tint.b, tint.a * current)
+		if current >= 1.0 - PROP_FADE_SETTLE:
+			finished.append(cell)
+	for cell_value in finished:
+		_restore_prop_cell(cell_value as Vector2i)
+	return settled
 
 
 func stand_level(cell: Vector2i) -> float:
@@ -253,6 +340,8 @@ func _rebuild_chunk(chunk_coord: Vector2i) -> void:
 	for y in range(min_cell.y, min_cell.y + CHUNK_SIZE):
 		for x in range(min_cell.x, min_cell.x + CHUNK_SIZE):
 			var cell := Vector2i(x, y)
+			# chunk 重建会替换该格全部 prop 实例，旧注册与代理同步清理。
+			_clear_prop_cell(cell)
 			if not _cells.has(cell):
 				continue
 			var blocks: Array = _cells[cell]["blocks"]
@@ -339,11 +428,22 @@ func _append_prop(props: Dictionary, cell: Vector2i, block: Dictionary) -> void:
 			"region": region,
 			"transforms": [],
 			"colors": [],
+			"cells": [],
+			"metas": [],
 		}
-	var center := IsoProjection.grid_to_world(cell, float(block.get("level", 0)))
-	center += _screen_offset_world(block.get("render_offset", Vector2.ZERO))
+	var anchor := IsoProjection.grid_to_world(cell, float(block.get("level", 0)))
+	var center := anchor + _screen_offset_world(block.get("render_offset", Vector2.ZERO))
 	(props[key]["transforms"] as Array).append(Transform3D(Basis.IDENTITY, center))
 	(props[key]["colors"] as Array).append(tint)
+	(props[key]["cells"] as Array).append(cell)
+	(props[key]["metas"] as Array).append({
+		"texture": texture,
+		"origin_px": region.position,
+		"size_px": region.size,
+		"center": center,
+		"anchor": anchor,
+		"tint": tint,
+	})
 
 
 func _commit_mesh_group(chunk: Node3D, group: Dictionary) -> void:
@@ -379,13 +479,100 @@ func _commit_prop_group(chunk: Node3D, group: Dictionary) -> void:
 	multimesh.use_colors = true
 	multimesh.mesh = quad
 	multimesh.instance_count = transforms.size()
+	var cells: Array = group["cells"]
+	var metas: Array = group["metas"]
 	for index in transforms.size():
 		multimesh.set_instance_transform(index, transforms[index])
 		multimesh.set_instance_color(index, group["colors"][index])
+		# 遮挡淡化注册：按格隐藏单个实例颜色，共享材质与其他植物不受影响。
+		var meta: Dictionary = metas[index]
+		var entry := {
+			"multimesh": multimesh,
+			"index": index,
+			"texture": meta["texture"],
+			"origin_px": meta["origin_px"],
+			"size_px": meta["size_px"],
+			"center": meta["center"],
+			"anchor": meta["anchor"],
+			"tint": meta["tint"],
+			"hidden": false,
+		}
+		var cell: Vector2i = cells[index]
+		if not _prop_instances.has(cell):
+			_prop_instances[cell] = []
+		(_prop_instances[cell] as Array).append(entry)
 	var instance := MultiMeshInstance3D.new()
 	instance.multimesh = multimesh
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	chunk.add_child(instance)
+
+
+func _ensure_fade_layer() -> Node3D:
+	if not is_instance_valid(_fade_layer):
+		_fade_layer = Node3D.new()
+		_fade_layer.name = "PropFadeLayer"
+		add_child(_fade_layer)
+	return _fade_layer
+
+
+func _make_prop_proxy(entry: Dictionary) -> Sprite3D:
+	var sprite := Sprite3D.new()
+	sprite.texture = entry["texture"]
+	sprite.pixel_size = 1.0 / IsoProjection.TILE_PIXELS
+	sprite.position = entry["center"]
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	sprite.shaded = false
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sprite.modulate = entry["tint"]
+	return sprite
+
+
+func _hide_prop_instance(entry: Dictionary) -> void:
+	var multimesh: MultiMesh = entry["multimesh"]
+	if is_instance_valid(multimesh):
+		multimesh.set_instance_color(int(entry["index"]), Color(0.0, 0.0, 0.0, 0.0))
+	entry["hidden"] = true
+
+
+func _restore_prop_cell(cell: Vector2i) -> void:
+	var state: Dictionary = _prop_fades.get(cell, {})
+	if state.is_empty():
+		return
+	for sprite_value in state["sprites"]:
+		var sprite: Sprite3D = sprite_value
+		if is_instance_valid(sprite):
+			sprite.queue_free()
+	for entry_value in state["entries"]:
+		var entry: Dictionary = entry_value
+		var multimesh: MultiMesh = entry["multimesh"]
+		if is_instance_valid(multimesh):
+			multimesh.set_instance_color(int(entry["index"]), entry["tint"])
+		entry["hidden"] = false
+	_prop_fades.erase(cell)
+
+
+func _clear_prop_cell(cell: Vector2i) -> void:
+	if _prop_fades.has(cell):
+		var state: Dictionary = _prop_fades[cell]
+		for sprite_value in state["sprites"]:
+			var sprite: Sprite3D = sprite_value
+			if is_instance_valid(sprite):
+				sprite.queue_free()
+		_prop_fades.erase(cell)
+	_prop_instances.erase(cell)
+
+
+func _clear_all_prop_cells() -> void:
+	for cell_value in _prop_fades.keys():
+		var state: Dictionary = _prop_fades[cell_value]
+		for sprite_value in state["sprites"]:
+			var sprite: Sprite3D = sprite_value
+			if is_instance_valid(sprite):
+				sprite.queue_free()
+	_prop_fades.clear()
+	_prop_instances.clear()
 
 
 func _add_quad(
