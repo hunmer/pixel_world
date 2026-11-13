@@ -83,6 +83,7 @@ static var _shared_registry: TerrainMaterialRegistry = null
 static var _shared_textures: Dictionary = {}   # surface_id -> {top: Texture2D, column: Texture2D, underwater: Texture2D}
 static var _shared_water: Dictionary = {}      # face -> Texture2D
 static var _shared_props: Dictionary = {}      # path -> Texture2D
+static var _shared_prop_bottoms: Dictionary = {}  # path -> 最底非透明像素行的下边界（贴图像素坐标）
 
 
 func _init() -> void:
@@ -418,7 +419,8 @@ func _terrain_tint(tile_type: StringName) -> Color:
 	return Color.WHITE
 
 
-## 装饰物 block（树/巨石）。贴图底部对齐柱顶菱形。
+## 装饰物 block（树/巨石）。实际非透明底部对齐本格真实可见顶面中心，
+## 不用整张 PNG 底边（含透明留白）或站立层猜位置，避免陷入方块/旧柱浮空。
 ## 选取顺序：自定义覆盖表（编辑器植物层/JSON props，""=压制默认）>
 ## 该地形 TERRAIN_PROPS 按格确定性选取。
 func _prop_for(cell: Vector2i, tile_type: StringName) -> Dictionary:
@@ -435,8 +437,11 @@ func _prop_for(cell: Vector2i, tile_type: StringName) -> Dictionary:
 	var tex := _prop_texture(path)
 	if tex == null:
 		return {}
-	var lift := (tex.get_size().y - TOP_TEXTURE_BASE) * 0.5
-	var block := _block(tex, stand_level(cell.x, cell.y), Color.WHITE, 1, Vector2(0.0, -lift))
+	var bottom_from_center := _prop_content_bottom(path, tex) - tex.get_size().y * 0.5
+	# 2D 顶面中心比格原点高 2px；3D 锚点本身就是真实顶面，不能再加这份屏幕偏移。
+	var top_offset_y := 0.0 if _terrain_3d != null else ColumnBatchScript.TOP_CENTER_OFFSET.y
+	var offset := Vector2(0.0, top_offset_y - bottom_from_center)
+	var block := _block(tex, visual_top_level(cell.x, cell.y), Color.WHITE, 1, offset)
 	block["occluder_class"] = &"prop"
 	return block
 
@@ -508,6 +513,26 @@ func _prop_texture(path: String) -> Texture2D:
 	var tex: Texture2D = load(path)
 	_shared_props[path] = tex
 	return tex
+
+
+## 最底可见像素行的下边界（不是整张图底边）；阈值与 ColumnBatch 遮挡采样一致。
+static func _prop_content_bottom(path: String, tex: Texture2D) -> float:
+	if _shared_prop_bottoms.has(path):
+		return float(_shared_prop_bottoms[path])
+	var bottom := float(tex.get_size().y)
+	var image: Image = tex.get_image()
+	if image != null and not image.is_empty():
+		var found := false
+		for y in range(image.get_height() - 1, -1, -1):
+			for x in range(image.get_width()):
+				if image.get_pixel(x, y).a > 0.01:
+					bottom = float(y + 1)
+					found = true
+					break
+			if found:
+				break
+	_shared_prop_bottoms[path] = bottom
+	return bottom
 
 
 static func _ensure_shared_textures() -> void:
