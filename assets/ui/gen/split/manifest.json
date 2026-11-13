@@ -72,2115 +72,1515 @@
   "files": [
     {
       "class": "archer",
-      "state": "attack",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 0,
-        "col": 0
-      },
-      "source_bbox": [
-        23,
-        35,
-        221,
-        284
-      ],
-      "out": "assets/ui/gen/split/actions/archer/archer_attack.png",
+      "out": "assets/ui/gen/split/sheets/archer_sheet.png",
       "size": [
+        2304,
+        288
+      ],
+      "cell": [
         288,
         288
       ],
-      "content_size": [
-        199,
-        250
+      "cells_n": 8,
+      "order": [
+        "front",
+        "side",
+        "back",
+        "attack",
+        "hurt",
+        "run",
+        "downed",
+        "potion"
       ],
       "anchor": "bottom-center",
-      "paste_xy": [
-        45,
-        34
-      ],
       "alpha_min": 0,
-      "opaque_px": 32199
-    },
-    {
-      "class": "archer",
-      "state": "hurt",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 0,
-        "col": 1
-      },
-      "source_bbox": [
-        301,
-        56,
-        489,
-        271
-      ],
-      "out": "assets/ui/gen/split/actions/archer/archer_hurt.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        189,
-        216
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        50,
-        68
-      ],
-      "alpha_min": 0,
-      "opaque_px": 27041
-    },
-    {
-      "class": "archer",
-      "state": "run",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 0,
-        "col": 2
-      },
-      "source_bbox": [
-        534,
-        56,
-        721,
-        273
-      ],
-      "out": "assets/ui/gen/split/actions/archer/archer_run.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        188,
-        218
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        50,
-        66
-      ],
-      "alpha_min": 0,
-      "opaque_px": 25279
-    },
-    {
-      "class": "archer",
-      "state": "downed",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 0,
-        "col": 3
-      },
-      "source_bbox": [
-        777,
-        186,
-        992,
-        286
-      ],
-      "out": "assets/ui/gen/split/actions/archer/archer_downed.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        216,
-        101
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        36,
-        183
-      ],
-      "alpha_min": 0,
-      "opaque_px": 16415
-    },
-    {
-      "class": "archer",
-      "state": "potion",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 0,
-        "col": 4
-      },
-      "source_bbox": [
-        1058,
-        56,
-        1210,
-        279
-      ],
-      "out": "assets/ui/gen/split/actions/archer/archer_potion.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        153,
-        224
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        68,
-        60
-      ],
-      "alpha_min": 0,
-      "opaque_px": 25789
-    },
-    {
-      "class": "assassin",
-      "state": "attack",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 1,
-        "col": 0
-      },
-      "source_bbox": [
-        27,
-        364,
-        224,
-        573
-      ],
-      "out": "assets/ui/gen/split/actions/assassin/assassin_attack.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        198,
-        210
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        45,
-        74
-      ],
-      "alpha_min": 0,
-      "opaque_px": 22068
+      "cells": [
+        {
+          "index": 0,
+          "state": "front",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 0,
+            "col": 0
+          },
+          "source_bbox": [
+            165,
+            9,
+            284,
+            145
+          ],
+          "cell_origin_in_sheet": 0,
+          "paste_in_cell": [
+            84,
+            147
+          ]
+        },
+        {
+          "index": 1,
+          "state": "side",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 0,
+            "col": 1
+          },
+          "source_bbox": [
+            578,
+            9,
+            656,
+            145
+          ],
+          "cell_origin_in_sheet": 288,
+          "paste_in_cell": [
+            105,
+            147
+          ]
+        },
+        {
+          "index": 2,
+          "state": "back",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 0,
+            "col": 2
+          },
+          "source_bbox": [
+            979,
+            9,
+            1071,
+            144
+          ],
+          "cell_origin_in_sheet": 576,
+          "paste_in_cell": [
+            98,
+            148
+          ]
+        },
+        {
+          "index": 3,
+          "state": "attack",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 0,
+            "col": 0
+          },
+          "source_bbox": [
+            23,
+            35,
+            221,
+            284
+          ],
+          "cell_origin_in_sheet": 864,
+          "paste_in_cell": [
+            45,
+            34
+          ]
+        },
+        {
+          "index": 4,
+          "state": "hurt",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 0,
+            "col": 1
+          },
+          "source_bbox": [
+            301,
+            56,
+            489,
+            271
+          ],
+          "cell_origin_in_sheet": 1152,
+          "paste_in_cell": [
+            50,
+            68
+          ]
+        },
+        {
+          "index": 5,
+          "state": "run",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 0,
+            "col": 2
+          },
+          "source_bbox": [
+            534,
+            56,
+            721,
+            273
+          ],
+          "cell_origin_in_sheet": 1440,
+          "paste_in_cell": [
+            50,
+            66
+          ]
+        },
+        {
+          "index": 6,
+          "state": "downed",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 0,
+            "col": 3
+          },
+          "source_bbox": [
+            777,
+            186,
+            992,
+            286
+          ],
+          "cell_origin_in_sheet": 1728,
+          "paste_in_cell": [
+            36,
+            183
+          ]
+        },
+        {
+          "index": 7,
+          "state": "potion",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 0,
+            "col": 4
+          },
+          "source_bbox": [
+            1058,
+            56,
+            1210,
+            279
+          ],
+          "cell_origin_in_sheet": 2016,
+          "paste_in_cell": [
+            68,
+            60
+          ]
+        }
+      ]
     },
     {
       "class": "assassin",
-      "state": "hurt",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 1,
-        "col": 1
-      },
-      "source_bbox": [
-        301,
-        363,
-        488,
-        574
-      ],
-      "out": "assets/ui/gen/split/actions/assassin/assassin_hurt.png",
+      "out": "assets/ui/gen/split/sheets/assassin_sheet.png",
       "size": [
+        2304,
+        288
+      ],
+      "cell": [
         288,
         288
       ],
-      "content_size": [
-        188,
-        212
+      "cells_n": 8,
+      "order": [
+        "front",
+        "side",
+        "back",
+        "attack",
+        "hurt",
+        "run",
+        "downed",
+        "potion"
       ],
       "anchor": "bottom-center",
-      "paste_xy": [
-        50,
-        72
-      ],
       "alpha_min": 0,
-      "opaque_px": 21252
-    },
-    {
-      "class": "assassin",
-      "state": "run",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 1,
-        "col": 2
-      },
-      "source_bbox": [
-        530,
-        357,
-        723,
-        573
-      ],
-      "out": "assets/ui/gen/split/actions/assassin/assassin_run.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        194,
-        217
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        47,
-        67
-      ],
-      "alpha_min": 0,
-      "opaque_px": 19711
-    },
-    {
-      "class": "assassin",
-      "state": "downed",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 1,
-        "col": 3
-      },
-      "source_bbox": [
-        763,
-        490,
-        1018,
-        579
-      ],
-      "out": "assets/ui/gen/split/actions/assassin/assassin_downed.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        256,
-        90
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        16,
-        194
-      ],
-      "alpha_min": 0,
-      "opaque_px": 15940
-    },
-    {
-      "class": "assassin",
-      "state": "potion",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 1,
-        "col": 4
-      },
-      "source_bbox": [
-        1071,
-        355,
-        1226,
-        574
-      ],
-      "out": "assets/ui/gen/split/actions/assassin/assassin_potion.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        156,
-        220
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        66,
-        64
-      ],
-      "alpha_min": 0,
-      "opaque_px": 20058
-    },
-    {
-      "class": "berserker",
-      "state": "attack",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 2,
-        "col": 0
-      },
-      "source_bbox": [
-        22,
-        659,
-        222,
-        894
-      ],
-      "out": "assets/ui/gen/split/actions/berserker/berserker_attack.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        201,
-        236
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        44,
-        48
-      ],
-      "alpha_min": 0,
-      "opaque_px": 27578
-    },
-    {
-      "class": "berserker",
-      "state": "hurt",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 2,
-        "col": 1
-      },
-      "source_bbox": [
-        298,
-        661,
-        513,
-        893
-      ],
-      "out": "assets/ui/gen/split/actions/berserker/berserker_hurt.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        216,
-        233
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        36,
-        51
-      ],
-      "alpha_min": 0,
-      "opaque_px": 26491
+      "cells": [
+        {
+          "index": 0,
+          "state": "front",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 1,
+            "col": 0
+          },
+          "source_bbox": [
+            176,
+            162,
+            287,
+            301
+          ],
+          "cell_origin_in_sheet": 0,
+          "paste_in_cell": [
+            88,
+            144
+          ]
+        },
+        {
+          "index": 1,
+          "state": "side",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 1,
+            "col": 1
+          },
+          "source_bbox": [
+            586,
+            162,
+            656,
+            301
+          ],
+          "cell_origin_in_sheet": 288,
+          "paste_in_cell": [
+            109,
+            144
+          ]
+        },
+        {
+          "index": 2,
+          "state": "back",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 1,
+            "col": 2
+          },
+          "source_bbox": [
+            982,
+            162,
+            1076,
+            300
+          ],
+          "cell_origin_in_sheet": 576,
+          "paste_in_cell": [
+            97,
+            145
+          ]
+        },
+        {
+          "index": 3,
+          "state": "attack",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 1,
+            "col": 0
+          },
+          "source_bbox": [
+            27,
+            364,
+            224,
+            573
+          ],
+          "cell_origin_in_sheet": 864,
+          "paste_in_cell": [
+            45,
+            74
+          ]
+        },
+        {
+          "index": 4,
+          "state": "hurt",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 1,
+            "col": 1
+          },
+          "source_bbox": [
+            301,
+            363,
+            488,
+            574
+          ],
+          "cell_origin_in_sheet": 1152,
+          "paste_in_cell": [
+            50,
+            72
+          ]
+        },
+        {
+          "index": 5,
+          "state": "run",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 1,
+            "col": 2
+          },
+          "source_bbox": [
+            530,
+            357,
+            723,
+            573
+          ],
+          "cell_origin_in_sheet": 1440,
+          "paste_in_cell": [
+            47,
+            67
+          ]
+        },
+        {
+          "index": 6,
+          "state": "downed",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 1,
+            "col": 3
+          },
+          "source_bbox": [
+            763,
+            490,
+            1018,
+            579
+          ],
+          "cell_origin_in_sheet": 1728,
+          "paste_in_cell": [
+            16,
+            194
+          ]
+        },
+        {
+          "index": 7,
+          "state": "potion",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 1,
+            "col": 4
+          },
+          "source_bbox": [
+            1071,
+            355,
+            1226,
+            574
+          ],
+          "cell_origin_in_sheet": 2016,
+          "paste_in_cell": [
+            66,
+            64
+          ]
+        }
+      ]
     },
     {
       "class": "berserker",
-      "state": "run",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 2,
-        "col": 2
-      },
-      "source_bbox": [
-        552,
-        661,
-        726,
-        890
-      ],
-      "out": "assets/ui/gen/split/actions/berserker/berserker_run.png",
+      "out": "assets/ui/gen/split/sheets/berserker_sheet.png",
       "size": [
+        2304,
+        288
+      ],
+      "cell": [
         288,
         288
       ],
-      "content_size": [
-        175,
-        230
+      "cells_n": 8,
+      "order": [
+        "front",
+        "side",
+        "back",
+        "attack",
+        "hurt",
+        "run",
+        "downed",
+        "potion"
       ],
       "anchor": "bottom-center",
-      "paste_xy": [
-        57,
-        54
-      ],
       "alpha_min": 0,
-      "opaque_px": 22046
-    },
-    {
-      "class": "berserker",
-      "state": "downed",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 2,
-        "col": 3
-      },
-      "source_bbox": [
-        775,
-        797,
-        1019,
-        894
-      ],
-      "out": "assets/ui/gen/split/actions/berserker/berserker_downed.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        245,
-        98
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        22,
-        186
-      ],
-      "alpha_min": 0,
-      "opaque_px": 15872
-    },
-    {
-      "class": "berserker",
-      "state": "potion",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 2,
-        "col": 4
-      },
-      "source_bbox": [
-        1061,
-        652,
-        1229,
-        890
-      ],
-      "out": "assets/ui/gen/split/actions/berserker/berserker_potion.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        169,
-        239
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        60,
-        45
-      ],
-      "alpha_min": 0,
-      "opaque_px": 26394
-    },
-    {
-      "class": "knight",
-      "state": "attack",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 3,
-        "col": 0
-      },
-      "source_bbox": [
-        22,
-        951,
-        241,
-        1203
-      ],
-      "out": "assets/ui/gen/split/actions/knight/knight_attack.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        220,
-        253
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        34,
-        31
-      ],
-      "alpha_min": 0,
-      "opaque_px": 31692
-    },
-    {
-      "class": "knight",
-      "state": "hurt",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 3,
-        "col": 1
-      },
-      "source_bbox": [
-        310,
-        985,
-        503,
-        1208
-      ],
-      "out": "assets/ui/gen/split/actions/knight/knight_hurt.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        194,
-        224
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        47,
-        60
-      ],
-      "alpha_min": 0,
-      "opaque_px": 27207
-    },
-    {
-      "class": "knight",
-      "state": "run",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 3,
-        "col": 2
-      },
-      "source_bbox": [
-        552,
-        979,
-        725,
-        1209
-      ],
-      "out": "assets/ui/gen/split/actions/knight/knight_run.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        174,
-        231
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        57,
-        53
-      ],
-      "alpha_min": 0,
-      "opaque_px": 23965
+      "cells": [
+        {
+          "index": 0,
+          "state": "front",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 2,
+            "col": 0
+          },
+          "source_bbox": [
+            161,
+            317,
+            301,
+            456
+          ],
+          "cell_origin_in_sheet": 0,
+          "paste_in_cell": [
+            74,
+            144
+          ]
+        },
+        {
+          "index": 1,
+          "state": "side",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 2,
+            "col": 1
+          },
+          "source_bbox": [
+            586,
+            317,
+            662,
+            456
+          ],
+          "cell_origin_in_sheet": 288,
+          "paste_in_cell": [
+            106,
+            144
+          ]
+        },
+        {
+          "index": 2,
+          "state": "back",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 2,
+            "col": 2
+          },
+          "source_bbox": [
+            955,
+            317,
+            1090,
+            456
+          ],
+          "cell_origin_in_sheet": 576,
+          "paste_in_cell": [
+            76,
+            144
+          ]
+        },
+        {
+          "index": 3,
+          "state": "attack",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 2,
+            "col": 0
+          },
+          "source_bbox": [
+            22,
+            659,
+            222,
+            894
+          ],
+          "cell_origin_in_sheet": 864,
+          "paste_in_cell": [
+            44,
+            48
+          ]
+        },
+        {
+          "index": 4,
+          "state": "hurt",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 2,
+            "col": 1
+          },
+          "source_bbox": [
+            298,
+            661,
+            513,
+            893
+          ],
+          "cell_origin_in_sheet": 1152,
+          "paste_in_cell": [
+            36,
+            51
+          ]
+        },
+        {
+          "index": 5,
+          "state": "run",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 2,
+            "col": 2
+          },
+          "source_bbox": [
+            552,
+            661,
+            726,
+            890
+          ],
+          "cell_origin_in_sheet": 1440,
+          "paste_in_cell": [
+            57,
+            54
+          ]
+        },
+        {
+          "index": 6,
+          "state": "downed",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 2,
+            "col": 3
+          },
+          "source_bbox": [
+            775,
+            797,
+            1019,
+            894
+          ],
+          "cell_origin_in_sheet": 1728,
+          "paste_in_cell": [
+            22,
+            186
+          ]
+        },
+        {
+          "index": 7,
+          "state": "potion",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 2,
+            "col": 4
+          },
+          "source_bbox": [
+            1061,
+            652,
+            1229,
+            890
+          ],
+          "cell_origin_in_sheet": 2016,
+          "paste_in_cell": [
+            60,
+            45
+          ]
+        }
+      ]
     },
     {
       "class": "knight",
-      "state": "downed",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 3,
-        "col": 3
-      },
-      "source_bbox": [
-        763,
-        1108,
-        1019,
-        1203
-      ],
-      "out": "assets/ui/gen/split/actions/knight/knight_downed.png",
+      "out": "assets/ui/gen/split/sheets/knight_sheet.png",
       "size": [
+        2304,
+        288
+      ],
+      "cell": [
         288,
         288
       ],
-      "content_size": [
-        257,
-        96
+      "cells_n": 8,
+      "order": [
+        "front",
+        "side",
+        "back",
+        "attack",
+        "hurt",
+        "run",
+        "downed",
+        "potion"
       ],
       "anchor": "bottom-center",
-      "paste_xy": [
-        16,
-        188
-      ],
       "alpha_min": 0,
-      "opaque_px": 18625
-    },
-    {
-      "class": "knight",
-      "state": "potion",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_A.png",
-      "source_sha256": "1d32ad204cecbd0e172def2b2171d84f307c79dcaa2a0b4d5fc54aaa0cede834",
-      "source_cell": {
-        "row": 3,
-        "col": 4
-      },
-      "source_bbox": [
-        1069,
-        979,
-        1211,
-        1206
-      ],
-      "out": "assets/ui/gen/split/actions/knight/knight_potion.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        143,
-        228
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        73,
-        56
-      ],
-      "alpha_min": 0,
-      "opaque_px": 24489
-    },
-    {
-      "class": "lancer",
-      "state": "attack",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 0,
-        "col": 0
-      },
-      "source_bbox": [
-        33,
-        58,
-        211,
-        278
-      ],
-      "out": "assets/ui/gen/split/actions/lancer/lancer_attack.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        179,
-        221
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        55,
-        63
-      ],
-      "alpha_min": 0,
-      "opaque_px": 22500
-    },
-    {
-      "class": "lancer",
-      "state": "hurt",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 0,
-        "col": 1
-      },
-      "source_bbox": [
-        299,
-        16,
-        459,
-        289
-      ],
-      "out": "assets/ui/gen/split/actions/lancer/lancer_hurt.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        161,
-        274
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        64,
-        10
-      ],
-      "alpha_min": 0,
-      "opaque_px": 25707
-    },
-    {
-      "class": "lancer",
-      "state": "run",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 0,
-        "col": 2
-      },
-      "source_bbox": [
-        517,
-        62,
-        768,
-        276
-      ],
-      "out": "assets/ui/gen/split/actions/lancer/lancer_run.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        252,
-        215
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        18,
-        69
-      ],
-      "alpha_min": 0,
-      "opaque_px": 27669
-    },
-    {
-      "class": "lancer",
-      "state": "downed",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 0,
-        "col": 3
-      },
-      "source_bbox": [
-        783,
-        189,
-        1027,
-        286
-      ],
-      "out": "assets/ui/gen/split/actions/lancer/lancer_downed.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        245,
-        98
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        22,
-        186
-      ],
-      "alpha_min": 0,
-      "opaque_px": 16917
+      "cells": [
+        {
+          "index": 0,
+          "state": "front",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 3,
+            "col": 0
+          },
+          "source_bbox": [
+            170,
+            471,
+            297,
+            610
+          ],
+          "cell_origin_in_sheet": 0,
+          "paste_in_cell": [
+            80,
+            144
+          ]
+        },
+        {
+          "index": 1,
+          "state": "side",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 3,
+            "col": 1
+          },
+          "source_bbox": [
+            578,
+            473,
+            678,
+            610
+          ],
+          "cell_origin_in_sheet": 288,
+          "paste_in_cell": [
+            94,
+            146
+          ]
+        },
+        {
+          "index": 2,
+          "state": "back",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 3,
+            "col": 2
+          },
+          "source_bbox": [
+            980,
+            473,
+            1084,
+            610
+          ],
+          "cell_origin_in_sheet": 576,
+          "paste_in_cell": [
+            92,
+            146
+          ]
+        },
+        {
+          "index": 3,
+          "state": "attack",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 3,
+            "col": 0
+          },
+          "source_bbox": [
+            22,
+            951,
+            241,
+            1203
+          ],
+          "cell_origin_in_sheet": 864,
+          "paste_in_cell": [
+            34,
+            31
+          ]
+        },
+        {
+          "index": 4,
+          "state": "hurt",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 3,
+            "col": 1
+          },
+          "source_bbox": [
+            310,
+            985,
+            503,
+            1208
+          ],
+          "cell_origin_in_sheet": 1152,
+          "paste_in_cell": [
+            47,
+            60
+          ]
+        },
+        {
+          "index": 5,
+          "state": "run",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 3,
+            "col": 2
+          },
+          "source_bbox": [
+            552,
+            979,
+            725,
+            1209
+          ],
+          "cell_origin_in_sheet": 1440,
+          "paste_in_cell": [
+            57,
+            53
+          ]
+        },
+        {
+          "index": 6,
+          "state": "downed",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 3,
+            "col": 3
+          },
+          "source_bbox": [
+            763,
+            1108,
+            1019,
+            1203
+          ],
+          "cell_origin_in_sheet": 1728,
+          "paste_in_cell": [
+            16,
+            188
+          ]
+        },
+        {
+          "index": 7,
+          "state": "potion",
+          "source": "assets/ui/gen/actions_A.png",
+          "source_cell": {
+            "row": 3,
+            "col": 4
+          },
+          "source_bbox": [
+            1069,
+            979,
+            1211,
+            1206
+          ],
+          "cell_origin_in_sheet": 2016,
+          "paste_in_cell": [
+            73,
+            56
+          ]
+        }
+      ]
     },
     {
       "class": "lancer",
-      "state": "potion",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 0,
-        "col": 4
-      },
-      "source_bbox": [
-        1093,
-        52,
-        1208,
-        289
-      ],
-      "out": "assets/ui/gen/split/actions/lancer/lancer_potion.png",
+      "out": "assets/ui/gen/split/sheets/lancer_sheet.png",
       "size": [
+        2304,
+        288
+      ],
+      "cell": [
         288,
         288
       ],
-      "content_size": [
-        116,
-        238
+      "cells_n": 8,
+      "order": [
+        "front",
+        "side",
+        "back",
+        "attack",
+        "hurt",
+        "run",
+        "downed",
+        "potion"
       ],
       "anchor": "bottom-center",
-      "paste_xy": [
-        86,
-        46
-      ],
       "alpha_min": 0,
-      "opaque_px": 18965
+      "cells": [
+        {
+          "index": 0,
+          "state": "front",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 4,
+            "col": 0
+          },
+          "source_bbox": [
+            159,
+            627,
+            302,
+            772
+          ],
+          "cell_origin_in_sheet": 0,
+          "paste_in_cell": [
+            72,
+            138
+          ]
+        },
+        {
+          "index": 1,
+          "state": "side",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 4,
+            "col": 1
+          },
+          "source_bbox": [
+            551,
+            627,
+            699,
+            772
+          ],
+          "cell_origin_in_sheet": 288,
+          "paste_in_cell": [
+            70,
+            138
+          ]
+        },
+        {
+          "index": 2,
+          "state": "back",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 4,
+            "col": 2
+          },
+          "source_bbox": [
+            966,
+            627,
+            1079,
+            772
+          ],
+          "cell_origin_in_sheet": 576,
+          "paste_in_cell": [
+            87,
+            138
+          ]
+        },
+        {
+          "index": 3,
+          "state": "attack",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 0,
+            "col": 0
+          },
+          "source_bbox": [
+            33,
+            58,
+            211,
+            278
+          ],
+          "cell_origin_in_sheet": 864,
+          "paste_in_cell": [
+            55,
+            63
+          ]
+        },
+        {
+          "index": 4,
+          "state": "hurt",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 0,
+            "col": 1
+          },
+          "source_bbox": [
+            299,
+            16,
+            459,
+            289
+          ],
+          "cell_origin_in_sheet": 1152,
+          "paste_in_cell": [
+            64,
+            10
+          ]
+        },
+        {
+          "index": 5,
+          "state": "run",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 0,
+            "col": 2
+          },
+          "source_bbox": [
+            517,
+            62,
+            768,
+            276
+          ],
+          "cell_origin_in_sheet": 1440,
+          "paste_in_cell": [
+            18,
+            69
+          ]
+        },
+        {
+          "index": 6,
+          "state": "downed",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 0,
+            "col": 3
+          },
+          "source_bbox": [
+            783,
+            189,
+            1027,
+            286
+          ],
+          "cell_origin_in_sheet": 1728,
+          "paste_in_cell": [
+            22,
+            186
+          ]
+        },
+        {
+          "index": 7,
+          "state": "potion",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 0,
+            "col": 4
+          },
+          "source_bbox": [
+            1093,
+            52,
+            1208,
+            289
+          ],
+          "cell_origin_in_sheet": 2016,
+          "paste_in_cell": [
+            86,
+            46
+          ]
+        }
+      ]
     },
     {
       "class": "mage",
-      "state": "attack",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 1,
-        "col": 0
-      },
-      "source_bbox": [
-        24,
-        372,
-        203,
-        578
-      ],
-      "out": "assets/ui/gen/split/actions/mage/mage_attack.png",
+      "out": "assets/ui/gen/split/sheets/mage_sheet.png",
       "size": [
+        2304,
+        288
+      ],
+      "cell": [
         288,
         288
       ],
-      "content_size": [
-        180,
-        207
+      "cells_n": 8,
+      "order": [
+        "front",
+        "side",
+        "back",
+        "attack",
+        "hurt",
+        "run",
+        "downed",
+        "potion"
       ],
       "anchor": "bottom-center",
-      "paste_xy": [
-        54,
-        77
-      ],
       "alpha_min": 0,
-      "opaque_px": 19043
-    },
-    {
-      "class": "mage",
-      "state": "hurt",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 1,
-        "col": 1
-      },
-      "source_bbox": [
-        320,
-        374,
-        448,
-        578
-      ],
-      "out": "assets/ui/gen/split/actions/mage/mage_hurt.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        129,
-        205
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        80,
-        79
-      ],
-      "alpha_min": 0,
-      "opaque_px": 18609
-    },
-    {
-      "class": "mage",
-      "state": "run",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 1,
-        "col": 2
-      },
-      "source_bbox": [
-        542,
-        371,
-        721,
-        578
-      ],
-      "out": "assets/ui/gen/split/actions/mage/mage_run.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        180,
-        208
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        54,
-        76
-      ],
-      "alpha_min": 0,
-      "opaque_px": 20129
-    },
-    {
-      "class": "mage",
-      "state": "downed",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 1,
-        "col": 3
-      },
-      "source_bbox": [
-        782,
-        493,
-        1018,
-        589
-      ],
-      "out": "assets/ui/gen/split/actions/mage/mage_downed.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        237,
-        97
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        26,
-        187
-      ],
-      "alpha_min": 0,
-      "opaque_px": 15135
-    },
-    {
-      "class": "mage",
-      "state": "potion",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 1,
-        "col": 4
-      },
-      "source_bbox": [
-        1076,
-        356,
-        1229,
-        578
-      ],
-      "out": "assets/ui/gen/split/actions/mage/mage_potion.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        154,
-        223
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        67,
-        61
-      ],
-      "alpha_min": 0,
-      "opaque_px": 23041
-    },
-    {
-      "class": "priest",
-      "state": "attack",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 2,
-        "col": 0
-      },
-      "source_bbox": [
-        34,
-        669,
-        205,
-        891
-      ],
-      "out": "assets/ui/gen/split/actions/priest/priest_attack.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        172,
-        223
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        58,
-        61
-      ],
-      "alpha_min": 0,
-      "opaque_px": 24685
+      "cells": [
+        {
+          "index": 0,
+          "state": "front",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 5,
+            "col": 0
+          },
+          "source_bbox": [
+            175,
+            788,
+            284,
+            925
+          ],
+          "cell_origin_in_sheet": 0,
+          "paste_in_cell": [
+            89,
+            146
+          ]
+        },
+        {
+          "index": 1,
+          "state": "side",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 5,
+            "col": 1
+          },
+          "source_bbox": [
+            580,
+            789,
+            677,
+            927
+          ],
+          "cell_origin_in_sheet": 288,
+          "paste_in_cell": [
+            95,
+            145
+          ]
+        },
+        {
+          "index": 2,
+          "state": "back",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 5,
+            "col": 2
+          },
+          "source_bbox": [
+            970,
+            789,
+            1073,
+            928
+          ],
+          "cell_origin_in_sheet": 576,
+          "paste_in_cell": [
+            92,
+            144
+          ]
+        },
+        {
+          "index": 3,
+          "state": "attack",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 1,
+            "col": 0
+          },
+          "source_bbox": [
+            24,
+            372,
+            203,
+            578
+          ],
+          "cell_origin_in_sheet": 864,
+          "paste_in_cell": [
+            54,
+            77
+          ]
+        },
+        {
+          "index": 4,
+          "state": "hurt",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 1,
+            "col": 1
+          },
+          "source_bbox": [
+            320,
+            374,
+            448,
+            578
+          ],
+          "cell_origin_in_sheet": 1152,
+          "paste_in_cell": [
+            80,
+            79
+          ]
+        },
+        {
+          "index": 5,
+          "state": "run",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 1,
+            "col": 2
+          },
+          "source_bbox": [
+            542,
+            371,
+            721,
+            578
+          ],
+          "cell_origin_in_sheet": 1440,
+          "paste_in_cell": [
+            54,
+            76
+          ]
+        },
+        {
+          "index": 6,
+          "state": "downed",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 1,
+            "col": 3
+          },
+          "source_bbox": [
+            782,
+            493,
+            1018,
+            589
+          ],
+          "cell_origin_in_sheet": 1728,
+          "paste_in_cell": [
+            26,
+            187
+          ]
+        },
+        {
+          "index": 7,
+          "state": "potion",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 1,
+            "col": 4
+          },
+          "source_bbox": [
+            1076,
+            356,
+            1229,
+            578
+          ],
+          "cell_origin_in_sheet": 2016,
+          "paste_in_cell": [
+            67,
+            61
+          ]
+        }
+      ]
     },
     {
       "class": "priest",
-      "state": "hurt",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 2,
-        "col": 1
-      },
-      "source_bbox": [
-        312,
-        661,
-        448,
-        888
-      ],
-      "out": "assets/ui/gen/split/actions/priest/priest_hurt.png",
+      "out": "assets/ui/gen/split/sheets/priest_sheet.png",
       "size": [
+        2304,
+        288
+      ],
+      "cell": [
         288,
         288
       ],
-      "content_size": [
-        137,
-        228
+      "cells_n": 8,
+      "order": [
+        "front",
+        "side",
+        "back",
+        "attack",
+        "hurt",
+        "run",
+        "downed",
+        "potion"
       ],
       "anchor": "bottom-center",
-      "paste_xy": [
-        76,
-        56
-      ],
       "alpha_min": 0,
-      "opaque_px": 20886
-    },
-    {
-      "class": "priest",
-      "state": "run",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 2,
-        "col": 2
-      },
-      "source_bbox": [
-        570,
-        677,
-        721,
-        895
-      ],
-      "out": "assets/ui/gen/split/actions/priest/priest_run.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        152,
-        219
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        68,
-        65
-      ],
-      "alpha_min": 0,
-      "opaque_px": 18977
-    },
-    {
-      "class": "priest",
-      "state": "downed",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 2,
-        "col": 3
-      },
-      "source_bbox": [
-        760,
-        812,
-        1026,
-        907
-      ],
-      "out": "assets/ui/gen/split/actions/priest/priest_downed.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        267,
-        96
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        11,
-        188
-      ],
-      "alpha_min": 0,
-      "opaque_px": 16801
-    },
-    {
-      "class": "priest",
-      "state": "potion",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 2,
-        "col": 4
-      },
-      "source_bbox": [
-        1075,
-        669,
-        1231,
-        896
-      ],
-      "out": "assets/ui/gen/split/actions/priest/priest_potion.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        157,
-        228
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        66,
-        56
-      ],
-      "alpha_min": 0,
-      "opaque_px": 23931
-    },
-    {
-      "class": "swordsman",
-      "state": "attack",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 3,
-        "col": 0
-      },
-      "source_bbox": [
-        19,
-        989,
-        188,
-        1199
-      ],
-      "out": "assets/ui/gen/split/actions/swordsman/swordsman_attack.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        170,
-        211
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        59,
-        73
-      ],
-      "alpha_min": 0,
-      "opaque_px": 18085
-    },
-    {
-      "class": "swordsman",
-      "state": "hurt",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 3,
-        "col": 1
-      },
-      "source_bbox": [
-        298,
-        956,
-        453,
-        1206
-      ],
-      "out": "assets/ui/gen/split/actions/swordsman/swordsman_hurt.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        156,
-        251
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        66,
-        33
-      ],
-      "alpha_min": 0,
-      "opaque_px": 20071
+      "cells": [
+        {
+          "index": 0,
+          "state": "front",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 6,
+            "col": 0
+          },
+          "source_bbox": [
+            175,
+            942,
+            281,
+            1079
+          ],
+          "cell_origin_in_sheet": 0,
+          "paste_in_cell": [
+            91,
+            146
+          ]
+        },
+        {
+          "index": 1,
+          "state": "side",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 6,
+            "col": 1
+          },
+          "source_bbox": [
+            580,
+            942,
+            664,
+            1079
+          ],
+          "cell_origin_in_sheet": 288,
+          "paste_in_cell": [
+            102,
+            146
+          ]
+        },
+        {
+          "index": 2,
+          "state": "back",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 6,
+            "col": 2
+          },
+          "source_bbox": [
+            970,
+            942,
+            1074,
+            1078
+          ],
+          "cell_origin_in_sheet": 576,
+          "paste_in_cell": [
+            92,
+            147
+          ]
+        },
+        {
+          "index": 3,
+          "state": "attack",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 2,
+            "col": 0
+          },
+          "source_bbox": [
+            34,
+            669,
+            205,
+            891
+          ],
+          "cell_origin_in_sheet": 864,
+          "paste_in_cell": [
+            58,
+            61
+          ]
+        },
+        {
+          "index": 4,
+          "state": "hurt",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 2,
+            "col": 1
+          },
+          "source_bbox": [
+            312,
+            661,
+            448,
+            888
+          ],
+          "cell_origin_in_sheet": 1152,
+          "paste_in_cell": [
+            76,
+            56
+          ]
+        },
+        {
+          "index": 5,
+          "state": "run",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 2,
+            "col": 2
+          },
+          "source_bbox": [
+            570,
+            677,
+            721,
+            895
+          ],
+          "cell_origin_in_sheet": 1440,
+          "paste_in_cell": [
+            68,
+            65
+          ]
+        },
+        {
+          "index": 6,
+          "state": "downed",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 2,
+            "col": 3
+          },
+          "source_bbox": [
+            760,
+            812,
+            1026,
+            907
+          ],
+          "cell_origin_in_sheet": 1728,
+          "paste_in_cell": [
+            11,
+            188
+          ]
+        },
+        {
+          "index": 7,
+          "state": "potion",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 2,
+            "col": 4
+          },
+          "source_bbox": [
+            1075,
+            669,
+            1231,
+            896
+          ],
+          "cell_origin_in_sheet": 2016,
+          "paste_in_cell": [
+            66,
+            56
+          ]
+        }
+      ]
     },
     {
       "class": "swordsman",
-      "state": "run",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 3,
-        "col": 2
-      },
-      "source_bbox": [
-        549,
-        989,
-        721,
-        1198
-      ],
-      "out": "assets/ui/gen/split/actions/swordsman/swordsman_run.png",
+      "out": "assets/ui/gen/split/sheets/swordsman_sheet.png",
       "size": [
+        2304,
+        288
+      ],
+      "cell": [
         288,
         288
       ],
-      "content_size": [
-        173,
-        210
+      "cells_n": 8,
+      "order": [
+        "front",
+        "side",
+        "back",
+        "attack",
+        "hurt",
+        "run",
+        "downed",
+        "potion"
       ],
       "anchor": "bottom-center",
-      "paste_xy": [
-        58,
-        74
-      ],
       "alpha_min": 0,
-      "opaque_px": 19228
-    },
-    {
-      "class": "swordsman",
-      "state": "downed",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 3,
-        "col": 3
-      },
-      "source_bbox": [
-        783,
-        1104,
-        1020,
-        1203
-      ],
-      "out": "assets/ui/gen/split/actions/swordsman/swordsman_downed.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        238,
-        100
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        25,
-        184
-      ],
-      "alpha_min": 0,
-      "opaque_px": 14055
-    },
-    {
-      "class": "swordsman",
-      "state": "potion",
-      "kind": "actions",
-      "source": "assets/ui/gen/actions_B.png",
-      "source_sha256": "55c772ae9b96497f3000d9a82709e88b4e93ef96091aae165ebb0f3b42a10334",
-      "source_cell": {
-        "row": 3,
-        "col": 4
-      },
-      "source_bbox": [
-        1077,
-        982,
-        1204,
-        1206
-      ],
-      "out": "assets/ui/gen/split/actions/swordsman/swordsman_potion.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        128,
-        225
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        80,
-        59
-      ],
-      "alpha_min": 0,
-      "opaque_px": 19478
-    },
-    {
-      "class": "archer",
-      "state": "front",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 0,
-        "col": 0
-      },
-      "source_bbox": [
-        165,
-        9,
-        284,
-        145
-      ],
-      "out": "assets/ui/gen/split/turnaround/archer/archer_front.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        120,
-        137
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        84,
-        147
-      ],
-      "alpha_min": 0,
-      "opaque_px": 11794
-    },
-    {
-      "class": "archer",
-      "state": "side",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 0,
-        "col": 1
-      },
-      "source_bbox": [
-        578,
-        9,
-        656,
-        145
-      ],
-      "out": "assets/ui/gen/split/turnaround/archer/archer_side.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        79,
-        137
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        105,
-        147
-      ],
-      "alpha_min": 0,
-      "opaque_px": 8335
-    },
-    {
-      "class": "archer",
-      "state": "back",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 0,
-        "col": 2
-      },
-      "source_bbox": [
-        979,
-        9,
-        1071,
-        144
-      ],
-      "out": "assets/ui/gen/split/turnaround/archer/archer_back.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        93,
-        136
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        98,
-        148
-      ],
-      "alpha_min": 0,
-      "opaque_px": 9668
-    },
-    {
-      "class": "assassin",
-      "state": "front",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 1,
-        "col": 0
-      },
-      "source_bbox": [
-        176,
-        162,
-        287,
-        301
-      ],
-      "out": "assets/ui/gen/split/turnaround/assassin/assassin_front.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        112,
-        140
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        88,
-        144
-      ],
-      "alpha_min": 0,
-      "opaque_px": 8877
-    },
-    {
-      "class": "assassin",
-      "state": "side",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 1,
-        "col": 1
-      },
-      "source_bbox": [
-        586,
-        162,
-        656,
-        301
-      ],
-      "out": "assets/ui/gen/split/turnaround/assassin/assassin_side.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        71,
-        140
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        109,
-        144
-      ],
-      "alpha_min": 0,
-      "opaque_px": 7507
-    },
-    {
-      "class": "assassin",
-      "state": "back",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 1,
-        "col": 2
-      },
-      "source_bbox": [
-        982,
-        162,
-        1076,
-        300
-      ],
-      "out": "assets/ui/gen/split/turnaround/assassin/assassin_back.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        95,
-        139
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        97,
-        145
-      ],
-      "alpha_min": 0,
-      "opaque_px": 8659
-    },
-    {
-      "class": "berserker",
-      "state": "front",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 2,
-        "col": 0
-      },
-      "source_bbox": [
-        161,
-        317,
-        301,
-        456
-      ],
-      "out": "assets/ui/gen/split/turnaround/berserker/berserker_front.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        141,
-        140
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        74,
-        144
-      ],
-      "alpha_min": 0,
-      "opaque_px": 12444
-    },
-    {
-      "class": "berserker",
-      "state": "side",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 2,
-        "col": 1
-      },
-      "source_bbox": [
-        586,
-        317,
-        662,
-        456
-      ],
-      "out": "assets/ui/gen/split/turnaround/berserker/berserker_side.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        77,
-        140
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        106,
-        144
-      ],
-      "alpha_min": 0,
-      "opaque_px": 8121
-    },
-    {
-      "class": "berserker",
-      "state": "back",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 2,
-        "col": 2
-      },
-      "source_bbox": [
-        955,
-        317,
-        1090,
-        456
-      ],
-      "out": "assets/ui/gen/split/turnaround/berserker/berserker_back.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        136,
-        140
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        76,
-        144
-      ],
-      "alpha_min": 0,
-      "opaque_px": 12495
-    },
-    {
-      "class": "knight",
-      "state": "front",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 3,
-        "col": 0
-      },
-      "source_bbox": [
-        170,
-        471,
-        297,
-        610
-      ],
-      "out": "assets/ui/gen/split/turnaround/knight/knight_front.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        128,
-        140
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        80,
-        144
-      ],
-      "alpha_min": 0,
-      "opaque_px": 13104
-    },
-    {
-      "class": "knight",
-      "state": "side",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 3,
-        "col": 1
-      },
-      "source_bbox": [
-        578,
-        473,
-        678,
-        610
-      ],
-      "out": "assets/ui/gen/split/turnaround/knight/knight_side.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        101,
-        138
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        94,
-        146
-      ],
-      "alpha_min": 0,
-      "opaque_px": 10517
-    },
-    {
-      "class": "knight",
-      "state": "back",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 3,
-        "col": 2
-      },
-      "source_bbox": [
-        980,
-        473,
-        1084,
-        610
-      ],
-      "out": "assets/ui/gen/split/turnaround/knight/knight_back.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        105,
-        138
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        92,
-        146
-      ],
-      "alpha_min": 0,
-      "opaque_px": 11602
-    },
-    {
-      "class": "lancer",
-      "state": "front",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 4,
-        "col": 0
-      },
-      "source_bbox": [
-        159,
-        627,
-        302,
-        772
-      ],
-      "out": "assets/ui/gen/split/turnaround/lancer/lancer_front.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        144,
-        146
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        72,
-        138
-      ],
-      "alpha_min": 0,
-      "opaque_px": 13783
-    },
-    {
-      "class": "lancer",
-      "state": "side",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 4,
-        "col": 1
-      },
-      "source_bbox": [
-        551,
-        627,
-        699,
-        772
-      ],
-      "out": "assets/ui/gen/split/turnaround/lancer/lancer_side.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        149,
-        146
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        70,
-        138
-      ],
-      "alpha_min": 0,
-      "opaque_px": 14113
-    },
-    {
-      "class": "lancer",
-      "state": "back",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 4,
-        "col": 2
-      },
-      "source_bbox": [
-        966,
-        627,
-        1079,
-        772
-      ],
-      "out": "assets/ui/gen/split/turnaround/lancer/lancer_back.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        114,
-        146
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        87,
-        138
-      ],
-      "alpha_min": 0,
-      "opaque_px": 10629
-    },
-    {
-      "class": "mage",
-      "state": "front",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 5,
-        "col": 0
-      },
-      "source_bbox": [
-        175,
-        788,
-        284,
-        925
-      ],
-      "out": "assets/ui/gen/split/turnaround/mage/mage_front.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        110,
-        138
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        89,
-        146
-      ],
-      "alpha_min": 0,
-      "opaque_px": 11358
-    },
-    {
-      "class": "mage",
-      "state": "side",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 5,
-        "col": 1
-      },
-      "source_bbox": [
-        580,
-        789,
-        677,
-        927
-      ],
-      "out": "assets/ui/gen/split/turnaround/mage/mage_side.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        98,
-        139
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        95,
-        145
-      ],
-      "alpha_min": 0,
-      "opaque_px": 10245
-    },
-    {
-      "class": "mage",
-      "state": "back",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 5,
-        "col": 2
-      },
-      "source_bbox": [
-        970,
-        789,
-        1073,
-        928
-      ],
-      "out": "assets/ui/gen/split/turnaround/mage/mage_back.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        104,
-        140
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        92,
-        144
-      ],
-      "alpha_min": 0,
-      "opaque_px": 10683
-    },
-    {
-      "class": "priest",
-      "state": "front",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 6,
-        "col": 0
-      },
-      "source_bbox": [
-        175,
-        942,
-        281,
-        1079
-      ],
-      "out": "assets/ui/gen/split/turnaround/priest/priest_front.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        107,
-        138
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        91,
-        146
-      ],
-      "alpha_min": 0,
-      "opaque_px": 11115
-    },
-    {
-      "class": "priest",
-      "state": "side",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 6,
-        "col": 1
-      },
-      "source_bbox": [
-        580,
-        942,
-        664,
-        1079
-      ],
-      "out": "assets/ui/gen/split/turnaround/priest/priest_side.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        85,
-        138
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        102,
-        146
-      ],
-      "alpha_min": 0,
-      "opaque_px": 9159
-    },
-    {
-      "class": "priest",
-      "state": "back",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 6,
-        "col": 2
-      },
-      "source_bbox": [
-        970,
-        942,
-        1074,
-        1078
-      ],
-      "out": "assets/ui/gen/split/turnaround/priest/priest_back.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        105,
-        137
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        92,
-        147
-      ],
-      "alpha_min": 0,
-      "opaque_px": 10607
-    },
-    {
-      "class": "swordsman",
-      "state": "front",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 7,
-        "col": 0
-      },
-      "source_bbox": [
-        172,
-        1095,
-        278,
-        1233
-      ],
-      "out": "assets/ui/gen/split/turnaround/swordsman/swordsman_front.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        107,
-        139
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        91,
-        145
-      ],
-      "alpha_min": 0,
-      "opaque_px": 9024
-    },
-    {
-      "class": "swordsman",
-      "state": "side",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 7,
-        "col": 1
-      },
-      "source_bbox": [
-        574,
-        1095,
-        657,
-        1234
-      ],
-      "out": "assets/ui/gen/split/turnaround/swordsman/swordsman_side.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        84,
-        140
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        102,
-        144
-      ],
-      "alpha_min": 0,
-      "opaque_px": 7323
-    },
-    {
-      "class": "swordsman",
-      "state": "back",
-      "kind": "turnaround",
-      "source": "assets/ui/gen/classes_turnaround.png",
-      "source_sha256": "580d7a89479e92156fe5b6f3403dfd45cc5243400140336bd4efe582e76dc8d4",
-      "source_cell": {
-        "row": 7,
-        "col": 2
-      },
-      "source_bbox": [
-        963,
-        1095,
-        1064,
-        1230
-      ],
-      "out": "assets/ui/gen/split/turnaround/swordsman/swordsman_back.png",
-      "size": [
-        288,
-        288
-      ],
-      "content_size": [
-        102,
-        136
-      ],
-      "anchor": "bottom-center",
-      "paste_xy": [
-        93,
-        148
-      ],
-      "alpha_min": 0,
-      "opaque_px": 8900
+      "cells": [
+        {
+          "index": 0,
+          "state": "front",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 7,
+            "col": 0
+          },
+          "source_bbox": [
+            172,
+            1095,
+            278,
+            1233
+          ],
+          "cell_origin_in_sheet": 0,
+          "paste_in_cell": [
+            91,
+            145
+          ]
+        },
+        {
+          "index": 1,
+          "state": "side",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 7,
+            "col": 1
+          },
+          "source_bbox": [
+            574,
+            1095,
+            657,
+            1234
+          ],
+          "cell_origin_in_sheet": 288,
+          "paste_in_cell": [
+            102,
+            144
+          ]
+        },
+        {
+          "index": 2,
+          "state": "back",
+          "source": "assets/ui/gen/classes_turnaround.png",
+          "source_cell": {
+            "row": 7,
+            "col": 2
+          },
+          "source_bbox": [
+            963,
+            1095,
+            1064,
+            1230
+          ],
+          "cell_origin_in_sheet": 576,
+          "paste_in_cell": [
+            93,
+            148
+          ]
+        },
+        {
+          "index": 3,
+          "state": "attack",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 3,
+            "col": 0
+          },
+          "source_bbox": [
+            19,
+            989,
+            188,
+            1199
+          ],
+          "cell_origin_in_sheet": 864,
+          "paste_in_cell": [
+            59,
+            73
+          ]
+        },
+        {
+          "index": 4,
+          "state": "hurt",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 3,
+            "col": 1
+          },
+          "source_bbox": [
+            298,
+            956,
+            453,
+            1206
+          ],
+          "cell_origin_in_sheet": 1152,
+          "paste_in_cell": [
+            66,
+            33
+          ]
+        },
+        {
+          "index": 5,
+          "state": "run",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 3,
+            "col": 2
+          },
+          "source_bbox": [
+            549,
+            989,
+            721,
+            1198
+          ],
+          "cell_origin_in_sheet": 1440,
+          "paste_in_cell": [
+            58,
+            74
+          ]
+        },
+        {
+          "index": 6,
+          "state": "downed",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 3,
+            "col": 3
+          },
+          "source_bbox": [
+            783,
+            1104,
+            1020,
+            1203
+          ],
+          "cell_origin_in_sheet": 1728,
+          "paste_in_cell": [
+            25,
+            184
+          ]
+        },
+        {
+          "index": 7,
+          "state": "potion",
+          "source": "assets/ui/gen/actions_B.png",
+          "source_cell": {
+            "row": 3,
+            "col": 4
+          },
+          "source_bbox": [
+            1077,
+            982,
+            1204,
+            1206
+          ],
+          "cell_origin_in_sheet": 2016,
+          "paste_in_cell": [
+            80,
+            59
+          ]
+        }
+      ]
     }
-  ]
+  ],
+  "layout": {
+    "sheet": "8 格水平, 每格 288x288, 总宽 2304",
+    "order": [
+      "front",
+      "side",
+      "back",
+      "attack",
+      "hurt",
+      "run",
+      "downed",
+      "potion"
+    ],
+    "anchor": "bottom-center",
+    "pad": 4,
+    "note": "格内像素为源图原分辨率裁切，未缩放"
+  }
 }

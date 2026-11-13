@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""slice_class_sheets.py — 把 AI 生成的角色网格图集切成每角色每状态独立透明 PNG。
+"""slice_class_sheets.py — 把 AI 生成的角色网格图集切成角色精灵图。
 
 针对 skills/class-turnaround-imagegen.md 产物（actions_*.png / classes_turnaround.png）：
 网格由生成模型手绘，存在漂移（1254÷5 非整除），故不做裸等分切割：
   1) 对 alpha>8 做连通域分析（4 邻接）；
   2) 按质心落到名义格子 (row = cy//cell_h, col = cx//cell_w) 归属；
-  3) 每格取其全部连通域的并集外接框，贴到统一画布（底部中心锚点，底边留 pad）；
-  4) 输出 每格 PNG + 每角色行条带 + 条带棋盘格预览 + manifest 增量合并。
+  3) 每格取其全部连通域的并集外接框，贴到统一画布（底部中心锚点，底边留 pad）。
 
-用法（每张源图一次调用，--canvas 全程一致保证帧画布稳定）:
-    python tools/slice_class_sheets.py \
-        --sheet assets/ui/gen/actions_A.png --grid 4x5 \
-        --rows archer,assassin,berserker,knight \
-        --cols attack,hurt,run,downed,potion \
-        --kind actions --out-root assets/ui/gen/split --canvas 360 --manifest assets/ui/gen/split/manifest.json
+子命令:
+  slice  — 逐源图切片: 每格 PNG + 每行条带 + manifest 增量合并（中间产物，供 merge 输入）
+  merge  — 按 manifest 把每角色各状态合成为单张水平精灵图（如 8 格 2304×288），
+           生成棋盘预览，可选 --prune 删除帧/条带等冗余中间产物，并重写 manifest。
 
-退出码: 0=全部通过; 1=存在空格/越界/跨格污染等失败。
-不写源图，只读。
+用法:
+    python tools/slice_class_sheets.py slice --sheet assets/ui/gen/actions_A.png --grid 4x5 \
+        --rows archer,assassin,berserker,knight --cols attack,hurt,run,downed,potion \
+        --kind actions --out-root assets/ui/gen/split --canvas 288 --manifest assets/ui/gen/split/manifest.json
+    python tools/slice_class_sheets.py merge --manifest assets/ui/gen/split/manifest.json \
+        --out-root assets/ui/gen/split --canvas 288 \
+        --order front,side,back,attack,hurt,run,downed,potion --prune
+
+退出码: 0=全部通过; 1=空格/越界/跨格污染/缺格等失败。不写源图，只读。
 """
 import argparse
 import hashlib
 import json
+import shutil
 import sys
 from collections import deque
 from pathlib import Path
@@ -75,34 +80,28 @@ def find_components(alpha, w, h):
     return comps
 
 
-def checker_bg(size, a=255):
+def checker_bg(size):
     bg = Image.new("RGBA", size)
     px = bg.load()
     for y in range(size[1]):
         for x in range(size[0]):
             g = 200 if ((x // CHECKER + y // CHECKER) % 2 == 0) else 150
-            px[x, y] = (g, g, g, a)
+            px[x, y] = (g, g, g, 255)
     return bg
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--sheet", required=True)
-    ap.add_argument("--grid", required=True, help="ROWSxCOLS, 如 4x5")
-    ap.add_argument("--rows", required=True, help="逗号分隔角色名, 自上而下")
-    ap.add_argument("--cols", required=True, help="逗号分隔列名, 自左而右")
-    ap.add_argument("--kind", required=True, help="actions / turnaround 等分组名")
-    ap.add_argument("--out-root", required=True)
-    ap.add_argument("--canvas", type=int, required=True, help="统一正方画布边长")
-    ap.add_argument("--pad", type=int, default=DEFAULT_PAD)
-    ap.add_argument("--manifest", required=True)
-    args = ap.parse_args()
+def paste_at(canvas, sprite, px, py):
+    """底部中心锚点: px = W//2 - sw//2, py = H - pad - sh"""
+    canvas.paste(sprite, (px, py))
 
+
+# ---------------------------------------------------------------- slice
+
+def cmd_slice(args):
     rows = [s.strip() for s in args.rows.split(",")]
     cols = [s.strip() for s in args.cols.split(",")]
     n_r, n_c = (int(v) for v in args.grid.lower().split("x"))
     assert len(rows) == n_r and len(cols) == n_c, "rows/cols 数量与 grid 不符"
-    assert n_r * n_c <= 64
 
     sheet_path = Path(args.sheet)
     img = Image.open(sheet_path).convert("RGBA")
@@ -110,14 +109,11 @@ def main():
     cell_w, cell_h = w / n_c, h / n_r
     comps = find_components(img.getchannel("A"), w, h)
 
-    # 质心归属格子
     cells = {}
-    stray = []
     for bbox, count, cx, cy in comps:
         r, c = int(cy / cell_h), int(cx / cell_w)
         r = min(max(r, 0), n_r - 1)
         c = min(max(c, 0), n_c - 1)
-        # 质心离名义格中心过远视为漂移警告
         ccx, ccy = (c + 0.5) * cell_w, (r + 0.5) * cell_h
         if abs(cx - ccx) > cell_w * 0.45 or abs(cy - ccy) > cell_h * 0.45:
             print(f"  [warn] 连通域质心({cx:.0f},{cy:.0f}) 偏离格({r},{c})中心较远")
@@ -130,9 +126,8 @@ def main():
     preview_dir.mkdir(parents=True, exist_ok=True)
 
     canvas = args.canvas
-    errors, entries, strips = [], [], []
+    errors, entries = [], []
 
-    # 先算每格并集外接框并做跨格检查
     boxes = {}
     for r in range(n_r):
         for c in range(n_c):
@@ -148,18 +143,12 @@ def main():
             if bw + 2 * args.pad > canvas or bh + 2 * args.pad > canvas:
                 errors.append(f"({rows[r]},{cols[c]}) 内容 {bw}x{bh} 超出画布 {canvas}")
             boxes[(r, c)] = (x0, y0, x1, y1)
-    # 相邻格并集框重叠 = 可能互相污染
     for (r, c), b in boxes.items():
-        for dc in (1,):
-            nb = boxes.get((r, c + dc))
+        for dr, dc, tag in ((0, 1, "右邻"), (1, 0, "下邻")):
+            nb = boxes.get((r + dr, c + dc))
             if nb and not (b[2] < nb[0] or nb[2] < b[0] or b[3] < nb[1] or nb[3] < b[1]):
                 overlap = (min(b[2], nb[2]) - max(b[0], nb[0]) + 1) * (min(b[3], nb[3]) - max(b[1], nb[1]) + 1)
-                errors.append(f"格({rows[r]},{cols[c]}) 与右邻并集框重叠 {overlap}px²")
-        for dr in (1,):
-            nb = boxes.get((r + dr, c))
-            if nb and not (b[2] < nb[0] or nb[2] < b[0] or b[3] < nb[1] or nb[3] < b[1]):
-                overlap = (min(b[2], nb[2]) - max(b[0], nb[0]) + 1) * (min(b[3], nb[3]) - max(b[1], nb[1]) + 1)
-                errors.append(f"格({rows[r]},{cols[c]}) 与下邻并集框重叠 {overlap}px²")
+                errors.append(f"格({rows[r]},{cols[c]}) 与{tag}并集框重叠 {overlap}px²")
 
     if errors:
         for e in errors:
@@ -167,9 +156,8 @@ def main():
         sys.exit(1)
 
     src_sha = sha256(sheet_path)
-    baseline = canvas - args.pad  # 底部基线 y(开区间)
+    baseline = canvas - args.pad
 
-    # 切片: 统一画布 + 底部中心锚点
     for r in range(n_r):
         strip = Image.new("RGBA", (n_c * canvas + (n_c - 1) * STRIP_GAP, canvas), (0, 0, 0, 0))
         for c in range(n_c):
@@ -179,13 +167,12 @@ def main():
             frame = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
             px = canvas // 2 - sw // 2
             py = baseline - sh
-            frame.paste(sprite, (px, py))
+            paste_at(frame, sprite, px, py)
             name = f"{rows[r]}_{cols[c]}.png"
             out = kind_dir / rows[r] / name
             out.parent.mkdir(parents=True, exist_ok=True)
             frame.save(out)
-            amin, amax = frame.getchannel("A").getextrema()
-            opaque = sum(1 for v in frame.getchannel("A").getdata() if v > ALPHA_TH)
+            amin, _ = frame.getchannel("A").getextrema()
             entries.append({
                 "class": rows[r], "state": cols[c], "kind": args.kind,
                 "source": str(sheet_path), "source_sha256": src_sha,
@@ -193,24 +180,17 @@ def main():
                 "source_bbox": [x0, y0, x1, y1],
                 "out": str(out), "size": [canvas, canvas],
                 "content_size": [sw, sh], "anchor": "bottom-center",
-                "paste_xy": [px, py],
-                "alpha_min": amin, "opaque_px": opaque,
+                "paste_xy": [px, py], "alpha_min": amin,
             })
             assert amin == 0, f"{name} 无透明背景"
             strip.paste(frame, (c * (canvas + STRIP_GAP), 0))
         strip_path = out_root / "strips" / f"{rows[r]}_{args.kind}.png"
         strip_path.parent.mkdir(parents=True, exist_ok=True)
         strip.save(strip_path)
-        checker_bg(strip.size).alpha_composite(strip)
-        prev_path = preview_dir / f"{rows[r]}_{args.kind}_preview.png"
-        strip.convert("RGBA")
-        Image.open(strip_path).convert("RGBA")
         comp = checker_bg(strip.size)
         comp.alpha_composite(Image.open(strip_path).convert("RGBA"))
-        comp.convert("RGB").save(prev_path)
-        strips.append(str(strip_path))
+        comp.convert("RGB").save(preview_dir / f"{rows[r]}_{args.kind}_preview.png")
 
-    # manifest 增量合并（按源图键覆盖）
     mf_path = Path(args.manifest)
     mf = {"sources": {}, "files": []}
     if mf_path.exists():
@@ -222,8 +202,136 @@ def main():
     mf["files"] = [f for f in mf.get("files", []) if f.get("source") != str(sheet_path)] + entries
     mf_path.parent.mkdir(parents=True, exist_ok=True)
     mf_path.write_text(json.dumps(mf, ensure_ascii=False, indent=2))
+    print(f"[ok] slice {sheet_path}: {len(entries)} 格 -> {kind_dir}, manifest 更新 {mf_path}")
 
-    print(f"[ok] {sheet_path}: {len(entries)} 格 -> {kind_dir}, 条带 {len(strips)} 条, manifest 更新 {mf_path}")
+
+# ---------------------------------------------------------------- merge
+
+def cmd_merge(args):
+    mf_path = Path(args.manifest)
+    mf = json.loads(mf_path.read_text())
+    order = [s.strip() for s in args.order.split(",")]
+    canvas, pad = args.canvas, args.pad
+    out_root = Path(args.out_root)
+    sheets_dir = out_root / "sheets"
+    preview_dir = out_root / "preview"
+    sheets_dir.mkdir(parents=True, exist_ok=True)
+    preview_dir.mkdir(parents=True, exist_ok=True)
+
+    by_class = {}
+    for f in mf.get("files", []):
+        if "source_bbox" not in f:      # 已是 sheet 条目则跳过
+            continue
+        by_class.setdefault(f["class"], {})[f["state"]] = f
+
+    classes = sorted(by_class)
+    if not classes:
+        sys.exit("[error] manifest 中没有可合并的帧条目（先运行 slice）")
+
+    sheets, entries = [], []
+    cache = {}
+    for cls in classes:
+        states = by_class[cls]
+        missing = [s for s in order if s not in states]
+        extra = [s for s in states if s not in order]
+        if missing or extra:
+            sys.exit(f"[error] {cls}: 缺 {missing} 多 {extra}，与 --order 不符")
+        sheet = Image.new("RGBA", (len(order) * canvas, canvas), (0, 0, 0, 0))
+        cells_meta = []
+        for i, st in enumerate(order):
+            e = states[st]
+            src = cache.setdefault(e["source"], Image.open(e["source"]).convert("RGBA"))
+            x0, y0, x1, y1 = e["source_bbox"]
+            sprite = src.crop((x0, y0, x1 + 1, y1 + 1))
+            px = canvas // 2 - sprite.width // 2
+            py = canvas - pad - sprite.height
+            if [px, py] != e.get("paste_xy"):
+                sys.exit(f"[error] {cls}/{st}: 画布位置 {px, py} 与 slice 记录 {e.get('paste_xy')} 不一致")
+            sheet.paste(sprite, (i * canvas + px, py))
+            cells_meta.append({
+                "index": i, "state": st,
+                "source": e["source"], "source_cell": e["source_cell"],
+                "source_bbox": e["source_bbox"],
+                "cell_origin_in_sheet": i * canvas,
+                "paste_in_cell": [px, py],
+            })
+        out = sheets_dir / f"{cls}_sheet.png"
+        sheet.save(out)
+        amin, _ = sheet.getchannel("A").getextrema()
+        assert amin == 0, f"{out} 无透明背景"
+        entries.append({
+            "class": cls, "out": str(out), "size": [sheet.width, sheet.height],
+            "cell": [canvas, canvas], "cells_n": len(order), "order": order,
+            "anchor": "bottom-center", "alpha_min": amin, "cells": cells_meta,
+        })
+        sheets.append((cls, out, sheet))
+        comp = checker_bg(sheet.size)
+        comp.alpha_composite(sheet)
+        comp.convert("RGB").save(preview_dir / f"{cls}_sheet_preview.png")
+        print(f"[ok] {out} ({sheet.width}x{sheet.height}, {len(order)} 格)")
+
+    # 全角色总览: 各 sheet 纵向堆叠
+    contact = Image.new("RGBA", (sheets[0][2].width, sum(s[2].height for s in sheets)), (0, 0, 0, 0))
+    y = 0
+    for _, _, sh in sheets:
+        contact.paste(sh, (0, y))
+        y += sh.height
+    comp = checker_bg(contact.size)
+    comp.alpha_composite(contact)
+    comp.convert("RGB").save(preview_dir / "all_sheets_contact.png")
+
+    # manifest 重写为 sheet 条目（保留 sources 与溯源 cells）
+    mf["files"] = entries
+    mf["layout"] = {
+        "sheet": f"{len(order)} 格水平, 每格 {canvas}x{canvas}, 总宽 {len(order) * canvas}",
+        "order": order, "anchor": "bottom-center", "pad": pad,
+        "note": "格内像素为源图原分辨率裁切，未缩放",
+    }
+    mf_path.write_text(json.dumps(mf, ensure_ascii=False, indent=2))
+    print(f"[ok] manifest 重写: {len(entries)} 张 sheet, {mf_path}")
+
+    if args.prune:
+        removed = []
+        for name in ("actions", "turnaround", "strips"):
+            d = out_root / name
+            if d.is_dir() and d.parent.resolve() == out_root.resolve():
+                shutil.rmtree(d)
+                removed.append(str(d))
+        for p in sorted(preview_dir.glob("*.png")):
+            if p.name not in {f"{c}_sheet_preview.png" for c in classes} | {"all_sheets_contact.png"}:
+                p.unlink()
+                removed.append(str(p))
+        for r in removed:
+            print(f"[prune] 已删除 {r}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("slice", help="逐源图切片为独立帧/条带（中间产物）")
+    s.add_argument("--sheet", required=True)
+    s.add_argument("--grid", required=True, help="ROWSxCOLS, 如 4x5")
+    s.add_argument("--rows", required=True)
+    s.add_argument("--cols", required=True)
+    s.add_argument("--kind", required=True)
+    s.add_argument("--out-root", required=True)
+    s.add_argument("--canvas", type=int, required=True)
+    s.add_argument("--pad", type=int, default=DEFAULT_PAD)
+    s.add_argument("--manifest", required=True)
+    s.set_defaults(func=cmd_slice)
+
+    m = sub.add_parser("merge", help="按角色合并为单张水平精灵图并清理冗余")
+    m.add_argument("--manifest", required=True)
+    m.add_argument("--out-root", required=True)
+    m.add_argument("--canvas", type=int, required=True)
+    m.add_argument("--pad", type=int, default=DEFAULT_PAD)
+    m.add_argument("--order", required=True, help="水平帧序, 如 front,side,back,attack,hurt,run,downed,potion")
+    m.add_argument("--prune", action="store_true", help="删除 actions/turnaround/strips 目录与旧 preview")
+    m.set_defaults(func=cmd_merge)
+
+    args = ap.parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":
