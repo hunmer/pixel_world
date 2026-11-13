@@ -1,0 +1,354 @@
+{
+  "meta": {
+    "language": "ja",
+    "model": "seed-audio-1.0",
+    "emo_order": [
+      "attack",
+      "hurt",
+      "confused",
+      "laugh",
+      "shy",
+      "cry",
+      "panic"
+    ],
+    "source_note": "cut/ 由 *_battle_voices_ja.wav 按最长 6 静音切分；源文件保留"
+  },
+  "characters": {
+    "elf_companion": {
+      "name_cn": "精灵同伴（mage→sage）",
+      "sample": "res://assets/audio/voice/voice_elf_companion_sample_ja.wav",
+      "battle_all": "res://assets/audio/voice/voice_elf_companion_battle_voices_ja.wav",
+      "voices": {
+        "attack": {
+          "path": "res://assets/audio/voice/cut/voice_elf_companion_attack.wav",
+          "line_ja": "攻撃のかけ声「えいっ！」",
+          "duration_s": 0.26
+        },
+        "hurt": {
+          "path": "res://assets/audio/voice/cut/voice_elf_companion_hurt.wav",
+          "line_ja": "被弾「っ……！」",
+          "duration_s": 1.11
+        },
+        "confused": {
+          "path": "res://assets/audio/voice/cut/voice_elf_companion_confused.wav",
+          "line_ja": "疑惑「……どういうこと？」",
+          "duration_s": 1.96
+        },
+        "laugh": {
+          "path": "res://assets/audio/voice/cut/voice_elf_companion_laugh.wav",
+          "line_ja": "笑い声「ふふっ」",
+          "duration_s": 2.82
+        },
+        "shy": {
+          "path": "res://assets/audio/voice/cut/voice_elf_companion_shy.wav",
+          "line_ja": "照れ「……そんな、勘違いしないで」",
+          "duration_s": 1.96
+        },
+        "cry": {
+          "path": "res://assets/audio/voice/cut/voice_elf_companion_cry.wav",
+          "line_ja": "泣き声「うっ……くっ……」",
+          "duration_s": 1.11
+        },
+        "panic": {
+          "path": "res://assets/audio/voice/cut/voice_elf_companion_panic.wav",
+          "line_ja": "驚きの大声「いやぁっ！？」",
+          "duration_s": 1.37
+        }
+      }
+    },
+    "hero": {
+      "name_cn": "主角（recruitKnight→paladin）",
+      "sample": "res://assets/audio/voice/voice_hero_sample_ja.wav",
+      "battle_all": "res://assets/audio/voice/voice_hero_battle_voices_ja.wav",
+      "voices": {
+        "attack": {
+          "path": "res://assets/audio/voice/cut/voice_hero_attack.wav",
+          "line_ja": "攻撃のかけ声「えいっ！」",
+          "duration_s": 1.19
+        },
+        "hurt": {
+          "path": "res://assets/audio/voice/cut/voice_hero_hurt.wav",
+          "line_ja": "被弾「っ……！」",
+          "duration_s": 2.05
+        },
+        "confused": {
+          "path": "res://assets/audio/voice/cut/voice_hero_confused.wav",
+          "line_ja": "疑惑「……どういうこと？」",
+          "duration_s": 2.82
+        },
+        "laugh": {
+          "path": "res://assets/audio/voice/cut/voice_hero_laugh.wav",
+          "line_ja": "笑い声「ふふっ」",
+          "duration_s": 2.13
+        },
+        "shy": {
+          "path": "res://assets/audio/voice/cut/voice_hero_shy.wav",
+          "line_ja": "照れ「……そんな、勘違いしないで」",
+          "duration_s": 1.45
+        },
+        "cry": {
+          "path": "res://assets/audio/voice/cut/voice_hero_cry.wav",
+          "line_ja": "泣き声「うっ……くっ……」",
+          "duration_s": 1.28
+        },
+        "panic": {
+          "path": "res://assets/audio/voice/cut/voice_hero_panic.wav",
+          "line_ja": "驚きの大声「いやぁっ！？」",
+          "duration_s": 2.05
+        }
+      }
+    },
+    "veteran": {
+      "name_cn": "老将副官（soldier→knight）",
+      "sample": "res://assets/audio/voice/voice_veteran_sample_ja.wav",
+      "battle_all": "res://assets/audio/voice/voice_veteran_battle_voices_ja.wav",
+      "voices": {
+        "attack": {
+          "path": "res://assets/audio/voice/cut/voice_veteran_attack.wav",
+          "line_ja": "攻撃のかけ声「えいっ！」",
+          "duration_s": 0.77
+        },
+        "hurt": {
+          "path": "res://assets/audio/voice/cut/voice_veteran_hurt.wav",
+          "line_ja": "被弾「っ……！」",
+          "duration_s": 1.71
+        },
+        "confused": {
+          "path": "res://assets/audio/voice/cut/voice_veteran_confused.wav",
+          "line_ja": "疑惑「……どういうこと？」",
+          "duration_s": 2.22
+        },
+        "laugh": {
+          "path": "res://assets/audio/voice/cut/voice_veteran_laugh.wav",
+          "line_ja": "笑い声「ふふっ」",
+          "duration_s": 1.54
+        },
+        "shy": {
+          "path": "res://assets/audio/voice/cut/voice_veteran_shy.wav",
+          "line_ja": "照れ「……そんな、勘違いしないで」",
+          "duration_s": 0.68
+        },
+        "cry": {
+          "path": "res://assets/audio/voice/cut/voice_veteran_cry.wav",
+          "line_ja": "泣き声「うっ……くっ……」",
+          "duration_s": 0.51
+        },
+        "panic": {
+          "path": "res://assets/audio/voice/cut/voice_veteran_panic.wav",
+          "line_ja": "驚きの大声「いやぁっ！？」",
+          "duration_s": 1.88
+        }
+      }
+    },
+    "mercenary": {
+      "name_cn": "佣兵弓手（archer→sniper）",
+      "sample": "res://assets/audio/voice/voice_mercenary_sample_ja.wav",
+      "battle_all": "res://assets/audio/voice/voice_mercenary_battle_voices_ja.wav",
+      "voices": {
+        "attack": {
+          "path": "res://assets/audio/voice/cut/voice_mercenary_attack.wav",
+          "line_ja": "攻撃のかけ声「えいっ！」",
+          "duration_s": 0.26
+        },
+        "hurt": {
+          "path": "res://assets/audio/voice/cut/voice_mercenary_hurt.wav",
+          "line_ja": "被弾「っ……！」",
+          "duration_s": 1.28
+        },
+        "confused": {
+          "path": "res://assets/audio/voice/cut/voice_mercenary_confused.wav",
+          "line_ja": "疑惑「……どういうこと？」",
+          "duration_s": 1.37
+        },
+        "laugh": {
+          "path": "res://assets/audio/voice/cut/voice_mercenary_laugh.wav",
+          "line_ja": "笑い声「ふふっ」",
+          "duration_s": 0.85
+        },
+        "shy": {
+          "path": "res://assets/audio/voice/cut/voice_mercenary_shy.wav",
+          "line_ja": "照れ「……そんな、勘違いしないで」",
+          "duration_s": 1.45
+        },
+        "cry": {
+          "path": "res://assets/audio/voice/cut/voice_mercenary_cry.wav",
+          "line_ja": "泣き声「うっ……くっ……」",
+          "duration_s": 1.62
+        },
+        "panic": {
+          "path": "res://assets/audio/voice/cut/voice_mercenary_panic.wav",
+          "line_ja": "驚きの大声「いやぁっ！？」",
+          "duration_s": 0.94
+        }
+      }
+    },
+    "pegasus": {
+      "name_cn": "天马斥候（pegasusKnight）",
+      "sample": "res://assets/audio/voice/voice_pegasus_sample_ja.wav",
+      "battle_all": "res://assets/audio/voice/voice_pegasus_battle_voices_ja.wav",
+      "voices": {
+        "attack": {
+          "path": "res://assets/audio/voice/cut/voice_pegasus_attack.wav",
+          "line_ja": "攻撃のかけ声「えいっ！」",
+          "duration_s": 1.02
+        },
+        "hurt": {
+          "path": "res://assets/audio/voice/cut/voice_pegasus_hurt.wav",
+          "line_ja": "被弾「っ……！」",
+          "duration_s": 1.71
+        },
+        "confused": {
+          "path": "res://assets/audio/voice/cut/voice_pegasus_confused.wav",
+          "line_ja": "疑惑「……どういうこと？」",
+          "duration_s": 1.37
+        },
+        "laugh": {
+          "path": "res://assets/audio/voice/cut/voice_pegasus_laugh.wav",
+          "line_ja": "笑い声「ふふっ」",
+          "duration_s": 1.54
+        },
+        "shy": {
+          "path": "res://assets/audio/voice/cut/voice_pegasus_shy.wav",
+          "line_ja": "照れ「……そんな、勘違いしないで」",
+          "duration_s": 1.45
+        },
+        "cry": {
+          "path": "res://assets/audio/voice/cut/voice_pegasus_cry.wav",
+          "line_ja": "泣き声「うっ……くっ……」",
+          "duration_s": 1.19
+        },
+        "panic": {
+          "path": "res://assets/audio/voice/cut/voice_pegasus_panic.wav",
+          "line_ja": "驚きの大声「いやぁっ！？」",
+          "duration_s": 1.28
+        }
+      }
+    },
+    "priest": {
+      "name_cn": "随军司祭（priest→bishop）",
+      "sample": "res://assets/audio/voice/voice_priest_sample_ja.wav",
+      "battle_all": "res://assets/audio/voice/voice_priest_battle_voices_ja.wav",
+      "voices": {
+        "attack": {
+          "path": "res://assets/audio/voice/cut/voice_priest_attack.wav",
+          "line_ja": "攻撃のかけ声「えいっ！」",
+          "duration_s": 0.26
+        },
+        "hurt": {
+          "path": "res://assets/audio/voice/cut/voice_priest_hurt.wav",
+          "line_ja": "被弾「っ……！」",
+          "duration_s": 1.71
+        },
+        "confused": {
+          "path": "res://assets/audio/voice/cut/voice_priest_confused.wav",
+          "line_ja": "疑惑「……どういうこと？」",
+          "duration_s": 2.13
+        },
+        "laugh": {
+          "path": "res://assets/audio/voice/cut/voice_priest_laugh.wav",
+          "line_ja": "笑い声「ふふっ」",
+          "duration_s": 2.47
+        },
+        "shy": {
+          "path": "res://assets/audio/voice/cut/voice_priest_shy.wav",
+          "line_ja": "照れ「……そんな、勘違いしないで」",
+          "duration_s": 1.79
+        },
+        "cry": {
+          "path": "res://assets/audio/voice/cut/voice_priest_cry.wav",
+          "line_ja": "泣き声「うっ……くっ……」",
+          "duration_s": 1.02
+        },
+        "panic": {
+          "path": "res://assets/audio/voice/cut/voice_priest_panic.wav",
+          "line_ja": "驚きの大声「いやぁっ！？」",
+          "duration_s": 1.37
+        }
+      }
+    },
+    "hierarch": {
+      "name_cn": "神权国圣座（boss bishop）",
+      "sample": "res://assets/audio/voice/voice_hierarch_sample_ja.wav",
+      "battle_all": "res://assets/audio/voice/voice_hierarch_battle_voices_ja.wav",
+      "voices": {
+        "attack": {
+          "path": "res://assets/audio/voice/cut/voice_hierarch_attack.wav",
+          "line_ja": "攻撃のかけ声「えいっ！」",
+          "duration_s": 0.26
+        },
+        "hurt": {
+          "path": "res://assets/audio/voice/cut/voice_hierarch_hurt.wav",
+          "line_ja": "被弾「っ……！」",
+          "duration_s": 1.19
+        },
+        "confused": {
+          "path": "res://assets/audio/voice/cut/voice_hierarch_confused.wav",
+          "line_ja": "疑惑「……どういうこと？」",
+          "duration_s": 1.71
+        },
+        "laugh": {
+          "path": "res://assets/audio/voice/cut/voice_hierarch_laugh.wav",
+          "line_ja": "笑い声「ふふっ」",
+          "duration_s": 2.22
+        },
+        "shy": {
+          "path": "res://assets/audio/voice/cut/voice_hierarch_shy.wav",
+          "line_ja": "照れ「……そんな、勘違いしないで」",
+          "duration_s": 1.37
+        },
+        "cry": {
+          "path": "res://assets/audio/voice/cut/voice_hierarch_cry.wav",
+          "line_ja": "泣き声「うっ……くっ……」",
+          "duration_s": 1.11
+        },
+        "panic": {
+          "path": "res://assets/audio/voice/cut/voice_hierarch_panic.wav",
+          "line_ja": "驚きの大声「いやぁっ！？」",
+          "duration_s": 1.37
+        }
+      }
+    },
+    "demon": {
+      "name_cn": "恶魔君主（boss knight/sage）",
+      "sample": "res://assets/audio/voice/voice_demon_sample_ja.wav",
+      "battle_all": "res://assets/audio/voice/voice_demon_battle_voices_ja.wav",
+      "voices": {
+        "attack": {
+          "path": "res://assets/audio/voice/cut/voice_demon_attack.wav",
+          "line_ja": "攻撃のかけ声「えいっ！」",
+          "duration_s": 0.68
+        },
+        "hurt": {
+          "path": "res://assets/audio/voice/cut/voice_demon_hurt.wav",
+          "line_ja": "被弾「っ……！」",
+          "duration_s": 1.02
+        },
+        "confused": {
+          "path": "res://assets/audio/voice/cut/voice_demon_confused.wav",
+          "line_ja": "疑惑「……どういうこと？」",
+          "duration_s": 2.99
+        },
+        "laugh": {
+          "path": "res://assets/audio/voice/cut/voice_demon_laugh.wav",
+          "line_ja": "笑い声「ふふっ」",
+          "duration_s": 2.39
+        },
+        "shy": {
+          "path": "res://assets/audio/voice/cut/voice_demon_shy.wav",
+          "line_ja": "照れ「……そんな、勘違いしないで」",
+          "duration_s": 1.28
+        },
+        "cry": {
+          "path": "res://assets/audio/voice/cut/voice_demon_cry.wav",
+          "line_ja": "泣き声「うっ……くっ……」",
+          "duration_s": 3.33
+        },
+        "panic": {
+          "path": "res://assets/audio/voice/cut/voice_demon_panic.wav",
+          "line_ja": "驚きの大声「いやぁっ！？」",
+          "duration_s": 1.19
+        }
+      }
+    }
+  }
+}
