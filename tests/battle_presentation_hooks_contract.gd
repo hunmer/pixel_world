@@ -23,12 +23,15 @@ func _first_unit(battle: Node, faction: StringName) -> Dictionary:
 	return {}
 
 
-func _sample_b1_kick(world: Node, sample: Dictionary, base_position: Vector3) -> void:
+func _sample_b1_kick(world: Node, sample: Dictionary, base_position: Vector3, base_lateral: Vector3) -> void:
 	await world.get_tree().create_timer(0.08).timeout
 	if not is_instance_valid(world):
 		return
 	var offset := world.get("_battle_camera_kick_offset") as Vector3
 	var actual_delta := (world._cam.global_position as Vector3) - base_position
+	# 正交 size 推近会同步改变 HUD 预留侧栏的横向补偿；除此之外只允许 additive。
+	var expected_delta := offset + (world._cam._reserved_lateral_world() as Vector3) - base_lateral
+	sample["expected_delta"] = expected_delta
 	sample["offset"] = offset.length()
 	sample["offset_vector"] = offset
 	sample["actual_delta"] = actual_delta
@@ -43,12 +46,13 @@ func _exercise_camera_kick(world: Node, battle: Node) -> void:
 	battle.turn_director.set_pref(attacker.id, &"anim_speed", 1.0)
 	battle.turn_director.set_pref(attacker.id, &"skip_anim", false)
 	var base_position: Vector3 = world._cam.global_position
+	var base_lateral: Vector3 = world._cam._reserved_lateral_world()
 	var base_yaw: float = world._cam.yaw_radians
 	var base_size: float = world._cam.size
 	var sample := {"offset": 0.0, "position_delta": 0.0}
 	var on_phase := func(phase: StringName, _event: Dictionary) -> void:
 		if phase == &"strike":
-			_sample_b1_kick(world, sample, base_position)
+			_sample_b1_kick(world, sample, base_position, base_lateral)
 	battle.action_anim.phase_started.connect(on_phase)
 	await battle._resolve_combat(attacker, defender, Callable())
 	battle.action_anim.phase_started.disconnect(on_phase)
@@ -56,9 +60,11 @@ func _exercise_camera_kick(world: Node, battle: Node) -> void:
 	_expect(float(sample["position_delta"]) > 0.0001, "B1 主相机每帧取景仍覆盖攻击推近")
 	_expect(
 		(sample.get("actual_delta", Vector3.ZERO) as Vector3).is_equal_approx(
-			sample.get("offset_vector", Vector3.ZERO)
+			sample.get("expected_delta", Vector3.ZERO)
 		),
-		"B1 strike 存在 additive 之外的相机位置写入"
+		"B1 strike 存在 additive/size 之外的相机位置写入: actual=%s expected=%s" % [
+			str(sample.get("actual_delta", Vector3.ZERO)), str(sample.get("expected_delta", Vector3.ZERO))
+		]
 	)
 	_expect((world.get("_battle_camera_kick_offset") as Vector3).is_zero_approx(), "攻击结束附加相机位移未清零")
 	_expect((world._cam.global_position as Vector3).distance_to(base_position) < 0.001, "攻击结束世界相机位置未恢复")

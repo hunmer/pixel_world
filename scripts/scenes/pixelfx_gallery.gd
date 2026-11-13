@@ -1,7 +1,7 @@
-## scripts/scenes/pixelfx_gallery.gd — pixelfx 特效画廊测试场景：网格分列展示全部 244 个特效，
-## 支持分类过滤 / 搜索 / 调色板重着色；点击格子在右侧大预览区播放，act 类特效可用完整演出（角色 + 目标 + freeze + shake）。
+## scripts/scenes/pixelfx_gallery.gd — pixelfx 特效画廊测试场景：左侧紧凑缩略图墙（96px 静态代表帧）分列展示全部 244 个特效，
+## 支持分类过滤 / 搜索 / 调色板重着色；点击缩略图在右侧大预览区播放，act 类特效可用完整演出（角色 + 目标 + freeze + shake）。
 ## 性能：烘焙是逐帧 GDScript 模拟（sim 帧依赖前序状态，~50ms/帧），并发播放必然卡顿（实测 6 并发 ~300ms/帧），
-## 因此网格全部静态化：每格只烘一张代表帧（第 BAKE_FRAME 帧）的 Sprite2D，首次滚入视口才分帧烘焙；动画只出现在预览面板。
+## 因此缩略图全部静态化：每格只烘一张代表帧（第 BAKE_FRAME 帧）的 Sprite2D，首次滚入视口才分帧烘焙；动画只出现在预览面板。
 ## ESC 退出。
 extends Control
 
@@ -12,8 +12,9 @@ const PixelFx2DScript := preload("res://addons/pixelfx/nodes/pixel_fx_2d.gd")
 const PixelFxAct2DScript := preload("res://addons/pixelfx/nodes/pixel_fx_act_2d.gd")
 const Px := preload("res://addons/pixelfx/core/px.gd")
 
-const CELL := 168
-const HOST := 144
+const CELL := 96
+const HOST := 76
+const GAP := 4
 const PANEL_W := 440
 const PREVIEW_W := 400.0
 const PREVIEW_H := 340.0
@@ -23,8 +24,12 @@ const BAKE_FRAME := 3
 ## 每次 Timer（0.4s）最多烘焙的格子数：每格 ~3 帧 × 56ms ≈ 170ms，分帧摊开避免卡顿。
 const BAKE_PER_TICK := 2
 ## 探针实测首帧烘焙超 1s 的特效（transitions/burn-away 2.8s、impacts/impact-frame 1.2s）：
-## 网格只显示占位文字，点击预览才播放。
+## 网格只显示占位文字，点击预览才播放。（有导出 png 时优先 png，此黑名单自动失效）
 const NO_BAKE_IDS := ["transitions/burn-away", "impacts/impact-frame"]
+
+## 离线导出的 png 缓存根目录（scripts/tools/pixelfx_export.gd 生成）。
+## 命中时缩略图/预览直接读图零烘焙；未命中回退运行时烘焙。
+const EXPORT_ROOT := "res://assets/pixelfx_export"
 
 var _grid: GridContainer
 var _scroll: ScrollContainer
@@ -40,7 +45,9 @@ var _preview_flip := false
 var _preview_seed := -1
 var _preview_act_mode := true
 var _act_toggle: CheckButton
+var _replay_btn: Button
 var _selected_panel: PanelContainer
+var _preview_bake_gen := 0
 
 var _cells: Array = []
 var _bake_queue: Array = []
@@ -61,9 +68,29 @@ func _ready() -> void:
 	t.start()
 	_show_preview("fire/campfire")
 	print("pixelfx_gallery: ready, %d cells, %d columns" % [_cells.size(), _grid.columns])
+	get_viewport().size_changed.connect(_relayout_columns)
 	for a in OS.get_cmdline_user_args():
 		if a == "--shot":
 			_shot_mode()
+		elif a == "--verify":
+			_verify_mode()
+		elif a.begins_with("--auto-pick:"):
+			var pick_id := a.substr("--auto-pick:".length())
+			if Registry.EFFECTS.has(pick_id):
+				_show_preview(pick_id)
+
+
+## 自动验证：等待预览加载/预热完成后打印状态并退出。用法：... -- --verify [--auto-pick:<id>]
+func _verify_mode() -> void:
+	await get_tree().create_timer(6.0).timeout
+	var png_dirs := 0
+	for c in _cells:
+		if _export_dir(c.id) != "":
+			png_dirs += 1
+	var kind := "none" if _preview_fx == null else "runtime_fx"
+	print("pixelfx_gallery: verify preview_id=%s fx=%s replay_disabled=%s replay_text=%s png_dirs=%d/%d" % [
+		_preview_id, kind, _replay_btn.disabled, _replay_btn.text, png_dirs, _cells.size()])
+	get_tree().quit()
 
 
 ## 无头/自动验证：等待烘焙几批 + 预览启动后截取自身视口存盘退出。用法：... PixelFxGallery.tscn -- --shot
@@ -160,8 +187,9 @@ func _build_ui() -> void:
 	add_child(_scroll)
 
 	_grid = GridContainer.new()
-	_grid.add_theme_constant_override("h_separation", 8)
-	_grid.add_theme_constant_override("v_separation", 8)
+	_grid.name = "ThumbGrid"
+	_grid.add_theme_constant_override("h_separation", GAP)
+	_grid.add_theme_constant_override("v_separation", GAP)
 	_scroll.add_child(_grid)
 
 	var pv := PanelContainer.new()
@@ -205,6 +233,7 @@ func _build_ui() -> void:
 		if _preview_fx:
 			_preview_fx.play())
 	row.add_child(replay)
+	_replay_btn = replay
 
 	var flip_btn := Button.new()
 	flip_btn.text = "翻转"
@@ -230,6 +259,15 @@ func _build_ui() -> void:
 	row.add_child(_act_toggle)
 
 
+## 窗口/视口尺寸变化时只重算列数（GridContainer 自动重排，烘焙缓存不失效）。
+func _relayout_columns() -> void:
+	if _grid == null:
+		return
+	var cols := maxi(3, int((get_viewport_rect().size.x - PANEL_W - 48) / (CELL + GAP)))
+	if cols != _grid.columns:
+		_grid.columns = cols
+
+
 func _current_category() -> String:
 	var i := _category_option.selected
 	return "" if i <= 0 else String(_category_option.get_item_metadata(i))
@@ -243,6 +281,8 @@ func _current_palette() -> String:
 func _on_palette_selected(_i: int) -> void:
 	var pal := _current_palette()
 	for c in _cells:
+		if _export_dir(c.id) != "":
+			continue  # png 缩略图固定原色，不随调色板变，不重置
 		c["baked"] = false
 		c["queued"] = false
 		if c.sprite != null:
@@ -274,7 +314,7 @@ func _rebuild_grid() -> void:
 	_cells.clear()
 	_bake_queue.clear()
 	_selected_panel = null
-	_grid.columns = maxi(3, int((get_viewport_rect().size.x - PANEL_W - 48) / (CELL + 8)))
+	_relayout_columns()
 	var cat := _current_category()
 	var search := _search_edit.text.to_lower()
 	var ids: Array = Registry.ids()
@@ -313,7 +353,7 @@ func _make_cell(id: String, meta: Dictionary) -> Dictionary:
 	label.text = id.get_slice("/", 1)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.clip_text = true
-	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_font_size_override("font_size", 10)
 	label.add_theme_color_override("font_color", Color(0.72, 0.72, 0.78))
 	box.add_child(label)
 
@@ -324,7 +364,7 @@ func _make_cell(id: String, meta: Dictionary) -> Dictionary:
 		hint.text = "（点击预览）"
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		hint.add_theme_font_size_override("font_size", 12)
+		hint.add_theme_font_size_override("font_size", 9)
 		hint.add_theme_color_override("font_color", Color(0.5, 0.5, 0.56))
 		host.add_child(hint)
 	else:
@@ -351,10 +391,17 @@ func _update_visibility() -> void:
 		return
 	var view := _scroll.get_global_rect().grow(CELL * 2)
 	for c in _cells:
-		if c.get("baked", false) or NO_BAKE_IDS.has(c.id):
+		if c.get("baked", false):
+			continue
+		if NO_BAKE_IDS.has(c.id) and _export_dir(c.id) == "":
 			continue
 		var on: bool = c.panel.get_global_rect().intersects(view)
 		if on and not c.get("queued", false):
+			if _export_dir(c.id) != "":
+				# png 直读便宜（几 ms），同步出图不排队
+				c["queued"] = true
+				_bake_cell(c)
+				continue
 			c["queued"] = true
 			_bake_queue.append(c)
 	var baked := 0
@@ -366,9 +413,39 @@ func _update_visibility() -> void:
 		baked += 1
 
 
+## 该特效离线导出目录（id 中 / 换 _），无缩略图返回 ""。
+func _export_dir(id: String) -> String:
+	var dir := "%s/%s" % [EXPORT_ROOT, id.replace("/", "_")]
+	return dir if FileAccess.file_exists(dir + "/thumb.png") else ""
+
+
+## 直接从磁盘读 png（绕过资源导入，headless/发布包可用），失败返回 null。
+func _load_png_texture(path: String) -> ImageTexture:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return null
+	var img := Image.new()
+	if img.load_png_from_buffer(bytes) != OK:
+		return null
+	return ImageTexture.create_from_image(img)
+
+
 ## 烘出该格的代表帧（第 BAKE_FRAME 帧）并挂到 Sprite2D 上。
+## 有离线导出 png 时直接读 thumb.png（零烘焙、不随调色板换色）；否则回退运行时烘焙。
 func _bake_cell(c: Dictionary) -> void:
 	var meta: Dictionary = Registry.EFFECTS[c.id]
+	var sp: Sprite2D = c.sprite
+	var edir := _export_dir(c.id)
+	if edir != "":
+		var thumb: ImageTexture = _load_png_texture(edir + "/thumb.png")
+		if thumb != null:
+			sp.texture = thumb
+			var size := Vector2(meta.size[0], meta.size[1])
+			var s := _fit(size.x, size.y, HOST, HOST, 4.0)
+			sp.scale = Vector2(s, s)
+			sp.position = Vector2(HOST, HOST) * 0.5 - size * s * 0.5
+			c["baked"] = true
+			return
 	var mod: Resource = load(meta.get("path"))
 	var opts := {"seed": 1.0}
 	var pal := _current_palette()
@@ -377,13 +454,13 @@ func _bake_cell(c: Dictionary) -> void:
 	var track = Baker.track(mod, opts)
 	var i := mini(BAKE_FRAME, track.n - 1)
 	var tex: ImageTexture = track.get_textures(i)[2]
-	var sp: Sprite2D = c.sprite
 	sp.texture = tex
 	var size := Vector2(meta.size[0], meta.size[1])
-	var origin := Vector2(meta.origin[0], meta.origin[1])
-	var s := _fit(size.x, size.y, HOST, HOST, 2.2)
+	# 缩略图按纹理几何中心对齐格子中心（忽略 origin —— origin 常在角色脚部，会把内容顶到格子边缘），
+	# 并放宽放大上限让小素材也能填满格子。
+	var s := _fit(size.x, size.y, HOST, HOST, 4.0)
 	sp.scale = Vector2(s, s)
-	sp.position = Vector2(HOST, HOST) * 0.5 + (origin - size * 0.5) * s
+	sp.position = Vector2(HOST, HOST) * 0.5 - size * s * 0.5
 	c["baked"] = true
 
 
@@ -405,6 +482,8 @@ func _show_preview(id: String) -> void:
 	var meta: Dictionary = Registry.EFFECTS[id]
 	var use_act: bool = meta.act and _preview_act_mode
 	_act_toggle.disabled = not meta.act
+	_replay_btn.disabled = false
+	_replay_btn.text = "重播"
 	if use_act:
 		var act: Node2D = PixelFxAct2DScript.new()
 		act.effect = id
@@ -423,7 +502,7 @@ func _show_preview(id: String) -> void:
 	else:
 		var fx: Node2D = PixelFx2DScript.new()
 		fx.effect = id
-		fx.autoplay = true
+		fx.autoplay = false
 		fx.speed_scale = 1.0
 		fx.flip = _preview_flip
 		fx.seed = _preview_seed
@@ -435,10 +514,35 @@ func _show_preview(id: String) -> void:
 		if not meta.loop:
 			fx.finished.connect(func() -> void:
 				await get_tree().create_timer(1.0).timeout
-				if is_instance_valid(fx):
+				if is_instance_valid(fx) and _preview_fx == fx:
 					fx.play())
 		_preview_fx = fx
+		_preview_bake_gen += 1
+		_prebake_preview(fx, _preview_bake_gen)
 	_preview_info.text = _info_text(id, meta, use_act)
+
+
+## 分帧预热预览特效的全部烘焙帧（BAKED 懒烘是逐帧实时模拟，首播每帧 ~50ms 会卡成 ~15fps）。
+## 每游戏帧烘 1 帧摊平成本，进度显示在重播按钮上；全部就绪后再 play()，播放全程走缓存纹理。
+func _prebake_preview(fx: Node2D, gen: int) -> void:
+	_replay_btn.disabled = true
+	var track = fx._track
+	if track == null or track.n <= 1:
+		_replay_btn.disabled = false
+		if is_instance_valid(fx):
+			fx.play()
+		return
+	for i in track.n:
+		if not is_instance_valid(fx) or gen != _preview_bake_gen:
+			return
+		track.get_textures(i)
+		_replay_btn.text = "烘焙中 %d/%d" % [i + 1, track.n]
+		await get_tree().process_frame
+	if not is_instance_valid(fx) or gen != _preview_bake_gen:
+		return
+	_replay_btn.disabled = false
+	_replay_btn.text = "重播"
+	fx.play()
 
 
 func _info_text(id: String, meta: Dictionary, use_act: bool) -> String:
