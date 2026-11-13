@@ -119,10 +119,10 @@ func _cell_level(x: int, y: int) -> int:
 ## 从当前投影的两条基向量构造格菱形，B1 旋转后仍贴合格子。
 func _cell_corners(x: int, y: int, corner_scale := 1.0) -> PackedVector2Array:
 	var center := _cell_to_screen(x, y)
-	# 基向量必须取邻居自身可视顶面（-1=各格解析）：混用本格站立层会把
-	# 基向量投到另一个高度平面，平地菱形被压扁成窄条（B2 旧柱体 off-by-one）。
-	var basis_x := (_cell_to_screen(x + 1, y, -1.0) - center) * 0.5 * corner_scale
-	var basis_y := (_cell_to_screen(x, y + 1, -1.0) - center) * 0.5 * corner_scale
+	# 本格四角与中心共享同一可视顶面；邻格高度不能参与本格基向量，否则高低差会拉斜光标。
+	var level := float(_cell_level(x, y))
+	var basis_x := (_cell_to_screen(x + 1, y, level) - center) * 0.5 * corner_scale
+	var basis_y := (_cell_to_screen(x, y + 1, level) - center) * 0.5 * corner_scale
 	return PackedVector2Array([
 		center - basis_x - basis_y,
 		center + basis_x - basis_y,
