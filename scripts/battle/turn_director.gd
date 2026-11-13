@@ -15,6 +15,8 @@
 ##   setup(grid, turn, chapter, unit_sprites)
 ##   is_hosting() / set_hosting(active)
 ##   get_prefs() / get_pref(unit_id) / set_pref(unit_id, key, value)
+##   get_action_anim_options(unit_id)  # -> { anim_speed:float, skip:bool }
+##   set_enemy_animation(speed, skip) / set_hosting_animation(speed, skip)
 ##   start_enemy_phase()
 ##   start_player_auto_phase()
 ##   toggle_hosting(can_start_now: bool)   # can_start_now = (玩家回合 IDLE 态时)
@@ -24,7 +26,9 @@
 ##   on_resolve_combat(attacker, defender, on_done_cb)
 ##   on_resolve_skill(caster, targets, skill_id)
 ##   on_resolve_item(user, targets, entry)
-##   on_resolve_combat_sync(attacker, defender)
+##   on_resolve_combat_sync(attacker, defender)  # 旧敌方同步回退
+##   on_resolve_combat_async(attacker, defender) # 可选：结算+await ActionAnim 的新路径
+##   on_resolve_skill/on_resolve_item 返回 true 表示已自行完成演出，不再追加旧固定等待。
 ##   on_check_battle_end()
 ##   on_clear_range_highlight()
 ##   on_clear_selection()           # 托管/切开关时清 selected_unit
@@ -43,6 +47,8 @@ var on_resolve_combat: Callable
 var on_resolve_skill: Callable
 var on_resolve_item: Callable
 var on_resolve_combat_sync: Callable
+## 新演出路径由场景集成者注入；为空时继续使用旧 sync 回调与固定等待。
+var on_resolve_combat_async: Callable
 var on_check_battle_end: Callable
 var on_clear_range_highlight: Callable
 var on_clear_selection: Callable
@@ -52,6 +58,11 @@ var on_set_mode: Callable
 # hosting_active=true 时玩家回合自动跑 start_player_auto_phase，手动输入路径被锁。
 # 仅本场战斗有效，偏好存 _auto_prefs（key=unitId → {priorityTargetId, strategy}）。
 var hosting_active: bool = false
+## 敌方与玩家托管的演出默认值；单位 pref 的 anim_speed 可覆盖速度，skip_anim 可强制跳过。
+var enemy_anim_speed: float = 1.0
+var skip_enemy_anim: bool = false
+var hosting_anim_speed: float = 1.0
+var skip_hosting_anim: bool = false
 var _auto_prefs: Dictionary = {}
 var _hosting_running: bool = false  # 防止 start_player_auto_phase 重入
 
@@ -93,6 +104,40 @@ func set_pref(unit_id, key: StringName, value) -> void:
 	var p: Dictionary = _auto_prefs.get(unit_id, PlayerAI.default_pref())
 	p[key] = value
 	_auto_prefs[unit_id] = p
+
+
+func set_enemy_animation(speed: float, skipped: bool) -> void:
+	enemy_anim_speed = clampf(speed, 0.1, 8.0)
+	skip_enemy_anim = skipped
+
+
+func set_hosting_animation(speed: float, skipped: bool) -> void:
+	hosting_anim_speed = clampf(speed, 0.1, 8.0)
+	skip_hosting_anim = skipped
+
+
+## 场景在 await ActionAnim.play 前读取；倍速只影响演出，不改变结算或 AI 决策。
+func get_action_anim_options(unit_id: StringName) -> Dictionary:
+	var unit: Dictionary = grid.units.get(unit_id, {}) if grid != null else {}
+	var is_enemy := StringName(unit.get(&"faction", &"")) == &"enemy"
+	var speed := enemy_anim_speed if is_enemy else 1.0
+	var skipped := skip_enemy_anim if is_enemy else false
+	if hosting_active and not is_enemy:
+		speed = hosting_anim_speed
+		skipped = skip_hosting_anim
+	var pref := get_pref(unit_id)
+	if pref.has(&"anim_speed"):
+		speed = clampf(float(pref[&"anim_speed"]), 0.1, 8.0)
+	if bool(pref.get(&"skip_anim", false)):
+		skipped = true
+	return { &"anim_speed": speed, &"skip": skipped }
+
+
+func _action_delay(unit_id: StringName, seconds: float) -> void:
+	var options := get_action_anim_options(unit_id)
+	if bool(options[&"skip"]):
+		return
+	await get_tree().create_timer(seconds / float(options[&"anim_speed"])).timeout
 
 
 ## 切换托管开关。can_start_now 由 battle.gd 判断（玩家回合 + IDLE 态 + 未在跑）后传入；
@@ -245,15 +290,20 @@ func _enemy_act(enemy: Dictionary) -> void:
 	var act_type: StringName = act.get(&"type", &"normal")
 	var tgts: Array = act.get(&"targets", [])
 	if act_type == &"skill" and act.has(&"skillId"):
-		# 移动到目标射程内后施法（若需移动）；这里假设决策已选好位置，直接施法
-		await on_resolve_skill.call(enemy, tgts, act[&"skillId"])
-		await get_tree().create_timer(0.9).timeout
+		# 新处理器返回 true 表示已 await ActionAnim；旧处理器保留按偏好缩放后的固定停顿。
+		var handled: Variant = await on_resolve_skill.call(enemy, tgts, act[&"skillId"])
+		if not bool(handled):
+			await _action_delay(enemy.id, 0.9)
 	elif act_type == &"item" and act.has(&"itemId"):
-		await on_resolve_item.call(enemy, tgts, act.get(&"entry", {}))
-		await get_tree().create_timer(0.7).timeout
+		var handled: Variant = await on_resolve_item.call(enemy, tgts, act.get(&"entry", {}))
+		if not bool(handled):
+			await _action_delay(enemy.id, 0.7)
 	elif not decision.attackTarget.is_empty() and not decision.attackTarget.isDead:
-		on_resolve_combat_sync.call(enemy, decision.attackTarget)
-		await get_tree().create_timer(0.9).timeout
+		if on_resolve_combat_async.is_valid():
+			await on_resolve_combat_async.call(enemy, decision.attackTarget)
+		else:
+			on_resolve_combat_sync.call(enemy, decision.attackTarget)
+			await _action_delay(enemy.id, 0.9)
 
 
 # ============================================================

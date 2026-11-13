@@ -34,7 +34,7 @@ window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/breakpoint_mcp/plugin.cfg", "res://addons/panku_console/plugin.cfg")
+enabled=PackedStringArray("res://addons/breakpoint_mcp/plugin.cfg", "res://addons/panku_console/plugin.cfg", "res://addons/pixelfx/plugin.cfg")
 
 [input]
 

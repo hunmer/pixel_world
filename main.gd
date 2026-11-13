@@ -207,17 +207,22 @@ var _world_camera_navigation := WorldCameraNavigationScript.new()
 # ---- B1 就地战斗模式字段（_battle_active=false 时全部不影响原行为）----
 var _battle_active := false            # 战斗模式开关（照搬 is_world_map_open 范式）
 var _battle_system: Node2D = null      # BattleSystem 实例（battle.gd 作为子节点）
+var _battle_transition: CanvasLayer = null  # B2 切场景前的遭遇覆盖层（随 main 释放）
+var _battle_transition_pending := false    # 覆盖播放期间吞输入并防止重复切场景
 var _battle_focus_world_pos := Vector2.ZERO  # 战斗时相机聚焦的世界坐标
 # 战场相机操控：B1 下相机归 main.gd，战场中心 + offset 即相机位置。
 var _battle_cam_offset := Vector2.ZERO   # 平移偏移（实际屏幕像素，相对战场中心）
 var _battle_pan_active := false          # 拖拽平移中（中键 / 空格+左键）
 var _battle_pan_last := Vector2.ZERO     # 上次拖拽鼠标位置
+# ActionAnim 的附加位移；焦点/角度/缩放仍由原相机管线管理。
+var _battle_camera_kick_offset := Vector3.ZERO
 # 进入战斗时备份的相机/玩家状态，退出时恢复
 var _cam_pos_backup := Vector2.ZERO
 var _zoom_index_backup := 0
 var _player_visible_backup := true
 # BattleSystem 脚本预加载
 const _BattleScript := preload("res://scripts/scenes/battle.gd")
+const _EncounterTransitionScript := preload("res://scripts/battle/encounter_transition.gd")
 
 var _player: Sprite3D
 var _player_cell := Vector2i.ZERO
@@ -3516,8 +3521,16 @@ func _handle_world_map_input(event: InputEvent) -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# B2 遭遇覆盖期间阻止 P/O/E 等入口重入；false 时保持原世界输入路径。
+	if _battle_transition_pending:
+		get_viewport().set_input_as_handled()
+		return
 	# B1 就地战斗模式：先处理拖拽平移（中键/空格+左键），再走整体短路
 	if _battle_active:
+		if _battle_system != null and _battle_system.mode == _battle_system.Mode.ANIMATING:
+			_battle_system._unhandled_input(event)
+			get_viewport().set_input_as_handled()
+			return
 		if _handle_battle_camera_input(event):
 			get_viewport().set_input_as_handled()
 			return
@@ -3816,6 +3829,15 @@ func _set_camera_position(world_position: Vector2) -> void:
 		world_position,
 		_player_current_stand_level()
 	)
+	if _battle_active and not _battle_camera_kick_offset.is_zero_approx():
+		_cam.global_position += _battle_camera_kick_offset
+
+
+## B1 攻击演出只叠加世界位移；原焦点、四正交角度和缩放逻辑不变。
+func set_battle_camera_kick(offset: Vector3) -> void:
+	_battle_camera_kick_offset = offset
+	if _battle_active:
+		_set_camera_position(_battle_camera_focus())
 
 
 ## 首次生成、换种子和自动截图属于瞬移，不应把旧视角缓慢拖进新位置。
@@ -3882,6 +3904,8 @@ func _shot_and_quit() -> void:
 ## 按 P 键进入战棋：从玩家周围真实地形采样 21×21 战场，切到 Battle.tscn。
 ## SceneArgs 是 autoload 单例（见 project.godot [autoload]），负责跨场景传参。
 func _enter_battle() -> void:
+	if _battle_transition_pending:
+		return
 	# L1 埋点：战棋入口被触发（按 AGENTS.md 调试埋点强制原则）
 	print("[world] 进入战棋（按 P）→ 中心=%s 模式=%s" % [
 		str(_player_cell), "就地" if Settings.battle_inline_mode else "独立场景"])
@@ -3896,13 +3920,32 @@ func _enter_battle() -> void:
 		"return_to": "res://main.tscn",
 		"hosting": false,
 	}
-	get_tree().change_scene_to_file("res://scenes/Battle.tscn")
+	_change_to_battle_scene()
+
+
+## B2 统一遭遇覆盖：先暗化当前世界，再切 Battle.tscn；新场景负责揭开。
+func _change_to_battle_scene() -> void:
+	if _battle_transition_pending:
+		return
+	_battle_transition_pending = true
+	_battle_transition = _EncounterTransitionScript.new()
+	add_child(_battle_transition)
+	await _battle_transition.cover_for_scene_change()
+	if not is_inside_tree():
+		return
+	var tree := get_tree()
+	if tree == null:
+		_battle_transition_pending = false
+		return
+	tree.change_scene_to_file("res://scenes/Battle.tscn")
 
 
 ## 从 JSON 战场文件进入战棋（HUD 战场列表点选触发）。
 ## JSON 声明的战场与真实世界地形无关（无 world_origin），固定走 B2 独立场景模式，
 ## 不受 Settings.battle_inline_mode 影响。
 func _enter_battlefield(path: String) -> void:
+	if _battle_transition_pending:
+		return
 	var result: Dictionary = BattlefieldLoaderScript.load_battlefield(path)
 	if not bool(result.get("ok", false)):
 		var msg := String(result.get("error", "未知错误"))
@@ -3923,7 +3966,7 @@ func _enter_battlefield(path: String) -> void:
 		"return_to": "res://main.tscn",
 		"hosting": bool(info.get("hosting", false)),
 	}
-	get_tree().change_scene_to_file("res://scenes/Battle.tscn")
+	_change_to_battle_scene()
 
 
 func _on_battlefield_picked(path: String) -> void:
@@ -3952,6 +3995,7 @@ func _enter_battle_inline(chapter: Dictionary) -> void:
 	# 复位战场相机偏移（防止上次战斗残留）
 	_battle_cam_offset = Vector2.ZERO
 	_battle_pan_active = false
+	_battle_camera_kick_offset = Vector3.ZERO
 	# 2. 隐藏世界玩家红点（用战棋 UnitSprite 替代）
 	_player.visible = false
 	# 3. 相机聚焦战场中心（玩家位置 ≈ 战场中心），固定 zoom=2.0x
@@ -3984,6 +4028,7 @@ func _exit_battle(result: StringName) -> void:
 	# 复位战场相机偏移/平移状态
 	_battle_cam_offset = Vector2.ZERO
 	_battle_pan_active = false
+	_battle_camera_kick_offset = Vector3.ZERO
 	# 恢复相机/玩家
 	_player.visible = _player_visible_backup
 	_zoom_index = _zoom_index_backup

@@ -16,6 +16,11 @@ var focus_position := Vector3.ZERO:
 	set(value):
 		focus_position = value
 		_apply_view()
+## 战斗演出的附加平移；不写焦点、角度或像素缩放。
+var presentation_offset := Vector3.ZERO:
+	set(value):
+		presentation_offset = value
+		_apply_view()
 var yaw_radians: float = IsoProjection.CAMERA_YAW
 var target_yaw_radians: float = IsoProjection.CAMERA_YAW
 var elevation_radians: float = IsoProjection.CAMERA_ELEVATION
@@ -162,7 +167,8 @@ func _apply_view() -> void:
 		cos(yaw_radians) * horizontal
 	) * CAMERA_DISTANCE
 	var lateral := _reserved_lateral_world()
-	position = focus_position + offset + lateral
-	var aim := focus_position + lateral
+	position = focus_position + offset + lateral + presentation_offset
+	# 演出位移同时移动视点，保持四个正交 yaw/elevation；推近缩放由 ActionAnim 的 size 负责。
+	var aim := focus_position + lateral + presentation_offset
 	if position.distance_squared_to(aim) > 0.000001:
 		look_at(aim, Vector3.UP)

@@ -32,6 +32,11 @@ func _lighting_counts(node: Node) -> Vector2i:
 
 func _run() -> void:
 	var world = load("res://main.tscn").instantiate()
+	if world.get_script() == null:
+		_expect(false, "main.gd 编译失败，测试不能作为通过依据")
+		world.queue_free()
+		quit(1)
+		return
 	world.seed = 42
 	root.add_child(world)
 	await process_frame
@@ -39,10 +44,17 @@ func _run() -> void:
 		world._terrain_sampler, world._player_cell, 4, 42
 	)
 	world._enter_battle_inline(chapter)
-	await create_timer(0.4).timeout
+	var battle = world._battle_system
+	await process_frame
+	_expect(battle.mode == battle.Mode.ANIMATING, "B1 遭遇演出期间未锁定战斗输入")
+	await battle.battle_ready
+	_expect(battle.battle_ui != null, "BattleUI 初始化失败，开场链无效")
+	if battle.battle_ui == null:
+		world._exit_battle(&"contract")
+		quit(1)
+		return
 	_expect(world._battle_active and world._battle_system != null, "B1 未能进入")
 	_expect(world._cam is Camera3D and world._cam.current, "B1 未复用主世界 Camera3D")
-	var battle = world._battle_system
 	_expect(battle._b1_mode and battle.renderer == null, "B1 错误创建了 B2 地形")
 	_expect(battle._sunlight == null, "B1 不应重复创建战斗太阳")
 	_expect(_lighting_counts(world) == Vector2i(1, 1), "B1 主世界应有且只有一组太阳与环境节点")
@@ -84,10 +96,16 @@ func _run() -> void:
 		world_cell, float(world.cell_stand_level(world_cell))
 	))
 	_expect(picked == world_cell, "B1 Camera3D 单位格拾取失败")
-	world._exit_battle(&"contract")
+	# 结算信号链：ResultPresentation.result_finished 之后才允许 main._exit_battle。
+	for battle_unit in battle.grid.units.values():
+		if battle_unit.faction == &"enemy":
+			battle_unit.isDead = true
+	battle._check_battle_end()
+	await process_frame
+	battle.battle_ui.skip_presentation()
 	await process_frame
 	await process_frame
-	_expect(not world._battle_active and world._battle_system == null, "B1 退出状态未恢复")
+	_expect(not world._battle_active and world._battle_system == null, "B1 结算后退出状态未恢复")
 	_expect(world._player.visible == world._player_visible_backup, "B1 退出未恢复玩家可见性")
 
 	world.queue_free()
@@ -95,8 +113,15 @@ func _run() -> void:
 	await process_frame
 	root.get_node("SceneArgs").set("battle_args", {"chapter": chapter, "hosting": false})
 	var b2 = load("res://scenes/Battle.tscn").instantiate()
+	if b2.get_script() == null:
+		_expect(false, "battle.gd 编译失败，测试不能作为通过依据")
+		b2.queue_free()
+		quit(1)
+		return
 	root.add_child(b2)
-	await create_timer(0.4).timeout
+	await process_frame
+	_expect(b2.mode == b2.Mode.ANIMATING, "B2 遭遇演出期间未锁定战斗输入")
+	await b2.battle_ready
 	_expect(not b2._b1_mode, "B2 被误判为 B1")
 	_expect(b2.board.camera is Camera3D and b2.board.camera.current, "B2 未启用 Camera3D")
 	_expect(b2.renderer._terrain_3d != null, "B2 未创建共享真实 3D 地形")

@@ -51,6 +51,7 @@ Pixel World 是一个 **Godot 4.7.2（GL Compatibility）/ Node2D** 单体 2D �
 | `addons/breakpoint_mcp/` | vendored 调试插件（loopback JSON 桥接编辑器 9080 / 运行时 9081 给 MCP host，v1.23.0） | [addons/breakpoint_mcp/CLAUDE.md](addons/breakpoint_mcp/CLAUDE.md) |
 | `addons/panku_console/` | vendored 游戏内 `~` REPL 控制台 v1.7.9（autoload `Panku`；项目 `dbg.*` 命令集在 `scripts/debug_console_commands.gd`） | 上游 README |
 | `addons/at-icons/` | vendored SVG 图标库 v1.6.0（700+，MIT；编辑器 UI 只用 `control/` 色系；插件未启用） | 上游 README |
+| `addons/pixelfx/` | vendored 像素特效库 v0.3.0（244 个代码绘制特效，24 类：fire/ice/explosions/melee/moves/pickups 等；`PixelFx2D` BAKED/LIVE 双模式 + `PixelFxAct2D` 演出节点，MIT；契约 `tests/pixelfx_contract.gd`） | 上游 README |
 
 ### 子系统关系
 

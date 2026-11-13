@@ -5,7 +5,8 @@
 ##   - 单位信息悬浮显示（show_info_at）
 ##   - 单位行动菜单（攻击/技能/物品/等待）+ 各级目标选择 picker
 ##   - 战斗预览面板 / 技能预览面板
-##   - 结果横幅（胜利/败北）
+##   - 开战名牌/Boss 横幅与胜利/失败/章节末结算演出（ResultPresentation）
+##   - 结果横幅（旧 show_result_banner 兼容入口）
 ##   - 通用面板样式 _make_panel_style
 ##
 ## 设计：从 battle.gd 抽出的 CanvasLayer（屏幕空间 UI 根）。不持有父场景引用；
@@ -22,7 +23,12 @@
 ##   is_over_ui(screen_pos) -> bool
 ##   set_phase_text(text, color)
 ##   disable_end_turn(disabled)
-##   show_result_banner(text, color)
+##   show_result_banner(text, color)  # 旧入口；新演出用 play_result
+##   play_opening(units, boss = {})
+##   play_result(result, data = {}, survivors = [], defeated = [])
+##   play_chapter_result(data = {}, survivors = [])
+##   skip_presentation()
+##   is_presentation_active() -> bool
 ##   update_unit_sprite(u)            # 菜单里改了单位状态后刷新对应 sprite
 ##   has_open_menu() -> bool          # 输入路径判断菜单是否打开
 ##
@@ -40,6 +46,20 @@
 ##   on_should_end_turn_after_action()  # turn.phase==player && all_player_acted() 时 end_turn
 class_name BattleUI
 extends CanvasLayer
+
+const ResultPresentationScript = preload("res://scripts/battle/result_presentation.gd")
+# 用预加载脚本作类型，避免干净 headless 尚未生成 global class cache 时无法解析。
+
+## 开战/结算演出事件；场景集成者连接这些信号驱动音效与单位视觉钩子。
+signal nameplate_shown(unit: Dictionary, index: int)
+signal boss_banner_shown(unit: Dictionary)
+signal loot_shown(entry: Dictionary, index: int)
+signal cheer_requested(unit: Dictionary)
+signal collapse_requested(unit: Dictionary)
+signal presentation_sound_requested(cue: StringName)
+signal opening_finished(skipped: bool)
+signal result_finished(result: StringName, skipped: bool)
+signal presentation_finished(kind: StringName, skipped: bool)
 
 # ---- 注入的只读引用 ----
 var board: IsoBoard
@@ -73,6 +93,7 @@ var preview_container: Control
 var turn_status_panel: PanelContainer
 var _turn_status_labels: Dictionary = {}
 var _turn_status_signature := ""
+var result_presentation: ResultPresentationScript
 # 单位详情面板（右键查看任意单位完整信息；与行动菜单 menu_container 独立）
 var _unit_detail_panel: Control = null
 
@@ -216,6 +237,7 @@ func build(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pref_cb: Cal
 	preview_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	preview_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(preview_container)
+	_ensure_result_presentation()
 
 
 ## battle.gd 注入：把 host_btn 交给 turn_director（battle.gd 持有 director 引用）。
@@ -824,7 +846,72 @@ func _make_panel_style() -> StyleBoxFlat:
 
 
 # ============================================================
-# 结果横幅
+# 开战 / 胜负 / 章节末演出（公开给 battle.gd 集成）
+# ============================================================
+func _ensure_result_presentation() -> ResultPresentationScript:
+	if is_instance_valid(result_presentation):
+		return result_presentation
+	result_presentation = ResultPresentationScript.new()
+	result_presentation.name = "ResultPresentation"
+	add_child(result_presentation)
+	result_presentation.nameplate_shown.connect(func(unit: Dictionary, index: int): nameplate_shown.emit(unit, index))
+	result_presentation.boss_banner_shown.connect(func(unit: Dictionary): boss_banner_shown.emit(unit))
+	result_presentation.loot_shown.connect(func(entry: Dictionary, index: int): loot_shown.emit(entry, index))
+	result_presentation.cheer_requested.connect(func(unit: Dictionary): cheer_requested.emit(unit))
+	result_presentation.collapse_requested.connect(func(unit: Dictionary): collapse_requested.emit(unit))
+	result_presentation.sound_requested.connect(_on_presentation_sound_requested)
+	result_presentation.opening_finished.connect(_on_opening_finished)
+	result_presentation.result_finished.connect(_on_result_finished)
+	return result_presentation
+
+
+## units 的 Array 顺序就是名牌亮出顺序；boss 传 {} 表示无 Boss。
+func play_opening(units: Array, boss: Dictionary = {}) -> void:
+	await _ensure_result_presentation().play_opening(units, boss)
+
+
+## data 复用逻辑层现有结果：{ loot, exp, gold, chapter_end, chapter_title, title, return_hint }。
+## survivors/defeated 仅用于发出视觉钩子，演出不改 UnitData 或 UnitSprite3D。
+func play_result(result: StringName, data: Dictionary = {}, survivors: Array = [], defeated: Array = []) -> void:
+	if is_instance_valid(phase_label):
+		set_phase_text("胜利 · 结算" if result in [&"win", &"victory"] else "战斗结束 · 等待返回", Color(0.55, 0.95, 0.66) if result in [&"win", &"victory"] else Color(0.95, 0.48, 0.48))
+	if is_instance_valid(end_turn_btn):
+		disable_end_turn(true)
+	await _ensure_result_presentation().play_result(result, data, survivors, defeated)
+
+
+func play_chapter_result(data: Dictionary = {}, survivors: Array = []) -> void:
+	if is_instance_valid(phase_label):
+		set_phase_text("章节完成 · 结算", Color(1.0, 0.86, 0.48))
+	if is_instance_valid(end_turn_btn):
+		disable_end_turn(true)
+	await _ensure_result_presentation().play_chapter_result(data, survivors)
+
+
+func skip_presentation() -> void:
+	_ensure_result_presentation().skip()
+
+
+func is_presentation_active() -> bool:
+	return is_instance_valid(result_presentation) and result_presentation.is_playing()
+
+
+func _on_presentation_sound_requested(cue: StringName) -> void:
+	presentation_sound_requested.emit(cue)
+
+
+func _on_opening_finished(skipped: bool) -> void:
+	opening_finished.emit(skipped)
+	presentation_finished.emit(&"opening", skipped)
+
+
+func _on_result_finished(result: StringName, skipped: bool) -> void:
+	result_finished.emit(result, skipped)
+	presentation_finished.emit(result, skipped)
+
+
+# ============================================================
+# 结果横幅（旧 API 保留；新集成请改用 play_result）
 # ============================================================
 ## 显示结果横幅 + 禁用结束回合按钮。5 秒后切场景由根节点 battle.gd 负责
 ## （子 CanvasLayer 可能在 timer 触发时已 free，直接 get_tree() 会拿到 null）。

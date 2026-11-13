@@ -9,6 +9,8 @@
 class_name CombatSystem
 extends RefCounted
 
+const AttackEventBuilder = preload("res://scripts/systems/attack_event.gd")
+
 ## 预览：不造成伤害，返回 { atkHit,defHit,atkDmg,defDmg,doubleAttack,defenderDouble,atkCrit }
 static func preview(
 	attacker: Dictionary, defender: Dictionary,
@@ -41,8 +43,8 @@ static func preview(
 ## 实际执行一次战斗（含双击判定）。
 ## 返回 CombatResult = {
 ##   attackerHits, defenderHits, attackerDamage, defenderDamage,
-##   attackerDied, defenderDied, isDoubleAttack, isCrit }
-## 会直接 mutate 双方 hp。
+##   attackerDied, defenderDied, isDoubleAttack, isCrit, attack_event }
+## 会直接 mutate 双方 hp；attack_event 是结算完成后的只读演出快照。
 static func execute(
 	attacker: Dictionary, defender: Dictionary,
 	defender_tile_avoid: int, defender_tile_def: int
@@ -54,42 +56,87 @@ static func execute(
 		&"attackerDied": false, &"defenderDied": false,
 		&"isDoubleAttack": false, &"isCrit": false,
 	}
+	var impacts: Array = []
+	var tri := _triangle_modifier(attacker, defender)
+	var atk_effective := int(tri[&"damage"]) > 0
+	var def_effective := int(tri[&"damage"]) < 0
+	var atk_element := _weapon_element(attacker)
+	var def_element := _weapon_element(defender)
 
-	# 攻击者第一次攻击
+	# 攻击者第一次攻击。随机判定顺序与原结算保持一致。
 	if randf() * 100.0 < int(p[&"atkHit"]):
 		var is_crit: bool = randf() * 100.0 < int(p[&"atkCrit"])
 		var base_dmg: int = int(p[&"atkDmg"])
 		var dmg: int = base_dmg * 3 if is_crit else base_dmg
-		defender[&"hp"] = maxi(0, int(defender[&"hp"]) - dmg)
+		var hp_before := int(defender[&"hp"])
+		defender[&"hp"] = maxi(0, hp_before - dmg)
 		result[&"attackerHits"] = true
 		result[&"attackerDamage"] = dmg
 		result[&"isCrit"] = is_crit
+		impacts.append(AttackEventBuilder.make_impact(
+			attacker, defender, true, dmg, hp_before, int(defender[&"hp"]),
+			is_crit, atk_effective, atk_element))
 		if int(defender[&"hp"]) <= 0:
 			result[&"defenderDied"] = true
-			return result
+			return _finish_combat(attacker, defender, result, impacts)
+	else:
+		impacts.append(AttackEventBuilder.make_impact(
+			attacker, defender, false, 0, int(defender[&"hp"]), int(defender[&"hp"]),
+			false, atk_effective, atk_element))
 
 	# 是否能反击（射程内 + 远程武器）
 	var can_counter := _in_range(attacker, defender)
-	if can_counter and randf() * 100.0 < int(p[&"defHit"]):
-		var dmg: int = int(p[&"defDmg"])
-		attacker[&"hp"] = maxi(0, int(attacker[&"hp"]) - dmg)
-		result[&"defenderHits"] = true
-		result[&"defenderDamage"] = dmg
-		if int(attacker[&"hp"]) <= 0:
-			result[&"attackerDied"] = true
-			return result
+	if can_counter:
+		if randf() * 100.0 < int(p[&"defHit"]):
+			var dmg: int = int(p[&"defDmg"])
+			var hp_before := int(attacker[&"hp"])
+			attacker[&"hp"] = maxi(0, hp_before - dmg)
+			result[&"defenderHits"] = true
+			result[&"defenderDamage"] = dmg
+			impacts.append(AttackEventBuilder.make_impact(
+				defender, attacker, true, dmg, hp_before, int(attacker[&"hp"]),
+				false, def_effective, def_element))
+			if int(attacker[&"hp"]) <= 0:
+				result[&"attackerDied"] = true
+				return _finish_combat(attacker, defender, result, impacts)
+		else:
+			# staff 原本就不能反击（defHit=0）；保留原 randf 消耗，但不伪造反击 MISS 演出。
+			if defender[&"weapon"][&"type"] != &"staff":
+				impacts.append(AttackEventBuilder.make_impact(
+					defender, attacker, false, 0, int(attacker[&"hp"]), int(attacker[&"hp"]),
+					false, def_effective, def_element))
 
 	# 攻击者追击（双击）
 	if p[&"doubleAttack"]:
 		result[&"isDoubleAttack"] = true
 		if randf() * 100.0 < int(p[&"atkHit"]):
 			var dmg: int = int(p[&"atkDmg"])
-			defender[&"hp"] = maxi(0, int(defender[&"hp"]) - dmg)
+			var hp_before := int(defender[&"hp"])
+			defender[&"hp"] = maxi(0, hp_before - dmg)
 			result[&"attackerDamage"] = int(result[&"attackerDamage"]) + dmg
+			impacts.append(AttackEventBuilder.make_impact(
+				attacker, defender, true, dmg, hp_before, int(defender[&"hp"]),
+				false, atk_effective, atk_element))
 			if int(defender[&"hp"]) <= 0:
 				result[&"defenderDied"] = true
-				return result
+				return _finish_combat(attacker, defender, result, impacts)
+		else:
+			impacts.append(AttackEventBuilder.make_impact(
+				attacker, defender, false, 0, int(defender[&"hp"]), int(defender[&"hp"]),
+				false, atk_effective, atk_element))
+	return _finish_combat(attacker, defender, result, impacts)
+
+
+static func _finish_combat(
+	attacker: Dictionary, defender: Dictionary, result: Dictionary, impacts: Array
+) -> Dictionary:
+	result[&"attack_event"] = AttackEventBuilder.from_combat(attacker, defender, result, impacts)
 	return result
+
+
+static func _weapon_element(unit: Dictionary) -> StringName:
+	var weapon_type: StringName = unit.get(&"weapon", {}).get(&"type", &"sword")
+	return weapon_type if weapon_type in [&"anima", &"dark", &"staff"] else &"physical"
 
 
 # ----------- 子公式 -----------

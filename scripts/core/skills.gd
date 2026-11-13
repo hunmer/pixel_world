@@ -6,6 +6,7 @@
 ##   range:[min,max], targetType(self/ally/enemy/aoe_ally/aoe_enemy),
 ##   mpCost, cooldown, power, hitBonus,
 ##   stat(str/mag/def/...), buffValue, buffTurns（buff/debuff 用）
+##   anim（可选）：slash / projectile:<variant> / burst:<variant> / beam:<variant>
 
 class_name SkillData
 extends RefCounted
@@ -55,6 +56,7 @@ static func _normalize(s: Dictionary) -> Dictionary:
 		desc = String(g.call("desc")),
 		type = StringName(g.call("type")),
 		element = StringName(g.call("element")),
+		anim = StringName(g.call("anim")) if g.call("anim") != null else &"",
 		range = [int(r[0]), int(r[1])],
 		targetType = StringName(g.call("targetType")),
 		mpCost = int(g.call("mpCost")),

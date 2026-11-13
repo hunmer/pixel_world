@@ -14,6 +14,8 @@
 class_name SkillSystem
 extends RefCounted
 
+const AttackEventBuilder = preload("res://scripts/systems/attack_event.gd")
+
 
 # ============================================================
 # buff 系统（转发到 BuffSystem，保持向后兼容的 API）
@@ -128,7 +130,8 @@ static func preview(caster: Dictionary, target: Dictionary, skill_id: StringName
 # ============================================================
 
 ## 执行技能。targets 为 targets_for 的结果（self 时是 [caster]）。
-## 返回 { hits:[{unit,hp_delta,died}], healed:[{unit,hp_delta}], buffed:[{unit,desc}], missed:[unit], mp_cost, cooldown_set }
+## 返回 { hits:[{unit,hp_delta,died}], healed:[{unit,hp_delta}], buffed:[{unit,desc,status}], missed:[unit], mp_cost, skill_id, attack_event }
+## HP/MP/冷却/状态在本函数内先落地；attack_event 仅供随后演出回放。
 static func execute(caster: Dictionary, targets: Array, skill_id: StringName) -> Dictionary:
 	var sk: Dictionary = SkillData.get_skill(skill_id)
 	if sk.is_empty():
@@ -158,7 +161,14 @@ static func execute(caster: Dictionary, targets: Array, skill_id: StringName) ->
 		&"buff", &"debuff":
 			for t in targets:
 				apply_buff(t, sk[&"stat"], int(sk[&"buffValue"]), int(sk[&"buffTurns"]), String(sk[&"name"]))
-				result[&"buffed"].append({ unit = t, desc = "%s%+d" % [String(sk[&"stat"]), int(sk[&"buffValue"])] })
+				var status := {
+					&"stat": sk[&"stat"], &"value": int(sk[&"buffValue"]),
+					&"turns": int(sk[&"buffTurns"]), &"label": String(sk[&"name"]),
+				}
+				result[&"buffed"].append({
+					unit = t, desc = "%s%+d" % [String(sk[&"stat"]), int(sk[&"buffValue"])], status = status,
+				})
+	result[&"attack_event"] = AttackEventBuilder.from_skill(caster, sk, result)
 	return result
 
 
