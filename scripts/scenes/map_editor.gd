@@ -33,7 +33,10 @@ const ProfessionDataScript = preload("res://scripts/core/professions.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const HintBarScript = preload("res://scripts/hint_bar.gd")
 
-const Tool = { PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5 }
+const Tool = {
+	PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5,
+	HEIGHT_UP = 6, HEIGHT_DOWN = 7,
+}
 const TAB_BLOCK := 3
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
@@ -60,6 +63,8 @@ const SIDEBAR_WIDTH := 320
 const UNDO_LIMIT := 100
 var model: Dictionary = {}
 var current_tool: int = Tool.PAINT
+## 高度画笔单笔内已处理的格子：避免原地 motion 重复升降，也防止 A→B→A 重复。
+var _height_stroke_cells: Dictionary = {}
 var current_terrain: StringName = &"mountain"
 ## 当前选中的具体植物贴图（非空=地形 Tab 画笔改为放置植物，写模型 props 层）
 var current_prop := ""
@@ -349,7 +354,7 @@ func _build_generate_tab(tabs: TabContainer) -> void:
 	tab.add_child(gen_row)
 
 
-## 左上角悬浮工具条：选择 / 画笔 / 填充 / 橡皮 / 角色 垂直图标按钮（覆盖在画布上）
+## 左上角悬浮工具条：选择 / 画笔 / 填充 / 橡皮 / 高度升降 / 角色（覆盖在画布上）
 func _build_tool_bar() -> Control:
 	var bar := PanelContainer.new()
 	bar.name = "ToolBar"
@@ -369,6 +374,8 @@ func _build_tool_bar() -> Control:
 	_add_tool_btn(box, tool_group, Tool.PAINT, "画笔", "paintbrush")
 	_add_tool_btn(box, tool_group, Tool.FILL, "填充", "bucket_fill")
 	_add_tool_btn(box, tool_group, Tool.ERASE, "橡皮", "eraser")
+	_add_tool_btn(box, tool_group, Tool.HEIGHT_UP, "地形上升", "arrow_up_from_line")
+	_add_tool_btn(box, tool_group, Tool.HEIGHT_DOWN, "地形下降", "arrow_down_to_line")
 	_add_tool_btn(box, tool_group, Tool.UNIT, "角色", "person")
 	_tool_buttons[Tool.PAINT].button_pressed = true
 	return bar
@@ -687,10 +694,11 @@ func _class_btn(cid: String, group: ButtonGroup) -> Button:
 # 编辑操作（canvas 信号 + 可测方法；生效工具由激活 Tab 决定）
 # ============================================================
 
-## 当前生效工具：地形 Tab = 画笔刷选中地形（选了具体植物则改为放置植物）；
-## 角色 Tab = 放置单位；其余 Tab = 左上角工具条的手动单选 current_tool。
+## 当前生效工具：高度升降始终遵循工具条；地形 Tab = 画笔/植物；角色 Tab = 放置单位。
 ## 避免在角色页选好职业点画布，却沿用工具条遗留的填充/橡皮。
 func _active_tool() -> int:
+	if current_tool == Tool.HEIGHT_UP or current_tool == Tool.HEIGHT_DOWN:
+		return current_tool
 	if _tabs == null:
 		return current_tool
 	var title := _tabs.get_tab_title(_tabs.current_tab)
@@ -704,11 +712,14 @@ func _active_tool() -> int:
 
 
 func _on_cell_pressed(cell: Vector2i) -> void:
+	var tool := _active_tool()
+	if tool == Tool.HEIGHT_UP or tool == Tool.HEIGHT_DOWN:
+		_height_stroke_cells.clear()
 	_apply_tool(cell)
 
 
 func _on_cell_dragged(cell: Vector2i) -> void:
-	# 拖动仅对画笔/植物/橡皮有意义（填充/角色不响应拖动）
+	# 拖动仅对画笔/植物/橡皮/高度升降有意义（填充/角色不响应拖动）
 	var tool := _active_tool()
 	if tool == Tool.SELECT:
 		_select_cell(cell)
@@ -719,6 +730,8 @@ func _on_cell_dragged(cell: Vector2i) -> void:
 	elif tool == Tool.ERASE:
 		_set_glyph(cell, ".")
 		_set_prop(cell, "")
+	elif tool == Tool.HEIGHT_UP or tool == Tool.HEIGHT_DOWN:
+		_apply_height_brush(cell, tool)
 
 
 func _apply_tool(cell: Vector2i) -> void:
@@ -726,7 +739,10 @@ func _apply_tool(cell: Vector2i) -> void:
 	if tool == Tool.SELECT:
 		_select_cell(cell)
 		return  # 选择不是文档编辑，不进入历史。
-	var names := { Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮", Tool.UNIT: "角色", Tool.PLANT: "植物" }
+	var names := {
+		Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮", Tool.UNIT: "角色",
+		Tool.PLANT: "植物", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
+	}
 	_push_undo(names[tool])  # 按下一次=一步；后续拖动不再入栈（整笔一笔撤销）
 	match tool:
 		Tool.PAINT:
@@ -744,6 +760,30 @@ func _apply_tool(cell: Vector2i) -> void:
 				place_unit(cell, selected_faction, selected_class, int(_level_box.value), _unit_name_edit.text)
 		Tool.PLANT:
 			_set_prop(cell, current_prop)
+		Tool.HEIGHT_UP, Tool.HEIGHT_DOWN:
+			_apply_height_brush(cell, tool)
+
+
+## 高度画笔只改 block_layout.z；单笔每格至多执行一次，边界由文档 schema 限制。
+func _apply_height_brush(cell: Vector2i, tool: int) -> void:
+	if _height_stroke_cells.has(cell):
+		return
+	_height_stroke_cells[cell] = true
+	var delta := 1 if tool == Tool.HEIGHT_UP else -1
+	var next_z := clampi(
+		BattlefieldDocScript.cell_z(model, cell) + delta,
+		BattlefieldDocScript.BLOCK_MIN_Z,
+		BattlefieldDocScript.BLOCK_MAX_Z
+	)
+	if not BattlefieldDocScript.set_cell_z(model, cell, next_z):
+		return
+	_canvas._refresh_cell(cell)
+	if _canvas.selected_cell == cell:
+		_sync_block_panel()
+	_update_cell_info(cell)
+	var action := "地形上升" if tool == Tool.HEIGHT_UP else "地形下降"
+	_status("%s (%d,%d) → z=%d" % [action, cell.x, cell.y, next_z])
+	print("[editor] 高度画笔 cell=%s z=%d" % [str(cell), next_z])  # L1 埋点
 
 
 func _select_cell(cell: Vector2i, activate_block: bool = true) -> void:
@@ -948,7 +988,10 @@ func _refresh_canvas() -> void:
 
 
 func _on_tool_changed() -> void:
-	var names := { Tool.SELECT: "选择", Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮", Tool.UNIT: "角色" }
+	var names := {
+		Tool.SELECT: "选择", Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮",
+		Tool.UNIT: "角色", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
+	}
 	_status("工具：%s" % names[current_tool])
 
 

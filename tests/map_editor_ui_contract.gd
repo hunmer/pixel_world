@@ -2,7 +2,7 @@
 ##
 ## 跑法：godot --headless --path . --script res://tests/map_editor_ui_contract.gd
 ## 覆盖：右侧 Tabs 面板布局（画布左满幅 + 面板右停靠固定宽）、6 Tab 结构
-##       （文件/生成/地形/方块/角色/历史）+ 画布左上角悬浮工具条（画笔/填充/橡皮/角色/选择 垂直图标）、每 Tab 关键控件齐全、
+##       （文件/生成/地形/方块/角色/历史）+ 画布左上角悬浮工具条（画笔/填充/橡皮/地形上升/地形下降/角色/选择 垂直图标）、每 Tab 关键控件齐全、
 ##       地形调色板分「地形/植物」两组：地形=单块 tile（不叠高塔），
 ##       植物枚举 meowa_tiles 全部素材（树木/植物/装饰三小节）+ 植物层 props，
 ##       ButtonGroup 交互（工具/地形/植物/阵营/职业单选）联动 editor 状态、
@@ -97,10 +97,15 @@ func _run() -> void:
 		_expect(_count_type(gen_tab, SpinBox) == 2, "生成 Tab：宽+高 SpinBox")
 		_expect(_count_type(gen_tab, LineEdit, SpinBox) == 1,
 			"生成 Tab：种子输入框（排除 SpinBox 内部 LineEdit）")
-	# 工具条：左上角悬浮（CanvasHolder/ToolBar/ToolBox），5 个垂直图标按钮
+	# 工具条：左上角悬浮（CanvasHolder/ToolBar/ToolBox），7 个垂直图标按钮
 	var toolbar: Node = editor.get_node_or_null("EditorRoot/CanvasHolder/ToolBar/ToolBox")
-	_expect(toolbar != null and toolbar.get_child_count() == 5,
-		"左上角工具条存在且含 5 个工具按钮")
+	_expect(toolbar != null and toolbar.get_child_count() == 7,
+		"左上角工具条存在且含 7 个工具按钮")
+	_expect(editor._tool_buttons.has(editor.Tool.HEIGHT_UP)
+		and editor._tool_buttons[editor.Tool.HEIGHT_UP].tooltip_text == "地形上升工具"
+		and editor._tool_buttons.has(editor.Tool.HEIGHT_DOWN)
+		and editor._tool_buttons[editor.Tool.HEIGHT_DOWN].tooltip_text == "地形下降工具",
+		"工具条含地形上升/地形下降按钮及可访问名称")
 	if toolbar != null:
 		var bar: Control = toolbar.get_parent()
 		_expect(bar.get_index() == 1 and editor._canvas.get_index() == 0,
@@ -290,6 +295,116 @@ func _run() -> void:
 		"平移缩放旋转后 hover 与真实顶面高光同步")
 	editor._canvas.rotate_view(-1)
 	editor._canvas.reset_view()
+
+	# ---- 4c. 高度画笔：z±1、单笔去重、反馈/历史、边界与保存读回 ----
+	var brush_a := Vector2i(2, 2)
+	var brush_b := Vector2i(3, 2)
+	var brush_rows: Array = (editor.model.rows as Array).duplicate()
+	var brush_props: Array = (editor.model.props as Array).duplicate(true)
+	var brush_units: Array = (editor.model.units as Array).duplicate(true)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 0
+		and BattlefieldDocScript.cell_z(editor.model, brush_b) == 0,
+		"高度画笔前置：两个目标格 z=0")
+	editor._tool_buttons[editor.Tool.HEIGHT_UP].button_pressed = true
+	tabs.current_tab = 3  # 高度画笔不被方块 Tab 的 SELECT 覆盖
+	_expect(editor.current_tool == editor.Tool.HEIGHT_UP
+		and editor._active_tool() == editor.Tool.HEIGHT_UP,
+		"点地形上升按钮 → current_tool/_active_tool=HEIGHT_UP")
+	editor._select_cell(brush_a, false)
+	editor._canvas._refresh_hover(editor._canvas._screen_to_local(
+		editor._canvas._renderer.top_center_for(brush_a.x, brush_a.y)))
+	editor._on_cell_pressed(brush_a)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 1
+		and editor._canvas._renderer.cell_z(brush_a) == 1
+		and int(editor._block_z_box.value) == 1,
+		"地形上升点击：模型/渲染器/选中格 SpinBox 同步 z=1")
+	_expect(editor._canvas._selection_marker.polygon == editor._canvas._poly_to_local(
+			editor._canvas._renderer.top_polygon_for(brush_a.x, brush_a.y))
+		and editor._canvas._hover_marker.polygon == editor._canvas._poly_to_local(
+			editor._canvas._renderer.top_polygon_for(brush_a.x, brush_a.y)),
+		"地形上升后选择/hover 高光同步到新顶面")
+	editor._on_cell_dragged(brush_a)
+	editor._on_cell_dragged(brush_b)
+	editor._on_cell_dragged(brush_a)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 1
+		and BattlefieldDocScript.cell_z(editor.model, brush_b) == 1
+		and editor._canvas._renderer.cell_z(brush_b) == 1,
+		"同一笔 A→B→A：同格不重复上升，两格各 z=1")
+	_expect(editor.model.rows == brush_rows and editor.model.props == brush_props
+		and editor.model.units == brush_units,
+		"高度画笔不改地形类型、props 或单位")
+	editor._seal_pending()
+	_expect(String(editor._history[editor._history_cursor].label) == "地形上升",
+		"一整笔地形上升合并为一个历史动作")
+	_send_key(editor, KEY_Z, true)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 0
+		and BattlefieldDocScript.cell_z(editor.model, brush_b) == 0
+		and int(editor._block_z_box.value) == 0,
+		"Ctrl+Z 一次撤销整笔上升并同步 SpinBox")
+	_send_key(editor, KEY_Y, true)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 1
+		and BattlefieldDocScript.cell_z(editor.model, brush_b) == 1,
+		"Ctrl+Y 一次重做整笔上升")
+	editor._on_cell_pressed(brush_a)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 2,
+		"松开后再次落笔可继续上升")
+
+	var height_json_path := "user://map_editor_ui_height_brush_contract.json"
+	var height_file := FileAccess.open(height_json_path, FileAccess.WRITE)
+	_expect(height_file != null, "高度画笔临时 JSON 可写")
+	if height_file != null:
+		height_file.store_string(JSON.stringify(BattlefieldDocScript.to_json_dict(editor.model)))
+		height_file.close()
+		_expect(bool(editor.load_path(height_json_path).get("ok", false)),
+			"高度画笔结果可保存并由 load_path 读回")
+		_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 2
+			and BattlefieldDocScript.cell_z(editor.model, brush_b) == 1,
+			"保存/加载保留高度画笔 z=2/1")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(height_json_path))
+
+	editor._tool_buttons[editor.Tool.HEIGHT_DOWN].button_pressed = true
+	tabs.current_tab = 3
+	_expect(editor.current_tool == editor.Tool.HEIGHT_DOWN
+		and editor._active_tool() == editor.Tool.HEIGHT_DOWN,
+		"点地形下降按钮 → current_tool/_active_tool=HEIGHT_DOWN")
+	editor._on_cell_pressed(brush_a)
+	editor._on_cell_pressed(brush_a)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 0,
+		"地形下降连续两笔：z=2→1→0")
+	editor._seal_pending()
+	var minimum_history_size: int = editor._history.size()
+	var minimum_cursor: int = editor._history_cursor
+	editor._on_cell_pressed(brush_a)
+	editor._seal_pending()
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 0
+		and editor._history.size() == minimum_history_size
+		and editor._history_cursor == minimum_cursor,
+		"下限 z=0 不多降，且空操作不进历史")
+
+	editor._tool_buttons[editor.Tool.SELECT].button_pressed = true
+	editor._apply_tool(brush_a)
+	editor._block_z_box.value = BattlefieldDocScript.BLOCK_MAX_Z
+	editor._seal_pending()
+	var maximum_history_size: int = editor._history.size()
+	var maximum_cursor: int = editor._history_cursor
+	editor._tool_buttons[editor.Tool.HEIGHT_UP].button_pressed = true
+	editor._on_cell_pressed(brush_a)
+	editor._seal_pending()
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == BattlefieldDocScript.BLOCK_MAX_Z
+		and int(editor._block_z_box.value) == BattlefieldDocScript.BLOCK_MAX_Z
+		and editor._history.size() == maximum_history_size
+		and editor._history_cursor == maximum_cursor,
+		"上限 z=16 不多升，SpinBox 保持且空操作不进历史")
+	editor._tool_buttons[editor.Tool.HEIGHT_DOWN].button_pressed = true
+	editor._on_cell_pressed(brush_a)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 15,
+		"地形下降在上限格真实改为 z=15")
+	_send_key(editor, KEY_Z, true)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 16,
+		"Ctrl+Z 撤销地形下降")
+	_send_key(editor, KEY_Y, true)
+	_expect(BattlefieldDocScript.cell_z(editor.model, brush_a) == 15,
+		"Ctrl+Y 重做地形下降")
 
 	var selected_before_paint: Vector2i = editor._canvas.selected_cell
 	tabs.current_tab = 2
