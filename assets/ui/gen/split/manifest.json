@@ -109,10 +109,19 @@
             284,
             145
           ],
+          "scale": 1.635,
+          "content_size_source": [
+            120,
+            137
+          ],
+          "content_size": [
+            196,
+            224
+          ],
           "cell_origin_in_sheet": 0,
           "paste_in_cell": [
-            84,
-            147
+            46,
+            60
           ]
         },
         {
@@ -129,10 +138,19 @@
             656,
             145
           ],
+          "scale": 1.635,
+          "content_size_source": [
+            79,
+            137
+          ],
+          "content_size": [
+            129,
+            224
+          ],
           "cell_origin_in_sheet": 288,
           "paste_in_cell": [
-            105,
-            147
+            80,
+            60
           ]
         },
         {
@@ -149,10 +167,19 @@
             1071,
             144
           ],
+          "scale": 1.635,
+          "content_size_source": [
+            93,
+            136
+          ],
+          "content_size": [
+            152,
+            222
+          ],
           "cell_origin_in_sheet": 576,
           "paste_in_cell": [
-            98,
-            148
+            68,
+            62
           ]
         },
         {
@@ -168,6 +195,15 @@
             35,
             221,
             284
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            199,
+            250
+          ],
+          "content_size": [
+            199,
+            250
           ],
           "cell_origin_in_sheet": 864,
           "paste_in_cell": [
@@ -189,6 +225,15 @@
             489,
             271
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            189,
+            216
+          ],
+          "content_size": [
+            189,
+            216
+          ],
           "cell_origin_in_sheet": 1152,
           "paste_in_cell": [
             50,
@@ -208,6 +253,15 @@
             56,
             721,
             273
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            188,
+            218
+          ],
+          "content_size": [
+            188,
+            218
           ],
           "cell_origin_in_sheet": 1440,
           "paste_in_cell": [
@@ -229,6 +283,15 @@
             992,
             286
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            216,
+            101
+          ],
+          "content_size": [
+            216,
+            101
+          ],
           "cell_origin_in_sheet": 1728,
           "paste_in_cell": [
             36,
@@ -249,13 +312,45 @@
             1210,
             279
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            153,
+            224
+          ],
+          "content_size": [
+            153,
+            224
+          ],
           "cell_origin_in_sheet": 2016,
           "paste_in_cell": [
             68,
             60
           ]
         }
-      ]
+      ],
+      "body_scale": {
+        "method": "standing_height_parity",
+        "ref_action_pose": "potion",
+        "ref_turnaround_pose": "front",
+        "ref_height_px": {
+          "front": 137,
+          "potion": 224
+        },
+        "factor": 1.635,
+        "scaled_states": [
+          "front",
+          "side",
+          "back"
+        ],
+        "unscaled_states": [
+          "attack",
+          "hurt",
+          "run",
+          "downed",
+          "potion"
+        ],
+        "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。"
+      }
     },
     {
       "class": "assassin",
@@ -296,10 +391,19 @@
             287,
             301
           ],
+          "scale": 1.5714,
+          "content_size_source": [
+            112,
+            140
+          ],
+          "content_size": [
+            176,
+            220
+          ],
           "cell_origin_in_sheet": 0,
           "paste_in_cell": [
-            88,
-            144
+            56,
+            64
           ]
         },
         {
@@ -316,10 +420,19 @@
             656,
             301
           ],
+          "scale": 1.5714,
+          "content_size_source": [
+            71,
+            140
+          ],
+          "content_size": [
+            112,
+            220
+          ],
           "cell_origin_in_sheet": 288,
           "paste_in_cell": [
-            109,
-            144
+            88,
+            64
           ]
         },
         {
@@ -336,10 +449,19 @@
             1076,
             300
           ],
+          "scale": 1.5714,
+          "content_size_source": [
+            95,
+            139
+          ],
+          "content_size": [
+            149,
+            218
+          ],
           "cell_origin_in_sheet": 576,
           "paste_in_cell": [
-            97,
-            145
+            70,
+            66
           ]
         },
         {
@@ -355,6 +477,15 @@
             364,
             224,
             573
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            198,
+            210
+          ],
+          "content_size": [
+            198,
+            210
           ],
           "cell_origin_in_sheet": 864,
           "paste_in_cell": [
@@ -376,6 +507,15 @@
             488,
             574
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            188,
+            212
+          ],
+          "content_size": [
+            188,
+            212
+          ],
           "cell_origin_in_sheet": 1152,
           "paste_in_cell": [
             50,
@@ -395,6 +535,15 @@
             357,
             723,
             573
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            194,
+            217
+          ],
+          "content_size": [
+            194,
+            217
           ],
           "cell_origin_in_sheet": 1440,
           "paste_in_cell": [
@@ -416,6 +565,15 @@
             1018,
             579
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            256,
+            90
+          ],
+          "content_size": [
+            256,
+            90
+          ],
           "cell_origin_in_sheet": 1728,
           "paste_in_cell": [
             16,
@@ -436,13 +594,45 @@
             1226,
             574
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            156,
+            220
+          ],
+          "content_size": [
+            156,
+            220
+          ],
           "cell_origin_in_sheet": 2016,
           "paste_in_cell": [
             66,
             64
           ]
         }
-      ]
+      ],
+      "body_scale": {
+        "method": "standing_height_parity",
+        "ref_action_pose": "potion",
+        "ref_turnaround_pose": "front",
+        "ref_height_px": {
+          "front": 140,
+          "potion": 220
+        },
+        "factor": 1.5714,
+        "scaled_states": [
+          "front",
+          "side",
+          "back"
+        ],
+        "unscaled_states": [
+          "attack",
+          "hurt",
+          "run",
+          "downed",
+          "potion"
+        ],
+        "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。"
+      }
     },
     {
       "class": "berserker",
@@ -483,10 +673,19 @@
             301,
             456
           ],
+          "scale": 1.7071,
+          "content_size_source": [
+            141,
+            140
+          ],
+          "content_size": [
+            241,
+            239
+          ],
           "cell_origin_in_sheet": 0,
           "paste_in_cell": [
-            74,
-            144
+            24,
+            45
           ]
         },
         {
@@ -503,10 +702,19 @@
             662,
             456
           ],
+          "scale": 1.7071,
+          "content_size_source": [
+            77,
+            140
+          ],
+          "content_size": [
+            131,
+            239
+          ],
           "cell_origin_in_sheet": 288,
           "paste_in_cell": [
-            106,
-            144
+            79,
+            45
           ]
         },
         {
@@ -523,10 +731,19 @@
             1090,
             456
           ],
+          "scale": 1.7071,
+          "content_size_source": [
+            136,
+            140
+          ],
+          "content_size": [
+            232,
+            239
+          ],
           "cell_origin_in_sheet": 576,
           "paste_in_cell": [
-            76,
-            144
+            28,
+            45
           ]
         },
         {
@@ -542,6 +759,15 @@
             659,
             222,
             894
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            201,
+            236
+          ],
+          "content_size": [
+            201,
+            236
           ],
           "cell_origin_in_sheet": 864,
           "paste_in_cell": [
@@ -563,6 +789,15 @@
             513,
             893
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            216,
+            233
+          ],
+          "content_size": [
+            216,
+            233
+          ],
           "cell_origin_in_sheet": 1152,
           "paste_in_cell": [
             36,
@@ -582,6 +817,15 @@
             661,
             726,
             890
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            175,
+            230
+          ],
+          "content_size": [
+            175,
+            230
           ],
           "cell_origin_in_sheet": 1440,
           "paste_in_cell": [
@@ -603,6 +847,15 @@
             1019,
             894
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            245,
+            98
+          ],
+          "content_size": [
+            245,
+            98
+          ],
           "cell_origin_in_sheet": 1728,
           "paste_in_cell": [
             22,
@@ -623,13 +876,45 @@
             1229,
             890
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            169,
+            239
+          ],
+          "content_size": [
+            169,
+            239
+          ],
           "cell_origin_in_sheet": 2016,
           "paste_in_cell": [
             60,
             45
           ]
         }
-      ]
+      ],
+      "body_scale": {
+        "method": "standing_height_parity",
+        "ref_action_pose": "potion",
+        "ref_turnaround_pose": "front",
+        "ref_height_px": {
+          "front": 140,
+          "potion": 239
+        },
+        "factor": 1.7071,
+        "scaled_states": [
+          "front",
+          "side",
+          "back"
+        ],
+        "unscaled_states": [
+          "attack",
+          "hurt",
+          "run",
+          "downed",
+          "potion"
+        ],
+        "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。"
+      }
     },
     {
       "class": "knight",
@@ -670,10 +955,19 @@
             297,
             610
           ],
+          "scale": 1.6286,
+          "content_size_source": [
+            128,
+            140
+          ],
+          "content_size": [
+            208,
+            228
+          ],
           "cell_origin_in_sheet": 0,
           "paste_in_cell": [
-            80,
-            144
+            40,
+            56
           ]
         },
         {
@@ -690,10 +984,19 @@
             678,
             610
           ],
+          "scale": 1.6286,
+          "content_size_source": [
+            101,
+            138
+          ],
+          "content_size": [
+            164,
+            225
+          ],
           "cell_origin_in_sheet": 288,
           "paste_in_cell": [
-            94,
-            146
+            62,
+            59
           ]
         },
         {
@@ -710,10 +1013,19 @@
             1084,
             610
           ],
+          "scale": 1.6286,
+          "content_size_source": [
+            105,
+            138
+          ],
+          "content_size": [
+            171,
+            225
+          ],
           "cell_origin_in_sheet": 576,
           "paste_in_cell": [
-            92,
-            146
+            59,
+            59
           ]
         },
         {
@@ -729,6 +1041,15 @@
             951,
             241,
             1203
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            220,
+            253
+          ],
+          "content_size": [
+            220,
+            253
           ],
           "cell_origin_in_sheet": 864,
           "paste_in_cell": [
@@ -750,6 +1071,15 @@
             503,
             1208
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            194,
+            224
+          ],
+          "content_size": [
+            194,
+            224
+          ],
           "cell_origin_in_sheet": 1152,
           "paste_in_cell": [
             47,
@@ -769,6 +1099,15 @@
             979,
             725,
             1209
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            174,
+            231
+          ],
+          "content_size": [
+            174,
+            231
           ],
           "cell_origin_in_sheet": 1440,
           "paste_in_cell": [
@@ -790,6 +1129,15 @@
             1019,
             1203
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            257,
+            96
+          ],
+          "content_size": [
+            257,
+            96
+          ],
           "cell_origin_in_sheet": 1728,
           "paste_in_cell": [
             16,
@@ -810,13 +1158,45 @@
             1211,
             1206
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            143,
+            228
+          ],
+          "content_size": [
+            143,
+            228
+          ],
           "cell_origin_in_sheet": 2016,
           "paste_in_cell": [
             73,
             56
           ]
         }
-      ]
+      ],
+      "body_scale": {
+        "method": "standing_height_parity",
+        "ref_action_pose": "potion",
+        "ref_turnaround_pose": "front",
+        "ref_height_px": {
+          "front": 140,
+          "potion": 228
+        },
+        "factor": 1.6286,
+        "scaled_states": [
+          "front",
+          "side",
+          "back"
+        ],
+        "unscaled_states": [
+          "attack",
+          "hurt",
+          "run",
+          "downed",
+          "potion"
+        ],
+        "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。"
+      }
     },
     {
       "class": "lancer",
@@ -857,10 +1237,19 @@
             302,
             772
           ],
+          "scale": 1.6301,
+          "content_size_source": [
+            144,
+            146
+          ],
+          "content_size": [
+            235,
+            238
+          ],
           "cell_origin_in_sheet": 0,
           "paste_in_cell": [
-            72,
-            138
+            27,
+            46
           ]
         },
         {
@@ -877,10 +1266,19 @@
             699,
             772
           ],
+          "scale": 1.6301,
+          "content_size_source": [
+            149,
+            146
+          ],
+          "content_size": [
+            243,
+            238
+          ],
           "cell_origin_in_sheet": 288,
           "paste_in_cell": [
-            70,
-            138
+            23,
+            46
           ]
         },
         {
@@ -897,10 +1295,19 @@
             1079,
             772
           ],
+          "scale": 1.6301,
+          "content_size_source": [
+            114,
+            146
+          ],
+          "content_size": [
+            186,
+            238
+          ],
           "cell_origin_in_sheet": 576,
           "paste_in_cell": [
-            87,
-            138
+            51,
+            46
           ]
         },
         {
@@ -916,6 +1323,15 @@
             58,
             211,
             278
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            179,
+            221
+          ],
+          "content_size": [
+            179,
+            221
           ],
           "cell_origin_in_sheet": 864,
           "paste_in_cell": [
@@ -937,6 +1353,15 @@
             459,
             289
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            161,
+            274
+          ],
+          "content_size": [
+            161,
+            274
+          ],
           "cell_origin_in_sheet": 1152,
           "paste_in_cell": [
             64,
@@ -956,6 +1381,15 @@
             62,
             768,
             276
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            252,
+            215
+          ],
+          "content_size": [
+            252,
+            215
           ],
           "cell_origin_in_sheet": 1440,
           "paste_in_cell": [
@@ -977,6 +1411,15 @@
             1027,
             286
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            245,
+            98
+          ],
+          "content_size": [
+            245,
+            98
+          ],
           "cell_origin_in_sheet": 1728,
           "paste_in_cell": [
             22,
@@ -997,13 +1440,45 @@
             1208,
             289
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            116,
+            238
+          ],
+          "content_size": [
+            116,
+            238
+          ],
           "cell_origin_in_sheet": 2016,
           "paste_in_cell": [
             86,
             46
           ]
         }
-      ]
+      ],
+      "body_scale": {
+        "method": "standing_height_parity",
+        "ref_action_pose": "potion",
+        "ref_turnaround_pose": "front",
+        "ref_height_px": {
+          "front": 146,
+          "potion": 238
+        },
+        "factor": 1.6301,
+        "scaled_states": [
+          "front",
+          "side",
+          "back"
+        ],
+        "unscaled_states": [
+          "attack",
+          "hurt",
+          "run",
+          "downed",
+          "potion"
+        ],
+        "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。"
+      }
     },
     {
       "class": "mage",
@@ -1044,10 +1519,19 @@
             284,
             925
           ],
+          "scale": 1.6159,
+          "content_size_source": [
+            110,
+            138
+          ],
+          "content_size": [
+            178,
+            223
+          ],
           "cell_origin_in_sheet": 0,
           "paste_in_cell": [
-            89,
-            146
+            55,
+            61
           ]
         },
         {
@@ -1064,10 +1548,19 @@
             677,
             927
           ],
+          "scale": 1.6159,
+          "content_size_source": [
+            98,
+            139
+          ],
+          "content_size": [
+            158,
+            225
+          ],
           "cell_origin_in_sheet": 288,
           "paste_in_cell": [
-            95,
-            145
+            65,
+            59
           ]
         },
         {
@@ -1084,10 +1577,19 @@
             1073,
             928
           ],
+          "scale": 1.6159,
+          "content_size_source": [
+            104,
+            140
+          ],
+          "content_size": [
+            168,
+            226
+          ],
           "cell_origin_in_sheet": 576,
           "paste_in_cell": [
-            92,
-            144
+            60,
+            58
           ]
         },
         {
@@ -1103,6 +1605,15 @@
             372,
             203,
             578
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            180,
+            207
+          ],
+          "content_size": [
+            180,
+            207
           ],
           "cell_origin_in_sheet": 864,
           "paste_in_cell": [
@@ -1124,6 +1635,15 @@
             448,
             578
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            129,
+            205
+          ],
+          "content_size": [
+            129,
+            205
+          ],
           "cell_origin_in_sheet": 1152,
           "paste_in_cell": [
             80,
@@ -1143,6 +1663,15 @@
             371,
             721,
             578
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            180,
+            208
+          ],
+          "content_size": [
+            180,
+            208
           ],
           "cell_origin_in_sheet": 1440,
           "paste_in_cell": [
@@ -1164,6 +1693,15 @@
             1018,
             589
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            237,
+            97
+          ],
+          "content_size": [
+            237,
+            97
+          ],
           "cell_origin_in_sheet": 1728,
           "paste_in_cell": [
             26,
@@ -1184,13 +1722,45 @@
             1229,
             578
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            154,
+            223
+          ],
+          "content_size": [
+            154,
+            223
+          ],
           "cell_origin_in_sheet": 2016,
           "paste_in_cell": [
             67,
             61
           ]
         }
-      ]
+      ],
+      "body_scale": {
+        "method": "standing_height_parity",
+        "ref_action_pose": "potion",
+        "ref_turnaround_pose": "front",
+        "ref_height_px": {
+          "front": 138,
+          "potion": 223
+        },
+        "factor": 1.6159,
+        "scaled_states": [
+          "front",
+          "side",
+          "back"
+        ],
+        "unscaled_states": [
+          "attack",
+          "hurt",
+          "run",
+          "downed",
+          "potion"
+        ],
+        "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。"
+      }
     },
     {
       "class": "priest",
@@ -1231,10 +1801,19 @@
             281,
             1079
           ],
+          "scale": 1.6522,
+          "content_size_source": [
+            107,
+            138
+          ],
+          "content_size": [
+            177,
+            228
+          ],
           "cell_origin_in_sheet": 0,
           "paste_in_cell": [
-            91,
-            146
+            56,
+            56
           ]
         },
         {
@@ -1251,10 +1830,19 @@
             664,
             1079
           ],
+          "scale": 1.6522,
+          "content_size_source": [
+            85,
+            138
+          ],
+          "content_size": [
+            140,
+            228
+          ],
           "cell_origin_in_sheet": 288,
           "paste_in_cell": [
-            102,
-            146
+            74,
+            56
           ]
         },
         {
@@ -1271,10 +1859,19 @@
             1074,
             1078
           ],
+          "scale": 1.6522,
+          "content_size_source": [
+            105,
+            137
+          ],
+          "content_size": [
+            173,
+            226
+          ],
           "cell_origin_in_sheet": 576,
           "paste_in_cell": [
-            92,
-            147
+            58,
+            58
           ]
         },
         {
@@ -1290,6 +1887,15 @@
             669,
             205,
             891
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            172,
+            223
+          ],
+          "content_size": [
+            172,
+            223
           ],
           "cell_origin_in_sheet": 864,
           "paste_in_cell": [
@@ -1311,6 +1917,15 @@
             448,
             888
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            137,
+            228
+          ],
+          "content_size": [
+            137,
+            228
+          ],
           "cell_origin_in_sheet": 1152,
           "paste_in_cell": [
             76,
@@ -1330,6 +1945,15 @@
             677,
             721,
             895
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            152,
+            219
+          ],
+          "content_size": [
+            152,
+            219
           ],
           "cell_origin_in_sheet": 1440,
           "paste_in_cell": [
@@ -1351,6 +1975,15 @@
             1026,
             907
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            267,
+            96
+          ],
+          "content_size": [
+            267,
+            96
+          ],
           "cell_origin_in_sheet": 1728,
           "paste_in_cell": [
             11,
@@ -1371,13 +2004,45 @@
             1231,
             896
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            157,
+            228
+          ],
+          "content_size": [
+            157,
+            228
+          ],
           "cell_origin_in_sheet": 2016,
           "paste_in_cell": [
             66,
             56
           ]
         }
-      ]
+      ],
+      "body_scale": {
+        "method": "standing_height_parity",
+        "ref_action_pose": "potion",
+        "ref_turnaround_pose": "front",
+        "ref_height_px": {
+          "front": 138,
+          "potion": 228
+        },
+        "factor": 1.6522,
+        "scaled_states": [
+          "front",
+          "side",
+          "back"
+        ],
+        "unscaled_states": [
+          "attack",
+          "hurt",
+          "run",
+          "downed",
+          "potion"
+        ],
+        "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。"
+      }
     },
     {
       "class": "swordsman",
@@ -1418,10 +2083,19 @@
             278,
             1233
           ],
+          "scale": 1.6187,
+          "content_size_source": [
+            107,
+            139
+          ],
+          "content_size": [
+            173,
+            225
+          ],
           "cell_origin_in_sheet": 0,
           "paste_in_cell": [
-            91,
-            145
+            58,
+            59
           ]
         },
         {
@@ -1438,10 +2112,19 @@
             657,
             1234
           ],
+          "scale": 1.6187,
+          "content_size_source": [
+            84,
+            140
+          ],
+          "content_size": [
+            136,
+            227
+          ],
           "cell_origin_in_sheet": 288,
           "paste_in_cell": [
-            102,
-            144
+            76,
+            57
           ]
         },
         {
@@ -1458,10 +2141,19 @@
             1064,
             1230
           ],
+          "scale": 1.6187,
+          "content_size_source": [
+            102,
+            136
+          ],
+          "content_size": [
+            165,
+            220
+          ],
           "cell_origin_in_sheet": 576,
           "paste_in_cell": [
-            93,
-            148
+            62,
+            64
           ]
         },
         {
@@ -1477,6 +2169,15 @@
             989,
             188,
             1199
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            170,
+            211
+          ],
+          "content_size": [
+            170,
+            211
           ],
           "cell_origin_in_sheet": 864,
           "paste_in_cell": [
@@ -1498,6 +2199,15 @@
             453,
             1206
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            156,
+            251
+          ],
+          "content_size": [
+            156,
+            251
+          ],
           "cell_origin_in_sheet": 1152,
           "paste_in_cell": [
             66,
@@ -1517,6 +2227,15 @@
             989,
             721,
             1198
+          ],
+          "scale": 1.0,
+          "content_size_source": [
+            173,
+            210
+          ],
+          "content_size": [
+            173,
+            210
           ],
           "cell_origin_in_sheet": 1440,
           "paste_in_cell": [
@@ -1538,6 +2257,15 @@
             1020,
             1203
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            238,
+            100
+          ],
+          "content_size": [
+            238,
+            100
+          ],
           "cell_origin_in_sheet": 1728,
           "paste_in_cell": [
             25,
@@ -1558,13 +2286,45 @@
             1204,
             1206
           ],
+          "scale": 1.0,
+          "content_size_source": [
+            128,
+            225
+          ],
+          "content_size": [
+            128,
+            225
+          ],
           "cell_origin_in_sheet": 2016,
           "paste_in_cell": [
             80,
             59
           ]
         }
-      ]
+      ],
+      "body_scale": {
+        "method": "standing_height_parity",
+        "ref_action_pose": "potion",
+        "ref_turnaround_pose": "front",
+        "ref_height_px": {
+          "front": 139,
+          "potion": 225
+        },
+        "factor": 1.6187,
+        "scaled_states": [
+          "front",
+          "side",
+          "back"
+        ],
+        "unscaled_states": [
+          "attack",
+          "hurt",
+          "run",
+          "downed",
+          "potion"
+        ],
+        "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。"
+      }
     }
   ],
   "layout": {
@@ -1581,6 +2341,7 @@
     ],
     "anchor": "bottom-center",
     "pad": 4,
-    "note": "格内像素为源图原分辨率裁切，未缩放"
+    "body_scale_unified": true,
+    "note": "动作格源分辨率 scale=1.0；三视图格按 files[].body_scale.factor 最近邻等比放大统一本体比例（测量依据见 body_scale）"
   }
 }

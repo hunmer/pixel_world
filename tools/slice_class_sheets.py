@@ -12,6 +12,10 @@
   slice  — 逐源图切片: 每格 PNG + 每行条带 + manifest 增量合并（中间产物，供 merge 输入）
   merge  — 按 manifest 把每角色各状态合成为单张水平精灵图（如 8 格 2304×288），
            生成棋盘预览，可选 --prune 删除帧/条带等冗余中间产物，并重写 manifest。
+           输入既可以是 slice 的帧条目，也可以是之前 merge 写出的 sheet 条目（自动扁平化 cells）。
+           加 --unify-scale 后做「本体视觉比例统一」：动作站姿格为基准 scale=1.0，
+           三视图格按 k = 站姿高(动作ref)/站姿高(三视图ref) 最近邻等比放大，
+           躺倒/奔跑等姿态格不缩放（只重新锚定），详见 README。
 
 用法:
     python tools/slice_class_sheets.py slice --sheet assets/ui/gen/actions_A.png --grid 4x5 \
@@ -207,6 +211,25 @@ def cmd_slice(args):
 
 # ---------------------------------------------------------------- merge
 
+def _flatten_frames(mf):
+    """manifest -> [(class, state, entry)]；兼容帧条目与 sheet 条目（扁平化 cells），(class,state) 去重取首个。"""
+    frames, seen = [], set()
+    for f in mf.get("files", []):
+        if "source_bbox" in f and "class" in f:
+            items = [(f["class"], f["state"], f)]
+        elif "cells" in f:
+            items = [(f["class"], c["state"], c) for c in f["cells"]]
+        else:
+            continue
+        for cls, st, e in items:
+            if (cls, st) in seen:
+                print(f"  [warn] 重复条目 {(cls, st)}，取首个")
+                continue
+            seen.add((cls, st))
+            frames.append((cls, st, e))
+    return frames
+
+
 def cmd_merge(args):
     mf_path = Path(args.manifest)
     mf = json.loads(mf_path.read_text())
@@ -219,17 +242,51 @@ def cmd_merge(args):
     preview_dir.mkdir(parents=True, exist_ok=True)
 
     by_class = {}
-    for f in mf.get("files", []):
-        if "source_bbox" not in f:      # 已是 sheet 条目则跳过
-            continue
-        by_class.setdefault(f["class"], {})[f["state"]] = f
+    for cls, st, e in _flatten_frames(mf):
+        by_class.setdefault(cls, {})[st] = e
 
     classes = sorted(by_class)
     if not classes:
-        sys.exit("[error] manifest 中没有可合并的帧条目（先运行 slice）")
+        sys.exit("[error] manifest 中没有可合并的条目（先运行 slice 或提供 sheet cells）")
+
+    # ---- 本体视觉比例统一: k = 站姿高(动作ref) / 站姿高(三视图ref) ----
+    cache = {}
+
+    def src_img(path):
+        return cache.setdefault(path, Image.open(path).convert("RGBA"))
+
+    def content_wh(e):
+        x0, y0, x1, y1 = e["source_bbox"]
+        return x1 - x0 + 1, y1 - y0 + 1
+
+    scale_factors, measure, evidence = {}, {}, {}
+    if args.unify_scale:
+        ref_a, ref_t = (s.strip() for s in args.scale_ref.split(":"))
+        scale_states = [s.strip() for s in args.scale_states.split(",")]
+        for cls in classes:
+            states = by_class[cls]
+            for need in (ref_a, ref_t):
+                if need not in states:
+                    sys.exit(f"[error] {cls}: 缺基准格 {need}，无法 --unify-scale")
+            _, ha = content_wh(states[ref_a])
+            _, ht = content_wh(states[ref_t])
+            k = round(ha / ht, 4)
+            if not 1.2 <= k <= 2.2:
+                sys.exit(f"[error] {cls}: 缩放因子 k={k} 超出合理区间 [1.2,2.2]，测量异常")
+            scale_factors[cls] = {s: (k if s in scale_states else 1.0) for s in order}
+            measure[cls] = {
+                "method": "standing_height_parity",
+                "ref_action_pose": ref_a,
+                "ref_turnaround_pose": ref_t,
+                "ref_height_px": {ref_t: ht, ref_a: ha},
+                "factor": k,
+                "scaled_states": scale_states,
+                "unscaled_states": [s for s in order if s not in scale_states],
+                "note": "动作站姿格为比例基准(scale=1.0)；三视图格按站姿高度比 k 最近邻等比放大；"
+                        "躺倒/奔跑/攻击等姿态不强行拉到站姿高度；头部大小经红绿叠加目检校验。",
+            }
 
     sheets, entries = [], []
-    cache = {}
     for cls in classes:
         states = by_class[cls]
         missing = [s for s in order if s not in states]
@@ -240,30 +297,46 @@ def cmd_merge(args):
         cells_meta = []
         for i, st in enumerate(order):
             e = states[st]
-            src = cache.setdefault(e["source"], Image.open(e["source"]).convert("RGBA"))
             x0, y0, x1, y1 = e["source_bbox"]
-            sprite = src.crop((x0, y0, x1 + 1, y1 + 1))
-            px = canvas // 2 - sprite.width // 2
-            py = canvas - pad - sprite.height
-            if [px, py] != e.get("paste_xy"):
-                sys.exit(f"[error] {cls}/{st}: 画布位置 {px, py} 与 slice 记录 {e.get('paste_xy')} 不一致")
+            sprite = src_img(e["source"]).crop((x0, y0, x1 + 1, y1 + 1))  # bbox 含端
+            sw, sh = sprite.size
+            k = scale_factors.get(cls, {}).get(st, 1.0)
+            if k != 1.0:
+                nw, nh = max(1, round(sw * k)), max(1, round(sh * k))
+                if nw + 2 * pad > canvas or nh + 2 * pad > canvas:
+                    sys.exit(f"[error] {cls}/{st}: 缩放后 {nw}x{nh} 超出画布 {canvas}(pad={pad})")
+                sprite = sprite.resize((nw, nh), Image.NEAREST)
+            else:
+                nw, nh = sw, sh
+            px = canvas // 2 - nw // 2
+            py = canvas - pad - nh
+            if k == 1.0 and e.get("paste_in_cell") and [px, py] != e["paste_in_cell"]:
+                sys.exit(f"[error] {cls}/{st}: 画布位置 {px, py} 与记录 {e['paste_in_cell']} 不一致")
             sheet.paste(sprite, (i * canvas + px, py))
             cells_meta.append({
                 "index": i, "state": st,
                 "source": e["source"], "source_cell": e["source_cell"],
                 "source_bbox": e["source_bbox"],
+                "scale": k,
+                "content_size_source": [sw, sh],
+                "content_size": [nw, nh],
                 "cell_origin_in_sheet": i * canvas,
                 "paste_in_cell": [px, py],
             })
+            if k != 1.0:
+                evidence.setdefault(cls, []).append((st, sh, nh, k))
         out = sheets_dir / f"{cls}_sheet.png"
         sheet.save(out)
         amin, _ = sheet.getchannel("A").getextrema()
         assert amin == 0, f"{out} 无透明背景"
-        entries.append({
+        entry = {
             "class": cls, "out": str(out), "size": [sheet.width, sheet.height],
             "cell": [canvas, canvas], "cells_n": len(order), "order": order,
             "anchor": "bottom-center", "alpha_min": amin, "cells": cells_meta,
-        })
+        }
+        if cls in measure:
+            entry["body_scale"] = measure[cls]
+        entries.append(entry)
         sheets.append((cls, out, sheet))
         comp = checker_bg(sheet.size)
         comp.alpha_composite(sheet)
@@ -280,12 +353,28 @@ def cmd_merge(args):
     comp.alpha_composite(contact)
     comp.convert("RGB").save(preview_dir / "all_sheets_contact.png")
 
+    # 缩放前后证据表 + 站姿 parity 自动检查
+    if args.unify_scale:
+        ref_a = args.scale_ref.split(":")[0].strip()
+        print("[unify] 本体比例统一证据 (content H: 缩放前→缩放后, k=factor):")
+        for cls in classes:
+            rows = evidence.get(cls, [])
+            line = "  ".join(f"{st} {a}→{b}" for st, a, b, _ in rows)
+            print(f"  {cls:10s} k={measure[cls]['factor']:<7} {line}")
+            ha = measure[cls]["ref_height_px"][ref_a]
+            front_after = dict((st, b) for st, a, b, _ in rows).get(ref_t := args.scale_ref.split(":")[1].strip())
+            if front_after is None or abs(front_after - ha) > 2:
+                sys.exit(f"[error] {cls}: 缩放后三视图ref高 {front_after} 与动作ref高 {ha} 偏差>2px")
+
     # manifest 重写为 sheet 条目（保留 sources 与溯源 cells）
     mf["files"] = entries
     mf["layout"] = {
         "sheet": f"{len(order)} 格水平, 每格 {canvas}x{canvas}, 总宽 {len(order) * canvas}",
         "order": order, "anchor": "bottom-center", "pad": pad,
-        "note": "格内像素为源图原分辨率裁切，未缩放",
+        "body_scale_unified": bool(args.unify_scale),
+        "note": ("动作格源分辨率 scale=1.0；三视图格按 files[].body_scale.factor "
+                 "最近邻等比放大统一本体比例（测量依据见 body_scale）" if args.unify_scale
+                 else "格内像素为源图原分辨率裁切，未缩放"),
     }
     mf_path.write_text(json.dumps(mf, ensure_ascii=False, indent=2))
     print(f"[ok] manifest 重写: {len(entries)} 张 sheet, {mf_path}")
@@ -328,6 +417,12 @@ def main():
     m.add_argument("--pad", type=int, default=DEFAULT_PAD)
     m.add_argument("--order", required=True, help="水平帧序, 如 front,side,back,attack,hurt,run,downed,potion")
     m.add_argument("--prune", action="store_true", help="删除 actions/turnaround/strips 目录与旧 preview")
+    m.add_argument("--unify-scale", action="store_true",
+                   help="本体视觉比例统一：--scale-states 格按 --scale-ref 站姿高度比最近邻等比放大")
+    m.add_argument("--scale-states", default="front,side,back",
+                   help="参与缩放的状态列表（默认 front,side,back 三视图）")
+    m.add_argument("--scale-ref", default="potion:front",
+                   help="站姿高度基准 动作格状态:三视图格状态（默认 potion:front）")
     m.set_defaults(func=cmd_merge)
 
     args = ap.parse_args()
