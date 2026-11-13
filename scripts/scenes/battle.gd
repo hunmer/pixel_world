@@ -22,6 +22,7 @@ const BattleActionResolver = preload("res://scripts/battle/battle_action_resolve
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 const PixelFx2DScript = preload("res://addons/pixelfx/nodes/pixel_fx_2d.gd")
+const PixelFxBakerScript = preload("res://addons/pixelfx/bake/baker.gd")
 
 var action_anim: Node = null
 var _action_camera_kick_tween: Tween = null
@@ -249,6 +250,8 @@ func _on_action_phase_started(phase: StringName, event: Dictionary) -> void:
 
 
 func _on_action_anim_finished(_event: Dictionary, _skipped: bool) -> void:
+	# 演出结束（含跳过/中断）立即按当前 HP 恢复常驻血条。
+	_set_unit_bars_visible(true)
 	if _action_camera_kick_tween != null and _action_camera_kick_tween.is_valid():
 		_action_camera_kick_tween.kill()
 	_action_camera_kick_offset = Vector3.ZERO
@@ -549,9 +552,15 @@ func _spawn_unit_sprite(u: Dictionary) -> void:
 		# B2 切场景模式：挂 board 下，注入 renderer.visual_top_level 站上可视柱顶
 		board.add_child(us)
 		us.setup(u, board, Callable(renderer, "visual_top_level"))
-	# 战斗中隐藏常驻头顶血条：实际受伤改由 pixelfx 伤害数字 + 血条受击特效表达。
-	us.set_persistent_bar_visible(false)
 	_unit_sprites[u.id] = us
+
+
+## 常驻血条显隐：仅在攻击/技能/物品等演出期间隐藏（受击特效在同一锚点演出），
+## 演出结束/中断/退出按各 sprite 当前 hp 与原有可见性规则恢复。
+func _set_unit_bars_visible(visible_: bool) -> void:
+	for us in _unit_sprites.values():
+		if is_instance_valid(us):
+			(us as UnitSprite3D).set_persistent_bar_visible(visible_)
 
 
 func _debug_print_unit_alignment() -> void:
@@ -1028,6 +1037,8 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 		str(options.get(&"skip", false)),
 	])
 	if action_anim != null and not event.is_empty():
+		_prewarm_damage_fx_variants(event.get(&"impacts", []))
+		_set_unit_bars_visible(false)
 		await action_anim.play(
 			event,
 			float(options.get(&"anim_speed", 1.0)),
@@ -1087,6 +1098,61 @@ func _on_impact_presented(impact: Dictionary) -> void:
 	_spawn_damage_fx(u, damage, int(impact.get(&"hp_before", int(u.get(&"hp", 0)))), int(impact.get(&"hp_after", int(u.get(&"hp", 0)))))
 
 
+## 演出前预热：把 impacts 的动态变体（伤害数字 text / 血条 from/to）提前烘焙进 PixelFx2D 静态缓存。
+## BAKED 缓存键 = 脚本路径|JSON.stringify(options)|layer —— 动态参数几乎每个伤害值/血量比都是冷变体，
+## 冷播放要逐帧 CPU 渲染 + ImageTexture 创建上传（headless 实测约 120~194ms/帧，拖垮整个 2s 动画）；
+## 在 action_anim.play 的走位窗口里同步预热（单变体毫秒级），受伤瞬间即为热重放（≤1.7ms/帧）。
+func _prewarm_damage_fx_variants(impacts: Array) -> void:
+	for impact_value in impacts:
+		var impact: Dictionary = impact_value
+		if not bool(impact.get(&"hit", false)) or int(impact.get(&"damage", 0)) <= 0:
+			continue
+		var u: Dictionary = grid.units.get(StringName(impact.get(&"target_id", &"")), {})
+		if u.is_empty():
+			continue
+		var damage := int(impact.get(&"damage", 0))
+		var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
+		var hp_before := int(impact.get(&"hp_before", int(u.get(&"hp", 0))))
+		var hp_after := int(impact.get(&"hp_after", int(u.get(&"hp", 0))))
+		_prewarm_fx_variant("ui/damage-number", {"text": "-%d" % damage})
+		_prewarm_fx_variant("ui/health-bar-hit", {
+			"from": clampf(float(hp_before) / float(max_hp), 0.0, 1.0),
+			"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),
+		})
+
+
+## 单变体烘焙：缓存未命中才创建 Track 并强制渲染全部帧（Track 是懒渲染，get_textures(n-1) 一次拉全）。
+func _prewarm_fx_variant(effect_name: String, opts: Dictionary) -> void:
+	var path := "res://addons/pixelfx/fx/%s.gd" % effect_name
+	# 与 PixelFx2D._reload 的缓存键构造保持一致（layer 默认 ""，故键以 "|" 结尾）。
+	var key := "%s|%s|" % [path, JSON.stringify(opts)]
+	if PixelFx2D._cache.has(key):
+		return
+	var mod: Script = load(path)
+	if mod == null:
+		return
+	var track = PixelFxBakerScript.track(mod, opts)
+	track.get_textures(track.n - 1)
+	PixelFx2D._cache[key] = track
+
+
+## 物品路径预热：由 hp_deltas 反推伤害变体（与 _resolve_item 的 _spawn_damage_fx 参数一致）。
+func _prewarm_item_damage_fx(result: Dictionary) -> void:
+	for h in result.get(&"hp_deltas", []):
+		var t: Dictionary = h[&"unit"]
+		var delta: int = int(h[&"delta"])
+		if delta >= 0:
+			continue
+		var hp_after := int(t.get(&"hp", 0))
+		var u: Dictionary = grid.units.get(StringName(t.get(&"id", &"")), t)
+		var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
+		_prewarm_fx_variant("ui/damage-number", {"text": "-%d" % -delta})
+		_prewarm_fx_variant("ui/health-bar-hit", {
+			"from": clampf(float(hp_after - delta) / float(max_hp), 0.0, 1.0),
+			"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),
+		})
+
+
 ## 伤害特效：damage-number 绑头顶（实际伤害数字），health-bar-hit 绑同锚点（from=伤前 to=伤后 占最大生命比）。
 func _spawn_damage_fx(u: Dictionary, damage: int, hp_before: int, hp_after: int) -> void:
 	if damage <= 0:
@@ -1142,6 +1208,8 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 		str(options.get(&"skip", false)),
 	])
 	if action_anim != null and not event.is_empty():
+		_prewarm_damage_fx_variants(event.get(&"impacts", []))
+		_set_unit_bars_visible(false)
 		await action_anim.play(
 			event,
 			float(options.get(&"anim_speed", 1.0)),
@@ -1169,7 +1237,13 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 		user.hasActed = true
 		return true
 	mode = Mode.ANIMATING
+	_set_unit_bars_visible(false)
 	var us: UnitSprite3D = _unit_sprites.get(user.id)
+	# 结算先行（execute+死亡标志+hasActed）走共享 resolver：伤害数值确定后才能预热对应 FX 变体。
+	var outcome := BattleActionResolver.resolve_item(user, targets, item_entry)
+	var result: Dictionary = outcome[&"item"]
+	# 预热在抬升动画窗口内完成，投掷命中瞬间零冷启动。
+	_prewarm_item_damage_fx(result)
 	# 简短使用动画：沿真实世界 Y 轴上抬 6 个美术像素。
 	if us != null:
 		var start: Vector3 = us.global_position
@@ -1177,9 +1251,6 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 		tween.tween_property(us, "global_position", start + Vector3(0, 6.0 / 32.0, 0), 0.12)
 		tween.tween_property(us, "global_position", start, 0.12)
 		await tween.finished
-	# 结算（execute+死亡标志+hasActed）走共享 resolver。
-	var outcome := BattleActionResolver.resolve_item(user, targets, item_entry)
-	var result: Dictionary = outcome[&"item"]
 	# HP 变化飘字（治疗绿 / 伤害红）
 	for h in result.get(&"hp_deltas", []):
 		var t: Dictionary = h[&"unit"]
@@ -1208,6 +1279,8 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 	# 结算（execute+死亡标志+hasActed）走共享 resolver；投掷致死在演出后收尾。
 	for victim in outcome[&"deaths"]:
 		_on_unit_death(victim)
+	# 物品演出结束：按当前 HP 恢复常驻血条。
+	_set_unit_bars_visible(true)
 	mode = Mode.IDLE
 	_check_battle_end()
 	return true
@@ -1630,6 +1703,8 @@ func _alive_count(faction: StringName) -> int:
 # 切换场景入口
 # ============================================================
 func _exit_tree() -> void:
+	# 防御：退出战斗（含 B1 就地模式）时恢复全部常驻血条。
+	_set_unit_bars_visible(true)
 	_restore_result_visuals()
 	_flush_save()  # 防半途退出：用最近一次完整快照补落盘（幂等）
 	if _presentation_audio != null:
