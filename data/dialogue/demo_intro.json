@@ -1,0 +1,32 @@
+{
+  "title": "渡口夜话 · 对话演示",
+  "speakers": {
+    "hero": {
+      "name": "罗恩",
+      "title": "见习骑士",
+      "side": "left",
+      "portrait": "res://assets/ui/class-knight.png",
+      "color": "#66DBD8"
+    },
+    "elf": {
+      "name": "莉娅",
+      "title": "精灵法师",
+      "side": "right",
+      "portrait": "res://assets/ui/class-mage.png",
+      "color": "#FFB866"
+    }
+  },
+  "lines": [
+    { "speaker": "hero", "text": "风把烟灰吹进河里了……三天了，前线的火还没熄。" },
+    { "speaker": "elf", "text": "人类打仗，总是先烧掉别人的家，再把那叫做战略。" },
+    { "speaker": "hero", "text": "我不管什么战略。我爹的账本、我娘的纺车、东巷磨坊的风车叶——全在第一次攻城那天变成了灰。我站在这里，只是想多守住几个人，再多守住几天。哪怕一天也好。" },
+    { "speaker": "elf", "text": "……你胸前那枚家族纹章，上面的鸢尾花还在吗？" },
+    { "speaker": "hero", "text": "在。房子烧得掉，人记着的东西烧不掉。" },
+    { "speaker": "elf", "text": "那就别学他们，把仇恨当粮食吃。你走你的骑士道——我跟着你，直到我的族人都能回家。" },
+    { "speaker": "hero", "text": "你族的预言说，额水晶会在战火里蒙尘。你怕吗？" },
+    { "speaker": "elf", "text": "怕。可怕和逃，从来是两回事。" },
+    { "speaker": "hero", "text": "好。那今晚轮流守夜——你上半夜，我下半夜。" },
+    { "speaker": "elf", "text": "成交。还有，罗恩——谢谢你那天回头。" },
+    { "speaker": "hero", "text": "……去睡吧。天一亮，我们就出发。" }
+  ]
+}
