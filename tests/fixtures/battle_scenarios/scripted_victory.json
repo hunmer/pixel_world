@@ -1,7 +1,7 @@
 {
 	"version": 1,
 	"id": "scripted_victory",
-	"description": "内联 3x3 战场：魔导师保持射程风筝狂战士，3 轮火球定胜负；演示 inline 战场声明与 HP 覆盖。",
+	"description": "内联 3x3 战场：魔导师站桩用 fire 武器（射程 1-2）远程普攻风筝狂战士，脚本 4 次攻击定胜负；演示 inline 战场声明与 HP 覆盖。",
 	"inline": {
 		"rows": [
 			"...",

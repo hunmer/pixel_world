@@ -11,20 +11,17 @@
 
 ## 快速上手
 
-```bash
+以下命令均为 **PowerShell**（在本仓库根目录运行；每条一行，可直接复制执行）：
+
+```powershell
 # 跑内置示例（Godot 4.7 console 版；-- 之后是 CLI 参数）
-& "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path . \
-    --script res://tools/battle_cli.gd -- \
-    --scenario res://tests/fixtures/battle_scenarios/quick_duel.json
+& "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path . --script res://tools/battle_cli.gd -- --scenario res://tests/fixtures/battle_scenarios/quick_duel.json
 
 # 指定 seed 与输出目录
-& godot --headless --path . --script res://tools/battle_cli.gd -- \
-    --scenario res://tests/fixtures/battle_scenarios/deterministic_replay.json \
-    --seed 42 --out E:/reports/dr_42
+& "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path . --script res://tools/battle_cli.gd -- --scenario res://tests/fixtures/battle_scenarios/deterministic_replay.json --seed 42 --out E:/reports/dr_42
 
-# 内联场景（不经文件）
-& godot --headless --path . --script res://tools/battle_cli.gd -- \
-    --scenario-json '{"version":1,"id":"tiny","battlefield":"res://data/battlefields/arena_1v1.json","seed":1,"factions":{"player":{"mode":"ai"},"enemy":{"mode":"ai"}}}'
+# 内联场景（不经文件；JSON 用单引号整体包裹，内部双引号原样保留）
+& "D:/Godot/Godot_v4.7.2-stable_win64_console.exe" --headless --path . --script res://tools/battle_cli.gd -- --scenario-json '{"version":1,"id":"tiny","battlefield":"res://data/battlefields/arena_1v1.json","seed":1,"factions":{"player":{"mode":"ai"},"enemy":{"mode":"ai"}}}'
 ```
 
 退出码（脚本/CI 判定依据）：
@@ -78,6 +75,7 @@
 - `move` 可省略（原地行动）；终结构动作也可省略（纯移动 = 移动后等待）。
 - 校验失败（单位不存在/已死/已行动/距离超出/路径不可达/技能未拥有或冷却/物品耗尽等）→ `exit 2`，错误信息带 `step=N` 定位，**无静默 AI 回退**。
 - 队列耗尽：`script_exhausted=wait`（缺省）时剩余单位按等待处理；`fail` 时报 exit 2。
+- 战斗提前结束（分胜负 / 僵持保护 / `stop_after_steps`）时，**尚未消费的脚本条目直接作废**——不执行、不报错、不计步。
 - `end_turn` 提前结束相位；未行动单位的标志由下一相位开始复位（与游戏一致）。
 
 ### AI（ai 阵营）
@@ -105,7 +103,7 @@
 
 ## 战报
 
-输出目录：`--out <dir>`，缺省 `user://battle_reports/<scenario_id>/run_<seed>/`（独立快照，不覆盖）。
+输出目录：`--out <dir>`，缺省 `user://battle_reports/<scenario_id>/run_<seed>/`。不同 seed（或不同 scenario_id）写入不同子目录、互不干扰；**同 scenario_id + 同 seed（或 `--out` 指向同一目录）重复运行会覆盖重写该目录下的三个文件，旧报告不保留**——需要留档请用不同 `--out`。
 
 - **events.jsonl** —— 每行一个事件的 JSON。公共字段：`seq`（全局序号）、`turn`、`phase`、`actor`、`source`（`script` / `ai` / `runner` / `resolver`）。事件类型：`battle_start`（seed + 初始地图 + 全部单位快照）、`phase_start`、`move`（from/to/path）、`attack`（命中/未命中/必杀/反击/追击/双方伤害与血量）、`skill`（MP 扣减/冷却/逐目标命中）、`item`（剩余次数/HP·MP 变化）、`death`、`exp`、`level_up`（升到几级 + `gains` 各属性成长明细）、`wait`、`turn_end`、`battle_end`（winner）、`stop`（停止原因）。
 - **result.json** —— 版本 / seed / 来源 / outcome（winner、battle_over、stop_reason、turns、steps）/ limits / 初始与最终全体单位快照（含死亡单位）/ 逐条断言评估（passed + 实际值 + 人读 summary）。
@@ -114,7 +112,8 @@
 ## 确定性契约
 
 - 同 `seed` + 同场景 + 同 Godot 版本 ⇒ `events.jsonl` **逐字节一致**（`deterministic_replay` fixture 即此回归锚点；契约测试双跑比对）。
-- 随机流唯一来源是场景 seed（runner 开局 `seed()`）；战场构建（固定职业/武器/站位）不消耗随机数；单位 ID、行动顺序、AI 评分全部确定；**文件路径、显示名、时间戳不参与任何随机决策**（遵守项目确定性契约）。
+- **随机源边界（如实说明）**：runner 开局调用一次 Godot **进程级全局 RNG** 的 `seed(scenario_seed)`（`battle_runner.gd`），命中 / 必杀 / 技能 / 升级成长共用这一条全局 `randf` 流——**不是可注入的独立 RNG 实例**（规划阶段曾拟独立 RNG，实际实现选择了全局流）。这之所以安全，是因为 CLI 每次运行都是独立的短命 headless 进程，runner 是该进程内唯一的随机消费者（战场构建固定职业 / 武器 / 站位，不消耗随机数）。因此「同 seed 复现」的承诺限定于**单次运行单 runner** 的用法；若未来要在同一进程内跑多个 runner（或与其他随机逻辑共存），必须改为独立 RNG。可复现性还限定同一 Godot 引擎版本（`randf` / `randi` 实现属引擎内部，跨版本不承诺）。
+- 单位 ID、行动顺序、AI 评分全部确定；**文件路径、显示名、时间戳不参与任何随机决策**（遵守项目确定性契约）。
 
 ## 实现边界（改动前必读）
 

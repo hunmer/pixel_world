@@ -29,6 +29,7 @@ func _run() -> void:
 	_test_runner_script_exhausted_fail()
 	_test_runner_limits_exit3()
 	_test_runner_skill_and_cooldown_tick()
+	_test_runner_buff_tick_expire()
 	_test_runner_kill_exp_levelup()
 	_test_runner_item_use_and_illegal()
 	_test_runner_illegal_no_side_effects()
@@ -346,6 +347,67 @@ func _test_runner_skill_and_cooldown_tick() -> void:
 		var second: Dictionary = skill_events[1]
 		_expect(int(second["turn"]) == 2, "第 2 次 smite 发生在第 2 轮（跨回合）")
 		_expect(int(second["mp_after"]) == 4, "mp_after==4（12-4-4，两次都扣 MP）")
+
+
+## buff 跨阶段 tick 与到期移除（与游戏共享 TurnManager 行为一致）。
+## tick 节奏：TurnManager 每次 phase 启动（player 与 enemy 各一次）调
+## SkillSystem.tick_buffs（全阵营），因此 3t buff 实际寿命 = 施放后 3 个
+## phase：T1 敌相(3→2)、T2 玩家相(2→1)、T2 敌相(1→0 移除)。本契约是该
+## 语义的回归锚点——若 tick 时机/到期行为偏离共享 TurnManager 会在此挂掉。
+func _test_runner_buff_tick_expire() -> void:
+	print("[runner buff tick + expire]")
+	# 场景 A：powerSurge(self, str+4, 3t, mp4, cd3) 施放后立即停 → buff 未经历任何 tick
+	var base := {
+		"version": 1, "id": "buff_tick", "seed": 13,
+		"inline": {
+			"rows": ["...", "...", "..."],
+			"playerUnits": [{"class": "swordsman", "x": 0, "y": 1}],
+			"enemyUnits": [{"class": "berserker", "x": 1, "y": 1}],
+		},
+		"overrides": {"u_p_0": {"hp": 999}, "u_e_0": {"hp": 999}},
+		"factions": {
+			"player": {"mode": "script", "script": [
+				{"unit": "u_p_0", "skill": "powerSurge", "targets": ["u_p_0"]},
+			]},
+			"enemy": {"mode": "script", "script": []},
+		},
+	}
+	var res_a := ScenarioLoader.load_from_dict(base.duplicate(true))
+	_expect(bool(res_a["ok"]), "场景 A 加载成功")
+	if not bool(res_a["ok"]):
+		_expect(false, "场景 A 错误: %s" % String(res_a.get("error", "")))
+		return
+	(res_a["scenario"] as Dictionary)["stop_after_steps"] = 1
+	var run_a := Runner.run(res_a["scenario"])
+	_expect(int(run_a["exit_code"]) == 0, "场景 A：施放后 1 步即停（exit 0）")
+	var skill_a: Dictionary = {}
+	for e in (run_a["events"] as Array):
+		if String((e as Dictionary).get("type", "")) == "skill":
+			skill_a = e
+			break
+	_expect(not skill_a.is_empty(), "场景 A：存在 skill 事件")
+	if not skill_a.is_empty():
+		_expect(int(skill_a.get("buffed", 0)) == 1, "powerSurge buffed==1")
+		_expect(int(skill_a.get("mp_after", -1)) == 8, "mp_after==8（12-4）")
+		_expect(int(skill_a.get("cooldown", -1)) == 3, "powerSurge(cd3) 使用后冷却==3")
+	var unit_a: Dictionary = _find_unit((run_a["result"] as Dictionary).get("final_units", []), "u_p_0")
+	var buffs_a: Array = unit_a.get("buffs", []) if not unit_a.is_empty() else []
+	_expect(buffs_a.size() == 1, "场景 A 终局 buffs 恰好 1 条（未 tick）")
+	if buffs_a.size() == 1:
+		var b: Dictionary = buffs_a[0]
+		_expect(String(b.get("stat", "")) == "str" and int(b.get("value", 0)) == 4 and int(b.get("turns", -1)) == 3, "buff 内容 str+4 剩 3 轮（实际 %s）" % JSON.stringify(b))
+
+	# 场景 B：同开局但跑到 max_turns=2 → buff 经 T1敌/T2玩家/T2敌 三次 phase tick 后到期移除
+	var cfg_b := base.duplicate(true)
+	cfg_b["id"] = "buff_expire"
+	cfg_b["limits"] = {"max_turns": 2}
+	var res_b := ScenarioLoader.load_from_dict(cfg_b)
+	_expect(bool(res_b["ok"]), "场景 B 加载成功")
+	var run_b := Runner.run(res_b["scenario"])
+	_expect(int(run_b["exit_code"]) == 3, "场景 B：max_turns=2 僵持保护（exit 3）")
+	var unit_b: Dictionary = _find_unit((run_b["result"] as Dictionary).get("final_units", []), "u_p_0")
+	var buffs_b: Array = unit_b.get("buffs", []) if not unit_b.is_empty() else []
+	_expect(buffs_b.is_empty(), "场景 B 终局 buffs 为空（3 次 phase tick 后到期移除；若 tick 失效会残留 str+4）")
 
 
 ## 普攻击杀 → 经验 → 升级事件链。
