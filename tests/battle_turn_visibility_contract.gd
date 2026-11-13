@@ -61,7 +61,10 @@ func _run() -> void:
 	root.get_node("SceneArgs").set("battle_args", {"chapter": chapter, "hosting": false})
 	var battle = load("res://scenes/Battle.tscn").instantiate()
 	root.add_child(battle)
-	await create_timer(0.4).timeout
+	# 开场链（转场/对峙演出）结束后才进入首个玩家回合，固定等待会读到"遭遇战"临时文案。
+	await battle.battle_ready
+	await process_frame
+	await process_frame
 	_expect_living_visible(battle, "初始")
 	_expect(battle.battle_ui.phase_label.text == "第 1 轮 · 我方行动", "初始轮数文案错误")
 	var player_status: Label = battle.battle_ui._turn_status_labels[&"player"]

@@ -54,7 +54,10 @@ func _run_b2() -> void:
 	root.get_node("SceneArgs").set("battle_args", {"chapter": chapter, "hosting": false})
 	var battle = load("res://scenes/Battle.tscn").instantiate()
 	root.add_child(battle)
-	await create_timer(0.4).timeout
+	# 开场链（转场/对峙演出）结束后才进入首个玩家回合，固定等待会读到"遭遇战"临时文案。
+	await battle.battle_ready
+	await process_frame
+	await process_frame
 	_expect(battle.battle_ui.phase_label.text == "第 1 轮 · 我方行动", "B2 顶部未显示中文当前轮数")
 	var player_status: Label = battle.battle_ui._turn_status_labels[&"player"]
 	var enemy_status: Label = battle.battle_ui._turn_status_labels[&"enemy"]
@@ -133,8 +136,11 @@ func _run_b1() -> void:
 		world._terrain_sampler, world._player_cell, 4, 42
 	)
 	world._enter_battle_inline(chapter)
-	await create_timer(0.4).timeout
 	var battle = world._battle_system
+	# B1 同样有开场链：等 BattleReady 再断言顶部轮数，固定等待会读到"遭遇战"。
+	await battle.battle_ready
+	await process_frame
+	await process_frame
 	var player: Dictionary = chapter.playerUnits[0]
 	_expect(battle.battle_ui.phase_label.text == "第 1 轮 · 我方行动", "B1 顶部未显示中文当前轮数")
 	var player_status: Label = battle.battle_ui._turn_status_labels[&"player"]
