@@ -67,6 +67,8 @@ func _run(scenario: Dictionary) -> Dictionary:
 	all_units.append_array(_chapter["playerUnits"])
 	all_units.append_array(_chapter["enemyUnits"])
 	_turn = TurnManager.new(all_units)
+	# 胜利条件（chapter 可选键；缺省 rout = 旧歼灭制）
+	_turn.victory = _chapter.get("victory", { &"type": &"rout" })
 	# 5) 初始快照（overrides 之后、任何行动之前）
 	_initial_units = _units_snapshot()
 	_emit({
@@ -104,6 +106,11 @@ func _run(scenario: Dictionary) -> Dictionary:
 			"phase": phase,
 			"turn": int(_turn.turn_number),
 		})
+		if phase == &"enemy":
+			# 完整回合结束：defend_turns / seize 的判定点（rout/歼灭在步内随时判）
+			_check_battle_end(true)
+			if _battle_over or _illegal != "":
+				break
 		_turn.end_turn()
 	# 7) 收尾事件
 	if _illegal != "":
@@ -482,13 +489,30 @@ func _steps_exceeded() -> bool:
 	return false
 
 
-func _check_battle_end() -> void:
+func _check_battle_end(p_end_of_round: bool = false) -> void:
 	if _battle_over:
 		return
-	var v := _turn.check_victory(_chapter["enemyUnits"])
+	var ctx := {}
+	if p_end_of_round:
+		ctx["end_of_round"] = true
+		ctx["turns_survived"] = int(_turn.turn_number)
+		ctx["seize_held"] = _seize_cell_held()
+	var v := _turn.check_victory(_chapter["enemyUnits"], ctx)
 	if v == &"win" or v == &"lose":
 		_battle_over = true
 		_winner = &"player" if v == &"win" else &"enemy"
+
+
+## seize 条件：目标格当前是否有存活玩家单位。
+func _seize_cell_held() -> bool:
+	var v: Dictionary = _turn.victory
+	if String(v.get(&"type", &"rout")) != "seize":
+		return false
+	var cell: Vector2i = v.get(&"cell", Vector2i(-1, -1))
+	for u in _grid.units.values():
+		if u[&"faction"] == &"player" and not bool(u[&"isDead"]) and (u[&"position"] as Vector2i) == cell:
+			return true
+	return false
 
 
 func _all_acted(faction: StringName) -> bool:

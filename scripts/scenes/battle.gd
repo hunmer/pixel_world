@@ -117,6 +117,7 @@ func _ready() -> void:
 		if not u.isDead:
 			grid.place_unit(u, u.position.x, u.position.y)
 	turn = TurnManager.new(chapter.playerUnits + chapter.enemyUnits)
+	turn.victory = chapter.get("victory", { &"type": &"rout" })
 	add_child(turn)
 	# 1b. 回合编排器（敌方 AI + 玩家方托管）
 	turn_director = TurnDirector.new()
@@ -381,6 +382,8 @@ func _inject_turn_director_callables() -> void:
 	# 普攻统一在 ActionAnim 完成后再刷新死亡/经验；敌方与托管也走同一入口。
 	turn_director.on_resolve_combat_async = _resolve_combat_async
 	turn_director.on_check_battle_end = _check_battle_end
+	# 完整回合结束（敌方相位末尾）走带 end_of_round 语境的判定：defend_turns/seize 生效点
+	turn_director.on_round_end_check = _check_battle_end.bind(true)
 	turn_director.on_clear_range_highlight = _clear_range_highlight
 	turn_director.on_clear_selection = _clear_selection
 	turn_director.on_set_mode = _set_mode_from_director
@@ -1635,11 +1638,17 @@ func _close_pref_panel() -> void:
 # ============================================================
 # 胜负
 # ============================================================
-func _check_battle_end() -> void:
+func _check_battle_end(p_end_of_round: bool = false) -> void:
 	if _battle_ended:
 		return  # 已结束，避免重复结算演出
 	var enemies: Array = chapter.enemyUnits
-	var result := turn.check_victory(enemies)
+	var ctx := {}
+	if p_end_of_round:
+		# 完整回合结束：defend_turns / seize 在此判定（rout 随时判定，兼容旧调用）
+		ctx["end_of_round"] = true
+		ctx["turns_survived"] = turn.turn_number
+		ctx["seize_held"] = _seize_cell_held()
+	var result := turn.check_victory(enemies, ctx)
 	if result != &"win" and result != &"lose":
 		return
 	if result == &"win":
@@ -1653,6 +1662,18 @@ func _check_battle_end() -> void:
 	_restore_result_visuals()
 	_commit_snapshot(result)  # 终局记录先行落盘：结算演出中断也不丢胜负
 	_present_result(result)
+
+
+## seize 条件：目标格当前是否有存活玩家单位（回合结束时由 _check_battle_end 查询）。
+func _seize_cell_held() -> bool:
+	var v: Dictionary = turn.victory
+	if String(v.get(&"type", &"rout")) != "seize":
+		return false
+	var cell: Vector2i = v.get(&"cell", Vector2i(-1, -1))
+	for u in grid.units.values():
+		if u.faction == &"player" and not u.isDead and u.position == cell:
+			return true
+	return false
 
 
 ## 结算演出（_check_battle_end 与恢复局共用）。

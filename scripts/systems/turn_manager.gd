@@ -12,6 +12,12 @@ var phase: StringName = &"player"
 var turn_number: int = 1
 var units: Array = [] # [UnitData dict, ...]
 
+## 胜利条件（由 chapter 注入；缺省 = 歼灭制 rout，兼容旧存档/旧战场）：
+##   {&"type": &"rout"}                                敌全灭=胜（=旧行为）
+##   {&"type": &"defend_turns", &"turns": N}           完整存活 N 回合=胜
+##   {&"type": &"seize", &"cell": Vector2i(x, y)}      回合结束占领目标格=胜
+var victory: Dictionary = { &"type": &"rout" }
+
 
 func _init(p_units: Array = []) -> void:
 	units = p_units
@@ -80,8 +86,13 @@ func all_enemy_acted() -> bool:
 	return true
 
 
-## 胜负判定：win / lose / 空(null)
-func check_victory(enemies: Array) -> StringName:
+## 胜负判定：win / lose / 空(null)。
+## 歼灭兜底对三种条件一致：敌全灭=win / 我方全灭=lose。
+## p_ctx 可选注入（保持确定性、可单测，不引全局）：
+##   "end_of_round": bool     是否在完整回合结束时调用（defend_turns/seize 仅在此判定）
+##   "turns_survived": int    已完整度过的回合数（defend_turns 用；缺省用 turn_number）
+##   "seize_held": bool       目标格当前是否有存活玩家单位（seize 用）
+func check_victory(enemies: Array, p_ctx: Dictionary = {}) -> StringName:
 	var alive_enemies := false
 	for e in enemies:
 		if not e[&"isDead"]:
@@ -96,4 +107,14 @@ func check_victory(enemies: Array) -> StringName:
 			break
 	if not alive_players:
 		return &"lose"
+	if not bool(p_ctx.get("end_of_round", false)):
+		return &"" # null 语义：回合中只判歼灭
+	var vtype := String(victory.get(&"type", &"rout"))
+	if vtype == "defend_turns":
+		var survived := int(p_ctx.get("turns_survived", turn_number))
+		if survived >= int(victory.get(&"turns", 1)):
+			return &"win"
+	elif vtype == "seize":
+		if bool(p_ctx.get("seize_held", false)):
+			return &"win"
 	return &"" # null 语义

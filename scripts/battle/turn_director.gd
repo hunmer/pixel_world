@@ -50,6 +50,9 @@ var on_resolve_combat_sync: Callable
 ## 新演出路径由场景集成者注入；为空时继续使用旧 sync 回调与固定等待。
 var on_resolve_combat_async: Callable
 var on_check_battle_end: Callable
+## 完整回合结束（敌方相位末尾）时的胜负判定（battle.gd 绑定 end_of_round=true）：
+## defend_turns/seize 条件的生效点；为空时退回 on_check_battle_end。
+var on_round_end_check: Callable
 var on_clear_range_highlight: Callable
 var on_clear_selection: Callable
 var on_set_mode: Callable
@@ -286,7 +289,10 @@ func start_enemy_phase() -> void:
 		if on_action_committed.is_valid():
 			on_action_committed.call()
 	await get_tree().create_timer(0.4).timeout
-	on_check_battle_end.call()
+	if on_round_end_check.is_valid():
+		on_round_end_check.call()
+	else:
+		on_check_battle_end.call()
 	if turn.phase == &"enemy":
 		turn.end_turn()
 

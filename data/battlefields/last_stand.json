@@ -1,0 +1,22 @@
+{
+	"id": "last_stand",
+	"name": "桥头守卫战",
+	"description": "defend_turns 胜利条件演示：玩家 2 人不必歼敌，完整存活 2 回合即胜。可开局 hosting 自动托管体验。",
+	"hosting": true,
+	"victory": { "type": "defend_turns", "turns": 2 },
+	"rows": [
+		".......",
+		"..f~f..",
+		"...~...",
+		"..f~f..",
+		"......."
+	],
+	"playerUnits": [
+		{ "class": "swordsman", "name": "罗兰", "level": 3, "x": 2, "y": 2 },
+		{ "class": "swordsman", "name": "艾伦", "level": 2, "x": 4, "y": 2 }
+	],
+	"enemyUnits": [
+		{ "class": "berserker", "name": "血斧", "level": 2, "x": 0, "y": 0 },
+		{ "class": "berserker", "name": "碎骨", "level": 2, "x": 6, "y": 4 }
+	]
+}

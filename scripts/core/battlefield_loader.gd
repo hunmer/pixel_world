@@ -20,7 +20,10 @@
 ##       ["water", "plain"]
 ##     ],
 ##     "playerUnits": [ { "class": "swordsman", "name": "罗兰", "level": 3, "x": 1, "y": 2 } ],
-##     "enemyUnits":  [ { "class": "berserker", "level": 2, "x": 6, "y": 2 } ]
+##     "enemyUnits":  [ { "class": "berserker", "level": 2, "x": 6, "y": 2 } ],
+##     "victory": { "type": "rout" }      # 可选胜利条件：
+##                                        #   rout（默认，=敌全灭）| {"type":"defend_turns","turns":N}
+##                                        #   | {"type":"seize","cell":[x,y]}
 ##   }
 ##
 ## 校验：地形名必须是 TerrainData 已注册类型；行宽一致；单位 class 必须存在；
@@ -184,6 +187,10 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 		if not bool(layout_result.get("ok", false)):
 			return {"ok": false, "error": String(layout_result.get("error", "block_layout 非法"))}
 		block_layout = layout_result["layout"]
+	# 5b) 胜利条件（可选 "victory"）：严格校验，规范化为 turn_manager.victory 同构 dict。
+	var victory := _parse_victory(d, width, height)
+	if not bool(victory.get("ok", false)):
+		return { "ok": false, "error": victory.get("error", "") }
 	# 6) 组装 chapter（无 blockTitles → battle.gd 走 terrain fallback 渲染）
 	var chapter := {
 		"id": StringName(String(info["id"])),
@@ -201,10 +208,51 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 		chapter["tile_overrides"] = tile_overrides
 	if not user_assets.is_empty():
 		chapter["user_assets"] = user_assets
+	if not (victory["victory"] as Dictionary).is_empty():
+		chapter["victory"] = victory["victory"]
 	return { "ok": true, "chapter": chapter, "info": info }
 
 
 ## ---- 内部实现 ----------------------------------------------------------
+
+
+## 胜利条件解析：{"type":"rout"} | {"type":"defend_turns","turns":N} | {"type":"seize","cell":[x,y]}。
+## 缺省/空 → rout（不写入 chapter，保持旧行为）。返回 { ok, victory } 或 { ok:false, error }。
+static func _parse_victory(d: Dictionary, width: int, height: int) -> Dictionary:
+	if not d.has("victory"):
+		return { "ok": true, "victory": {} }
+	var raw = d["victory"]
+	if not (raw is Dictionary):
+		return { "ok": false, "error": "\"victory\" 必须是对象" }
+	var v: Dictionary = raw
+	var vtype := String(v.get("type", "rout"))
+	if vtype == "rout":
+		return { "ok": true, "victory": { &"type": &"rout" } }
+	if vtype == "defend_turns":
+		var turns := int(v.get("turns", 0))
+		if turns < 1:
+			return { "ok": false, "error": "victory.defend_turns 的 \"turns\" 必须是 ≥1 的整数" }
+		return { "ok": true, "victory": { &"type": &"defend_turns", &"turns": turns } }
+	if vtype == "seize":
+		var cell = v.get("cell", [])
+		if not (cell is Array) or (cell as Array).size() != 2 \
+				or not _is_json_int((cell as Array)[0]) or not _is_json_int((cell as Array)[1]):
+			return { "ok": false, "error": "victory.seize 的 \"cell\" 必须是 [x, y] 整数对" }
+		var x := int((cell as Array)[0])
+		var y := int((cell as Array)[1])
+		if x < 0 or y < 0 or x >= width or y >= height:
+			return { "ok": false, "error": "victory.seize 的 cell (%d,%d) 越界（地图 %dx%d）" % [x, y, width, height] }
+		return { "ok": true, "victory": { &"type": &"seize", &"cell": Vector2i(x, y) } }
+	return { "ok": false, "error": "未知 victory.type \"%s\"（可用: rout/defend_turns/seize）" % vtype }
+
+
+## JSON 数字（int/float，float 需整值）是否可当整数坐标用。
+static func _is_json_int(v) -> bool:
+	if v is int:
+		return true
+	if v is float:
+		return is_finite(v) and float(int(v)) == v
+	return false
 
 
 ## 植物层解析（宽松）：
