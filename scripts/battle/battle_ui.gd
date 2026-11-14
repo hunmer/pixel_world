@@ -52,6 +52,7 @@ extends CanvasLayer
 const ResultPresentationScript = preload("res://scripts/battle/result_presentation.gd")
 const BattleSettingsTabScript = preload("res://scripts/battle/battle_settings_tab.gd")
 # 用预加载脚本作类型，避免干净 headless 尚未生成 global class cache 时无法解析。
+const TradeSystemScript = preload("res://scripts/systems/trade_system.gd")
 
 ## 开战/结算演出事件；场景集成者连接这些信号驱动音效与单位视觉钩子。
 signal nameplate_shown(unit: Dictionary, index: int)
@@ -686,6 +687,8 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 	# 可用技能 / 可用物品（uses>0 非装备）
 	var usable_skills := SkillData.usable_skills(u)
 	var usable_items := ItemData.usable_items(u)
+	# 相邻 1 格带物品友军（C1 交换；自由动作）
+	var trade_targets: Array = TradeSystemScript.adjacent_trade_targets(u, grid)
 	# 面板高度按按钮数动态算
 	var btn_count := 1   # 等待
 	if not targets.is_empty():
@@ -693,6 +696,8 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 	if not usable_skills.is_empty():
 		btn_count += 1
 	if not usable_items.is_empty():
+		btn_count += 1
+	if not trade_targets.is_empty():
 		btn_count += 1
 	var panel := Panel.new()
 	panel.size = Vector2(120, 40 + btn_count * 28)
@@ -740,6 +745,16 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 			_open_item_picker(u)
 		)
 		vbox.add_child(bi)
+	if not trade_targets.is_empty():
+		var bt := UIFactoryScript.button()
+		bt.text = "交换"
+		bt.tooltip_text = "与相邻友军转移物品（自由动作，不消耗行动）"
+		bt.pressed.connect(func():
+			close_menu()
+			on_clear_pending_move_undo.call()
+			_open_trade_picker(u, trade_targets)
+		)
+		vbox.add_child(bt)
 	var bwait := UIFactoryScript.button()
 	bwait.text = "等待"
 	bwait.pressed.connect(func():
@@ -942,6 +957,88 @@ func _open_item_target_picker(u: Dictionary, targets: Array, _item_id: StringNam
 			on_finish_player_action.call(u)
 		)
 		vbox.add_child(b)
+
+
+## 交换友军选择菜单（C1：仅相邻 1 格带物品友军）。选完进入物品选择。
+func _open_trade_picker(u: Dictionary, targets: Array) -> void:
+	if targets.is_empty():
+		return
+	if targets.size() == 1:
+		_open_trade_item_picker(u, targets[0])
+		return
+	var panel := Panel.new()
+	panel.size = Vector2(170, 30 + targets.size() * 28)
+	panel.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 85, get_viewport().get_visible_rect().size.y / 2 - panel.size.y / 2)
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
+	menu_container.add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
+	panel.add_child(vbox)
+	for t in targets:
+		var b := UIFactoryScript.button()
+		b.text = "⇄ " + String(t.name)
+		b.pressed.connect(func():
+			close_menu()
+			_open_trade_item_picker(u, t)
+		)
+		vbox.add_child(b)
+
+
+## 交换物品选择菜单：列出双方背包条目，点选即单向转移（自由动作，不置 hasActed）。
+## 转移完成后重开行动菜单，来回点两次即为交换。
+func _open_trade_item_picker(u: Dictionary, ally: Dictionary) -> void:
+	# 双方背包条目合并列出：owner 标记物品当前归属，转移方向 = 归属方 → 另一方
+	var entries: Array = []
+	for ie in u.get(&"items", []):
+		entries.append({ entry = ie, owner = u })
+	for ie in ally.get(&"items", []):
+		entries.append({ entry = ie, owner = ally })
+	if entries.is_empty():
+		_reopen_unit_menu(u)
+		return
+	var panel := Panel.new()
+	panel.size = Vector2(280, 70 + entries.size() * 36)
+	var vp := get_viewport().get_visible_rect().size
+	panel.position = Vector2(vp.x / 2 - 140, vp.y / 2 - panel.size.y / 2)
+	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
+	menu_container.add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
+	panel.add_child(vbox)
+	var title := Label.new()
+	title.text = "转移给对方（%s ⇄ %s）" % [String(u.name), String(ally.name)]
+	title.add_theme_font_size_override("font_size", 12)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(title)
+	for rec in entries:
+		var entry: Dictionary = rec[&"entry"]
+		var owner: Dictionary = rec[&"owner"]
+		var receiver: Dictionary = ally if owner == u else u
+		var b := UIFactoryScript.button()
+		b.text = "%s：%s ×%d" % [String(owner.name), ItemData.item_name(entry.get(&"id", &"")), int(entry.get(&"uses", 0))]
+		b.custom_minimum_size = Vector2(0, 32)
+		b.pressed.connect(func():
+			close_menu()
+			TradeSystemScript.execute_trade(owner, receiver, entry)
+			update_unit_sprite(u)
+			update_unit_sprite(ally)
+			_reopen_unit_menu(u)
+		)
+		vbox.add_child(b)
+	var bclose := UIFactoryScript.button()
+	bclose.text = "返回"
+	bclose.pressed.connect(func():
+		close_menu()
+		_reopen_unit_menu(u)
+	)
+	vbox.add_child(bclose)
+
+
+## 自由动作收尾：不置 hasActed，回到行动菜单继续选择（攻击/技能/物品/等待）。
+func _reopen_unit_menu(u: Dictionary) -> void:
+	open_unit_menu(u, u.position, u.position)
 
 
 func _open_attack_target_picker(u: Dictionary, targets: Array) -> void:
