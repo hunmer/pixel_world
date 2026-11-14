@@ -63,14 +63,14 @@ node --test tools/build_blocks_manifest.test.mjs                                
 | 按需下载 | `request_asset_image(id)` → `asset_ready` / `asset_failed`（sha256 校验） |
 | 丢图（库有描述符、blob 缺失） | adapter `resolve()` 返回程序占位（missing=true，淡红提示），引用不丢 |
 | 在线素材预览 | 面板懒预览对「image 为 http 且本地无 blob」的可见素材**自动加载图片**（service 内部去重/限流），加载后缓存进 blob 目录；`asset_ready` 后清 adapter 占位缓存换真图；`asset_failed` 状态栏报真实错误 |
-| 方块页素材方块 | 方块 Tab 的「素材方块」网格**只列已下载到本地**（blob 就绪）的地形素材——「一键清空已下载」后网格即空，随素材 Tab 浏览自动加载、下载完成经 `asset_ready` **0.3s 合批**重建逐个出现；空列表显示引导提示（`BlockAssetEmptyHint`）；网格一次性 `adapter.resolve_many(ids, false)` 批量出图（单次库加载、不灌 LRU）；点选后方块页画笔=ASSET 放置（tile_overrides 层），再点取消回选择工具；与素材 Tab 选中互斥 |
+| 方块页素材方块 | 方块 Tab 的「素材方块」网格**只列已保存（✓）**的地形素材——浏览在线列表会自动下载缓存，按缓存过滤等于整页全进来，所以以用户保存标记为准（本地导入默认已保存）：素材 Tab 选中后点「保存标记」即出现在方块页；未下载的已保存方块保持占位、网格重建时顺手触发下载，完成经 `asset_ready` **0.3s 合批**重建换真图；取消标记/一键清空后从网格消失；空列表显示引导提示（`BlockAssetEmptyHint`）；网格一次性 `adapter.resolve_many(ids, false)` 批量出图（单次库加载、不灌 LRU）；点选后方块页画笔=ASSET 放置（tile_overrides 层），再点取消回选择工具；与素材 Tab 选中互斥 |
 | 素材尺寸归一化 | `UserAssetVisualAdapter.bake_image` 对 terrain 整图按 footprint 归一化到与内建方块同宽（32px×footprint.w，等比最近邻缩放），`render.scale` 在归一化基础上再乘；植物不归一化；crop 模式按裁后尺寸归一化——解决 F 盘整图方块（~174px 宽）放置后比内建方块（32px 宽）大数倍的问题 |
 | 内容包围盒锚定 | pivot 的锚域是不透明内容包围盒（`_opaque_bounds` 扫描 alpha>0.04）而非整图底缘：素材 PNG 底部常带透明留白，整图锚会把块体顶高悬空；全不透明图退化为旧整图公式，行为兼容；与渲染层内建装饰 `_prop_content_bottom` 同思路 |
 | 编辑器画布光照 | 编辑器场景无 main.gd 的日光系统，而地形材质自 3D 日照提交（3189caf）起是逐像素着色——无灯时整块画布渲成黑色（与素材无关的潜伏 bug，2026-11-14 修复）：`EditorCanvas._ready` 挂 `SunlightSystem` 固定正午 `apply_time(0.5, 0.0)`（与 battle.gd B2 同款）；素材 billboard 材质本就 unshaded 不受影响 |
 | 烘焙缓存落盘 | crop/归一化/scale 的像素处理只做一次：`resolve`/`resolve_many` 走 `_load_baked_or_blob` 优先读 `<root>/baked/<id>.png`（零像素处理），缺失则读 blob 现场烘焙并 `save_png` 落盘；render 参数编辑后 `invalidate_baked(id)` 删烘焙图重烘；源 blob 永不被修改 |
 | 多选与保存标记 | 列表多选模式：普通点击=画笔主选，Ctrl+点击=加选/减选；「保存标记」对选中行**切换**用户保存标记（已标记→取消），经 `service.set_assets_saved` 持久化到库（manifest 重跑经 `_merge_net_descriptor` 全量保留旧字段不丢标记）；本地导入素材默认 saved=true；✓ 前缀=用户保存标记，与图片是否已缓存无关 |
 | 隐藏素材 | `remove_asset(id, keep_blob=true)`：库中移除、blob 保留；地图引用靠存档内 `user_assets` 快照 |
-| 一键清空已下载 | 素材面板「清空已下载…」按钮（带确认弹窗，`ClearCacheConfirmDialog`）→ `service.clear_online_cache()`：删除全部 **http 来源**素材的 blob 原图与 `baked/` 烘焙图（本地导入素材不动），库描述符保留、状态回 missing；面板视觉缓存全失效重建，之后浏览到会自动重新下载；用于重置/释放磁盘 |
+| 一键清空已下载 | 素材面板「清空已下载…」按钮（带确认弹窗，`ClearCacheConfirmDialog`）→ `service.clear_online_cache()`：删除全部 **http 来源**素材的 blob 原图、`baked/` 烘焙图与**保存标记 ✓**（本地导入素材与其标记不动），库描述符保留、状态回 missing；先落库标记、成功后才删文件（保存失败整体不动）；面板视觉缓存全失效重建，之后浏览到会自动重新下载；用于重置/释放磁盘 |
 | 编辑器 Esc | 素材弹窗先关（`AssetLibraryPanel.close_dialogs()`），不穿透退出编辑器 |
 | 素材列表分页 | 全库先过滤 + 按 id 稳定排序再切页，24 条/页只建本页行；翻页条含上一页/下一页、页码/总页数/匹配总数；过滤变更回第 1 页，导入/隐藏/清单同步后钳制页界；翻页与异步 `asset_ready` 均不触发全库请求、不重建列表 |
 | 存档 | `tile_overrides`（地块整图）与 `props[].asset_id`（植物）均带 `user_assets` 描述符快照，保存前权威预校验，tmp/bak 原子写 |
@@ -118,8 +118,8 @@ godot --headless --path . --script res://tests/user_asset_runtime_contract.gd   
 | T3 live 端到端 | `godot --headless --path . --script res://tests/user_asset_source_live_contract.gd` | 45 checks 全绿（默认 URL/清单/描述符/下载/视觉/缺图/离线/面板手动下载回归 S7/多选批量下载 S8） | 0 |
 | 后续迭代 | 同上 4 项编辑器契约（editor/pagination/ui） | editor 59（含方块页素材方块 S9）/ pagination 28 / ui EXIT=0 全绿 | 0 |
 | 自动加载+保存标记+尺寸归一化 | `godot --headless --path . --script res://tests/user_asset_source_live_contract.gd` / `user_asset_runtime_contract.gd` | live 46（S7 懒预览自动加载/S8 保存标记 toggle+持久化）/ runtime 68（含 S12 归一化 5 项）EXIT=0 全绿；editor 59 / pagination 28 / ui / render / save / catalog / map_editor 回归 EXIT=0 | 0 |
-| 一键清空已下载 | `godot --headless --path . --script res://tests/user_asset_source_live_contract.gd` / `user_asset_editor_contract.gd` | live 57（S9 9 项：清空删在线 blob+烘焙图/本地导入保留/描述符保留/状态回 missing）/ editor 62（S9 扩展：删缓存即从方块网格消失、写回恢复、回归）EXIT=0；ui / pagination 28 回归 EXIT=0 | 0 |
-| 方块网格只列已下载 | 同上 editor 契约 | editor 62 checks EXIT=0（新增 3 项过滤断言）；一键清空后方块 Tab 网格随缓存清空而空，随下载合批重建出现 | 0 |
+| 一键清空已下载 | `godot --headless --path . --script res://tests/user_asset_source_live_contract.gd` / `user_asset_editor_contract.gd` | live 61（S9 13 项：清空删在线 blob+烘焙图+保存标记/本地导入保留/描述符保留/状态回 missing）/ editor 63 EXIT=0；ui / pagination 28 回归 EXIT=0 | 0 |
+| 方块网格只列已保存 | 同上 editor 契约 | editor 63 checks EXIT=0（S9 改保存标记 toggle 断言：取消标记出网格/恢复标记回归）；一键清空/取消标记后方块 Tab 网格即空 | 0 |
 | 内容锚定+烘焙缓存+合批刷缩略图 | 同上 6 项契约（runtime/live/editor/pagination/ui/map_editor） | runtime 78（含 S14 烘焙落盘 4 项）/ live 46 / editor 59 / pagination 28 / ui / map_editor EXIT=0 全绿 | 0 |
 | 编辑器黑块修复（画布光照） | 窗口化 `godot --path . --script` 截图探针：载入 plains_skirmish 实证修复前地形全黑、修复后彩色；回归 4 契约 `map_editor_ui_contract.gd` / `user_asset_editor_contract.gd` / `user_asset_pagination_contract.gd` / `battlefield_render_contract.gd` | 截图对比验证（EditorSunlight 固定正午）；4 项 EXIT=0 | 0 |
 | T2 编辑器全链路 | `godot --headless --path . --script res://tests/user_asset_editor_contract.gd` | 59 checks（导入/放置/撤销重做/保存重开/四角度拾取/B2/缺图/方块页素材方块 S9） | 0 |

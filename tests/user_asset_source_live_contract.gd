@@ -198,10 +198,20 @@ func _run() -> void:
 	_expect(FileAccess.file_exists(online_blob), "S9 清空前在线 blob 存在")
 	_expect(FileAccess.file_exists(online_baked), "S9 清空前在线烘焙图存在")
 	_expect(local_blob != "" and FileAccess.file_exists(local_blob), "S9 清空前本地 blob 存在")
+	# 给在线素材打上保存标记，验证清空时一并清除（本地导入的标记保留）
+	var mark_res: Dictionary = svc.set_assets_saved(["volcano_99"], true)
+	_expect(bool(mark_res.get("ok", false)) and int(mark_res.get("changed", 0)) == 1,
+		"S9 标记 volcano_99 保存成功")
 	var clear_res: Dictionary = svc.clear_online_cache()
 	_expect(bool(clear_res.get("ok", false)), "S9 clear_online_cache ok")
 	_expect(int(clear_res.get("removed_blobs", 0)) >= 1,
 		"S9 removed_blobs>=1（实际 %d）" % int(clear_res.get("removed_blobs", 0)))
+	_expect(int(clear_res.get("cleared_marks", 0)) >= 1,
+		"S9 cleared_marks>=1（实际 %d）" % int(clear_res.get("cleared_marks", 0)))
+	_expect(not bool((svc.find_by_id("volcano_99") as Dictionary).get("saved", false)),
+		"S9 在线素材保存标记已清除")
+	_expect(bool((svc.find_by_id(local_id) as Dictionary).get("saved", false)),
+		"S9 本地导入保存标记保留")
 	_expect(not FileAccess.file_exists(online_blob), "S9 在线 blob 已删除")
 	_expect(not FileAccess.file_exists(online_baked), "S9 在线烘焙图已删除")
 	_expect(FileAccess.file_exists(local_blob), "S9 本地导入 blob 保留")

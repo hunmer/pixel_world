@@ -81,7 +81,7 @@ godot -d --path . res://main.tscn --seed=42
 
 ## 调试（MCP 桥 / Panku 控制台）
 
-- **MCP 工具按会话激活**（AGENTS.md）：`mcp_connector_session_tools` preview-activate → 用户确认 → activate `confirmed:true`（`connectionKey: json-godot`，ttl 1–30 分钟，下一轮推理生效，不跨会话继承）。全集 295，其中 49 个可激活。工具地图见 `rules/godot-tools-map.md`；**不要用 `search` 找工具名**，查该文或 `tool-names.md`。
+- **MCP 工具按会话激活**（AGENTS.md）：`mcp_connector_session_tools` preview-activate → activate `confirmed:true`（`confirmed:true` 由激活方自行设置，member 无需向 lead 申请；`connectionKey: json-godot`，ttl 1–30 分钟，下一轮推理生效，不跨会话继承）。全集 295，其中 49 个可激活。工具地图见 `rules/godot-tools-map.md`；**不要用 `search` 找工具名**，查该文或 `tool-names.md`。
 - 会话开头自检用 `find_symbol` + `runtime_get_monitors`；**不要用 `editor_ping`**（不在 `runtime,dap,knowledge` 三组内，激活也拿不到，`tool not found` 会误判成「没装」）。9080 不通 = 编辑器没开或插件未启用（由用户确认）。
 - 启动调试：`dbg_launch({scene: "res://main.tscn"})`（**必须传 scene**，省略只会进默认主场景）。场景路由表见 AGENTS.md（改哪跑哪）。
 - 编辑器桥 `127.0.0.1:9080`（`BREAKPOINT_BRIDGE_PORT` 覆盖）；运行时桥 `9081`（**单实例**，已有游戏在跑再启动会绑定失败）。

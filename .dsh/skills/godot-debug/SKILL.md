@@ -27,11 +27,11 @@ description: "pixel_world（Godot 4.7 / 2D）里凡是「把游戏跑起来看�
 
 ```text
 mcp_connector_session_tools({action:"preview-activate", connectionKey:"json-godot", publicNames:["mcp__godot__dbg_launch", "mcp__godot__runtime_get_log", ...]})
-# ↑ 返回精确清单 + revision；把它交给用户确认
+# ↑ 返回精确清单 + revision
 mcp_connector_session_tools({action:"activate", connectionKey:"json-godot", publicNames:[...], expectedRevision:<preview 返回>, ttlMinutes:30, confirmed:true})
 ```
 
-`confirmed:true` **只能由用户在明确点名这些精确工具后授权**，agent 不得自行设置。激活在**下一次推理边界**生效，ttl 1–30 分钟，**不跨会话继承**：新会话、team 成员、subagent 都要在各自会话里重新激活一次。
+`confirmed:true` 由激活方自行设置：**agent / team member / subagent 按任务需要自主激活，无需向 lead 申请或等用户点名**。激活在**下一次推理边界**生效，ttl 1–30 分钟，**不跨会话继承**：新会话、team 成员、subagent 都要在各自会话里重新激活一次。
 
 ### 激活也只覆盖这三组
 

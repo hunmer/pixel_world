@@ -214,34 +214,22 @@ func _run() -> void:
 	editor._apply_tool(Vector2i(1, 1))
 	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(1, 1))).is_empty(), "S3 橡皮应清除 tile_override")
 
-	# --- S9 方块页「素材方块」列表：本地就绪的地形素材出现在方块 Tab，点选后画笔放置 ---
+	# --- S9 方块页「素材方块」列表：已保存（✓）的地形素材出现在方块 Tab，点选后画笔放置 ---
 	editor._rebuild_block_asset_grid()
 	var block_grid: GridContainer = editor.find_child("BlockAssetGrid", true, false)
 	_expect(block_grid != null, "S9 方块页应有 BlockAssetGrid")
 	_expect(editor._block_asset_buttons.has("terra_a"), "S9 terra_a 应在素材方块列表")
 	_expect(not editor._block_asset_buttons.has("flora_b"), "S9 flora_b(plant) 不应出现在素材方块列表")
-	# 只列已下载（本地有缓存）的方块：删掉 blob 后应从列表消失（一键清空按钮同理），恢复后回归
-	var terra_sha: String = String((ed_svc.find_by_id("terra_a") as Dictionary).get("sha256", ""))
-	var terra_blob: String = ed_svc.blob_path_for_sha(terra_sha)
-	DirAccess.remove_absolute(terra_blob)
+	# 只列已保存（✓）的方块：取消保存标记应从列表消失（一键清空同理），恢复标记后回归
+	var unsave_res: Dictionary = ed_svc.set_assets_saved(["terra_a"], false)
+	_expect(bool(unsave_res.get("ok", false)), "S9 取消 terra_a 保存标记成功")
 	editor._rebuild_block_asset_grid()
-	_expect(not editor._block_asset_buttons.has("terra_a"), "S9 删掉本地缓存后 terra_a 应从素材方块列表消失")
-	var rf := FileAccess.open(TMP_ROOT + "/src/terra_a.png", FileAccess.READ)
-	var restored := false
-	if rf != null:
-		var rbytes := rf.get_buffer(rf.get_length())
-		rf.close()
-		# 直接按内容寻址路径写回 blob（等价于重新下载落盘；import_image_bytes 对同 sha 走
-		# 去重捷径不重写文件，故不用它恢复）
-		DirAccess.make_dir_recursive_absolute(terra_blob.get_base_dir())
-		var wf := FileAccess.open(terra_blob, FileAccess.WRITE)
-		if wf != null:
-			wf.store_buffer(rbytes)
-			wf.close()
-		restored = FileAccess.file_exists(terra_blob)
-	_expect(restored, "S9 写回 blob 后文件恢复（等价重新下载落盘）")
+	_expect(not editor._block_asset_buttons.has("terra_a"),
+		"S9 取消保存标记后 terra_a 应从素材方块列表消失")
+	var save_back: Dictionary = ed_svc.set_assets_saved(["terra_a"], true)
+	_expect(bool(save_back.get("ok", false)), "S9 恢复 terra_a 保存标记成功")
 	editor._rebuild_block_asset_grid()
-	_expect(editor._block_asset_buttons.has("terra_a"), "S9 缓存恢复后 terra_a 回到素材方块列表")
+	_expect(editor._block_asset_buttons.has("terra_a"), "S9 恢复保存标记后 terra_a 回到素材方块列表")
 	(editor._block_asset_buttons["terra_a"] as Button).pressed.emit()  # 模拟点选按钮
 	_expect(editor._selected_block_asset == "terra_a", "S9 点选后方块页选中 terra_a")
 	tabs.current_tab = 3  # 方块

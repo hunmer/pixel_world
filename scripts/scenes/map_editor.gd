@@ -529,7 +529,7 @@ func _build_block_tab(tabs: TabContainer) -> void:
 	tab.add_child(row)
 	UIFactoryScript.center_row(row)
 	tab.add_child(UIFactoryScript.label("每格只有一个独立方块；z=0 为统一平面。", 10, TEXT_DIM))
-	tab.add_child(UIFactoryScript.label("素材方块（已下载，点选后用画笔放置；再点取消选中）", 11, TEXT_DIM))
+	tab.add_child(UIFactoryScript.label("素材方块（已保存 ✓，点选后用画笔放置；再点取消选中）", 11, TEXT_DIM))
 	_block_asset_group = ButtonGroup.new()
 	_block_asset_group.allow_unpress = true  # 再点已选中按钮 = 取消选中
 	_block_asset_grid = GridContainer.new()
@@ -539,7 +539,7 @@ func _build_block_tab(tabs: TabContainer) -> void:
 	_block_asset_grid.add_theme_constant_override("v_separation", 2)
 	tab.add_child(_block_asset_grid)
 	_block_asset_empty = UIFactoryScript.label(
-		"暂无已下载的素材方块\n在「素材」Tab 浏览在线方块，加载后自动出现在这里", 11, UIThemeScript.TEXT_DIM)
+		"暂无已保存的素材方块\n在「素材」Tab 选中方块后点「保存标记」，保存后会出现在这里", 11, UIThemeScript.TEXT_DIM)
 	_block_asset_empty.name = "BlockAssetEmptyHint"
 	_block_asset_empty.visible = false
 	tab.add_child(_block_asset_empty)
@@ -682,12 +682,14 @@ func _rebuild_block_asset_grid() -> void:
 		if String(d.get("kind", "")) != UserAssetCatalogScript.KIND_TERRAIN:
 			continue
 		var aid := String(d.get("id", ""))
-		# 只列已下载到本地的方块（一键清空后即空；未下载的从「素材」Tab 浏览自动加载，
-		# 下载完成经 asset_ready 合批重建进入本列表）
-		if String(_asset_service.get_asset_state(aid).get("status", "")) != "ready":
+		# 只列用户保存（✓）的方块：浏览在线列表会自动下载缓存，按缓存过滤等于全量进来；
+		# 未下载的已保存方块保持占位，下面顺手触发下载，完成后经 asset_ready 合批重建换真图
+		if not bool(d.get("saved", false)):
 			continue
 		ids.append(aid)
 		descs[aid] = d
+		if String(_asset_service.get_asset_state(aid).get("status", "")) != "ready":
+			_asset_service.request_asset_image(aid)
 	# p_cache=false：不灌 LRU（防挤穿热缓存）；列表规模=已下载数，resolve_many 单次库加载可承受
 	var visuals: Dictionary = _asset_adapter.resolve_many(ids, false)
 	for aid in ids:

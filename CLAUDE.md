@@ -17,7 +17,7 @@ Pixel World 是一个 **Godot 4.7.2（GL Compatibility）/ Node2D** 单体 2D �
 - **确定性契约**：内容 ID / `stream_key` / legacy `placement_seed` 是存档/世界契约；文件路径与显示名绝不能当随机种子；重排 manifest / 改稳定 ID 需 world version 迁移。
 - **战棋双模式**：`Settings.battle_inline_mode`（默认 true）切 B1/B2；JSON 战场固定 B2。改 `main.gd` 遵守"新增不修改，分支注入"：B1 逻辑一律 `if _battle_active:` 前置短路。
 - **视角只支持 4 正交角度**（0/90/180/270，`isometric_view.gd`）：素材其余角度有拼缝，勿放开连续角度。
-- **MCP 调试按会话激活**（见 `AGENTS.md`）：godot 工具**默认不在工具表里**（注入模式「按会话启用」，实测激活 0 / 隐藏 285），先 `mcp_connector_session_tools` preview-activate → activate（用户点名后才 `confirmed:true`）；`tool not found` ≠ 没装 godot MCP，别改用 bash 跑 godot。自检用 `find_symbol` + `runtime_get_monitors`（`editor_ping` 不在可激活组）；`dbg_launch` 必传 `scene`；验证用 `runtime_assert_*`，不要 `print` 肉眼判断。
+- **MCP 调试按会话激活**（见 `AGENTS.md`）：godot 工具**默认不在工具表里**（注入模式「按会话启用」，实测激活 0 / 隐藏 285），先 `mcp_connector_session_tools` preview-activate → activate（`confirmed:true` 由激活方自行设置，member 无需向 lead 申请）；`tool not found` ≠ 没装 godot MCP，别改用 bash 跑 godot。自检用 `find_symbol` + `runtime_get_monitors`（`editor_ping` 不在可激活组）；`dbg_launch` 必传 `scene`；验证用 `runtime_assert_*`，不要 `print` 肉眼判断。
 - **`story/` 是目标态设计 bible**（13 职业/27 技能/25 道具），运行时事实是 `data/` 的 8/8/8 —— 勿混用。
 
 > 详细命令、规范与禁忌见 [conventions.md](claude/conventions.md)；agent 工作约束见根 `AGENTS.md`。

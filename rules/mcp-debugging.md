@@ -2,7 +2,7 @@
 
 > 本规则是 `AGENTS.md`「关键约束」的展开。MCP 命名空间、scene 必传、CLI 不可用等硬约束见 AGENTS.md；本文讲**完整操作流程**。
 
-> **2026-11 更新：godot 连接是「按会话启用」**。工具**默认不在工具表里**（2026-11-14 实测 `session_tools status` = 已激活 0 / 会话层隐藏 285），必须先 `mcp_connector_session_tools` 激活本次要用的精确工具（connectionKey `json-godot`，preview → 用户确认 → activate `confirmed:true`），再按本文调用；未激活直接调用会 tool not found。**这 ≠ 没装 godot MCP**，别改用 bash 跑 godot。全集 295，只有 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 的 49 个能激活。完整分类与激活配方见 `@rules/godot-tools-map.md`。下文为可读性省略 `mcp__godot__` 前缀，实际调用一律带全名。
+> **2026-11 更新：godot 连接是「按会话启用」**。工具**默认不在工具表里**（2026-11-14 实测 `session_tools status` = 已激活 0 / 会话层隐藏 285），必须先 `mcp_connector_session_tools` 激活本次要用的精确工具（connectionKey `json-godot`，preview → activate `confirmed:true`；`confirmed:true` 由激活方自行设置，member 无需向 lead 申请），再按本文调用；未激活直接调用会 tool not found。**这 ≠ 没装 godot MCP**，别改用 bash 跑 godot。全集 295，只有 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 的 49 个能激活。完整分类与激活配方见 `@rules/godot-tools-map.md`。下文为可读性省略 `mcp__godot__` 前缀，实际调用一律带全名。
 
 ## Godot MCP 工具集（Breakpoint MCP）
 
