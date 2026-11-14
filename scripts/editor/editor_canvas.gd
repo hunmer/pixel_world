@@ -16,6 +16,7 @@ const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const IsoBoardScript = preload("res://scripts/iso/iso_board.gd")
 const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
 const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 
 signal cell_pressed(cell: Vector2i)
 signal cell_dragged(cell: Vector2i)
@@ -25,6 +26,11 @@ const PLAYER_COLOR := Color(0.376, 0.647, 0.980)
 const ENEMY_COLOR := Color(0.973, 0.443, 0.443)
 const HOVER_COLOR := Color(1.0, 0.85, 0.3, 0.55)
 const SELECTION_COLOR := Color(0.25, 0.95, 1.0, 0.62)
+## 区域虚线投影描边色（框选范围边框；深色底衬见 _RegionOutlineMark）
+const REGION_COLOR := Color(0.3, 0.98, 0.75, 0.95)
+const REGION_DASH := 8.0
+const REGION_GAP := 6.0
+const REGION_LINE_WIDTH := 2.0
 ## 滚轮/手势每步缩放因子（与 B2 battle.gd 一致：factor<1 = 放大一步）
 const WHEEL_ZOOM_IN := 0.9
 const WHEEL_ZOOM_OUT := 1.1
@@ -40,6 +46,14 @@ var selected_cell := Vector2i(-1, -1):
 	set(value):
 		selected_cell = value
 		_update_selection_marker()
+## 区域虚线投影（框选范围边框）：{"min": Vector2i, "max": Vector2i, "z": int}，
+## z>=0 = 固定方块高度层的平面四边形；z<0 = 跟随地形逐格高度（周界分段）。
+## 由 set_selection_region()/clear_selection_region() 维护（含归一与坐标校验），
+## 描边随相机逐帧对齐（_process 视图缓存变化时重算）。
+var selection_region: Dictionary = {}:
+	set(v):
+		selection_region = v
+		_update_region_marker()
 var _world: Node2D = null
 var _renderer: Node2D = null
 var _board: IsoBoard = null
@@ -54,6 +68,7 @@ var asset_preview_visual: Dictionary = {}:
 var _asset_preview_marker: Node2D = null
 var _hover_marker: Polygon2D = null
 var _selection_marker: Polygon2D = null
+var _region_marker: Node2D = null
 var _unit_markers: Array[Node2D] = []
 var _dragging := false
 var _panning := false
@@ -102,6 +117,16 @@ func _ready() -> void:
 	_selection_marker.color = SELECTION_COLOR
 	_selection_marker.visible = false
 	_world.add_child(_selection_marker)
+	# 区域虚线投影（框选范围边框；z 介于素材预览与选中标记之间）
+	_region_marker = _RegionOutlineMark.new()
+	_region_marker.name = "RegionOutlineMark"
+	_region_marker.z_index = 17
+	_region_marker.line_color = REGION_COLOR
+	_region_marker.dash_len = REGION_DASH
+	_region_marker.gap_len = REGION_GAP
+	_region_marker.line_width = REGION_LINE_WIDTH
+	_region_marker.visible = false
+	_world.add_child(_region_marker)
 	# 素材预览块（选中素材时跟随悬停格顶面中心，z 介于选中与悬停标记之间）
 	_asset_preview_marker = _AssetPreviewMark.new()
 	_asset_preview_marker.name = "AssetPreviewMark"
@@ -120,6 +145,8 @@ func _rebuild() -> void:
 		_renderer.setup(null)
 		_hover_marker.visible = false
 		_selection_marker.visible = false
+		if _region_marker != null:
+			_region_marker.visible = false
 		return
 	_renderer.set_custom_props(model.get("props", []))  # 植物层（setup 前注入）
 	_renderer.set_custom_assets(
@@ -130,6 +157,8 @@ func _rebuild() -> void:
 	_rebuild_unit_markers()
 	_update_hover_marker()
 	_update_selection_marker()
+	_clamp_selection_region()
+	_update_region_marker()
 	_center_map()
 
 
@@ -316,6 +345,7 @@ func _process(_delta: float) -> void:
 		_update_hover_marker()
 		_update_selection_marker()
 		_layout_unit_markers()
+		_update_region_marker()
 
 
 func _update_hover_marker() -> void:
@@ -367,6 +397,122 @@ func _poly_to_local(poly: PackedVector2Array) -> PackedVector2Array:
 
 
 # ============================================================
+# 区域虚线投影（框选范围边框接口）
+# ============================================================
+
+## 设置区域虚线投影：闭区间 [min_cell, max_cell]（两轴顺序任意，自动归一）。
+## z>=0 = 该方块高度层的平面四边形；z<0（默认）= 跟随地形逐格高度。
+## 坐标校验：与模型无交集（完全在边界外）→ 清空；部分越界 → 夹回边界内。
+func set_selection_region(min_cell: Vector2i, max_cell: Vector2i, z := -1) -> void:
+	var lo := Vector2i(mini(min_cell.x, max_cell.x), mini(min_cell.y, max_cell.y))
+	var hi := Vector2i(maxi(min_cell.x, max_cell.x), maxi(min_cell.y, max_cell.y))
+	var w := int(model.get("width", 0))
+	var h := int(model.get("height", 0))
+	if w <= 0 or h <= 0 or hi.x < 0 or hi.y < 0 or lo.x >= w or lo.y >= h:
+		selection_region = {}
+		return
+	lo = Vector2i(clampi(lo.x, 0, w - 1), clampi(lo.y, 0, h - 1))
+	hi = Vector2i(clampi(hi.x, 0, w - 1), clampi(hi.y, 0, h - 1))
+	selection_region = {"min": lo, "max": hi, "z": z}
+
+
+## 清空区域虚线投影。
+func clear_selection_region() -> void:
+	selection_region = {}
+
+
+func has_selection_region() -> bool:
+	return not selection_region.is_empty()
+
+
+## 计算区域虚线边框折线（画布局部坐标；每边一条 PackedVector2Array，屏幕
+## 空间覆盖层直接可用）。z>=0 = 固定高度平面四边形（一条闭合折线）；
+## z<0 = 跟随地形周界（北/东/南/西各一条，逐格用 visual_top_level）。
+## 纯几何无副作用，headless 契约直接调用（tests/editor_selection_contract.gd）。
+func region_outline_polylines(min_cell: Vector2i, max_cell: Vector2i, z := -1) -> Array:
+	var out: Array = []
+	if _renderer == null or _renderer.grid == null:
+		return out
+	var lo := Vector2i(mini(min_cell.x, max_cell.x), mini(min_cell.y, max_cell.y))
+	var hi := Vector2i(maxi(min_cell.x, max_cell.x), maxi(min_cell.y, max_cell.y))
+	var w := int(_renderer.grid.width)
+	var h := int(_renderer.grid.height)
+	if hi.x < 0 or hi.y < 0 or lo.x >= w or lo.y >= h:
+		return out
+	lo = Vector2i(clampi(lo.x, 0, w - 1), clampi(lo.y, 0, h - 1))
+	hi = Vector2i(clampi(hi.x, 0, w - 1), clampi(hi.y, 0, h - 1))
+	var offset := get_global_rect().position
+	if z >= 0:
+		# 固定高度平面：区域四角（世界坐标 ±half）一次性投影
+		var camera := _board.camera if _board != null else null
+		if camera == null:
+			return out
+		var half := IsoProjection.GRID_STEP * 0.5
+		var nw := IsoProjection.world_to_screen(
+			camera, IsoProjection.grid_to_world(Vector2i(lo.x, lo.y), z) + Vector3(-half, 0, -half))
+		var ne := IsoProjection.world_to_screen(
+			camera, IsoProjection.grid_to_world(Vector2i(hi.x, lo.y), z) + Vector3(half, 0, -half))
+		var se := IsoProjection.world_to_screen(
+			camera, IsoProjection.grid_to_world(Vector2i(hi.x, hi.y), z) + Vector3(half, 0, half))
+		var sw := IsoProjection.world_to_screen(
+			camera, IsoProjection.grid_to_world(Vector2i(lo.x, hi.y), z) + Vector3(-half, 0, half))
+		out.append(PackedVector2Array([nw - offset, ne - offset, se - offset, sw - offset, nw - offset]))
+		return out
+	# 跟随地形：周界格顶面外缘边（renderer.top_polygon_for 已含逐格 visual_top_level
+	# 与相机投影；顶点序 [0]=NW [1]=NE [2]=SE [3]=SW，相邻格共享顶点天然连续）
+	var north := PackedVector2Array()
+	for x in range(lo.x, hi.x + 1):
+		var poly: PackedVector2Array = _renderer.top_polygon_for(x, lo.y)
+		north.append(poly[0] - offset)
+		if x == hi.x:
+			north.append(poly[1] - offset)
+	out.append(north)
+	var east := PackedVector2Array()
+	for y in range(lo.y, hi.y + 1):
+		var poly: PackedVector2Array = _renderer.top_polygon_for(hi.x, y)
+		east.append(poly[1] - offset)
+		if y == hi.y:
+			east.append(poly[2] - offset)
+	out.append(east)
+	var south := PackedVector2Array()
+	for x in range(hi.x, lo.x - 1, -1):
+		var poly: PackedVector2Array = _renderer.top_polygon_for(x, hi.y)
+		south.append(poly[2] - offset)
+		if x == lo.x:
+			south.append(poly[3] - offset)
+	out.append(south)
+	var west := PackedVector2Array()
+	for y in range(hi.y, lo.y - 1, -1):
+		var poly: PackedVector2Array = _renderer.top_polygon_for(lo.x, y)
+		west.append(poly[3] - offset)
+		if y == lo.y:
+			west.append(poly[0] - offset)
+	out.append(west)
+	return out
+
+
+## 模型 resize/重生成后收敛区域端点（与 set_selection_region 同一校验规则）。
+func _clamp_selection_region() -> void:
+	if selection_region.is_empty():
+		return
+	set_selection_region(selection_region["min"], selection_region["max"], int(selection_region.get("z", -1)))
+
+
+## 把当前 selection_region 折线刷进覆盖层标记（相机视图变化/模型变化时由
+## _process 与 _rebuild/_refresh_markers_at 调用）。
+func _update_region_marker() -> void:
+	if _region_marker == null:
+		return
+	if selection_region.is_empty() or _renderer == null or _renderer.grid == null:
+		_region_marker.visible = false
+		return
+	var lines := region_outline_polylines(
+		selection_region["min"], selection_region["max"], int(selection_region.get("z", -1)))
+	_region_marker.polylines = lines
+	_region_marker.visible = not lines.is_empty()
+
+
+# ============================================================
 # 单位标记
 # ============================================================
 
@@ -401,6 +547,7 @@ func _refresh_markers_at(_cell: Vector2i) -> void:
 	_rebuild_unit_markers()
 	_update_hover_marker()
 	_update_selection_marker()
+	_update_region_marker()
 
 
 func _clear_unit_markers() -> void:
@@ -463,3 +610,53 @@ class _AssetPreviewMark:
 		var offset: Vector2 = visual.get("render_offset", Vector2.ZERO)
 		draw_texture(tex, offset - tex.get_size() * 0.5,
 			Color(1.0, 0.55, 0.55) if bool(visual.get("missing", false)) else Color.WHITE)
+
+
+## 区域虚线投影标记（自绘）：一组折线按 dash/gap 虚线描边，深色底衬 +1px
+## 增强浅色地形上的对比度。折线坐标 = 画布局部（_world 恒等变换下直接可用）。
+class _RegionOutlineMark:
+	extends Node2D
+	var polylines: Array = []:
+		set(v):
+			polylines = v
+			queue_redraw()
+	var line_color := Color(0.3, 0.98, 0.75, 0.95)
+	var dash_len := 8.0
+	var gap_len := 6.0
+	var line_width := 2.0
+	var underlay_color := Color(0.0, 0.0, 0.0, 0.45)
+
+	func _draw() -> void:
+		for pl in polylines:
+			_draw_dashed(pl, underlay_color, Vector2(0, 1))
+		for pl in polylines:
+			_draw_dashed(pl, line_color, Vector2.ZERO)
+
+	## 沿折线按固定 dash/gap 长度画虚线（跨线段连续计相位）。
+	func _draw_dashed(pts: PackedVector2Array, color: Color, shift: Vector2) -> void:
+		if pts.size() < 2:
+			return
+		var t := 0.0  # 当前 dash/gap 段已消耗长度
+		var drawing := true
+		for i in range(pts.size() - 1):
+			var a: Vector2 = pts[i]
+			var b: Vector2 = pts[i + 1]
+			var seg_len := a.distance_to(b)
+			if seg_len <= 0.0001:
+				continue
+			var dir := (b - a) / seg_len
+			var pos := 0.0
+			while pos < seg_len:
+				var budget := (dash_len if drawing else gap_len) - t
+				var remain := seg_len - pos
+				if budget <= remain:
+					if drawing:
+						draw_line(a + dir * pos + shift, a + dir * (pos + budget) + shift, color, line_width)
+					pos += budget
+					t = 0.0
+					drawing = not drawing
+				else:
+					if drawing:
+						draw_line(a + dir * pos + shift, b + shift, color, line_width)
+					t += remain
+					pos = seg_len
