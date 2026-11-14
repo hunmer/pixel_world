@@ -380,7 +380,7 @@ func _build_column(cell: Vector2i) -> void:
 	var asset_rec: Dictionary = _asset_overrides.get(cell, {})
 	var tile_visual: Dictionary = asset_rec.get("tile", {})
 	if not tile_visual.is_empty():
-		var tile_asset := _asset_block_for(cell, tile_visual)
+		var tile_asset := _asset_block_for(cell, tile_visual, true)
 		if not tile_asset.is_empty():
 			blocks.append(tile_asset)
 			var prop_visual: Dictionary = asset_rec.get("prop", {})
@@ -541,12 +541,20 @@ func _asset_prop_or_default(cell: Vector2i, asset_rec: Dictionary, tile_type: St
 ## 素材 visual（UserAssetVisualAdapter 产出）→ 渲染 block。
 ## render_offset 已按 pivot 烘焙（相对纹理中心）；2D 路径再加顶面中心屏幕偏移（同 _prop_for）。
 ## 缺图占位（missing=true）淡红染色提示，引用不丢失。
-func _asset_block_for(cell: Vector2i, visual: Dictionary) -> Dictionary:
+## top_aligned（地块层 tile）：素材图是「顶面+侧面」的完整方块 depiction，顶边对齐格顶面
+## 平面（同内建块 TOP_UV 的贴法）；false（素材 prop）保持「内容底缘站在锚点」的装饰语义。
+func _asset_block_for(cell: Vector2i, visual: Dictionary, top_aligned := false) -> Dictionary:
 	var tex: Texture2D = visual.get("texture", null)
 	if tex == null:
 		return {}
 	var top_offset_y := 0.0 if _terrain_3d != null else ColumnBatchScript.TOP_CENTER_OFFSET.y
 	var offset: Vector2 = visual.get("render_offset", Vector2.ZERO)
+	if top_aligned:
+		# 顶边对齐格顶面上缘：3D 锚点是顶面中心平面，而内建块顶面菱形上半高
+		# （TOP_UV y6..22 → 半高 8px）在锚点之上——素材图顶边要抬高半顶面高才与内建块齐平，
+		# 否则整块下沉半顶面高（顶边只到顶面中心）。
+		var top_half := (ColumnBatchScript.TOP_UV[2].y - ColumnBatchScript.TOP_UV[0].y) * 0.5
+		offset = Vector2(offset.x, tex.get_height() * 0.5 - top_half)
 	offset.y += top_offset_y
 	var block := _block(tex, visual_top_level(cell.x, cell.y), Color.WHITE, 1, offset)
 	block["occluder_class"] = &"prop"

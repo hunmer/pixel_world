@@ -214,6 +214,22 @@ func _run() -> void:
 	editor._apply_tool(Vector2i(1, 1))
 	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(1, 1))).is_empty(), "S3 橡皮应清除 tile_override")
 
+	# 内置画笔/填充应能覆盖素材地块：覆盖后清 override 恢复常规柱
+	editor._on_asset_selected(ed_svc.find_by_id("terra_a"))
+	editor._apply_tool(Vector2i(1, 1))
+	editor._clear_asset_selection()
+	tabs.current_tab = 2  # 地形页、无素材选中 → PAINT
+	editor._apply_tool(Vector2i(1, 1))
+	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(1, 1))).is_empty(),
+		"S3 内置画笔覆盖素材地块应清 tile_override")
+	editor._on_asset_selected(ed_svc.find_by_id("terra_a"))
+	editor._apply_tool(Vector2i(1, 1))
+	editor._clear_asset_selection()
+	tabs.current_tab = 2
+	editor.fill_cell(Vector2i(1, 1), editor.current_terrain)
+	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(1, 1))).is_empty(),
+		"S3 内置填充覆盖素材地块应清 tile_override")
+
 	# --- S9 方块页「素材方块」列表：已保存（✓）的地形素材出现在方块 Tab，点选后画笔放置 ---
 	editor._rebuild_block_asset_grid()
 	var block_grid: GridContainer = editor.find_child("BlockAssetGrid", true, false)

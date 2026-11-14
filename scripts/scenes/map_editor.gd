@@ -970,6 +970,7 @@ func _on_cell_dragged(cell: Vector2i) -> void:
 		_select_cell(cell)
 	elif tool == Tool.PAINT:
 		_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH[current_terrain])
+		_set_tile_override(cell, "")  # 内置画笔覆盖素材地块：清 override 恢复常规柱
 	elif tool == Tool.PLANT:
 		_set_prop(cell, current_prop)
 	elif tool == Tool.ASSET:
@@ -997,6 +998,7 @@ func _apply_tool(cell: Vector2i) -> void:
 	match tool:
 		Tool.PAINT:
 			_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH[current_terrain])
+			_set_tile_override(cell, "")  # 内置画笔覆盖素材地块：清 override 恢复常规柱
 		Tool.FILL:
 			fill_cell(cell, current_terrain)
 		Tool.ERASE:
@@ -1178,8 +1180,8 @@ func fill_cell(cell: Vector2i, terrain: StringName) -> void:
 	var rows: Array = model.rows
 	var from: String = (rows[cell.y] as String).substr(cell.x, 1)
 	var to: String = String(BattlefieldDocScript.TERRAIN_GLYPH.get(terrain, "."))
-	if from == to:
-		return
+	if from == to and (model.get("tile_overrides", {}) as Dictionary).is_empty():
+		return  # 地形未变且无素材覆盖：无可做；有覆盖时要继续走完以便清 override
 	var stack: Array[Vector2i] = [cell]
 	var seen := { cell: true }
 	while not stack.is_empty():
@@ -1192,6 +1194,10 @@ func fill_cell(cell: Vector2i, terrain: StringName) -> void:
 			if (rows[n.y] as String).substr(n.x, 1) == from:
 				seen[n] = true
 				stack.append(n)
+	# 填充经过的格子一并清素材地块覆盖，否则 override 优先整图替换、内置填充看不见
+	if not (model.get("tile_overrides", {}) as Dictionary).is_empty():
+		for c in seen:
+			BattlefieldDocScript.set_tile_override(model, c, "")
 	_refresh_canvas()
 	_status("填充 %s ×%d 格" % [BattlefieldDocScript.TERRAIN_CN[terrain], seen.size()])
 
