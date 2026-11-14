@@ -14,6 +14,11 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 
+## 有意承接鼠标的面板子树（game_hud.gd 头注释约定：LeftRail/SidePanel 要承接点击/滚动），
+## 其余 HUD 控件仍必须 MOUSE_FILTER_IGNORE 不拦截游戏输入。
+const INTERACTIVE_SUBTREES: Array[String] = ["LeftRail", "SidePanel"]
+
+
 func _assert_mouse_passthrough(node: Node) -> void:
 	if node is Control:
 		_expect(
@@ -21,6 +26,8 @@ func _assert_mouse_passthrough(node: Node) -> void:
 			"HUD 控件拦截了游戏输入: " + str(node.get_path())
 		)
 	for child in node.get_children():
+		if INTERACTIVE_SUBTREES.has(child.name):
+			continue
 		_assert_mouse_passthrough(child)
 
 

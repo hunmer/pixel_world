@@ -149,6 +149,13 @@ func _build_ui() -> void:
 
 ## 设置面板：战斗模式切换（就地/独立场景）
 func _open_settings() -> void:
+	# Settings 走 /root 动态解析：契约测试用 --script 模式跑，不加载 autoload，
+	# 编译期直接引用 Settings 标识符会 Compile Error（game_hud_contract.gd）。
+	# 游戏内 /root/Settings 即 Settings autoload 本体，行为不变。
+	var settings := get_node_or_null("/root/Settings")
+	if settings == null:
+		push_error("[hud] Settings autoload 未加载，设置面板不可用")
+		return
 	# 如果已打开，先移除
 	var old := get_node_or_null("HUDRoot/SettingsPanel")
 	if old != null:
@@ -178,15 +185,15 @@ func _open_settings() -> void:
 	var opt := UIFactoryScript.option_button()
 	opt.add_item("就地（B1）", 0)
 	opt.add_item("独立场景（B2）", 1)
-	opt.select(0 if Settings.battle_inline_mode else 1)
+	opt.select(0 if settings.battle_inline_mode else 1)
 	opt.custom_minimum_size = Vector2(140, 0)
 	opt.item_selected.connect(func(idx: int):
-		Settings.set_battle_inline_mode(idx == 0)
+		settings.set_battle_inline_mode(idx == 0)
 	)
 	row.add_child(opt)
 	# 敌方 AI 难度 / 托管 AI 难度（四档；缺省 normal，非法存档值已由 Settings 归一）
-	vbox.add_child(_difficulty_row("敌方 AI 难度", Settings.enemy_ai_difficulty, "enemy"))
-	vbox.add_child(_difficulty_row("托管 AI 难度", Settings.host_ai_difficulty, "host"))
+	vbox.add_child(_difficulty_row("敌方 AI 难度", settings.enemy_ai_difficulty, "enemy"))
+	vbox.add_child(_difficulty_row("托管 AI 难度", settings.host_ai_difficulty, "host"))
 	# 关闭按钮
 	var close_btn := UIFactoryScript.button("关闭", func():
 		var p := get_node_or_null("HUDRoot/SettingsPanel")
@@ -196,6 +203,7 @@ func _open_settings() -> void:
 
 
 ## 构造一行「AI 难度」选项（label + OptionButton 四档）。kind: "enemy"/"host"。
+## settings 传入 _open_settings 解析出的 /root/Settings，避免编译期引用 autoload 标识符。
 func _difficulty_row(label_text: String, current: String, kind: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -212,7 +220,9 @@ func _difficulty_row(label_text: String, current: String, kind: String) -> HBoxC
 	opt.custom_minimum_size = Vector2(140, 0)
 	opt.item_selected.connect(func(idx: int):
 		var chosen: Dictionary = AIDifficultyScript.OPTIONS[idx]
-		Settings.set_ai_difficulty(kind, String(chosen.get("id", "normal")))
+		var settings := get_node_or_null("/root/Settings")
+		if settings != null:
+			settings.set_ai_difficulty(kind, String(chosen.get("id", "normal")))
 	)
 	row.add_child(opt)
 	return row
