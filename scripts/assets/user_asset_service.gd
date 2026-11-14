@@ -368,6 +368,60 @@ func set_assets_saved(asset_ids: Array, saved: bool) -> Dictionary:
 	return {"ok": true, "changed": pending.size(), "error": ""}
 
 
+## 一键清空在线素材的本地缓存：删除 image 为 http(s) 来源的 blob 原图与烘焙图，
+## 同时清除这些素材的保存标记（✓）；本地导入素材（含其标记）不受影响；
+## 库与描述符保留（素材回到 missing，按需自动重新下载）。
+## 先落库标记清除、成功后才删文件（保存失败整体不动）。
+## 返回 {ok, removed_blobs, removed_baked, cleared_marks, error}。
+func clear_online_cache() -> Dictionary:
+	var removed_ids: Array[String] = []
+	var marked: Array = []
+	var assets: Array = library.get("assets", [])
+	for i in assets.size():
+		var raw: Variant = assets[i]
+		if not (raw is Dictionary):
+			continue
+		var d: Dictionary = raw
+		if not is_http_url(String(d.get("image", ""))):
+			continue
+		if String(d.get("id", "")).is_empty():
+			continue
+		if bool(d.get("saved", false)):
+			marked.append(i)
+		removed_ids.append(String(d.get("id", "")))
+	# 先清标记并落库（失败回滚、不删任何文件）
+	for i in marked:
+		(assets[i] as Dictionary)["saved"] = false
+	if not marked.is_empty():
+		var save_res: Dictionary = save_library()
+		if not bool(save_res.get("ok", false)):
+			for i in marked:
+				(assets[i] as Dictionary)["saved"] = true
+			return {"ok": false, "removed_blobs": 0, "removed_baked": 0,
+				"cleared_marks": 0, "error": "library_save_failed: %s" % save_res.get("error", "")}
+	# 落库成功后再删缓存文件
+	var removed_blobs := 0
+	var removed_baked := 0
+	for d in assets:
+		if not (d is Dictionary):
+			continue
+		if not is_http_url(String(d.get("image", ""))):
+			continue
+		var sha := String(d.get("sha256", ""))
+		if sha.length() == 64:
+			var blob := blob_path_for_sha(sha)
+			if FileAccess.file_exists(blob) and DirAccess.remove_absolute(blob) == OK:
+				removed_blobs += 1
+		var baked := root_dir.path_join("baked").path_join("%s.png" % String(d.get("id", "")))
+		if FileAccess.file_exists(baked) and DirAccess.remove_absolute(baked) == OK:
+			removed_baked += 1
+	for asset_id in removed_ids:
+		_textures.erase(asset_id)
+		_texture_lru.erase(asset_id)
+	return {"ok": true, "removed_blobs": removed_blobs, "removed_baked": removed_baked,
+		"cleared_marks": marked.size(), "error": ""}
+
+
 # ---------------------------------------------------------------------------
 # HTTP 请求调度（有限并发 + 去重 + 重试）
 # ---------------------------------------------------------------------------

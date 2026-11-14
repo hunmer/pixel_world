@@ -220,6 +220,28 @@ func _run() -> void:
 	_expect(block_grid != null, "S9 方块页应有 BlockAssetGrid")
 	_expect(editor._block_asset_buttons.has("terra_a"), "S9 terra_a 应在素材方块列表")
 	_expect(not editor._block_asset_buttons.has("flora_b"), "S9 flora_b(plant) 不应出现在素材方块列表")
+	# 只列已下载（本地有缓存）的方块：删掉 blob 后应从列表消失（一键清空按钮同理），恢复后回归
+	var terra_sha: String = String((ed_svc.find_by_id("terra_a") as Dictionary).get("sha256", ""))
+	var terra_blob: String = ed_svc.blob_path_for_sha(terra_sha)
+	DirAccess.remove_absolute(terra_blob)
+	editor._rebuild_block_asset_grid()
+	_expect(not editor._block_asset_buttons.has("terra_a"), "S9 删掉本地缓存后 terra_a 应从素材方块列表消失")
+	var rf := FileAccess.open(TMP_ROOT + "/src/terra_a.png", FileAccess.READ)
+	var restored := false
+	if rf != null:
+		var rbytes := rf.get_buffer(rf.get_length())
+		rf.close()
+		# 直接按内容寻址路径写回 blob（等价于重新下载落盘；import_image_bytes 对同 sha 走
+		# 去重捷径不重写文件，故不用它恢复）
+		DirAccess.make_dir_recursive_absolute(terra_blob.get_base_dir())
+		var wf := FileAccess.open(terra_blob, FileAccess.WRITE)
+		if wf != null:
+			wf.store_buffer(rbytes)
+			wf.close()
+		restored = FileAccess.file_exists(terra_blob)
+	_expect(restored, "S9 写回 blob 后文件恢复（等价重新下载落盘）")
+	editor._rebuild_block_asset_grid()
+	_expect(editor._block_asset_buttons.has("terra_a"), "S9 缓存恢复后 terra_a 回到素材方块列表")
 	(editor._block_asset_buttons["terra_a"] as Button).pressed.emit()  # 模拟点选按钮
 	_expect(editor._selected_block_asset == "terra_a", "S9 点选后方块页选中 terra_a")
 	tabs.current_tab = 3  # 方块

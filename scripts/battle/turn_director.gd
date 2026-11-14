@@ -337,6 +337,7 @@ func _enemy_act(enemy: Dictionary) -> void:
 ## UnitSprite3D 继承 Node3D；B1/B2 都返回真实地形表面的 Vector3。
 func _tween_move(us: UnitSprite3D, path: Array) -> void:
 	for cell in path:
+		Sfx.play_step(StringName(grid.tile_at(cell.x, cell.y).get(&"type", &"plain")))
 		var target := us._world_cell_world(cell) if us.is_world_mode() else us._b2_cell_world(cell)
 		us.face_movement(target)
 		var tw := create_tween()

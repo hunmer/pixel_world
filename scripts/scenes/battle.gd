@@ -234,6 +234,7 @@ func _on_action_phase_started(phase: StringName, event: Dictionary) -> void:
 		return
 	var target_offset := Vector3.ZERO
 	if phase == &"strike":
+		_play_strike_sound(event)
 		var camera := get_viewport().get_camera_3d()
 		if camera == null:
 			return
@@ -461,6 +462,7 @@ func _on_player_phase(turn_num: int) -> void:
 		return  # 战斗已分胜负，丢弃后续回合信号
 	# L1 埋点：回合切换（按 AGENTS.md 调试埋点强制原则）
 	print("[turn] === 玩家回合 #%d 开始 ===" % turn_num)
+	Sfx.play(&"turn_player")
 	mode = Mode.IDLE
 	battle_ui.set_phase_text("第 %d 轮 · 我方行动" % turn_num, Color(0.29, 0.87, 0.50))
 	_refresh_all_units()
@@ -482,6 +484,7 @@ func _on_enemy_phase(turn_num: int) -> void:
 		return  # 战斗已分胜负，丢弃后续回合信号
 	# L1 埋点：回合切换
 	print("[turn] === 敌方回合 #%d 开始 ===" % turn_num)
+	Sfx.play(&"turn_enemy")
 	battle_ui.set_phase_text("第 %d 轮 · 敌方行动" % turn_num, Color(0.97, 0.44, 0.44))
 	mode = Mode.ENEMY_TURN
 	_clear_range_highlight()
@@ -1024,6 +1027,7 @@ func _perform_move(u: Dictionary, target: Vector2i) -> void:
 		battle_ui.open_unit_menu(u, target, from_pos)
 		return
 	var us: UnitSprite3D = _unit_sprites[u.id]
+	Sfx.play_step(StringName(grid.tile_at(target.x, target.y).get(&"type", &"plain")))
 	us.move_along_path(path.slice(1), func():
 		grid.place_unit(u, target.x, target.y)
 		u.hasMoved = true
@@ -1129,7 +1133,68 @@ func _spawn_float_text(u: Dictionary, text: String, color: Color, font_size: int
 
 ## ActionAnim 每次 impact 回调一次：实际受伤（命中且 damage>0）播 pixelfx 伤害数字 + 血条受击特效。
 ## 零伤害 / 未命中 / 治疗 / 纯 buff 均不触发。
+# ============================================================
+# 战斗音效（assets/audio/sfx，经 Sfx autoload 播放）
+# ============================================================
+## 出手音：按事件动画/武器类型选拨剑/挥斧/突刺/放箭；法系由受击音覆盖。
+func _play_strike_sound(event: Dictionary) -> void:
+	var anim := String(event.get(&"anim", &"slash"))
+	var cue := StringName()
+	if anim == "projectile:arrow":
+		cue = &"bow_release"
+	elif anim == "slash":
+		var attacker: Dictionary = grid.units.get(StringName(event.get(&"attacker_id", &"")), {})
+		var weapon_type := StringName(attacker.get(&"weapon", {}).get(&"type", &"sword"))
+		match weapon_type:
+			&"axe":
+				cue = &"swing_axe"
+			&"lance":
+				cue = &"swing_lance"
+			_:
+				cue = &"swing_sword"
+	if cue != StringName():
+		Sfx.play(cue)
+
+
+## 受击/闪避/治疗/死亡/暴击/低血量警报音；素材缺失时 Sfx 内部静默。
+func _play_impact_sound(impact: Dictionary) -> void:
+	if int(impact.get(&"healing", 0)) > 0:
+		Sfx.play(&"heal")
+		return
+	if not bool(impact.get(&"hit", false)):
+		Sfx.play(&"miss")
+		return
+	if bool(impact.get(&"died", false)):
+		Sfx.play(&"unit_death")
+		return
+	if bool(impact.get(&"critical", false)):
+		Sfx.play(&"crit")
+		return
+	var element := StringName(impact.get(&"element", &"physical"))
+	if element == &"physical":
+		var source: Dictionary = grid.units.get(StringName(impact.get(&"source_id", &"")), {})
+		var weapon_type := StringName(source.get(&"weapon", {}).get(&"type", &"sword"))
+		match weapon_type:
+			&"axe":
+				Sfx.play(&"hit_blunt")
+			&"lance", &"bow":
+				Sfx.play(&"hit_pierce")
+			_:
+				Sfx.play(&"hit_blade")
+	else:
+		Sfx.play(StringName("skill_" + String(element)))
+	# 低血量警报：我方单位 HP ≤ 25%（Sfx 内部带 6s 冷却）
+	var hp_after := int(impact.get(&"hp_after", 0))
+	if hp_after > 0:
+		var u: Dictionary = grid.units.get(StringName(impact.get(&"target_id", &"")), {})
+		if not u.is_empty() and u.get(&"faction", &"") == &"player":
+			var max_hp := int(u.get(&"stats", {}).get(&"hp", 0))
+			if max_hp > 0 and hp_after * 4 <= max_hp:
+				Sfx.play_low_hp()
+
+
 func _on_impact_presented(impact: Dictionary) -> void:
+	_play_impact_sound(impact)
 	if not bool(impact.get(&"hit", false)):
 		return
 	var damage := int(impact.get(&"damage", 0))
@@ -1397,6 +1462,8 @@ func _on_unit_death(u: Dictionary) -> void:
 ## 这里保留薄包装：刷新立绘状态，供残留的动态调用兼容。
 func _gain_exp(u: Dictionary, amount: int) -> Dictionary:
 	var info: Dictionary = BattleActionResolver.gain_exp(u, amount)
+	if not (info.get(&"exp", {}).get(&"levels", []) as Array).is_empty():
+		Sfx.play(&"ui_levelup")
 	if _unit_sprites.has(u.id):
 		(_unit_sprites[u.id] as UnitSprite3D).update_state()
 	return info
@@ -1713,6 +1780,10 @@ func _restore_result_visuals() -> void:
 
 
 func _on_presentation_sound(cue: StringName) -> void:
+	# 优先播放真实素材（assets/audio/sfx，经 Sfx autoload）；缺失时回退程序化波形。
+	if Sfx.play(_presentation_cue_to_sfx(cue)):
+		print("[Battle] PresentationSound cue=%s (sfx)" % String(cue))
+		return
 	if _presentation_audio == null:
 		return
 	if not _presentation_sound_cache.has(cue):
@@ -1721,6 +1792,22 @@ func _on_presentation_sound(cue: StringName) -> void:
 	_presentation_audio.stream = _presentation_sound_cache[cue]
 	_presentation_audio.play()
 	print("[Battle] PresentationSound cue=%s" % String(cue))
+
+
+## 演出 cue → Sfx cue 映射（胜利/失败/拾取/名牌/Boss 横幅）。
+func _presentation_cue_to_sfx(cue: StringName) -> StringName:
+	match cue:
+		&"victory", &"chapter_end":
+			return &"victory"
+		&"defeat":
+			return &"defeat"
+		&"loot":
+			return &"ui_equip"
+		&"nameplate":
+			return &"ui_select"
+		&"boss":
+			return &"skill_dark"
+	return cue
 
 
 ## 固定波形，无 RNG、无外部资产依赖；各 cue 以音高/时长区分。

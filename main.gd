@@ -3386,6 +3386,9 @@ func _try_move(d: Vector2i) -> void:
 	_move_sort_from = _column_sort_y(_move_from_cell) + PLAYER_SORT_BIAS
 	_move_sort_to = _column_sort_y(_player_cell) + PLAYER_SORT_BIAS
 	_move_t = 0.0
+	# 脚步声：按目标格 CellContext 的水域/群系/地貌选素材（Sfx 内部带节流）。
+	var _step_state = _cell_states.get(_player_cell)
+	Sfx.play_world_step(_step_state.context if _step_state != null else null)
 	_player_facing = Vector3(float(d.x), 0.0, float(d.y))
 	_set_player_pose(CharacterSheet.POSE_RUN)
 	_set_player_render_position(_player_visual_position, _player_movement_sort_y())

@@ -54,6 +54,7 @@ var _retry_btn: Button
 var _import_btn: Button
 var _import_kind: OptionButton
 var _download_btn: Button
+var _clear_btn: Button
 var _kind_filter: OptionButton
 var _source_filter: OptionButton
 var _search_edit: LineEdit
@@ -87,6 +88,7 @@ var _hide_btn: Button
 
 var _file_dialog: FileDialog
 var _hide_confirm: ConfirmationDialog
+var _clear_confirm: ConfirmationDialog
 
 var _selected_id := ""
 var _selected_index := -1
@@ -175,6 +177,17 @@ func _build_ui() -> void:
 	import_row.add_child(_download_btn)
 	add_child(import_row)
 	UIFactoryScript.center_row(import_row)
+
+	# ---- 缓存清理 ----
+	var cache_row := HBoxContainer.new()
+	cache_row.name = "CacheRow"
+	_clear_btn = UIFactoryScript.button("清空已下载…", _on_clear_cache_pressed, "trash_can")
+	_clear_btn.name = "ClearCacheButton"
+	_clear_btn.tooltip_text = ("删除全部在线素材的本地缓存（原图 + 烘焙图），本地导入不受影响；"
+		+ "素材列表保留，再次浏览会自动重新下载")
+	_clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cache_row.add_child(_clear_btn)
+	add_child(cache_row)
 
 	# ---- 过滤：分类 / 来源 / 搜索 / 标签 ----
 	var filter_row := HBoxContainer.new()
@@ -382,6 +395,12 @@ func _build_dialogs() -> void:
 	_hide_confirm.exclusive = true
 	_hide_confirm.confirmed.connect(_on_hide_confirmed)
 	add_child(_hide_confirm)
+
+	_clear_confirm = ConfirmationDialog.new()
+	_clear_confirm.name = "ClearCacheConfirmDialog"
+	_clear_confirm.exclusive = true
+	_clear_confirm.confirmed.connect(_on_clear_cache_confirmed)
+	add_child(_clear_confirm)
 
 
 func _spin(min_v: float, max_v: float, step: float, value: float) -> SpinBox:
@@ -788,6 +807,30 @@ func _on_hide_confirmed() -> void:
 # 导入 / 来源 URL
 # ============================================================
 
+func _on_clear_cache_pressed() -> void:
+	if service == null:
+		return
+	_clear_confirm.dialog_text = ("清空全部在线素材的本地缓存？\n"
+		+ "删除已下载的原图、烘焙图与保存标记（本地导入的图片与标记不受影响）；\n"
+		+ "素材列表保留，之后浏览到会自动重新下载。")
+	_clear_confirm.popup_centered()
+
+
+func _on_clear_cache_confirmed() -> void:
+	if service == null:
+		return
+	var res: Dictionary = service.clear_online_cache()
+	if bool(res.get("ok", false)):
+		adapter.clear_cache()  # 全部视觉缓存失效（烘焙图已删，resolve 会重烘）
+		_status("已清空在线缓存：原图 %d 个、烘焙图 %d 个、标记 %d 个"
+			% [int(res.get("removed_blobs", 0)), int(res.get("removed_baked", 0)),
+			int(res.get("cleared_marks", 0))])
+		library_changed.emit()
+		_rebuild_grid()
+	else:
+		_status("清空失败：%s" % res.get("error", ""), true)
+
+
 func _on_import_pressed() -> void:
 	_file_dialog.popup_centered_ratio(0.72)
 
@@ -855,7 +898,8 @@ func _on_manifest_loaded(result: Dictionary) -> void:
 
 func is_dialog_open() -> bool:
 	return (_file_dialog != null and _file_dialog.visible) \
-		or (_hide_confirm != null and _hide_confirm.visible)
+		or (_hide_confirm != null and _hide_confirm.visible) \
+		or (_clear_confirm != null and _clear_confirm.visible)
 
 
 func close_dialogs() -> void:
@@ -863,6 +907,8 @@ func close_dialogs() -> void:
 		_file_dialog.hide()
 	if _hide_confirm != null:
 		_hide_confirm.hide()
+	if _clear_confirm != null:
+		_clear_confirm.hide()
 
 
 func _status(text: String, is_error := false) -> void:

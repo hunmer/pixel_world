@@ -10,6 +10,7 @@ const SECTION := "startup"
 var path: String
 var auto_open_last_scene: bool = true
 var last_scene: String = BATTLE_SCENE
+var excluded_scenes: Array[String] = ["res://scenes/SkillTest.tscn"]
 var _config: ConfigFile = ConfigFile.new()
 var _writable: bool = true
 
@@ -31,6 +32,13 @@ func reload() -> void:
 	auto_open_last_scene = _config.get_value(SECTION, "auto_open_last_scene", true) == true
 	var value: Variant = _config.get_value(SECTION, "last_scene", BATTLE_SCENE)
 	last_scene = String(value).strip_edges() if value is String else ""
+	excluded_scenes = ["res://scenes/SkillTest.tscn"]
+	var excluded: Variant = _config.get_value(SECTION, "excluded_scenes", excluded_scenes)
+	if excluded is Array or excluded is PackedStringArray:
+		excluded_scenes = []
+		for item: Variant in excluded:
+			if item is String:
+				excluded_scenes.append(String(item).strip_edges())
 
 
 ## 文件缺失或路径错误时安全回到入口列表。
@@ -49,12 +57,13 @@ func launch_scene() -> String:
 ## 保存时重新读取，保留用户在运行中修改的开关和额外配置项。
 func record_scene(scene_path: String) -> void:
 	reload()
-	if not _writable or scene_path.is_empty():
+	if not _writable or scene_path.is_empty() or excluded_scenes.has(scene_path):
 		return
 	if last_scene == scene_path and FileAccess.file_exists(path):
 		return
 	_config.set_value(SECTION, "auto_open_last_scene", auto_open_last_scene)
 	_config.set_value(SECTION, "last_scene", scene_path)
+	_config.set_value(SECTION, "excluded_scenes", excluded_scenes)
 	var err: Error = _config.save(path)
 	if err != OK:
 		push_warning("[StartupConfig] 最近场景保存失败：%s (%d)" % [path, err])

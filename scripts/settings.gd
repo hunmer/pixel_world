@@ -50,6 +50,8 @@ func save() -> void:
 	cfg.set_value(SECTION_BATTLE, KEY_HOST_AI_DIFFICULTY, host_ai_difficulty)
 	cfg.set_value(SECTION_BATTLE, KEY_IMMERSIVE_PRESENTATION, battle_immersive_presentation)
 	var err := cfg.save(PATH)
+	if err == OK:
+		Sfx.play(&"save")
 	if err != OK:
 		push_warning("[Settings] 保存失败: %s (%d)" % [PATH, err])
 

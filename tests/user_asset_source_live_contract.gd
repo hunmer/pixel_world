@@ -181,6 +181,35 @@ func _run() -> void:
 	panel.visible = true
 	panel.queue_free()
 
+	# S9 一键清空在线缓存：在线 blob/烘焙图删除、本地导入保留、库描述符保留、状态回 missing
+	var local_src := "user://zz_live_local_src.png"
+	var local_img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	local_img.fill(Color(0.2, 0.8, 0.3, 1.0))
+	local_img.save_png(local_src)
+	var imp: Dictionary = svc.import_local_file(local_src, "terrain")
+	_expect(bool(imp.get("ok", false)), "S9 本地导入成功")
+	var local_id := String(imp.get("asset_id", ""))
+	var online_sha := String((svc.find_by_id("volcano_99") as Dictionary).get("sha256", ""))
+	var online_blob: String = svc.blob_path_for_sha(online_sha)
+	var online_baked := tmp_root.path_join("baked").path_join("volcano_99.png")
+	var local_blob := ""
+	if local_id != "":
+		local_blob = String(svc.blob_path_for_sha(String((svc.find_by_id(local_id) as Dictionary).get("sha256", ""))))
+	_expect(FileAccess.file_exists(online_blob), "S9 清空前在线 blob 存在")
+	_expect(FileAccess.file_exists(online_baked), "S9 清空前在线烘焙图存在")
+	_expect(local_blob != "" and FileAccess.file_exists(local_blob), "S9 清空前本地 blob 存在")
+	var clear_res: Dictionary = svc.clear_online_cache()
+	_expect(bool(clear_res.get("ok", false)), "S9 clear_online_cache ok")
+	_expect(int(clear_res.get("removed_blobs", 0)) >= 1,
+		"S9 removed_blobs>=1（实际 %d）" % int(clear_res.get("removed_blobs", 0)))
+	_expect(not FileAccess.file_exists(online_blob), "S9 在线 blob 已删除")
+	_expect(not FileAccess.file_exists(online_baked), "S9 在线烘焙图已删除")
+	_expect(FileAccess.file_exists(local_blob), "S9 本地导入 blob 保留")
+	_expect(svc.find_by_id("volcano_99") is Dictionary, "S9 库描述符保留（素材仍在列表）")
+	_expect(String(svc.get_asset_state("volcano_99").get("status", "")) == "missing",
+		"S9 清空后状态回 missing（可自动重新下载）")
+	DirAccess.remove_absolute(local_src)
+
 	svc.queue_free()
 	_remove_recursive(tmp_root)
 

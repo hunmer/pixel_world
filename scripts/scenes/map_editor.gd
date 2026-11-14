@@ -113,6 +113,7 @@ var _block_asset_buttons: Dictionary = {}  # asset_id -> Button
 var _pending_asset_thumbs: Dictionary = {}
 var _asset_thumb_timer: Timer = null
 var _block_asset_grid: GridContainer = null
+var _block_asset_empty: Label = null
 var _block_asset_group: ButtonGroup = null
 var _tool_buttons: Dictionary = {}   # Tool -> Button
 var _terrain_buttons: Dictionary = {}  # StringName(terrain) -> Button
@@ -537,6 +538,11 @@ func _build_block_tab(tabs: TabContainer) -> void:
 	_block_asset_grid.add_theme_constant_override("h_separation", 2)
 	_block_asset_grid.add_theme_constant_override("v_separation", 2)
 	tab.add_child(_block_asset_grid)
+	_block_asset_empty = UIFactoryScript.label(
+		"暂无已下载的素材方块\n在「素材」Tab 浏览在线方块，加载后自动出现在这里", 11, UIThemeScript.TEXT_DIM)
+	_block_asset_empty.name = "BlockAssetEmptyHint"
+	_block_asset_empty.visible = false
+	tab.add_child(_block_asset_empty)
 	_rebuild_block_asset_grid()
 
 
@@ -676,16 +682,20 @@ func _rebuild_block_asset_grid() -> void:
 		if String(d.get("kind", "")) != UserAssetCatalogScript.KIND_TERRAIN:
 			continue
 		var aid := String(d.get("id", ""))
+		# 只列已下载到本地的方块（一键清空后即空；未下载的从「素材」Tab 浏览自动加载，
+		# 下载完成经 asset_ready 合批重建进入本列表）
+		if String(_asset_service.get_asset_state(aid).get("status", "")) != "ready":
+			continue
 		ids.append(aid)
 		descs[aid] = d
-	# p_cache=false：1455 项不灌 LRU（防挤穿热缓存）；放置时低频 resolve 重解析可接受
+	# p_cache=false：不灌 LRU（防挤穿热缓存）；列表规模=已下载数，resolve_many 单次库加载可承受
 	var visuals: Dictionary = _asset_adapter.resolve_many(ids, false)
 	for aid in ids:
-		if String(_asset_service.get_asset_state(aid).get("status", "")) == "missing":
-			_asset_service.request_asset_image(aid)
 		var tb := _block_asset_btn(aid, descs[aid], visuals.get(aid, {}))
 		_block_asset_grid.add_child(tb)
 		_block_asset_buttons[aid] = tb
+	if _block_asset_empty != null:
+		_block_asset_empty.visible = ids.is_empty()
 	if not _selected_block_asset.is_empty():
 		if _block_asset_buttons.has(_selected_block_asset):
 			(_block_asset_buttons[_selected_block_asset] as Button).set_pressed_no_signal(true)
@@ -772,25 +782,9 @@ func _on_block_asset_ready(asset_id: String) -> void:
 
 ## 合批刷新待刷缩略图：整批一次 clear_cache + 一次 resolve_many（单库解析）。
 func _flush_asset_thumbs() -> void:
-	if _asset_adapter == null:
-		_pending_asset_thumbs.clear()
-		return
-	var ids: Array = _pending_asset_thumbs.keys()
+	# 0.3s 合批：新下载的素材整体重建网格加入（列表=已下载集，重建即增量；不做逐按钮补丁）
 	_pending_asset_thumbs.clear()
-	for raw_id in ids:
-		_asset_adapter.clear_cache(String(raw_id))
-	var visuals: Dictionary = _asset_adapter.resolve_many(ids, false)
-	for raw_id in ids:
-		var aid := String(raw_id)
-		var tb: Button = _block_asset_buttons.get(aid)
-		if tb == null:
-			continue
-		var visual: Dictionary = visuals.get(aid, {})
-		if visual.is_empty():
-			continue
-		for child in tb.get_children():
-			if child is TilePreviewScript:
-				child.asset_visual = visual
+	_rebuild_block_asset_grid()
 
 
 ## 选地形/植物调色板时清空素材选中（两组互斥，避免误放置）

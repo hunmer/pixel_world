@@ -166,6 +166,8 @@ func _run() -> void:
 			"素材面板：AssetList 为多选模式（Ctrl+点击批量选择）")
 		var dlb: Node = asset_panel.find_child("DownloadSelectedButton", true, false)
 		_expect(dlb is Button, "素材面板：下载选中按钮存在")
+		var ccb: Node = asset_panel.find_child("ClearCacheButton", true, false)
+		_expect(ccb is Button, "素材面板：一键清空已下载按钮存在")
 		_expect(asset_panel.get_node_or_null("SearchEdit") is LineEdit, "素材面板：搜索框存在")
 		# 过滤/导入/详情按钮嵌在各自的行容器里，用递归查找
 		var kf: Node = asset_panel.find_child("KindFilter", true, false)
@@ -176,7 +178,8 @@ func _run() -> void:
 		var ib: Node = asset_panel.find_child("ImportButton", true, false)
 		var ifd: Node = asset_panel.find_child("ImportFileDialog", true, false)
 		var hcd: Node = asset_panel.find_child("HideConfirmDialog", true, false)
-		_expect(ib is Button and ifd is FileDialog and hcd is ConfirmationDialog,
+		var ccd: Node = asset_panel.find_child("ClearCacheConfirmDialog", true, false)
+		_expect(ib is Button and ifd is FileDialog and hcd is ConfirmationDialog and ccd is ConfirmationDialog,
 			"素材面板：导入按钮 + 文件/确认弹窗存在")
 		var db: Node = asset_panel.find_child("DetailBox", true, false)
 		var ab: Node = asset_panel.find_child("ApplyButton", true, false)

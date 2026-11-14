@@ -14,6 +14,7 @@ const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_rendere
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const IsoBoardScript = preload("res://scripts/iso/iso_board.gd")
+const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
 const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
 
 signal cell_pressed(cell: Vector2i)
@@ -83,6 +84,12 @@ func _ready() -> void:
 	add_child(_world)
 	_renderer = BattlefieldRendererScript.new()
 	_board.add_child(_renderer)
+	# 编辑器没有 main.gd 的日光系统，而地形材质是逐像素着色（自 3D 日照提交起），
+	# 无真实光照会把整块画布渲成黑色。挂一盏固定正午阳光（与 battle.gd B2 同款）。
+	var sunlight := SunlightSystemScript.new()
+	sunlight.name = "EditorSunlight"
+	_board.add_child(sunlight)
+	sunlight.apply_time(0.5, 0.0)
 	_hover_marker = Polygon2D.new()
 	_hover_marker.name = "HoverMarker"
 	_hover_marker.z_index = 20

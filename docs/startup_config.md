@@ -7,10 +7,13 @@
 
 auto_open_last_scene=true
 last_scene="res://scenes/MapEditor.tscn"
+excluded_scenes=["res://scenes/SkillTest.tscn"]
 ```
 
 - `auto_open_last_scene`：是否启动时自动打开 `last_scene`。设为 `false` 时停在战场选择列表。
 - `last_scene`：最后实际进入的场景，使用 `res://` 场景路径；可以手动指定，下次启动生效。切换场景时自动更新，即使关闭自动打开也仍会记录。
+
+- `excluded_scenes`：不自动记录的场景路径列表，按完整路径精确匹配，默认排除 `res://scenes/SkillTest.tscn`。进入过滤场景时保留原来的 `last_scene`，不会写入配置；设为 `[]` 可取消过滤。该列表仅影响自动记录，不阻止手动指定启动场景，也不清除已经保存的 `last_scene`。
 
 常用入口：
 
