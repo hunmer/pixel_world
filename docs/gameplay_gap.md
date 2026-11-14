@@ -44,7 +44,7 @@
 
 | # | 元素 | 状态 | 证据与说明 | 规模 | roadmap |
 | --- | --- | --- | --- | --- | --- |
-| C1 | **单位间交换/传递** | ❌ | `trade/交换/give_item` 零命中。物品只能自用 | S | 未列，建议补 |
+| C1 | **单位间交换/传递** | ✅ | FE 式相邻友军 trade：行动菜单「交换」项（相邻 1 格带物品友军时可用）→ 选友军 → 单向转移（来回两次=交换），自由动作不置 hasActed；核心逻辑 `scripts/systems/trade_system.gd`（can_trade/adjacent_trade_targets/execute_trade），UI 在 `battle_ui.gd _open_trade_picker/_open_trade_item_picker`；契约 `tests/battle_trade_contract.gd`（commit 2a501c7） | S | 已补 |
 | C2 | **商店/金币经济** | ❌ | `gold/金币` 零命中。战间无资源循环，物品获得只有关卡配置 | M | 未列（依赖 A2 战役结构） |
 | C3 | 装备深度 | 🟡 | 有 equip 类物品与武器三角，无多槽位/耐久修理/锻造分化 | M | 部分（P2-9 扩道具数量，未提槽位） |
 
