@@ -6,7 +6,9 @@
 ##    .import）、同内容去重（重复导入返回既有 id）、原图字节原样保留。
 ## 2. 网络加载：HTTPRequest 拉清单（blocks.json）与图片按需下载；来源仅限
 ##    http(s)；同请求去重、有限并发、超时与有限重试、字节上限与（声明时）哈希
-##    校验；断网时已缓存 blob 仍可离线取纹理。
+##    校验；断网时已缓存 blob 仍可离线取纹理。源 URL 三级配置：root_dir 下
+##    asset_source.cfg 的 [asset_source] source_url 覆盖 > 库内 settings.source_url
+##    > DEFAULT_SOURCE_URL；同文件 remote_enabled=false 可整体禁用远程源（导出用）。
 ## 3. 纹理：Image 运行时解码 → ImageTexture，LRU 有界缓存（默认 64 张），
 ##    绝不一次性解码整库（1455 张清单只存元数据）。
 ## 4. 状态：get_asset_state 表达 missing / pending / ready，供 UI 阶段复用；
@@ -26,6 +28,10 @@ signal asset_failed(asset_id: String, error: String)
 signal source_changed(url: String)
 
 const DEFAULT_SOURCE_URL := "http://127.0.0.1:8076/blocks.json"
+const SOURCE_OVERRIDE_FILENAME := "asset_source.cfg"  ## 放 root_dir 下，独立于全局 settings.cfg
+const SOURCE_SECTION := "asset_source"
+const KEY_OVERRIDE_URL := "source_url"
+const KEY_REMOTE_ENABLED := "remote_enabled"
 const MAX_CONCURRENT_REQUESTS := 3
 const MAX_TEXTURE_CACHE := 64
 const REQUEST_TIMEOUT_SEC := 10.0
@@ -35,6 +41,12 @@ const BLOB_DIRNAME := "blobs"
 var root_dir: String
 var library_path: String
 var library: Dictionary
+
+## 远程源总开关（asset_source.cfg 可整体禁用：清单/图片下载全拒，
+## 本地导入与已缓存 blob 不受影响）。导出环境置 false 即可解绑远程源。
+var remote_enabled := true
+## 配置文件级源 URL 覆盖（优先于库内 settings.source_url；空 = 无覆盖）。
+var _override_source_url := ""
 
 ## 运行参数（测试可覆盖；max_image_bytes 只能收紧，catalog 层夹紧上限）
 var max_concurrent_requests := MAX_CONCURRENT_REQUESTS
@@ -59,6 +71,7 @@ func _init(custom_root: String = "user://custom_assets") -> void:
 
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(blob_root())
+	_load_source_override()
 	var res := Catalog.load_library(library_path)
 	if bool(res["ok"]):
 		library = res["library"]
@@ -80,9 +93,41 @@ func _exit_tree() -> void:
 
 # ---------------------------------------------------------------------------
 # 源设置（库内 settings 段持久化，独立于全局 settings.cfg）
+# 优先级：asset_source.cfg 的 source_url 覆盖 > 库内 settings.source_url > 默认。
 # ---------------------------------------------------------------------------
 
+## 源覆盖配置文件路径（root_dir/asset_source.cfg，与库同目录、按 root 隔离，
+# 测试换 root 即换配置，不污染真实 user://custom_assets）。
+func source_override_path() -> String:
+	return root_dir + "/" + SOURCE_OVERRIDE_FILENAME
+
+
+## 读取源覆盖配置。文件不存在 = 无覆盖（默认行为完全不变）。
+## [asset_source] source_url=<http(s) URL> 覆盖源；remote_enabled=false 整体禁用远程源。
+## 返回 {ok, applied, remote_enabled}（ok=false 表示无配置文件）。
+func _load_source_override() -> Dictionary:
+	var cfg := ConfigFile.new()
+	var err := cfg.load(source_override_path())
+	if err != OK:
+		return {"ok": false, "applied": "", "remote_enabled": true}
+	remote_enabled = bool(cfg.get_value(SOURCE_SECTION, KEY_REMOTE_ENABLED, true))
+	var raw_url := str(cfg.get_value(SOURCE_SECTION, KEY_OVERRIDE_URL, ""))
+	_override_source_url = ""
+	if not raw_url.is_empty():
+		if is_http_url(raw_url):
+			_override_source_url = raw_url
+		else:
+			push_warning("[UserAsset] 源覆盖配置 source_url 非 http(s)，忽略: %s" % raw_url)
+	if not _override_source_url.is_empty():
+		push_warning("[UserAsset] 源 URL 被配置覆盖: %s" % _override_source_url)
+	if not remote_enabled:
+		push_warning("[UserAsset] 远程源已被配置禁用（remote_enabled=false），仅本地导入与缓存可用")
+	return {"ok": true, "applied": _override_source_url, "remote_enabled": remote_enabled}
+
+
 func get_source_url() -> String:
+	if not _override_source_url.is_empty():
+		return _override_source_url
 	return str((library["settings"] as Dictionary).get("source_url", DEFAULT_SOURCE_URL))
 
 
@@ -184,6 +229,9 @@ func import_image_bytes(bytes: PackedByteArray, source_name: String,
 ## 拉取清单（默认源 blocks.json）。在途/排队中重复调用直接去重返回。
 ## 完成后 emit manifest_loaded({ok, added, updated, total, error})。
 func request_manifest() -> Dictionary:
+	if not remote_enabled:
+		push_warning("[UserAsset] 远程源已禁用，跳过清单拉取: %s" % source_override_path())
+		return {"ok": false, "error": "remote_source_disabled"}
 	if _manifest_pending:
 		return {"ok": true, "queued": true, "deduped": true}
 	var url := get_source_url()
@@ -204,6 +252,9 @@ func request_asset_image(asset_id: String) -> Dictionary:
 	if has_blob(d):
 		asset_ready.emit(asset_id)
 		return {"ok": true, "ready": true, "queued": false}
+	if not remote_enabled:
+		push_warning("[UserAsset] 远程源已禁用，无法补图（仅缓存可用）: %s" % asset_id)
+		return {"ok": false, "error": "remote_source_disabled"}
 	if _pending_assets.has(asset_id):
 		return {"ok": true, "ready": false, "queued": true, "deduped": true}
 	var url := str(d["image"])
@@ -493,11 +544,14 @@ func _finish_inflight(rec: Dictionary) -> void:
 func _dispatch_failure(rec: Dictionary, error: String) -> void:
 	if rec["kind"] == "manifest":
 		_manifest_pending = false
+		push_warning("[UserAsset] 清单拉取失败（源 %s）: %s —— 已缓存素材仍可离线使用"
+			% [str(rec["url"]), error])
 		manifest_loaded.emit({"ok": false, "added": 0, "updated": 0,
 			"total": asset_count(), "error": error})
 	else:
 		var asset_id := str(rec["asset_id"])
 		_pending_assets.erase(asset_id)
+		push_warning("[UserAsset] 图片拉取失败（%s ← %s）: %s" % [asset_id, str(rec["url"]), error])
 		asset_failed.emit(asset_id, error)
 
 

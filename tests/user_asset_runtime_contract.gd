@@ -3,7 +3,8 @@
 ## 覆盖：本地导入（成功/去重/非图/超大/超尺寸）、清单拉取与元数据先行、
 ## 跨源内容去重（本地导入 sha 与清单同图共享 blob）、图片下载回填、
 ## 声明哈希不匹配拒绝、同请求去重、并发上限、超时+重试、断网离线取纹理、
-## remove_asset blob 引用保护、LRU 逐出、库持久化 round-trip（新实例）。
+## remove_asset blob 引用保护、LRU 逐出、库持久化 round-trip（新实例）、
+## 源配置覆盖/断源降级/远程禁用（S15，P1-6）。
 ## 运行：godot --headless --path . --script res://tests/user_asset_runtime_contract.gd
 
 extends SceneTree
@@ -468,6 +469,47 @@ func _run() -> void:
 	var re: Dictionary = adapter2.resolve("slow_1")
 	_expect(not bool(re.get("missing", true)) and FileAccess.file_exists(baked_path),
 		"S14 烘焙失效后 resolve 应重烘并再次落盘")
+
+	# --- S15 源配置覆盖 + 断源降级 + 远程禁用（P1-6） ---
+	# 覆盖配置按 root 隔离：独立 root，不动 TMP_ROOT 主库
+	var ovr_root := TMP_ROOT + "/ovr"
+	DirAccess.make_dir_recursive_absolute(ovr_root)
+	var dead_port := 9  # loopback 丢弃端口，连接立即被拒（CANT_CONNECT）
+	var ovr_cfg := ConfigFile.new()
+	ovr_cfg.set_value("asset_source", "source_url", "http://127.0.0.1:%d/blocks.json" % dead_port)
+	var cfg_err: int = ovr_cfg.save(ovr_root + "/asset_source.cfg")
+	_expect(cfg_err == OK, "S15 写入源覆盖配置应成功 (err=%d)" % cfg_err)
+	var svc3: Node = ServiceScript.new(ovr_root)
+	root.add_child(svc3)
+	_expect(svc3.get_source_url() == "http://127.0.0.1:%d/blocks.json" % dead_port,
+		"S15 覆盖 URL 应优先于默认/库内 source_url: " + svc3.get_source_url())
+	# 断源降级：URL 不可达 → 明确失败信号 + 错误日志，不崩，库仍可用
+	var dead_req: Dictionary = svc3.request_manifest()
+	_expect(bool(dead_req.get("ok", false)), "S15 断源清单请求应入队")
+	fired = await _await_sig(svc3.manifest_loaded, 20000)
+	_expect(bool(fired[0]), "S15 断源 manifest_loaded 应触发（降级不挂起）")
+	_expect(not bool((fired[1] as Dictionary).get("ok", true)), "S15 断源结果应 ok=false")
+	_expect(not str((fired[1] as Dictionary).get("error", "")).is_empty(),
+		"S15 断源应携带明确 error")
+	var offline_imp: Dictionary = svc3.import_image_bytes(img_a, "offline_block.png")
+	_expect(bool(offline_imp.get("ok", false)), "S15 断源时本地导入仍可用: " + str(offline_imp.get("error", "")))
+	_expect(svc3.get_texture("offline_block") != null, "S15 断源时导入素材纹理可取")
+	root.remove_child(svc3)
+	svc3.queue_free()
+	# 远程禁用：remote_enabled=false → 拒绝远程请求，本地/缓存不受影响
+	ovr_cfg.set_value("asset_source", "remote_enabled", false)
+	_expect(ovr_cfg.save(ovr_root + "/asset_source.cfg") == OK, "S15 更新覆盖配置应成功")
+	var svc4: Node = ServiceScript.new(ovr_root)
+	root.add_child(svc4)
+	var dis_man: Dictionary = svc4.request_manifest()
+	_expect(not bool(dis_man.get("ok", true))
+		and str(dis_man.get("error", "")).contains("remote_source_disabled"),
+		"S15 禁用后清单拉取应被拒（remote_source_disabled）")
+	var dis_img: Dictionary = svc4.request_asset_image("offline_block")
+	_expect(bool(dis_img.get("ready", false)), "S15 禁用后已有 blob 的素材仍立即 ready")
+	_expect(svc4.asset_count() == 1, "S15 禁用后库仍从磁盘恢复（1 条）")
+	root.remove_child(svc4)
+	svc4.queue_free()
 
 	# --- 清理 ---
 	root.remove_child(svc)

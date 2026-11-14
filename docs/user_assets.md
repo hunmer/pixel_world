@@ -77,6 +77,31 @@ node --test tools/build_blocks_manifest.test.mjs                                
 
 ## 6. 单图视角限制
 
+### 6.1 换机重建 / 自定义源（P1-6）
+
+默认源 `http://127.0.0.1:8076/blocks.json` 只是历史约定，不是硬编码依赖：换机或想换素材目录时三步即可重建。
+
+**第一步：生成清单**（在新机的素材目录上）：
+
+```bash
+node tools/build_blocks_manifest.mjs --root <素材目录> --out <素材目录>/blocks.json
+```
+
+**第二步：本机起 http 服务**（只绑回环，不出网卡；`python3 -m http.server 8076 --bind 127.0.0.1 --directory <素材目录>` 或 `npx http-server <素材目录> -a 127.0.0.1 -p 8076 -c-1`）。
+
+**第三步：配置 override**：写 `user://custom_assets/asset_source.cfg`（macOS 即 `~/Library/Application Support/Godot/app_userdata/<项目名>/custom_assets/asset_source.cfg`，注意先跑过一次游戏让目录存在）：
+
+```ini
+[asset_source]
+source_url="http://127.0.0.1:<新端口>/blocks.json"
+```
+
+优先级：`asset_source.cfg` 的 `source_url` > 库内 `settings.source_url`（编辑器面板「保存并刷新」写的就是它）> 默认。不写该文件，行为与历史版本完全一致。
+
+**导出环境禁用远程源**：同文件加 `remote_enabled=false` —— `request_manifest()` / 缺图下载直接拒绝（错误 `remote_source_disabled`），本地导入与已缓存 blob 照常可用，适合纯离线分发。
+
+**断源降级**：源不可达时清单拉取按重试策略失败后 emit `manifest_loaded {ok:false, error:"http_result_…"}` 并打 `[UserAsset] 清单拉取失败…` 警告日志；已下载素材不受影响（库 + blob 在 `user://custom_assets/`，adapter 离线可读），不崩溃。
+
 等距方块图是**单张 2D 图**（含伪 3D 顶面），不是自动四向真 3D。渲染按 `render.pivot`（默认底部中心
 `{0.5,1.0}`）贴到柱顶，战斗视角仅支持 4 正交角度（0/90/180/270）。禁止擅自抠白色背景或按角度重投影。
 
