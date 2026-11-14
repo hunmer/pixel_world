@@ -28,6 +28,10 @@ const CHECK_BUTTON_VARIATION: StringName = &"PixelCheckButton"
 const SLIDER_VARIATION: StringName = &"PixelSlider"
 const SPIN_BOX_VARIATION: StringName = &"PixelSpinBox"
 const PROGRESS_BAR_VARIATION: StringName = &"PixelProgressBar"
+const IMAGE_VARIATION: StringName = &"PixelImage"
+const TEXT_AREA_VARIATION: StringName = &"PixelTextArea"
+const DROPDOWN_VARIATION: StringName = &"PixelDropdown"
+const POPUP_VARIATION: StringName = &"PixelPopup"
 
 ## 按钮图标默认最大宽度（像素）；PixelButton 可用 icon_size 覆盖。
 const DEFAULT_ICON_SIZE: int = 18
@@ -42,6 +46,7 @@ static func create() -> Theme:
 	_define_tabs(theme)
 	_define_panel(theme)
 	_define_controls(theme)
+	_define_media_controls(theme)
 	return theme
 
 
@@ -370,3 +375,95 @@ static func _define_progress_bar(theme: Theme) -> void:
 	)
 	theme.set_font_size("font_size", PROGRESS_BAR_VARIATION, DEFAULT_FONT_SIZE)
 	theme.set_color("font_color", PROGRESS_BAR_VARIATION, UIThemeScript.TEXT_MAIN)
+
+
+## 媒体与菜单类变体：图片容器 / 多行文本 / 动作菜单 / 弹层。
+## 播放器容器直接复用 PANEL_VARIATION，不额外造变体。
+static func _define_media_controls(theme: Theme) -> void:
+	_define_image(theme)
+	_define_text_area(theme)
+	_define_dropdown(theme)
+	_define_popup(theme)
+
+
+## 图片容器：卡片面但内容边距为 0，让纹理贴边；圆角由 StyleBox 裁出观感。
+static func _define_image(theme: Theme) -> void:
+	theme.set_type_variation(IMAGE_VARIATION, &"PanelContainer")
+	theme.set_stylebox(
+		"panel", IMAGE_VARIATION,
+		UIThemeScript.flat_style(UIThemeScript.HELP_BG, UIThemeScript.BORDER, 1, 8, 0.0)
+	)
+
+
+## 多行文本：与输入框同口径，补只读态与选区色。
+static func _define_text_area(theme: Theme) -> void:
+	theme.set_type_variation(TEXT_AREA_VARIATION, &"TextEdit")
+	theme.set_stylebox(
+		"normal", TEXT_AREA_VARIATION,
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, 6, 8.0)
+	)
+	theme.set_stylebox(
+		"focus", TEXT_AREA_VARIATION,
+		UIThemeScript.flat_style(Color(0.07, 0.10, 0.12, 1.0), UIThemeScript.ACCENT, 1, 6, 8.0)
+	)
+	theme.set_stylebox(
+		"read_only", TEXT_AREA_VARIATION,
+		UIThemeScript.flat_style(
+			Color(0.06, 0.08, 0.10, 0.9), Color(0.2, 0.25, 0.28, 0.5), 1, 6, 8.0
+		)
+	)
+	theme.set_color("font_color", TEXT_AREA_VARIATION, UIThemeScript.TEXT_MAIN)
+	theme.set_color("font_readonly_color", TEXT_AREA_VARIATION, UIThemeScript.TEXT_DIM)
+	theme.set_color("font_selected_color", TEXT_AREA_VARIATION, UIThemeScript.TEXT_MAIN)
+	theme.set_color("caret_color", TEXT_AREA_VARIATION, UIThemeScript.ACCENT)
+	theme.set_color("selection_color", TEXT_AREA_VARIATION, Color(0.4, 0.86, 0.76, 0.28))
+	theme.set_font_size("font_size", TEXT_AREA_VARIATION, DEFAULT_FONT_SIZE)
+
+
+## 动作菜单：沿用按钮六态观感，与 OptionButton 的下拉外观区分（MenuButton 基类）。
+static func _define_dropdown(theme: Theme) -> void:
+	theme.set_type_variation(DROPDOWN_VARIATION, &"MenuButton")
+	theme.set_stylebox(
+		"normal", DROPDOWN_VARIATION,
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, 6, 6.0)
+	)
+	theme.set_stylebox(
+		"hover", DROPDOWN_VARIATION,
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_HOVER, UIThemeScript.PANEL_BORDER, 1, 6, 6.0)
+	)
+	theme.set_stylebox(
+		"pressed", DROPDOWN_VARIATION,
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, 6, 6.0)
+	)
+	theme.set_stylebox(
+		"hover_pressed", DROPDOWN_VARIATION,
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, 6, 6.0)
+	)
+	theme.set_stylebox(
+		"focus", DROPDOWN_VARIATION,
+		UIThemeScript.flat_style(Color(0, 0, 0, 0), UIThemeScript.ACCENT, 1, 6, 6.0)
+	)
+	theme.set_stylebox(
+		"disabled", DROPDOWN_VARIATION,
+		UIThemeScript.flat_style(
+			Color(0.07, 0.09, 0.11, 0.8), Color(0.2, 0.25, 0.28, 0.5), 1, 6, 6.0
+		)
+	)
+	theme.set_color("font_color", DROPDOWN_VARIATION, UIThemeScript.TEXT_MAIN)
+	theme.set_color("font_hover_color", DROPDOWN_VARIATION, UIThemeScript.TEXT_MAIN)
+	theme.set_color("font_pressed_color", DROPDOWN_VARIATION, UIThemeScript.ACCENT)
+	theme.set_color("font_focus_color", DROPDOWN_VARIATION, UIThemeScript.ACCENT)
+	theme.set_color("font_disabled_color", DROPDOWN_VARIATION, Color(0.5, 0.55, 0.58, 0.5))
+	theme.set_constant("h_separation", DROPDOWN_VARIATION, 6)
+	theme.set_font_size("font_size", DROPDOWN_VARIATION, DEFAULT_FONT_SIZE)
+
+
+## 弹层：与卡片同口径的深底面，独立窗口内容直接落在这个面板上。
+static func _define_popup(theme: Theme) -> void:
+	theme.set_type_variation(POPUP_VARIATION, &"PopupPanel")
+	var sb := UIThemeScript.flat_style(
+		UIThemeScript.HELP_BG, UIThemeScript.BORDER, 1, 8, 12.0
+	)
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	sb.shadow_size = 8
+	theme.set_stylebox("panel", POPUP_VARIATION, sb)

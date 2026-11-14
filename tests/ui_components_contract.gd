@@ -28,9 +28,16 @@ const PixelCheckButtonScript = preload("res://ui/components/pixel_check_button.g
 const PixelSliderScript = preload("res://ui/components/pixel_slider.gd")
 const PixelSpinBoxScript = preload("res://ui/components/pixel_spin_box.gd")
 const PixelProgressBarScript = preload("res://ui/components/pixel_progress_bar.gd")
+const PixelImageScript = preload("res://ui/components/pixel_image.gd")
+const PixelIconScript = preload("res://ui/components/pixel_icon.gd")
+const PixelTextAreaScript = preload("res://ui/components/pixel_text_area.gd")
+const PixelDropdownScript = preload("res://ui/components/pixel_dropdown.gd")
+const PixelPopupScript = preload("res://ui/components/pixel_popup.gd")
+const PixelAudioPlayerScript = preload("res://ui/components/pixel_audio_player.gd")
+const PixelVideoPlayerScript = preload("res://ui/components/pixel_video_player.gd")
 
 ## 画廊页签标题的期望值（与脚本内 DEMO_TAB_TITLES 保持一致，改名时必须同步）。
-const EXPECTED_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值"]
+const EXPECTED_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单"]
 
 var _failures: Array[String] = []
 var _checks: int = 0
@@ -47,6 +54,7 @@ func _run() -> void:
 	_test_pixel_tabs()
 	_test_pixel_panel()
 	_test_pixel_controls()
+	await _test_pixel_media_controls()
 	await _test_gallery()
 	_finish()
 
@@ -343,6 +351,8 @@ func _test_pixel_controls() -> void:
 	_expect(other_line_edit.theme.get_color("font_color", ComponentThemeScript.LINE_EDIT_VARIATION) == before, "输入框主题实例互不污染")
 
 	# 原生行为：范围、步进、禁用、信号都还是 Godot 原生实现。
+	# Range 的 value_changed 需要节点在树内才稳定投递，先挂到 root 再测。
+	root.add_child(slider)
 	slider.min_value = 0.0
 	slider.max_value = 100.0
 	slider.step = 1.0
@@ -390,6 +400,198 @@ func _test_pixel_controls() -> void:
 	spin.free()
 	progress.free()
 	other_line_edit.free()
+
+
+# ---------------------------------------------------------------- 媒体与菜单组件
+
+func _test_pixel_media_controls() -> void:
+	var image: PanelContainer = PixelImageScript.new() as PanelContainer
+	var icon: TextureRect = PixelIconScript.new() as TextureRect
+	var text_area: TextEdit = PixelTextAreaScript.new() as TextEdit
+	var dropdown: MenuButton = PixelDropdownScript.new() as MenuButton
+	var popup: PopupPanel = PixelPopupScript.new() as PopupPanel
+	var audio: PanelContainer = PixelAudioPlayerScript.new() as PanelContainer
+	var video: PanelContainer = PixelVideoPlayerScript.new() as PanelContainer
+	_expect(image is PanelContainer, "PixelImage 继承 PanelContainer")
+	_expect(icon is TextureRect, "PixelIcon 继承 TextureRect")
+	_expect(text_area is TextEdit, "PixelTextArea 继承 TextEdit")
+	_expect(dropdown is MenuButton, "PixelDropdown 继承 MenuButton")
+	_expect(popup is PopupPanel, "PixelPopup 继承 PopupPanel")
+	_expect(audio is PanelContainer, "PixelAudioPlayer 是组合 PanelContainer")
+	_expect(video is PanelContainer, "PixelVideoPlayer 是组合 PanelContainer")
+	if image == null or icon == null or text_area == null or dropdown == null or popup == null:
+		return
+	if audio == null or video == null:
+		return
+
+	# 变体与实例隔离：每个组件实例化即带集中主题。
+	_expect(image.theme != null and image.theme_type_variation == ComponentThemeScript.IMAGE_VARIATION, "图片容器使用 PixelImage 变体")
+	_expect(text_area.theme != null and text_area.theme_type_variation == ComponentThemeScript.TEXT_AREA_VARIATION, "多行文本使用 PixelTextArea 变体")
+	_expect(dropdown.theme_type_variation == ComponentThemeScript.DROPDOWN_VARIATION, "动作菜单使用 PixelDropdown 变体")
+	_expect(popup.theme_type_variation == ComponentThemeScript.POPUP_VARIATION, "弹层使用 PixelPopup 变体")
+	_expect(audio.theme_type_variation == ComponentThemeScript.PANEL_VARIATION, "音频容器复用卡片面变体")
+	_expect(video.theme_type_variation == ComponentThemeScript.PANEL_VARIATION, "视频容器复用卡片面变体")
+	_expect(image.theme != text_area.theme, "媒体组件之间不共享 Theme 实例")
+
+	# PixelImage：纹理绑定、尺寸、适配方式、重复进树幂等。
+	var image_texture: Texture2D = UIThemeScript.icon("star")
+	image.set("texture", image_texture)
+	image.set("image_size", Vector2i(160, 90))
+	var image_child: TextureRect = image.get_node_or_null(
+		NodePath(String(PixelImageScript.IMAGE_NODE_NAME))
+	) as TextureRect
+	_expect(image_child != null, "图片容器内部 Image 节点常驻")
+	if image_child != null:
+		_expect(image_child.texture == image_texture, "纹理绑定到内部 TextureRect")
+		_expect(image_child.custom_minimum_size == Vector2(160, 90), "图片最小尺寸随导出值")
+	image.set("stretch_mode", TextureRect.STRETCH_KEEP_ASPECT_COVERED)
+	if image_child != null:
+		_expect(image_child.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_COVERED, "图片支持等比裁切")
+	var image_children: int = image.get_child_count()
+	root.add_child(image)
+	root.remove_child(image)
+	root.add_child(image)
+	_expect(image.get_child_count() == image_children, "图片容器重复进树不增节点")
+	root.remove_child(image)
+
+	# PixelIcon：尺寸钳制与着色。
+	icon.set("icon_size", 48)
+	_expect(icon.custom_minimum_size == Vector2(48, 48), "图标尺寸写入最小尺寸")
+	icon.set("icon_color", Color.RED)
+	_expect(icon.modulate == Color.RED, "图标着色写入 modulate")
+	icon.set("icon_size", 999)
+	_expect(icon.custom_minimum_size == Vector2(128, 128), "图标尺寸上限钳制到 128")
+	icon.free()
+
+	# PixelTextArea：原生占位、多行、只读/可编辑。
+	text_area.placeholder = "多行"
+	_expect(text_area.placeholder_text == "多行", "多行文本占位符转发")
+	root.add_child(text_area)
+	text_area.text = "第一行\n第二行"
+	_expect(text_area.get_line_count() == 2, "多行文本保留原生换行")
+	text_area.editable = false
+	_expect(not text_area.editable, "多行文本保留可编辑开关")
+	_expect(text_area.has_theme_stylebox("read_only"), "多行文本主题含只读样式")
+	root.remove_child(text_area)
+	text_area.free()
+
+	# PixelDropdown：条目、动作信号。
+	dropdown.set("items", PackedStringArray(["打开", "复制"]))
+	_expect(int(dropdown.call("get_choice_count")) == 2, "动作菜单按 items 建条目")
+	_expect(dropdown.get_popup().get_item_text(0) == "打开", "动作菜单条目文本正确")
+	dropdown.call("add_choice", "删除")
+	_expect(int(dropdown.call("get_choice_count")) == 3, "add_choice 追加条目")
+	var picked: Array[int] = []
+	dropdown.get_popup().id_pressed.connect(func(id: int) -> void: picked.append(id))
+	dropdown.get_popup().id_pressed.emit(1)
+	_expect(picked == [1], "动作菜单保留原生 id_pressed 信号")
+	dropdown.free()
+
+	# PixelPopup：真实打开/关闭与焦点恢复。
+	var opener := Button.new()
+	opener.text = "打开"
+	root.add_child(opener)
+	opener.grab_focus()
+	_expect(root.gui_get_focus_owner() == opener, "弹层 opener 获得焦点")
+	popup.add_child(Label.new())
+	root.add_child(popup)
+	popup.call("open_for", opener)
+	_expect(popup.visible, "open_for 后弹层可见")
+	popup.hide()
+	_expect(not popup.visible, "hide 后弹层关闭")
+	_expect(root.gui_get_focus_owner() == opener, "弹层关闭后焦点恢复到 opener")
+	root.remove_child(popup)
+	root.add_child(popup)
+	popup.call("open_for", opener)
+	popup.hide()
+	_expect(root.gui_get_focus_owner() == opener, "重复进树后关闭仍恢复焦点")
+	root.remove_child(popup)
+	popup.queue_free()
+	root.remove_child(opener)
+	opener.queue_free()
+
+	# PixelAudioPlayer：真实播放/暂停/停止、音量、空流安全、重复进树幂等。
+	audio.set("stream", load("res://assets/audio/sfx/ui/sfx_ui_confirm.mp3"))
+	var audio_player: AudioStreamPlayer = audio.get_node_or_null("Player") as AudioStreamPlayer
+	_expect(audio_player != null, "音频容器含 Player 节点")
+	if audio_player != null:
+		_expect(audio_player.stream != null, "音频流已绑定 Player")
+	root.add_child(audio)
+	audio.call("play_sound")
+	if audio_player != null:
+		_expect(audio_player.playing, "音频真实进入播放")
+	audio.call("pause_sound")
+	if audio_player != null:
+		_expect(audio_player.stream_paused, "暂停写入 stream_paused")
+	audio.call("play_sound")
+	if audio_player != null:
+		_expect(not audio_player.stream_paused, "音频从暂停恢复")
+	audio.call("stop_sound")
+	if audio_player != null:
+		_expect(not audio_player.playing, "停止后退出播放")
+	audio.set("volume_db", -6.0)
+	if audio_player != null:
+		_expect(is_equal_approx(audio_player.volume_db, -6.0), "音量导出写入播放器")
+	var audio_children: int = audio.get_child_count()
+	root.remove_child(audio)
+	root.add_child(audio)
+	_expect(audio.get_child_count() == audio_children, "音频容器重复进树不增节点")
+	root.remove_child(audio)
+	audio.queue_free()
+
+	var empty_audio: PanelContainer = PixelAudioPlayerScript.new() as PanelContainer
+	root.add_child(empty_audio)
+	empty_audio.call("play_sound")
+	var empty_audio_player: AudioStreamPlayer = empty_audio.get_node_or_null("Player") as AudioStreamPlayer
+	_expect(empty_audio_player != null and not empty_audio_player.playing, "空流播放请求安全忽略")
+	root.remove_child(empty_audio)
+	empty_audio.queue_free()
+
+	# PixelVideoPlayer：真实可播 ogv、播放/暂停/停止、空流安全、重复进树幂等。
+	var video_stream: VideoStream = load("res://assets/video/ui/ui_demo.ogv") as VideoStream
+	_expect(video_stream != null, "项目内 .ogv 视频样例可加载")
+	if video_stream == null:
+		video.queue_free()
+		return
+	video.set("stream", video_stream)
+	var video_player: VideoStreamPlayer = video.get_node_or_null("Video") as VideoStreamPlayer
+	_expect(video_player != null and video_player.stream == video_stream, "视频流已绑定 VideoStreamPlayer")
+	root.add_child(video)
+	video.call("play_video")
+	await process_frame
+	if video_player != null:
+		_expect(video_player.is_playing(), "视频真实进入播放")
+	video.call("pause_video")
+	if video_player != null:
+		_expect(video_player.paused, "视频暂停写入 paused")
+	video.call("play_video")
+	if video_player != null:
+		_expect(not video_player.paused, "视频从暂停恢复")
+	await process_frame
+	await process_frame
+	if video_player != null:
+		_expect(video_player.stream_position >= 0.0, "视频位置可读")
+	video.call("stop_video")
+	if video_player != null:
+		_expect(not video_player.is_playing(), "视频停止后退出播放")
+	var video_children: int = video.get_child_count()
+	root.remove_child(video)
+	root.add_child(video)
+	_expect(video.get_child_count() == video_children, "视频容器重复进树不增节点")
+	root.remove_child(video)
+	video.queue_free()
+
+	var empty_video: PanelContainer = PixelVideoPlayerScript.new() as PanelContainer
+	root.add_child(empty_video)
+	empty_video.call("play_video")
+	var empty_video_player: VideoStreamPlayer = empty_video.get_node_or_null("Video") as VideoStreamPlayer
+	_expect(empty_video_player != null and not empty_video_player.is_playing(), "空流视频安全忽略")
+	root.remove_child(empty_video)
+	empty_video.queue_free()
+
+	# @tool 静默：两个播放器都必须在源码里用 is_editor_hint 拦住编辑器播发。
+	_check_source("res://ui/components/pixel_audio_player.gd", ["Engine.is_editor_hint()"], [])
+	_check_source("res://ui/components/pixel_video_player.gd", ["Engine.is_editor_hint()"], [])
 
 
 # ---------------------------------------------------------------- PixelTabs
@@ -501,7 +703,7 @@ func _test_gallery() -> void:
 	_expect(tabs != null, "画廊包含 ComponentTabs")
 	if tabs == null:
 		return
-	_expect(tabs.get_tab_count() == 4, "画廊有 4 个页签")
+	_expect(tabs.get_tab_count() == EXPECTED_TAB_TITLES.size(), "画廊页签数量与期望一致")
 	for tab_index: int in range(mini(tabs.get_tab_count(), EXPECTED_TAB_TITLES.size())):
 		_expect(
 			tabs.get_tab_title(tab_index) == EXPECTED_TAB_TITLES[tab_index],
@@ -577,6 +779,90 @@ func _test_gallery() -> void:
 	_expect(int(demo_slider.value) == 25, "数值框联动滑块")
 	_expect(int(demo_progress.value) == 25, "数值框驱动进度条")
 
+	# 媒体页：图片/图标/音频/视频容器挂载，播放控制真实驱动播放状态。
+	tabs.current_tab = 4
+	await process_frame
+	await process_frame
+	var demo_image: Control = gallery.find_child("DemoImage", true, false) as Control
+	var demo_icon: Control = gallery.find_child("DemoIcon", true, false) as Control
+	var demo_audio: Control = gallery.find_child("DemoAudioPlayer", true, false) as Control
+	var demo_video: Control = gallery.find_child("DemoVideoPlayer", true, false) as Control
+	_expect(
+		demo_image != null and demo_icon != null and demo_audio != null and demo_video != null,
+		"媒体页包含图片/图标/音频/视频容器"
+	)
+	if demo_image == null or demo_icon == null or demo_audio == null or demo_video == null:
+		return
+	_expect(demo_image.get_script() == PixelImageScript, "媒体页图片为 PixelImage")
+	_expect(demo_icon.get_script() == PixelIconScript, "媒体页图标为 PixelIcon")
+	_expect(demo_audio.get_script() == PixelAudioPlayerScript, "媒体页音频为 PixelAudioPlayer")
+	_expect(demo_video.get_script() == PixelVideoPlayerScript, "媒体页视频为 PixelVideoPlayer")
+	var media_image: TextureRect = demo_image.find_child("Image", true, false) as TextureRect
+	var audio_player: AudioStreamPlayer = demo_audio.find_child("Player", true, false) as AudioStreamPlayer
+	var video_player: VideoStreamPlayer = demo_video.find_child("Video", true, false) as VideoStreamPlayer
+	_expect(media_image != null and media_image.texture != null, "媒体页图片绑定真实纹理")
+	_expect(audio_player != null and audio_player.stream != null, "媒体页音频绑定真实 stream")
+	_expect(video_player != null and video_player.stream != null, "媒体页视频绑定真实 stream")
+	var play_audio: Button = demo_audio.find_child("PlayButton", true, false) as Button
+	var pause_audio: Button = demo_audio.find_child("PauseButton", true, false) as Button
+	var stop_audio: Button = demo_audio.find_child("StopButton", true, false) as Button
+	_expect(play_audio != null and pause_audio != null and stop_audio != null, "音频容器含播放/暂停/停止按钮")
+	if play_audio != null and pause_audio != null and stop_audio != null and audio_player != null:
+		play_audio.pressed.emit()
+		_expect(audio_player.playing, "媒体页音频播放按钮驱动播放")
+		pause_audio.pressed.emit()
+		_expect(audio_player.stream_paused, "媒体页音频暂停按钮生效")
+		play_audio.pressed.emit()
+		_expect(not audio_player.stream_paused, "媒体页音频从暂停恢复")
+		stop_audio.pressed.emit()
+		_expect(not audio_player.playing, "媒体页音频停止按钮生效")
+	var play_video: Button = demo_video.find_child("PlayButton", true, false) as Button
+	var pause_video: Button = demo_video.find_child("PauseButton", true, false) as Button
+	var stop_video: Button = demo_video.find_child("StopButton", true, false) as Button
+	_expect(play_video != null and pause_video != null and stop_video != null, "视频容器含播放/暂停/停止按钮")
+	if play_video != null and pause_video != null and stop_video != null and video_player != null:
+		play_video.pressed.emit()
+		await process_frame
+		_expect(video_player.is_playing(), "媒体页视频播放按钮驱动播放")
+		pause_video.pressed.emit()
+		_expect(video_player.paused, "媒体页视频暂停按钮生效")
+		play_video.pressed.emit()
+		_expect(not video_player.paused, "媒体页视频从暂停恢复")
+		stop_video.pressed.emit()
+		_expect(not video_player.is_playing(), "媒体页视频停止按钮生效")
+
+	# 菜单页：多行文本、动作菜单、弹层开关与焦点恢复。
+	tabs.current_tab = 5
+	await process_frame
+	await process_frame
+	var demo_text_area: TextEdit = gallery.find_child("DemoTextArea", true, false) as TextEdit
+	var demo_dropdown: MenuButton = gallery.find_child("DemoDropdown", true, false) as MenuButton
+	var open_popup: Button = gallery.find_child("OpenPopupButton", true, false) as Button
+	var demo_popup: PopupPanel = gallery.find_child("DemoPopup", true, false) as PopupPanel
+	var close_popup: Button = gallery.find_child("PopupCloseButton", true, false) as Button
+	_expect(
+		demo_text_area != null and demo_dropdown != null and open_popup != null
+		and demo_popup != null and close_popup != null,
+		"菜单页包含多行文本/动作菜单/弹层与开关按钮"
+	)
+	if demo_text_area == null or demo_dropdown == null or open_popup == null:
+		return
+	if demo_popup == null or close_popup == null:
+		return
+	_expect(demo_text_area.get_script() == PixelTextAreaScript, "菜单页多行文本为 PixelTextArea")
+	_expect(demo_dropdown.get_script() == PixelDropdownScript, "菜单页动作菜单为 PixelDropdown")
+	_expect(demo_popup.get_script() == PixelPopupScript, "菜单页弹层为 PixelPopup")
+	demo_text_area.text_changed.emit()
+	_expect(feedback.text.contains("文本域"), "多行文本编辑写入反馈")
+	demo_dropdown.get_popup().id_pressed.emit(0)
+	_expect(feedback.text.contains("动作"), "动作菜单选择写入反馈")
+	open_popup.grab_focus()
+	open_popup.pressed.emit()
+	_expect(demo_popup.visible, "打开按钮弹出弹层")
+	close_popup.pressed.emit()
+	_expect(not demo_popup.visible, "关闭按钮收起弹层")
+	_expect(root.gui_get_focus_owner() == open_popup, "弹层关闭后焦点回到打开按钮")
+
 	# 演示页无教学/说明性文本：标题、短标签与真实值之外不应出现说明文案或路径。
 	var forbidden: Array[String] = ["说明", "用法", "API", "继承", "res://", "点击可", "示例"]
 	for control: Node in gallery.find_children("*", "Label", true, false):
@@ -599,6 +885,10 @@ func _test_gallery() -> void:
 		_expect(feedback.text.contains("重置"), "重置写入反馈")
 		_expect(int(demo_slider.value) == 0 and int(demo_progress.value) == 0, "重置后滑块与进度归零")
 		_expect(preview.text.contains("—"), "重置后预览值复位")
+		_expect(demo_text_area.text == "", "重置清空多行文本")
+		_expect(not demo_popup.visible, "重置收起弹层")
+		_expect(audio_player != null and not audio_player.playing, "重置停止音频")
+		_expect(video_player != null and not video_player.is_playing(), "重置停止视频")
 		_expect(root.gui_get_focus_owner() == primary, "重置后焦点回到主操作按钮")
 
 	# 多尺寸：铺满窗口、页签/新组件有有效布局。
@@ -620,6 +910,20 @@ func _test_gallery() -> void:
 			feedback.size.y > 0.0,
 			"反馈面板在 %dx%d 有有效高度" % [target.x, target.y]
 		)
+		tabs.current_tab = 4
+		await process_frame
+		_expect(
+			demo_image.size.x > 0.0 and demo_image.size.y > 0.0,
+			"图片容器在 %dx%d 有有效尺寸" % [target.x, target.y]
+		)
+		tabs.current_tab = 5
+		await process_frame
+		_expect(
+			demo_text_area.size.x > 0.0 and demo_text_area.size.y > 0.0,
+			"多行文本在 %dx%d 有有效尺寸" % [target.x, target.y]
+		)
+		tabs.current_tab = 0
+		await process_frame
 
 	root.remove_child(gallery)
 	gallery.queue_free()

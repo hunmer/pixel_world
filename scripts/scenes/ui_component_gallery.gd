@@ -3,9 +3,9 @@
 ## 只展示真实组件、短名称、必要操作标签与真实值；API、继承、资源路径与用法
 ## 说明全部放 ui/README.md，界面不写教学文字、帮助页、描述段落或说明 tooltip。
 ##
-## 页签：按钮 / 卡片 / 输入 / 数值。PixelButton、PixelTabs、PixelPanel 与六类
-## 新组件（输入框 / 下拉 / 开关 / 滑块 / 数值框 / 进度条）在同一画廊真实交互。
-## F6 独立运行，不依赖战斗参数，不修改默认启动；ESC 退出。
+## 页签：按钮 / 卡片 / 输入 / 数值 / 媒体 / 菜单。PixelButton、PixelTabs、PixelPanel、
+## 六类输入数值组件与图片 / 图标 / 多行文本 / 动作菜单 / 弹层 / 音频 / 视频容器
+## 在同一画廊真实交互。F6 独立运行，不依赖战斗参数，不修改默认启动；ESC 退出。
 extends Control
 
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
@@ -19,13 +19,20 @@ const PixelCheckButtonScript = preload("res://ui/components/pixel_check_button.g
 const PixelSliderScript = preload("res://ui/components/pixel_slider.gd")
 const PixelSpinBoxScript = preload("res://ui/components/pixel_spin_box.gd")
 const PixelProgressBarScript = preload("res://ui/components/pixel_progress_bar.gd")
+const PixelImageScript = preload("res://ui/components/pixel_image.gd")
+const PixelIconScript = preload("res://ui/components/pixel_icon.gd")
+const PixelTextAreaScript = preload("res://ui/components/pixel_text_area.gd")
+const PixelDropdownScript = preload("res://ui/components/pixel_dropdown.gd")
+const PixelPopupScript = preload("res://ui/components/pixel_popup.gd")
+const PixelAudioPlayerScript = preload("res://ui/components/pixel_audio_player.gd")
+const PixelVideoPlayerScript = preload("res://ui/components/pixel_video_player.gd")
 
 ## 反馈面板最多保留的历史条数（超出丢弃最早一条，避免长时间点击后无限增长）。
 const FEEDBACK_MAX_LINES := 60
 ## 右侧反馈卡片的窄窗口最小宽度。
 const SIDE_MIN_WIDTH := 360
 ## 页签标题：只保留短组件类别。
-const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值"]
+const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单"]
 ## 数值页滑块 / 数值框 / 进度条的共用范围。
 const DEMO_VALUE_MAX: float = 100.0
 
@@ -51,6 +58,16 @@ var _preview_label: Label
 var _demo_slider: HSlider
 var _demo_spin: SpinBox
 var _demo_progress: ProgressBar
+
+var _demo_image: Control
+var _demo_icon: TextureRect
+var _demo_extra_icon: TextureRect
+var _demo_audio: Control
+var _demo_video: Control
+var _demo_text_area: TextEdit
+var _demo_dropdown: MenuButton
+var _demo_popup: PopupPanel
+var _open_popup_button: Button
 
 
 func _ready() -> void:
@@ -97,6 +114,8 @@ func _build_ui() -> void:
 	_build_panel_page()
 	_build_input_page()
 	_build_value_page()
+	_build_media_page()
+	_build_menu_page()
 
 	var feedback_card := _make_card("反馈", "")
 	feedback_card.custom_minimum_size = Vector2(SIDE_MIN_WIDTH, 0)
@@ -292,6 +311,99 @@ func _build_value_page() -> void:
 	page.add_child(card)
 
 
+## 第 5 页：图片 / 图标 / 音频 / 视频容器（全部用项目内真实素材）。
+func _build_media_page() -> void:
+	var page: VBoxContainer = _tabs.call("add_pixel_tab", DEMO_TAB_TITLES[4]) as VBoxContainer
+	page.add_theme_constant_override("separation", 12)
+
+	var image_card := _make_card("图片", "")
+	_demo_image = PixelImageScript.new() as Control
+	_demo_image.name = "DemoImage"
+	_demo_image.set("texture", load("res://assets/markers/tile_box.png"))
+	_demo_image.set("image_size", Vector2i(240, 135))
+	_demo_image.set("stretch_mode", TextureRect.STRETCH_KEEP_ASPECT_CENTERED)
+	_card_slot(image_card).add_child(_demo_image)
+	page.add_child(image_card)
+
+	var icon_card := _make_card("图标", "")
+	var icon_row := HBoxContainer.new()
+	icon_row.add_theme_constant_override("separation", 16)
+	_demo_icon = PixelIconScript.new() as TextureRect
+	_demo_icon.name = "DemoIcon"
+	_demo_icon.texture = UIThemeScript.icon("star")
+	_demo_icon.set("icon_size", 48)
+	icon_row.add_child(_demo_icon)
+	_demo_extra_icon = PixelIconScript.new() as TextureRect
+	_demo_extra_icon.name = "DemoExtraIcon"
+	_demo_extra_icon.texture = UIThemeScript.icon("play")
+	_demo_extra_icon.set("icon_size", 28)
+	_demo_extra_icon.set("icon_color", UIThemeScript.ACCENT)
+	icon_row.add_child(_demo_extra_icon)
+	_card_slot(icon_card).add_child(icon_row)
+	page.add_child(icon_card)
+
+	var audio_card := _make_card("音频", "")
+	_demo_audio = PixelAudioPlayerScript.new() as Control
+	_demo_audio.name = "DemoAudioPlayer"
+	_demo_audio.set("stream", load("res://assets/audio/sfx/ui/sfx_ui_confirm.mp3"))
+	_demo_audio.set("volume_db", -2.0)
+	_card_slot(audio_card).add_child(_demo_audio)
+	page.add_child(audio_card)
+
+	var video_card := _make_card("视频", "")
+	_demo_video = PixelVideoPlayerScript.new() as Control
+	_demo_video.name = "DemoVideoPlayer"
+	_demo_video.set("stream", load("res://assets/video/ui/ui_demo.ogv"))
+	_demo_video.set("video_size", Vector2i(320, 180))
+	_card_slot(video_card).add_child(_demo_video)
+	page.add_child(video_card)
+
+
+## 第 6 页：多行文本 / 动作菜单 / 弹层。
+func _build_menu_page() -> void:
+	var page: VBoxContainer = _tabs.call("add_pixel_tab", DEMO_TAB_TITLES[5]) as VBoxContainer
+	page.add_theme_constant_override("separation", 12)
+
+	var text_card := _make_card("多行文本", "")
+	_demo_text_area = PixelTextAreaScript.new() as TextEdit
+	_demo_text_area.name = "DemoTextArea"
+	_demo_text_area.placeholder = "多行文本"
+	_demo_text_area.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_demo_text_area.custom_minimum_size = Vector2(0, 120)
+	_card_slot(text_card).add_child(_demo_text_area)
+	page.add_child(text_card)
+
+	var menu_card := _make_card("菜单", "")
+	var menu_row := HBoxContainer.new()
+	menu_row.add_theme_constant_override("separation", 12)
+	_demo_dropdown = PixelDropdownScript.new() as MenuButton
+	_demo_dropdown.name = "DemoDropdown"
+	_demo_dropdown.text = "动作"
+	_demo_dropdown.set("items", PackedStringArray(["打开", "复制", "删除"]))
+	menu_row.add_child(_demo_dropdown)
+	_card_slot(menu_card).add_child(menu_row)
+	page.add_child(menu_card)
+
+	var popup_card := _make_card("弹层", "")
+	_open_popup_button = _make_pixel_button("打开", 1, "info")
+	_open_popup_button.name = "OpenPopupButton"
+	_card_slot(popup_card).add_child(_open_popup_button)
+	page.add_child(popup_card)
+
+	_demo_popup = PixelPopupScript.new() as PopupPanel
+	_demo_popup.name = "DemoPopup"
+	var popup_box := VBoxContainer.new()
+	popup_box.custom_minimum_size = Vector2(240, 120)
+	popup_box.add_theme_constant_override("separation", 8)
+	popup_box.add_child(UIFactoryScript.label("弹层", 13, UIThemeScript.TEXT_MAIN))
+	var popup_close := _make_pixel_button("关闭", 1, "")
+	popup_close.name = "PopupCloseButton"
+	popup_close.pressed.connect(_on_popup_close_pressed)
+	popup_box.add_child(popup_close)
+	_demo_popup.add_child(popup_box)
+	add_child(_demo_popup)
+
+
 ## 右侧反馈卡片内容：状态行 + 富文本历史。
 func _build_feedback_body(slot: Container) -> void:
 	_status_label = UIFactoryScript.label("就绪", 13, UIThemeScript.TEXT_MAIN)
@@ -329,6 +441,15 @@ func _connect_signals() -> void:
 	_demo_slider.value_changed.connect(_on_slider_changed)
 	_demo_spin.value_changed.connect(_on_spin_changed)
 	_tabs.tab_changed.connect(_on_tab_changed)
+	_demo_dropdown.get_popup().id_pressed.connect(_on_dropdown_id_pressed)
+	_demo_text_area.text_changed.connect(_on_text_area_changed)
+	_open_popup_button.pressed.connect(_on_open_popup_pressed)
+	_demo_audio.connect("playback_started", _on_audio_state_changed.bind("播放"))
+	_demo_audio.connect("playback_paused", _on_audio_state_changed.bind("暂停"))
+	_demo_audio.connect("playback_stopped", _on_audio_state_changed.bind("停止"))
+	_demo_video.connect("playback_started", _on_video_state_changed.bind("播放"))
+	_demo_video.connect("playback_paused", _on_video_state_changed.bind("暂停"))
+	_demo_video.connect("playback_stopped", _on_video_state_changed.bind("停止"))
 
 
 ## 生成一个 PixelButton（不依赖全局类名，统一走 preload 脚本 + 动态属性）。
@@ -428,6 +549,41 @@ func _on_tab_changed(tab: int) -> void:
 	_log_feedback("页签 → %s" % tab_title)
 
 
+func _on_dropdown_id_pressed(id: int) -> void:
+	var popup: PopupMenu = _demo_dropdown.get_popup()
+	var item_text := popup.get_item_text(id) if id >= 0 and id < popup.item_count else str(id)
+	_status_label.text = "动作：%s" % item_text
+	_log_feedback("动作 → %s" % item_text)
+
+
+func _on_text_area_changed() -> void:
+	var line_count := _demo_text_area.get_line_count()
+	_status_label.text = "多行文本：%d 行" % line_count
+	_log_feedback("文本域 → %d 行" % line_count)
+
+
+func _on_open_popup_pressed() -> void:
+	_demo_popup.call("open_for", _open_popup_button)
+	_status_label.text = "弹层打开"
+	_log_feedback("弹层 → 打开")
+
+
+func _on_popup_close_pressed() -> void:
+	_demo_popup.hide()
+	_status_label.text = "弹层关闭"
+	_log_feedback("弹层 → 关闭")
+
+
+func _on_audio_state_changed(state: String) -> void:
+	_status_label.text = "音频：%s" % state
+	_log_feedback("音频 → %s" % state)
+
+
+func _on_video_state_changed(state: String) -> void:
+	_status_label.text = "视频：%s" % state
+	_log_feedback("视频 → %s" % state)
+
+
 ## 统一开关所有演示用 PixelButton 的悬停/点击音效（按脚本识别，不动其他按钮）。
 func _apply_sfx_enabled(enabled: bool) -> void:
 	for btn: Button in find_children("*", "Button", true, false):
@@ -458,6 +614,10 @@ func _reset_demo() -> void:
 	_demo_spin.set_value_no_signal(0.0)
 	_demo_progress.value = 0.0
 	_preview_label.text = "值：—"
+	_demo_text_area.text = ""
+	_demo_popup.hide()
+	_demo_audio.call("stop_sound")
+	_demo_video.call("stop_video")
 	_tabs.current_tab = 0
 	_status_label.text = "已重置"
 	_log_feedback("重置")

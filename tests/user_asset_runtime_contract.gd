@@ -403,7 +403,7 @@ func _run() -> void:
 	_expect(svc2.get_source_url() == server.base_url() + "/blocks.json",
 		"S11 新实例 source_url 应持久化")
 
-	# --- S12 terrain 整图尺寸归一化（放置后与内建 32px 方块同宽） ---
+	# --- S12 terrain 整图尺寸适配 32x26 盒（内容裁剪 + 等比 fit，放置后与内建方块同尺寸） ---
 	var adapter := AdapterScript.new(TMP_ROOT)
 	var big_png := _make_png(174, 200, Color.WHITE)
 	var big_img := Image.new()
@@ -411,22 +411,22 @@ func _run() -> void:
 	var desc_norm := Catalog.make_descriptor("norm_a", Catalog.KIND_TERRAIN,
 		"norm_a", [], "norm_a.png", "", 0, 174, 200)
 	var v_norm: Dictionary = adapter.build_visual(desc_norm, big_img)
-	_expect(Vector2(v_norm["canvas_size"]) == Vector2(32, 37),
-		"S12 terrain 174x200 归一化到 32 宽（高按同比例 37）: %s" % str(v_norm["canvas_size"]))
+	_expect(Vector2(v_norm["canvas_size"]) == Vector2(23, 26),
+		"S12 terrain 174x200 等比适配 32x26 盒（fit=0.13）: %s" % str(v_norm["canvas_size"]))
 	var desc_fp2 := Catalog.make_descriptor("norm_b", Catalog.KIND_TERRAIN,
 		"norm_b", [], "norm_b.png", "", 0, 174, 200)
 	desc_fp2["render"] = {"mode": "full", "crop": null, "pivot": {"x": 0.5, "y": 1.0},
 		"scale": 1.0, "footprint": {"w": 2, "h": 1}}
 	var v_fp2: Dictionary = adapter.build_visual(desc_fp2, big_img)
-	_expect(Vector2(v_fp2["canvas_size"]) == Vector2(64, 74),
-		"S12 footprint.w=2 → 归一化到 64 宽: %s" % str(v_fp2["canvas_size"]))
+	_expect(Vector2(v_fp2["canvas_size"]) == Vector2(23, 26),
+		"S12 footprint.w=2 → 盒 64x26，高受限 fit=0.13（等比不拉伸）: %s" % str(v_fp2["canvas_size"]))
 	var desc_x2 := Catalog.make_descriptor("norm_c", Catalog.KIND_TERRAIN,
 		"norm_c", [], "norm_c.png", "", 0, 174, 200)
 	desc_x2["render"] = {"mode": "full", "crop": null, "pivot": {"x": 0.5, "y": 1.0},
 		"scale": 2.0, "footprint": {"w": 1, "h": 1}}
 	var v_x2: Dictionary = adapter.build_visual(desc_x2, big_img)
-	_expect(Vector2(v_x2["canvas_size"]) == Vector2(64, 74),
-		"S12 render.scale=2 在归一化基础上再乘: %s" % str(v_x2["canvas_size"]))
+	_expect(Vector2(v_x2["canvas_size"]) == Vector2(46, 52),
+		"S12 render.scale=2 在 fit 后再乘（23x26 × 2）: %s" % str(v_x2["canvas_size"]))
 	var desc_plant := Catalog.make_descriptor("norm_d", Catalog.KIND_PLANT,
 		"norm_d", [], "norm_d.png", "", 0, 174, 200)
 	var v_plant: Dictionary = adapter.build_visual(desc_plant, big_img)
@@ -437,8 +437,8 @@ func _run() -> void:
 	desc_crop["render"] = {"mode": "crop", "crop": {"x": 0, "y": 0, "w": 87, "h": 100},
 		"pivot": {"x": 0.5, "y": 1.0}, "scale": 1.0, "footprint": {"w": 1, "h": 1}}
 	var v_crop: Dictionary = adapter.build_visual(desc_crop, big_img)
-	_expect(Vector2(v_crop["canvas_size"]) == Vector2(32, 37),
-		"S12 crop 模式按裁后尺寸归一化（87x100 → 32 宽）: %s" % str(v_crop["canvas_size"]))
+	_expect(Vector2(v_crop["canvas_size"]) == Vector2(23, 26),
+		"S12 crop 模式按裁后尺寸适配盒（87x100 全不透明 → 23x26）: %s" % str(v_crop["canvas_size"]))
 
 	# --- S13 resolve_many 批量解析（方块页网格用：一次库加载出全图） ---
 	# 注意 red_block/basic_0/grassland_1 已在 S9 移除，这里用 slow_1 + 新导入素材。

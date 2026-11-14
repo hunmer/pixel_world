@@ -34,6 +34,9 @@ const PLACEHOLDER_H := 48
 ## 之后 resolve 直接读盘；render 参数编辑后 invalidate_baked 作废重烘。源 blob 不动。
 const BAKED_DIR := "baked"
 
+## 烘焙管线版本：归一化/裁剪规则变更时 +1，使旧烘焙图自然失效重烘（文件名含版本）。
+const BAKED_VERSION := 2
+
 var root: String = "user://custom_assets"
 
 ## asset_id -> visual（LRU 缓存；missing 占位也缓存，键前缀区分）
@@ -95,17 +98,33 @@ func bake_image(descriptor: Dictionary, image: Image) -> Image:
 				var cropped := Image.create(cw, ch, false, img.get_format())
 				cropped.blit_rect(img, Rect2i(cx, cy, cw, ch), Vector2i.ZERO)
 				img = cropped
-	# 2) 尺寸归一化（仅 terrain）：F 盘整图方块约 174px 宽，直接放会比内建
-	# 方块（32px 宽/格，见 isometric_column_batch.gd 的 UV 图集）大数倍。
-	# 归一化到 32px×footprint.w 宽（crop 模式按裁后尺寸），render.scale 在其基础上再乘。
+	# 2) 尺寸归一化（仅 terrain）：F 盘整图方块约 174px 宽，直接放会比内建方块大数倍。
+	# 目标盒=内建方块内容盒 32 宽 × 26 高（图集顶面 y6..22 + 侧面到 y32，见
+	# isometric_column_batch.gd 的 UV 区域）；先裁到不透明内容（去透明留白——
+	# 整图归一化会把底部留白的高度一起算进去，结果 32x40 比正常方块 32x26 高），
+	# 再等比缩放到恰好装进 32*fw × 26*fh 盒（不拉伸变形）；render.scale 在其上再乘。
 	const BLOCK_NORM_WIDTH := 32.0
+	const BLOCK_NORM_HEIGHT := 26.0
 	if String(descriptor.get("kind", "")) == Catalog.KIND_TERRAIN:
 		var footprint: Dictionary = render.get("footprint", {})
-		var norm_target := BLOCK_NORM_WIDTH * clampi(int(footprint.get("w", 1)), 1, 8)
-		var norm := norm_target / float(img.get_width())
-		if absf(norm - 1.0) > 0.001:
-			var nw := maxi(1, roundi(img.get_width() * norm))
-			var nh := maxi(1, roundi(img.get_height() * norm))
+		var fw := clampi(int(footprint.get("w", 1)), 1, 8)
+		var fh := clampi(int(footprint.get("h", 1)), 1, 8)
+		var content_bounds := _opaque_bounds(img)
+		if not content_bounds.is_empty():
+			var bx := int(content_bounds.get("min_x", 0))
+			var by := int(content_bounds.get("min_y", 0))
+			var bw := int(content_bounds.get("max_x", 0)) - bx + 1
+			var bh := int(content_bounds.get("max_y", 0)) - by + 1
+			if bw > 0 and bh > 0 and (bw != img.get_width() or bh != img.get_height()):
+				var content := Image.create(bw, bh, false, img.get_format())
+				content.blit_rect(img, Rect2i(bx, by, bw, bh), Vector2i.ZERO)
+				img = content
+		var box_w := BLOCK_NORM_WIDTH * fw
+		var box_h := BLOCK_NORM_HEIGHT * fh
+		var fit := minf(box_w / float(img.get_width()), box_h / float(img.get_height()))
+		if absf(fit - 1.0) > 0.001:
+			var nw := maxi(1, roundi(img.get_width() * fit))
+			var nh := maxi(1, roundi(img.get_height() * fit))
 			var normed: Image = img.duplicate()
 			normed.resize(nw, nh, Image.INTERPOLATE_NEAREST)
 			img = normed
@@ -321,7 +340,7 @@ func _blob_path(sha: String) -> String:
 ## 烘焙图路径：<root>/baked/<id>.png。烘焙图 = crop/归一化/scale 已完成的像素结果，
 ## resolve 优先读它（免重复像素处理）；源 blob 永不被修改（原图保全）。
 func baked_path_for(asset_id: String) -> String:
-	return root + "/" + BAKED_DIR + "/" + asset_id + ".png"
+	return root + "/" + BAKED_DIR + "/" + asset_id + ".v" + str(BAKED_VERSION) + ".png"
 
 
 ## render 参数（mode/crop/pivot/scale/footprint）被编辑后调用：删烘焙图，下次 resolve 重烘。

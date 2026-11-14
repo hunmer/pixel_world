@@ -412,9 +412,12 @@ func clear_online_cache() -> Dictionary:
 			var blob := blob_path_for_sha(sha)
 			if FileAccess.file_exists(blob) and DirAccess.remove_absolute(blob) == OK:
 				removed_blobs += 1
-		var baked := root_dir.path_join("baked").path_join("%s.png" % String(d.get("id", "")))
-		if FileAccess.file_exists(baked) and DirAccess.remove_absolute(baked) == OK:
-			removed_baked += 1
+		# 烘焙图：删全部版本命名（<id>.png 旧版 + <id>.v<N>.png 当前版）
+		var baked_dir := root_dir.path_join("baked")
+		for suffix in [".png", ".v2.png"]:
+			var baked := baked_dir.path_join("%s%s" % [String(d.get("id", "")), suffix])
+			if FileAccess.file_exists(baked) and DirAccess.remove_absolute(baked) == OK:
+				removed_baked += 1
 	for asset_id in removed_ids:
 		_textures.erase(asset_id)
 		_texture_lru.erase(asset_id)

@@ -191,7 +191,7 @@ func _run() -> void:
 	var local_id := String(imp.get("asset_id", ""))
 	var online_sha := String((svc.find_by_id("volcano_99") as Dictionary).get("sha256", ""))
 	var online_blob: String = svc.blob_path_for_sha(online_sha)
-	var online_baked := tmp_root.path_join("baked").path_join("volcano_99.png")
+	var online_baked := tmp_root.path_join("baked").path_join("volcano_99.v2.png")
 	var local_blob := ""
 	if local_id != "":
 		local_blob = String(svc.blob_path_for_sha(String((svc.find_by_id(local_id) as Dictionary).get("sha256", ""))))
