@@ -26,7 +26,7 @@
 | --- | --- | --- | --- | --- | --- |
 | A1 | **多样化胜利条件** | 🟡 | **部分完成**（2ec8acb）：chapter JSON 可选 `victory` 字段（`{"type":"rout"}` 默认 / `{"type":"defend_turns","turns":N}` / `{"type":"seize","cell":[x,y]}`）；`turn_manager.gd` `check_victory(enemies, ctx)` 注入式判定 + 歼灭兜底；battle.gd/turn_director 回合结束接线；CLI/runner 同步；契约 `tests/victory_conditions_contract.gd`（40 断言）；演示战场 `data/battlefields/last_stand.json`。仍缺：护送/撤离(escape)、指定单位击破、回合限制失败、E1 目标型 AI 配套 | M（框架）/S（每种条件） | 框架已落地（rout/defend_turns/seize） |
 | A2 | **战役/章节结构** | 🟡 | 4 战场平铺（O 键选单），无章节链/解锁/胜负流转；story 目标态 15 章。演出层已有 `play_chapter_result` 接口等着接 | L | ✅ P2-10 |
-| A3 | **增援系统** | ❌ | `reinforce` 零命中。无按回合/事件刷援军——战旗关卡节奏的灵魂机制 | M | 未列，建议补 |
+| A3 | **增援系统** | ✅ | **已完成（最小框架）**（ff7d229）：chapter JSON 可选 `reinforcements` 波次（`[{turn:N, units:[同enemyUnits格式], positions:[{x,y}]}]`），`battlefield_loader` 严格校验（界内/可站立/不重叠，非法整卡拒绝）；`core/reinforcement_spawner.gd` 共享刷入内核（敌方回合开始时到点波次入 grid/turn/enemyUnits，落点被占自动挪最近空格）；battle.gd（含演出 sprite/快照/恢复局）与 battle_runner（CLI 无头，`reinforce` 事件入战报）同点位接线；未到点波次并入敌存活集合防提前判胜；契约 `tests/reinforcement_contract.gd`（33 断言）；演示战场 `data/battlefields/ambush_reinforce.json`。仍缺：事件触发（非回合）、增援演出、玩家方增援 | M | 框架已落地（回合波次式） |
 | A4 | **地图事件脚本** | ❌ | 无"第 N 回合发生 X"的脚本层（增援/对话插播/地形变化/失败条件追加）。chapter JSON 只有静态单位表 | M–L | 未列（A1/A3 的载体） |
 | A5 | **Boss/指挥官单位** | 🟡 | 演出层有 Boss 横幅接口（`play_opening(units, boss={})`）；单位数据层无 boss 标志/专属技能/击破即胜语义 | S–M | 未列 |
 | A6 | 地形交互语义 | 🟡 | 11 种地形有数值（回避/防御/移动成本），但 village/fort/wall 无占领、治疗、开门等交互 | M | 部分（roadmap P1-4 只管地形覆盖） |
