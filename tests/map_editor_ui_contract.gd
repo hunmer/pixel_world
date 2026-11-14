@@ -10,6 +10,11 @@
 ##       Ctrl+Z/Ctrl+Y 撤销重做（画笔/单位放置/生成，重做分支截断，边界安全）。
 ##    8. 历史 Tab：动作时间线列表（初始地图为第 0 条、游标高亮、入史同步），
 ##       换页封存画笔动作，点击任意记录可一步跳转（前进=重做/后退=撤销）。
+##   10. 选择模式菜单（点「选择」/「填充」图标弹出，Esc 关闭）：单格/区域两模式；
+##       区域=两次独立点击设 pos1/pos2（拖动无效，z=所在格高度）+ SpinBox 精修，
+##       画布虚线框同步（同高=固定平面，异高=跟随地形）；区域填充与无区域洪水
+##       填充均支持内置地形（写 rows 清 override）/已保存素材方块（只写
+##       tile_overrides），整个区域一步历史、撤销原子回滚；回单格模式行为不回退。
 
 extends SceneTree
 
@@ -648,6 +653,154 @@ func _run() -> void:
 			"合法读取透传 z=9，并同步清空旧选择")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(json_path))
 
+	# ---- 10. 选择模式菜单 / 区域端点（两次独立点击 + SpinBox 精修）/ 区域与素材填充 ----
+	editor.apply_generate("sel_contract", 8, 8)
+	await process_frame
+	var popup: Control = editor.get_node_or_null("SelectionPopup")
+	_expect(popup != null and not popup.visible, "10 选择模式菜单存在且默认隐藏")
+	if popup == null:
+		_finish(editor)
+		return
+	var sel_box: VBoxContainer = popup.get_node_or_null("SelectionPopupBox")
+	_expect(sel_box != null, "10 菜单内容容器存在")
+	var mode_opt := sel_box.get_node_or_null("ModeOption") if sel_box != null else null
+	_expect(mode_opt is OptionButton and (mode_opt as OptionButton).item_count == 2,
+		"10 模式菜单含 单格/区域 两项")
+	_expect(sel_box.get_node_or_null("Pos1Row/Pos1X") is SpinBox
+		and sel_box.get_node_or_null("Pos1Row/Pos1Y") is SpinBox
+		and sel_box.get_node_or_null("Pos1Row/Pos1Z") is SpinBox
+		and sel_box.get_node_or_null("Pos2Row/Pos2X") is SpinBox
+		and sel_box.get_node_or_null("Pos2Row/Pos2Y") is SpinBox
+		and sel_box.get_node_or_null("Pos2Row/Pos2Z") is SpinBox,
+		"10 pos1/pos2 六维坐标 SpinBox 齐全")
+	_expect(sel_box.get_node_or_null("FillBlockSelector") != null, "10 通用方块选择器在菜单内")
+	_expect(sel_box.get_node_or_null("RegionBtnRow/RegionFillBtn") is Button
+		and sel_box.get_node_or_null("RegionBtnRow/RegionClearBtn") is Button
+		and sel_box.get_node_or_null("RegionBtnRow/CloseBtn") is Button,
+		"10 填充/清除/关闭按钮齐全")
+
+	# 两次独立点击（拖动无效）+ 虚线框 / SpinBox 同步
+	editor._on_selection_mode_item(1)
+	_expect(editor._selection_mode == &"region", "10 切换到区域模式")
+	editor._apply_region_click(Vector2i(1, 1))
+	_expect(editor._selection_range.is_active() and not editor._region_pos2_set,
+		"10 第一次点击置 pos1（区域未完备）")
+	editor._on_cell_dragged(Vector2i(6, 6))
+	_expect(editor._selection_range.max_corner() == editor._selection_range.min_corner(),
+		"10 区域模式拖动不设端点（须两次独立点击）")
+	editor._apply_region_click(Vector2i(4, 3))
+	_expect(editor._region_pos2_set
+		and editor._selection_range.min_corner() == Vector3i(1, 1, 0)
+		and editor._selection_range.max_corner() == Vector3i(4, 3, 0),
+		"10 第二次独立点击置 pos2，端点=点击格（z=所在格高度）")
+	_expect(editor._canvas.has_selection_region()
+		and editor._canvas.selection_region.get("min") == Vector2i(1, 1)
+		and editor._canvas.selection_region.get("max") == Vector2i(4, 3)
+		and int(editor._canvas.selection_region.get("z", -99)) == 0,
+		"10 虚线框同步（同高度 → 固定平面 z=0）")
+	var pos1x: SpinBox = sel_box.get_node("Pos1Row/Pos1X")
+	var pos2x: SpinBox = sel_box.get_node("Pos2Row/Pos2X")
+	var pos2z: SpinBox = sel_box.get_node("Pos2Row/Pos2Z")
+	_expect(int(pos1x.value) == 1 and int(pos2x.value) == 4 and int(pos2z.value) == 0,
+		"10 坐标 SpinBox 回显两次点击端点")
+
+	# 第三次点击重新从 pos1 开始；SpinBox 精修同步 range 与虚线框
+	editor._apply_region_click(Vector2i(2, 2))
+	_expect(not editor._region_pos2_set
+		and editor._selection_range.min_corner() == Vector3i(2, 2, 0),
+		"10 第三次点击重新从 pos1 开始")
+	editor._apply_region_click(Vector2i(4, 3))
+	editor._pos2_boxes[&"x"].value = 6
+	_expect(editor._selection_range.max_corner().x == 6
+		and editor._canvas.selection_region.get("max") == Vector2i(6, 3),
+		"10 手改 pos2.x=6 → range 与虚线框同步")
+	editor._pos1_boxes[&"z"].value = 2
+	_expect(editor._selection_range.min_corner().z == 2
+		and int(editor._canvas.selection_region.get("z", -99)) == -1,
+		"10 手改 pos1.z 成异高度 → 虚线框转跟随地形周界（z=-1）")
+	editor._pos1_boxes[&"z"].value = 0
+	_expect(int(editor._canvas.selection_region.get("z", -99)) == 0,
+		"10 恢复同高度 → 回到固定平面虚线框")
+
+	# 区域填充（内置地形）：rows 全改 + 覆盖清空，恰好一步历史、撤销原子回滚
+	_expect(editor._fill_selector.select_terrain(&"water"), "10 选择器选中内置地形 water")
+	var rows_before: Array = (editor.model.rows as Array).duplicate()
+	var hist_before: int = editor._history.size()
+	editor._push_undo("填充")
+	editor._apply_fill(Vector2i(0, 0))
+	var all_water := true
+	for y in range(2, 4):
+		for x in range(2, 7):
+			if (editor.model.rows[y] as String).substr(x, 1) != "w":
+				all_water = false
+	_expect(all_water, "10 区域填充 terrain：区域内 10 格全部写入 rows")
+	_expect(BattlefieldDocScript.tile_override_at(editor.model, Vector2i(3, 2)) == "",
+		"10 区域填充 terrain：区域覆盖清空")
+	_expect((editor.model.rows[0] as String) == (rows_before[0] as String),
+		"10 区域填充 terrain：区域外行不受影响")
+	_expect(editor._history.size() == hist_before + 1, "10 区域填充恰好一步历史")
+	_send_key(editor, KEY_Z, true)
+	_expect(_diff_cells(editor.model.rows as Array, rows_before) == 0,
+		"10 撤销区域填充：rows 原子回滚（0 差异）")
+	_send_key(editor, KEY_Y, true)
+
+	# 区域填充（已保存素材方块）：只写 tile_overrides、不动 rows（两层正确区分）
+	var fake_service := _FakeAssetService.new()
+	fake_service.entries = [{"id": "a_land", "kind": "terrain", "saved": true, "name": "地块A"}]
+	editor._fill_selector.setup(fake_service, _FakeAdapter.new())
+	editor._fill_selector.refresh_assets()
+	_expect(editor._fill_selector.select_asset("a_land"), "10 选择器选中已保存素材方块")
+	var rows_before_asset: Array = (editor.model.rows as Array).duplicate()
+	var overrides_before: Dictionary = (editor.model.get("tile_overrides", {}) as Dictionary).duplicate()
+	var hist_before_asset: int = editor._history.size()
+	editor._push_undo("区域填充")
+	editor._fill_region()
+	var asset_ok := true
+	for y in range(2, 4):
+		for x in range(2, 7):
+			if BattlefieldDocScript.tile_override_at(editor.model, Vector2i(x, y)) != "a_land":
+				asset_ok = false
+	_expect(asset_ok, "10 区域填充 asset：区域内 10 格全部写入 tile_overrides")
+	_expect(_diff_cells(editor.model.rows as Array, rows_before_asset) == 0,
+		"10 区域填充 asset：rows 一字未动")
+	_expect(editor._history.size() == hist_before_asset + 1, "10 素材区域填充恰好一步历史")
+	_send_key(editor, KEY_Z, true)
+	_expect((editor.model.get("tile_overrides", {}) as Dictionary) == overrides_before,
+		"10 撤销素材区域填充：tile_overrides 原子回滚")
+	_send_key(editor, KEY_Y, true)
+
+	# 无区域 + 选择器=素材 → 同「地形+覆盖」连通洪水填充（只写 tile_overrides、rows 不动）
+	editor._selection_range.clear()
+	editor._region_pos2_set = false
+	editor._sync_region_marker()
+	_expect(not editor._canvas.has_selection_region(), "10 清除区域后虚线框消失")
+	var rows_before_flood: Array = (editor.model.rows as Array).duplicate()
+	editor._push_undo("填充")
+	editor._apply_fill(Vector2i(0, 0))
+	_expect(BattlefieldDocScript.tile_override_at(editor.model, Vector2i(0, 0)) == "a_land",
+		"10 素材洪水填充：起点写入 tile_overrides")
+	_expect(_diff_cells(editor.model.rows as Array, rows_before_flood) == 0,
+		"10 素材洪水填充：rows 一字未动")
+	_expect(BattlefieldDocScript.tile_override_at(editor.model, Vector2i(3, 2)) == "a_land",
+		"10 素材洪水填充：不同图例/有覆盖区域不受影响")
+	_send_key(editor, KEY_Z, true)
+	_expect(BattlefieldDocScript.tile_override_at(editor.model, Vector2i(0, 0)) == "",
+		"10 撤销素材洪水填充：覆盖原子回滚")
+
+	# 回单格模式：区域清空，单格选择 / 方块面板 / Esc 行为不回退
+	editor._on_selection_mode_item(0)
+	_expect(editor._selection_mode == &"single" and not editor._selection_range.is_active()
+		and not editor._canvas.has_selection_region(), "10 回单格模式清空区域")
+	editor._open_selection_popup()
+	_expect(editor._selection_popup.visible, "10 菜单可打开")
+	_send_key(editor, KEY_ESCAPE)
+	_expect(not editor._selection_popup.visible, "10 Esc 先关选择菜单（不返回世界）")
+	tabs.current_tab = 3
+	editor._apply_tool(Vector2i(5, 5))
+	_expect(editor._canvas.selected_cell == Vector2i(5, 5)
+		and int(editor._block_z_box.value) == BattlefieldDocScript.cell_z(editor.model, Vector2i(5, 5)),
+		"10 单格选择与方块面板联动不回退")
+
 	_finish(editor)
 
 
@@ -752,6 +905,31 @@ func _send_key(editor: Node, key: Key, ctrl := false) -> void:
 	ev.pressed = true
 	ev.ctrl_pressed = ctrl
 	editor._unhandled_input(ev)
+
+
+class _FakeAssetService:
+	extends RefCounted
+	signal asset_ready(asset_id: String)
+	var entries: Array = []
+	func list_assets() -> Array:
+		return entries
+	func get_asset_state(_asset_id: String) -> Dictionary:
+		return {"status": "ready"}
+	func request_asset_image(_asset_id: String) -> void:
+		pass
+
+
+class _FakeAdapter:
+	extends RefCounted
+	func resolve(_asset_id: String) -> Dictionary:
+		return {}
+	func resolve_many(ids: Array, _p_cache: bool = true) -> Dictionary:
+		var out := {}
+		for id in ids:
+			out[id] = {}
+		return out
+	func clear_cache(_asset_id: String = "") -> void:
+		pass
 
 
 func _finish(editor: Node) -> void:

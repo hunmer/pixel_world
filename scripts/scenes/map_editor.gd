@@ -18,6 +18,11 @@
 ## 图标：at-icons 矢量 SVG（res://addons/at-icons/control/，16×16），加载失败
 ## 自动回退文字标签。保存为 res://data/battlefields/<id>.json（loader schema，
 ## 保存即回读校验），战场列表（O 键）立即可见可开战。
+## 选择模式（点「选择」/「填充」图标弹出菜单）：单格选择沿用原行为；区域选择=
+## 两次独立点击设 pos1/pos2（z 取所在格高度，可在菜单内 SpinBox 精修），画布
+## 同步 GLM 虚线边框（同高度=固定平面，异高度=跟随地形周界）；区域填充与无区域
+## 洪水填充均支持内置地形与已保存素材方块——地形写 rows 并清 override，素材写
+## tile_overrides 不动 rows，整个区域一步历史（原子）。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
 ## 按钮一律由 ui/components 像素组件创建（UIFactory / PixelButton 预加载），
 ## 本文件不再自带样式 helper 与裸 Button.new；领域按钮工厂（_add_tool_btn 等）保留。
@@ -37,6 +42,8 @@ const AssetLibraryPanelScript = preload("res://scripts/editor/asset_library_pane
 const UserAssetServiceScript = preload("res://scripts/assets/user_asset_service.gd")
 const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
 const UserAssetCatalogScript = preload("res://scripts/assets/user_asset_catalog.gd")
+const SelectionRangeScript = preload("res://scripts/editor/selection_range.gd")
+const BlockSelectorScript = preload("res://scripts/editor/block_selector.gd")
 
 const Tool = {
 	PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5,
@@ -123,11 +130,27 @@ var _terrain_buttons: Dictionary = {}  # StringName(terrain) -> Button
 var _class_buttons: Dictionary = {}  # String(class_id) -> Button
 ## 程序化同步 SpinBox 时挂起 _on_resize（避免读到另一半的旧值触发错误 resize）
 var _syncing_boxes := false
+## 选择模式菜单（点「选择」/「填充」图标弹出）：&"single" 单格 / &"region" 区域
+var _selection_mode := &"single"
+## GLM 区域选择组件：双端点（x/y 格 + z 高度层）；changed → 画布虚线框 + 坐标回显
+var _selection_range := SelectionRangeScript.new()
+## 区域模式第二次点击已置 pos2（第三次点击重新从 pos1 开始）
+var _region_pos2_set := false
+var _selection_popup: PanelContainer = null
+var _mode_option: OptionButton = null
+## pos1/pos2 坐标编辑：{ &"x"/&"y"/&"z": SpinBox }（名称 Pos1X 等，UI 契约用）
+var _pos1_boxes: Dictionary = {}
+var _pos2_boxes: Dictionary = {}
+## 通用方块选择器（弹窗内）：区域填充/洪水填充用内置地形还是已保存素材方块
+var _fill_selector: BlockSelectorScript = null
+## 程序化回写 SpinBox 时挂起 _on_region_box_changed（防回环）
+var _syncing_region_boxes := false
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	model = BattlefieldDocScript.create_empty()
+	_selection_range.changed.connect(_on_selection_range_changed)
 	_prop_paths = _scan_prop_paths()  # 植物素材枚举（_build_terrain_tab 用）
 	_init_asset_service()  # 素材服务必须先于 UI（画布/面板注入共享 adapter）
 	_build_ui()
@@ -161,6 +184,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			_redo()
 		elif key.physical_keycode == KEY_ESCAPE or key.keycode == KEY_ESCAPE:
+			# 选择模式菜单打开时：Esc 先关菜单，不碰素材弹窗也不返回世界
+			if _selection_popup != null and _selection_popup.visible:
+				_close_selection_popup()
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
 			# 素材面板弹窗（导入文件选择/隐藏确认）打开时：Esc 先关弹窗，不返回世界
 			if _asset_panel != null and _asset_panel.is_dialog_open():
 				_asset_panel.close_dialogs()
@@ -276,6 +305,9 @@ func _build_ui() -> void:
 	_build_units_tab(tabs)
 	_build_history_tab(tabs)
 	_build_asset_tab(tabs)
+
+	# ---- 选择模式菜单（点「选择」/「填充」图标弹出的悬浮窗，默认隐藏） ----
+	_build_selection_popup()
 
 	# ---- 状态栏（贴面板底部，自动换行） ----
 	_status_label = UIFactoryScript.label("就绪 — 左键操作画布；同种子+同尺寸生成结果确定", 11, TEXT_DIM)
@@ -410,7 +442,9 @@ func _build_tool_bar() -> Control:
 	var tool_group := ButtonGroup.new()
 	tool_group.pressed.connect(func(btn: Button):
 		current_tool = btn.get_meta("tool")
-		_on_tool_changed())
+		_on_tool_changed()
+		if current_tool == Tool.SELECT or current_tool == Tool.FILL:
+			_open_selection_popup())
 	_add_tool_btn(box, tool_group, Tool.SELECT, "选择", "mouse_pointer")
 	_add_tool_btn(box, tool_group, Tool.PAINT, "画笔", "paintbrush")
 	_add_tool_btn(box, tool_group, Tool.FILL, "填充", "bucket_fill")
@@ -971,7 +1005,8 @@ func _on_cell_dragged(cell: Vector2i) -> void:
 	# 拖动仅对画笔/植物/橡皮/高度升降有意义（填充/角色不响应拖动）
 	var tool := _active_tool()
 	if tool == Tool.SELECT:
-		_select_cell(cell)
+		if _selection_mode != &"region":
+			_select_cell(cell)  # 区域模式：拖动不设端点，须两次独立点击
 	elif tool == Tool.PAINT:
 		_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH[current_terrain])
 		_set_tile_override(cell, "")  # 内置画笔覆盖素材地块：清 override 恢复常规柱
@@ -991,7 +1026,10 @@ func _on_cell_dragged(cell: Vector2i) -> void:
 func _apply_tool(cell: Vector2i) -> void:
 	var tool := _active_tool()
 	if tool == Tool.SELECT:
-		_select_cell(cell)
+		if _selection_mode == &"region":
+			_apply_region_click(cell)
+		else:
+			_select_cell(cell)
 		return  # 选择不是文档编辑，不进入历史。
 	var names := {
 		Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮", Tool.UNIT: "角色",
@@ -1004,7 +1042,7 @@ func _apply_tool(cell: Vector2i) -> void:
 			_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH[current_terrain])
 			_set_tile_override(cell, "")  # 内置画笔覆盖素材地块：清 override 恢复常规柱
 		Tool.FILL:
-			fill_cell(cell, current_terrain)
+			_apply_fill(cell)
 		Tool.ERASE:
 			if _remove_unit_at(cell):
 				pass  # 单位优先删除
@@ -1206,6 +1244,297 @@ func fill_cell(cell: Vector2i, terrain: StringName) -> void:
 	_status("填充 %s ×%d 格" % [BattlefieldDocScript.TERRAIN_CN[terrain], seen.size()])
 
 
+# ============================================================
+# 选择模式菜单与区域填充（GLM：EditorSelectionRange / BlockSelector / 画布虚线框）
+# ============================================================
+
+## 选择模式弹窗（点「选择」/「填充」图标打开，Esc 关闭）：模式切换 + pos1/pos2
+## 坐标编辑 + 通用方块选择器 + 区域填充/清除按钮。默认隐藏。
+func _build_selection_popup() -> void:
+	var popup := PanelContainer.new()
+	popup.name = "SelectionPopup"
+	popup.visible = false
+	popup.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	popup.offset_left = 52
+	popup.offset_top = 8
+	popup.offset_right = 332
+	popup.offset_bottom = 400
+	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
+	_selection_popup = popup
+	add_child(popup)
+
+	var box := VBoxContainer.new()
+	box.name = "SelectionPopupBox"
+	box.add_theme_constant_override("separation", 6)
+	popup.add_child(box)
+
+	box.add_child(UIFactoryScript.label("选择模式", 13, ACCENT))
+	_mode_option = OptionButton.new()
+	_mode_option.name = "ModeOption"
+	_mode_option.add_item("单格选择", 0)
+	_mode_option.add_item("区域选择", 1)
+	_mode_option.item_selected.connect(_on_selection_mode_item)
+	box.add_child(_mode_option)
+
+	box.add_child(UIFactoryScript.label("区域端点（点击画布设置，可再精修）", 10, TEXT_DIM))
+	box.add_child(_build_region_endpoint_row("pos1", _pos1_boxes))
+	box.add_child(_build_region_endpoint_row("pos2", _pos2_boxes))
+
+	box.add_child(UIFactoryScript.label("填充内容（内置地形 / 已保存素材方块）", 10, TEXT_DIM))
+	_fill_selector = BlockSelectorScript.new()
+	_fill_selector.name = "FillBlockSelector"
+	_fill_selector.custom_minimum_size = Vector2(0, 140)
+	_fill_selector.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_fill_selector.setup(_asset_service, _asset_adapter)
+	box.add_child(_fill_selector)
+
+	var btns := HBoxContainer.new()
+	btns.name = "RegionBtnRow"
+	btns.add_theme_constant_override("separation", 4)
+	var fill_btn := _pixel_btn()
+	fill_btn.name = "RegionFillBtn"
+	fill_btn.text = "填充区域"
+	fill_btn.pressed.connect(_on_region_fill_pressed)
+	UIThemeScript.style_button(fill_btn)
+	btns.add_child(fill_btn)
+	var clear_btn := _pixel_btn()
+	clear_btn.name = "RegionClearBtn"
+	clear_btn.text = "清除区域"
+	clear_btn.pressed.connect(_on_region_clear_pressed)
+	UIThemeScript.style_button(clear_btn)
+	btns.add_child(clear_btn)
+	var close_btn := _pixel_btn()
+	close_btn.name = "CloseBtn"
+	close_btn.text = "关闭"
+	close_btn.pressed.connect(_close_selection_popup)
+	UIThemeScript.style_button(close_btn)
+	btns.add_child(close_btn)
+	box.add_child(btns)
+
+
+## pos1/pos2 行：标签 + x/y/z 三个 SpinBox（名称 Pos1X 等，坐标 UI 契约用）
+func _build_region_endpoint_row(which: String, store: Dictionary) -> HBoxContainer:
+	var tag: String = which.replace("pos", "Pos")
+	var row := HBoxContainer.new()
+	row.name = "%sRow" % tag
+	row.add_theme_constant_override("separation", 4)
+	row.add_child(UIFactoryScript.label(which, 10, TEXT_DIM))
+	for axis in [&"x", &"y", &"z"]:
+		var sp := SpinBox.new()
+		sp.name = "%s%s" % [tag, String(axis).to_upper()]
+		sp.min_value = BattlefieldDocScript.BLOCK_MIN_Z if axis == &"z" else 0
+		sp.max_value = BattlefieldDocScript.BLOCK_MAX_Z if axis == &"z" else 999
+		sp.step = 1
+		sp.rounded = true
+		sp.value_changed.connect(_on_region_box_changed.bind(which, axis))
+		sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		store[axis] = sp
+		row.add_child(sp)
+	return row
+
+
+func _open_selection_popup() -> void:
+	if _selection_popup == null:
+		return
+	_selection_popup.visible = true
+	if _fill_selector != null:
+		_fill_selector.refresh_assets()
+	_sync_region_boxes()
+
+
+func _close_selection_popup() -> void:
+	if _selection_popup != null:
+		_selection_popup.visible = false
+
+
+func _on_selection_mode_item(idx: int) -> void:
+	_selection_mode = &"region" if idx == 1 else &"single"
+	if _selection_mode == &"single":
+		# 回单格：清区域端点与虚线框（单格选择行为与既有契约完全一致）
+		_selection_range.clear()
+		_region_pos2_set = false
+		_sync_region_marker()
+	_status("选择模式：%s" % ("区域（两次点击设 pos1/pos2，拖动无效）" if idx == 1 else "单格"))
+
+
+## 区域模式点击：第一次=pos1（取所在格 z），第二次=pos2，第三次重新从 pos1 开始
+func _apply_region_click(cell: Vector2i) -> void:
+	var p := Vector3i(cell.x, cell.y, BattlefieldDocScript.cell_z(model, cell))
+	if not _selection_range.is_active() or _region_pos2_set:
+		_selection_range.begin(p)
+		_region_pos2_set = false
+	else:
+		_selection_range.update_focus(p)
+		_region_pos2_set = true
+	_sync_region_marker()
+	var mn := _selection_range.min_corner()
+	var mx := _selection_range.max_corner()
+	_status("区域 pos1=(%d,%d,%d) pos2=(%d,%d,%d) · %d 格" % [
+		mn.x, mn.y, mn.z, mx.x, mx.y, mx.z, _selection_range.cell_count(),
+	])
+	print("[editor] 区域端点 pos1=%s pos2=%s" % [str(mn), str(mx)])  # L1 埋点
+
+
+## range.changed（端点变化 / clamp_to 缩框）→ 画布虚线框 + 坐标 SpinBox 回显
+func _on_selection_range_changed() -> void:
+	_sync_region_marker()
+
+
+func _sync_region_marker() -> void:
+	if _canvas == null:
+		return
+	if _selection_range.is_active():
+		var mn := _selection_range.min_corner()
+		var mx := _selection_range.max_corner()
+		# 两端点同高度 → 固定高度平面四边形；异高度 → 跟随地形逐格周界
+		var z := mn.z if mn.z == mx.z else -1
+		_canvas.set_selection_region(Vector2i(mn.x, mn.y), Vector2i(mx.x, mx.y), z)
+	else:
+		_canvas.clear_selection_region()
+	_sync_region_boxes()
+
+
+## 坐标 SpinBox 回显原始端点（anchor=pos1 / focus=pos2，与手改一一对应）：
+## 未激活时禁用编辑，max 跟随模型尺寸
+func _sync_region_boxes() -> void:
+	if _pos1_boxes.is_empty() or _pos2_boxes.is_empty():
+		return
+	_syncing_region_boxes = true
+	var active := _selection_range.is_active()
+	for pair in [[_pos1_boxes, _selection_range.anchor], [_pos2_boxes, _selection_range.focus]]:
+		var boxes: Dictionary = pair[0]
+		var p: Vector3i = pair[1]
+		boxes.x.max_value = float(maxi(0, int(model.width) - 1))
+		boxes.y.max_value = float(maxi(0, int(model.height) - 1))
+		boxes.x.editable = active
+		boxes.y.editable = active
+		boxes.z.editable = active
+		if active:
+			boxes.x.value = p.x
+			boxes.y.value = p.y
+			boxes.z.value = p.z
+	_syncing_region_boxes = false
+
+
+## SpinBox 手改坐标：直接改原始端点（anchor=pos1 / focus=pos2，回显与输入
+## 一一对应；归一化只影响虚线框与填充遍历）；夹进模型边界
+func _on_region_box_changed(value: float, which: String, axis: StringName) -> void:
+	if _syncing_region_boxes or not _selection_range.is_active():
+		return
+	var v := int(value)
+	if axis == &"x":
+		v = clampi(v, 0, int(model.width) - 1)
+	elif axis == &"y":
+		v = clampi(v, 0, int(model.height) - 1)
+	else:
+		v = clampi(v, BattlefieldDocScript.BLOCK_MIN_Z, BattlefieldDocScript.BLOCK_MAX_Z)
+	if which == "pos1":
+		var p := _selection_range.anchor
+		p[String(axis)] = v
+		var f := _selection_range.focus
+		_selection_range.begin(p)
+		_selection_range.update_focus(f)
+	else:
+		var p := _selection_range.focus
+		p[String(axis)] = v
+		_selection_range.update_focus(p)
+	_sync_region_marker()
+
+
+## 填充路由：完整区域 → 区域填充；否则按弹窗选择器——素材=同质地块洪水填充，
+## 地形=内置地形同图例洪水填充；未选=沿用画笔当前地形（原行为）。
+func _apply_fill(cell: Vector2i) -> void:
+	if _selection_mode == &"region" and _region_pos2_set and _selection_range.is_active():
+		_fill_region()
+		return
+	var sel := _fill_selector.selected() if _fill_selector != null else {}
+	match StringName(sel.get("kind", "")):
+		&"asset":
+			_flood_fill_asset(cell, String(sel.get("id", "")))
+		&"terrain":
+			fill_cell(cell, StringName(sel.get("id", "")))
+		_:
+			fill_cell(cell, current_terrain)
+
+
+## 区域填充：区域内每格应用选择器内容——内置地形写 rows 并清素材覆盖；
+## 已保存素材方块写 tile_overrides 不动 rows（两层正确区分）。
+## 调用方负责 _push_undo：整个区域一步历史（原子）。
+func _fill_region() -> void:
+	var sel := _fill_selector.selected() if _fill_selector != null else {}
+	var kind := StringName(sel.get("kind", ""))
+	var id := String(sel.get("id", ""))
+	if kind == &"" or id.is_empty():
+		kind = &"terrain"
+		id = String(current_terrain)
+	var cells := _selection_range.cells_2d()
+	var rows: Array = model.rows
+	var glyph := String(BattlefieldDocScript.TERRAIN_GLYPH.get(StringName(id), "."))
+	var count := 0
+	for c in cells:
+		if c.x < 0 or c.y < 0 or c.x >= int(model.width) or c.y >= int(model.height):
+			continue
+		if kind == &"asset":
+			BattlefieldDocScript.set_tile_override(model, c, id)
+		else:
+			var row: String = rows[c.y]
+			if row.substr(c.x, 1) != glyph:
+				rows[c.y] = row.substr(0, c.x) + glyph + row.substr(c.x + 1)
+			BattlefieldDocScript.set_tile_override(model, c, "")
+		count += 1
+	_refresh_canvas()
+	var label := id if kind == &"asset" else String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id))
+	_status("区域填充 %s ×%d 格" % [label, count])
+	print("[editor] 区域填充 kind=%s id=%s cells=%d" % [String(kind), id, count])  # L1 埋点
+
+
+## 素材洪水填充（无区域、选择器=素材）：同「地形字符 + 现有覆盖」连通的区域
+## 整体替换为素材方块，只写 tile_overrides、不动 rows。
+func _flood_fill_asset(cell: Vector2i, asset_id: String) -> void:
+	if asset_id.is_empty():
+		return
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return
+	if BattlefieldDocScript.tile_override_at(model, cell) == asset_id:
+		return  # 起点已是目标素材：无可做
+	var rows: Array = model.rows
+	var from_glyph: String = rows[cell.y].substr(cell.x, 1)
+	var from_override := BattlefieldDocScript.tile_override_at(model, cell)
+	var stack: Array[Vector2i] = [cell]
+	var seen := { cell: true }
+	while not stack.is_empty():
+		var c: Vector2i = stack.pop_back()
+		BattlefieldDocScript.set_tile_override(model, c, asset_id)
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + d
+			if n.x < 0 or n.y < 0 or n.x >= int(model.width) or n.y >= int(model.height) or seen.has(n):
+				continue
+			if (rows[n.y] as String).substr(n.x, 1) != from_glyph:
+				continue
+			if BattlefieldDocScript.tile_override_at(model, n) != from_override:
+				continue
+			seen[n] = true
+			stack.append(n)
+	_refresh_canvas()
+	_status("素材填充 %s ×%d 格" % [asset_id, seen.size()])
+	print("[editor] 素材洪水填充 asset=%s cells=%d" % [asset_id, seen.size()])  # L1 埋点
+
+
+func _on_region_fill_pressed() -> void:
+	if _selection_mode != &"region" or not _region_pos2_set or not _selection_range.is_active():
+		_status("区域未完整（需两次点击画布设置 pos1/pos2）", true)
+		return
+	_push_undo("区域填充")  # 按钮路径自行入栈；画布 FILL 路径由 _apply_tool 统一入栈
+	_fill_region()
+
+
+func _on_region_clear_pressed() -> void:
+	_selection_range.clear()
+	_region_pos2_set = false
+	_sync_region_marker()
+	_status("已清除区域选择")
+
+
 ## 放置阵营角色：站不住的地形拒绝；同格已有单位则先移除
 func place_unit(cell: Vector2i, faction: String, class_id: String, level: int, uname: String = "") -> bool:
 	if cell.x < 0 or cell.y < 0 or cell.x >= model.width or cell.y >= model.height:
@@ -1287,6 +1616,7 @@ func _on_resize() -> void:
 func _refresh_canvas() -> void:
 	if _canvas == null:
 		return
+	_selection_range.clamp_to(model)  # resize/生成后区域端点夹进新边界（无交集=清空）
 	_canvas.model = model
 	_canvas.queue_redraw()
 	_sync_selection_after_model_change()
