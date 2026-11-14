@@ -1,40 +1,47 @@
 # 文件清单与目录地图
 
+> 更新：2026-11-15（scripts 75→113 .gd；tests 37→71；scenes 5→11；新增 ui/ 素材库、docs/、tools/、用户素材与音效系统）。
+
 ## 顶层结构
 
 ```
-pixel_world/  (E:/pixel_world)
-├── project.godot          引擎配置（主场景 main.tscn、4 autoload、input、Jolt、gl_compatibility）
-├── main.gd                世界引擎根脚本（4099 行 / 174 函数）★ 单文件中枢
+pixel_world/  (本机 /Users/Zhuanz/Documents/pixel_world；历史路径 G:/ → E:/)
+├── project.godot          引擎配置（主场景 scenes/Game.tscn、8 autoload、input、Jolt、gl_compatibility）
+├── main.gd                世界引擎根脚本（4319 行 / 176 函数）★ 单文件中枢
 ├── main.tscn              世界根场景（Node2D "Main" + 子节点 "DebugConsoleCommands"）
 ├── icon.svg(.import)      项目图标
 ├── README.md / README.zh-CN.md   项目说明（双语，含截图）
-├── HANDOFF.md             战棋融合交接文档（2026-11-11 更新：需求→入口索引 + 坑列表）★ 改战棋前必读
 ├── AGENTS.md              agent 工作约束（MCP 按会话激活、场景路由表、runtime_assert_*）
 ├── ASSET_LICENSE.md / LICENSE / .editorconfig / .gitignore / .gitattributes
 │
-├── scripts/               ★ 全部项目 GDScript（75 个 .gd，见下）
-├── scenes/                5 个 .tscn：Battle / Isometric3DTest / MapEditor / SkillTest / Title
-├── tests/                 37 个契约测试 + flat_rotation_probe + fixtures/(18 文件)
-├── config/                JSON 配置（生态 + 表现层 + sunlight.json）
-├── data/                  战棋 JSON：professions/skills/items + battlefields/(4 战场)
-├── rules/                 5 篇 agent 规则文档（godot-tools-map 295 工具/49 可激活、mcp-debugging、image-viewing、autoplay-hosting、skill-item-system）
-├── story/                 19 篇设计 bible（目标态：13 职业/27 技能/25 道具/15 章；当前 data/ 仅 8/8/8）
-├── handoff/               2026-11-11-isometric-rotation.md（2D 旋转踩坑，已被 3D 迁移取代）
-├── docs/screenshots/      README 截图（22 张）
-├── shaders/               5 个仓库自有 .gdshader
-├── addons/                3 个 vendored 插件：breakpoint_mcp / panku_console / at-icons
-├── assets/                战棋素材：bg / markers / ui / units
-├── meowa_tiles/           世界像素素材 126 png：terrain / animals(13 种) / plants / trees / decorations / heroes(待映射)
-├── music/ sound_effect/   .mp3 ×8
+├── scripts/               ★ 全部项目 GDScript（113 个 .gd，见下）
+├── ui/                    ★ 共享 UI 组件库（16 个 Pixel* @tool 控件 + ComponentTheme + README 304 行）
+├── scenes/                11 个 .tscn：Battle / DialogueDemo / Game / HomeEntry / Isometric3DTest /
+│                          LoadingScreen / MapEditor / PixelFxGallery / SkillTest / Title / UIComponentGallery
+├── tests/                 71 个 .gd（69 契约 + 2 探针）+ fixtures/（模块扩展夹具 + battle_scenarios/ 4 JSON）
+├── config/                JSON 配置（生态 + 表现层 + sunlight.json + startup.cfg 调试启动配置）
+├── data/                  战棋 JSON：professions/skills/items + battlefields/(4) + dialogue/(demo_intro)
+├── docs/                  battle_automation.md / startup_config.md / user_assets.md + screenshots/(22)
+├── rules/                 4 篇 agent 规则文档（godot-tools-map、mcp-debugging、autoplay-hosting、skill-item-system）
+├── story/                 19 篇设计 bible（目标态：13 职业/27 技能/25 道具；当前 data/ 仅 8/8/8）
+├── handoff/               3 篇专题交接：isometric-rotation / game-sfx-system / immersive-battle-presentation
+├── plans/                 验证计划文档（immersive-loading-occlusion-verification-plan）
+├── tools/                 battle_cli.gd + build_blocks_manifest.mjs(+test) + python 素材切片脚本 + art/audio 生成脚本
+├── shaders/               6 个仓库自有 .gdshader（+encounter_warp）
+├── addons/                4 个 vendored 插件：breakpoint_mcp / panku_console / at-icons / pixelfx
+├── assets/                素材：audio(bgm/sfx/ambience/voice) / bg / markers / ui / units / video / character_art_registry.json / pixelfx_export
+├── meowa_tiles/           世界像素素材 165 png：terrain/animals(24)/plants(39)/trees(25)/decorations/generated(39)/heroes(24)
+├── music/ sound_effect/   .mp3 ×8（music 下另有空的 rules/ story/ 占位目录）
 └── .godot/                引擎生成（gitignore；改码后须删 .godot/editor）
 ```
 
-## `scripts/` 详细地图（75 .gd）
+> ⚠️ 根目录 `HANDOFF.md` 已删除，交接文档统一在 `handoff/`（3 篇）。`rules/image-viewing.md` 也已移除（rules/ 现存 4 篇）。
+
+## `scripts/` 详细地图（113 .gd）
 
 ```
 scripts/
-├── core/                      【战棋纯逻辑，迁移自 phaserjs，零渲染依赖】
+├── core/                      【战棋纯逻辑，迁移自 phaserjs，零渲染依赖】13 .gd
 │   ├── enums.gd               class_name Enums（Faction/Mode 等，StringName）
 │   ├── unit.gd                UnitData 构造 + 默认成长率
 │   ├── professions.gd         class_name ProfessionData（懒加载 data/professions.json）
@@ -44,9 +51,12 @@ scripts/
 │   ├── terrain.gd             class_name TerrainData（11 地形查表）
 │   ├── cmd_args.gd            启动命令行解析（纯静态，零依赖）
 │   ├── world_to_chapter.gd    ★ 世界 cell → 战棋 chapter 适配层（两子系统唯一耦合）
-│   └── battlefield_loader.gd  ★ JSON 战场加载 + 唯一权威校验（res:// 与 user://battlefields/）
+│   ├── battlefield_loader.gd  ★ JSON 战场加载 + 唯一权威校验（res:// 与 user://battlefields/）
+│   ├── battle_save_codec.gd   战旗存档编解码（chapter+state ⇄ 落盘 dict，version=1）
+│   ├── battle_save_store.gd   存档原子落盘（tmp+bak 两段写 / index.json 自恢复）
+│   └── block_layout.gd        用户素材方块布局（编辑器素材画布消费）
 │
-├── systems/                   【战棋战斗子系统】
+├── systems/                   【战棋战斗子系统】11 .gd
 │   ├── grid_system.gd         网格世界模型（实例：new(w,h,map)）
 │   ├── combat_system.gd       战斗结算（全静态）
 │   ├── skill_system.gd        技能结算（全静态）
@@ -54,37 +64,75 @@ scripts/
 │   ├── buff_system.gd         buff/属性修正（全静态零依赖）
 │   ├── turn_manager.gd        回合调度（实例）
 │   ├── enemy_ai.gd            敌方 AI 决策
-│   └── player_ai.gd           玩家方托管决策器
+│   ├── player_ai.gd           玩家方托管决策器
+│   ├── ai_difficulty.gd       AI 难度分级（设置面板可调）
+│   ├── ai_difficulty_scoring.gd  难度评分参数
+│   └── attack_event.gd        攻击事件结构（表现层钩子消费）
 │
-├── iso/                       【等距渲染层：主世界 3D + 战棋 B1/B2】
+├── iso/                       【等距渲染层：主世界 3D + 战棋 B1/B2】11 .gd
 │   ├── iso_projection_3d.gd   ★ 3D 投影标尺（TILE_PIXELS 32 / TILE_HEIGHT 16 / LEVEL_PIXELS 10）
 │   ├── isometric_camera_3d.gd ★ 正交 Camera3D（zoom 0.5–4，旋转只动相机）
 │   ├── isometric_terrain_3d.gd ★ chunk 3D 柱地形（CHUNK_SIZE=2，MAX_WATER_RIPPLES=48）
 │   ├── isometric_view.gd      离散视角（SUPPORTED_ANGLES=[0,90,180,270]）
-│   ├── battlefield_renderer.gd ★ JSON 战场等距方块柱渲染（B2+编辑器共用；高度 h1–h5）
+│   ├── battlefield_renderer.gd ★ JSON 战场等距方块柱渲染（B2+编辑器共用；高度 h1–h5；支持用户素材贴图）
 │   ├── iso_coords.gd          2D 等距坐标变换（B1/B2 共用；to_cell 用 roundi）
 │   ├── iso_board.gd           等距棋盘控制器（纯相机/坐标）
 │   ├── unit_sprite.gd         单位视觉（高度感知站位）
-│   └── profession_visual.gd   职业立绘/动画加载
+│   ├── profession_visual.gd   职业立绘/动画加载
+│   ├── character_sheet.gd     角色详情面板（属性/装备/技能一览）
+│   ├── battle_occluder.gd     战斗遮挡剔除（单位被地形柱挡住时的处理）
+│   └── world_camera_navigation.gd  世界相机漫游导航（键盘/边缘滚屏统一）
 │
-├── battle/                    【战棋场景助手，setup()+Callable 注入】
+├── battle/                    【战棋场景助手，setup()+Callable 注入】10 .gd + automation/
+│   ├── battle_action_resolver.gd ★ 行动结算内核（battle.gd 与 automation 无表现回放共享）
 │   ├── battle_ui.gd           屏幕空间 UI（HUD + 菜单/选择器/预览/结果横幅）
 │   ├── range_overlay.gd       范围/光标层（只显示，不参与判定）
-│   └── turn_director.gd       回合编排（敌方 AI + 玩家托管 + 偏好数据）
+│   ├── turn_director.gd       回合编排（敌方 AI + 玩家托管 + 偏好数据 + 沉浸演出调度）
+│   ├── battle_presentation.gd 战斗表现层（结算 → 动画/特效/音效的桥）
+│   ├── battle_settings_tab.gd 战斗设置页（B1/B2、难度、沉浸相机等开关）
+│   ├── action_anim.gd         行动动画（移动/攻击的补间演出）
+│   ├── encounter_transition.gd 遭遇战转场（encounter_warp shader）
+│   ├── result_presentation.gd 胜负结算演出
+│   ├── immersive_camera.gd    ★ 沉浸式战斗相机（导演式运镜；见 handoff/2026-11-14）
+│   └── automation/            【声明式战场 CLI（docs/battle_automation.md）】
+│       ├── battle_scenario_loader.gd  场景 JSON → scenario
+│       ├── battle_runner.gd            无表现确定性对局执行器
+│       └── battle_report.gd            events.jsonl / result.json / summary.txt 战报
 │
-├── editor/                    【战场编辑器（2026-11-11 新增）】
+├── editor/                    【战场编辑器】4 .gd
 │   ├── battlefield_doc.gd     文档模型（generate(seed)/to_json_dict/save_model/quick_validate）
 │   ├── editor_canvas.gd       画布（内嵌 BattlefieldRenderer；多高度拾取；cell 信号；平移缩放）
-│   └── tile_preview.gd        地形调色板缩略图（真实柱渲染，4 列）
+│   ├── tile_preview.gd        地形调色板缩略图（真实柱渲染，4 列）
+│   └── asset_library_panel.gd ★ 用户素材库面板（导入/清单刷新/画布放置）
 │
-├── scenes/                    【场景脚本】
-│   ├── battle.gd              ★ 战斗场景编排器（状态机/生命周期/输入/胜负）
-│   ├── title.gd               标题屏（"进入世界" → main.tscn）
-│   ├── map_editor.gd          ★ 战场编辑器场景（四工具；🛠 按钮 + E 键）
+├── scenes/                    【场景脚本】12 .gd
+│   ├── battle.gd              ★ 战斗场景编排器（状态机/生命周期/输入/胜负/演出编排）
+│   ├── title.gd               标题屏
+│   ├── map_editor.gd          ★ 战场编辑器场景（画笔/填充/橡皮/角色 + 地形升降笔刷 + 素材 Tab）
+│   ├── game_entry.gd          Game.tscn 入口（战场列表 / 冷启动续玩路由）
+│   ├── game_session.gd        ★ autoload：战旗会话路由 + 分战场存档（user://battle_saves/）
+│   ├── home_entry.gd          HomeEntry.tscn（主页占位入口）
+│   ├── dialogue_demo.gd       对话系统演示（data/dialogue/demo_intro.json）
+│   ├── startup_config.gd      ★ 调试启动配置（config/startup.cfg：auto_open_last_scene 等）
+│   ├── ui_component_gallery.gd  UI 组件画廊（16 组件交互演示）
+│   ├── pixelfx_gallery.gd     PixelFx 特效画廊
 │   ├── isometric_3d_test.gd   3D 柱网格旋转验证场景
 │   └── scene_args.gd          跨场景传参 autoload（SceneArgs）
 │
-├── world/                     【世界生成模块】
+├── assets/                    【用户素材系统（docs/user_assets.md）】3 .gd
+│   ├── user_asset_service.gd  ★ 服务核心（本地导入 sha256 去重 / 网络清单拉取校验 / blob 存储）
+│   ├── user_asset_catalog.gd  清单协议校验（descriptor 校验 / 宽容解析 / merge 语义）
+│   └── user_asset_visual_adapter.gd  素材 → 渲染适配（pivot/scale/footprint → 战场画布）
+│
+├── audio/
+│   └── game_sfx.gd            ★ autoload Sfx：UI/战斗/回合/胜负/脚步音效池（SceneTree.node_added 自动挂按钮声）
+│
+├── ui/                        【UI 基础设施】3 .gd
+│   ├── ui_theme.gd            老主题（配色/StyleBox）
+│   ├── ui_factory.gd          老工厂方法（现有业务 UI 用）
+│   └── loading_screen.gd      全局加载遮罩（autoload LoadingScreen 场景的脚本，幂等 show/hide）
+│
+├── world/                     【世界生成模块】12 .gd
 │   ├── terrain_sampler.gd     地形采样（命名噪声 + Voronoi + 高度场）
 │   ├── cell_context.gd        CellContext（格子环境快照）
 │   ├── cell_state.gd          CellState（渲染状态）
@@ -93,9 +141,9 @@ scripts/
 │   ├── terrain_material_registry.gd  地形材质注册（set_texture_processor 两参！）
 │   ├── map_snapshot_renderer.gd  地图快照渲染
 │   └── biomes/                biome 模块（可插拔）：biome_module.gd / biome_registry.gd
-│                              + temperate / desert / snow 等实现
+│                              + temperate / desert / snow 实现
 │
-├── ecology/                   【生态 / 群落】
+├── ecology/                   【生态 / 群落】9 .gd
 │   ├── ecology_registry.gd    物种/community 注册表
 │   ├── ecology_resolver.gd    habitat 匹配 + 冲突权重选择
 │   ├── community_runtime.gd   群落运行时
@@ -108,11 +156,11 @@ scripts/
 ├── animals/
 │   └── animal_behavior_registry.gd  动物行为栈（水域/避雪/嗜雪/群体/避人）
 │
-├── tests/                     【战棋自测（extends Node）】
+├── tests/                     【战棋自测（extends Node）】2 .gd
 │   ├── test_skills.gd         技能/物品自测 44/44
 │   └── debug_test.gd          战斗逻辑自测 35/35
 │
-└── （世界表现层 + UI，散落 scripts/ 根）
+└── （世界表现层 + UI，散落 scripts/ 根）17 .gd
     ├── weather_system.gd          天气（雨/雪/世界空间模拟）
     ├── day_night_system.gd        昼夜 + 月光
     ├── sunlight_system.gd         ★ 3D 阳光+地形阴影（DirectionalLight3D；config/sunlight.json）
@@ -124,9 +172,36 @@ scripts/
     ├── isometric_depth_sort.gd    等距深度排序
     ├── game_hud.gd                左侧图标 HUD + 战场面板 + 设置（⚠️ 契约测试在 HEAD 上坏）
     ├── world_map_overlay.gd       大地图叠加
+    ├── side_panel.gd              侧栏面板（世界信息）
+    ├── hint_bar.gd                底部操作提示条
+    ├── game_cursor.gd             autoload GameCursor：全局游戏光标（纹理切换/战斗态）
     ├── debug_console_commands.gd  Panku dbg.* 命令集（help/list_battlefields/editor/enter_battle...）
     └── settings.gd                ★ 用户偏好 autoload（Settings，user://settings.cfg）
 ```
+
+## `ui/` 组件库（2026-11-14 新增，详见 `ui/README.md`）
+
+```
+ui/
+├── README.md                 304 行使用文档（ComponentTheme / 组件清单 / 画廊说明）
+├── theme/component_theme.gd  class_name ComponentTheme：每次 create() 新建独立 Theme；语义→Type Variation
+└── components/               16 个 @tool 控件（全部复用 scripts/ui/ui_theme + ui_factory，不改其行为）
+    ├── pixel_button.gd / pixel_check_button.gd / pixel_option_button.gd / pixel_dropdown.gd
+    ├── pixel_line_edit.gd / pixel_text_area.gd / pixel_slider.gd / pixel_spin_box.gd
+    ├── pixel_progress_bar.gd / pixel_tabs.gd / pixel_panel.gd(+.tscn) / pixel_popup.gd
+    ├── pixel_image.gd / pixel_icon.gd
+    └── pixel_audio_player.gd / pixel_video_player.gd（真实 .ogv 样例在 assets/video/ui/）
+```
+
+交互画廊 `scenes/UIComponentGallery.tscn`（F6 独立运行、ESC 退出、不依赖战斗参数）；契约 `tests/ui_components_contract.gd`。**目前只有画廊使用，现有业务 UI 尚未迁移**。
+
+## `tools/`（2026-11-14 纳入索引）
+
+| 文件 | 用途 |
+| --- | --- |
+| `battle_cli.gd` | 声明式战场 CLI 入口（`--scenario/--seed/--out`；见 `docs/battle_automation.md`） |
+| `build_blocks_manifest.mjs`(+`.test.mjs`) | 用户素材清单生成/校验（node --test 7 项；`docs/user_assets.md`） |
+| `slice_class_sheets.py` / `slice_ui_sheet.py` | 素材图集切片（配合 `tools/art`、`tools/audio` 的生成脚本） |
 
 ## 关键文件快速索引
 
@@ -139,30 +214,36 @@ scripts/
 | 改动物行为 | `scripts/animals/animal_behavior_registry.gd` + `main.gd._compile_animal_behavior_stacks` |
 | 战棋逻辑 | `scripts/core/` + `scripts/systems/` + `scripts/scenes/battle.gd` |
 | 加 JSON 战场 | 抄 `data/battlefields/arena_1v1.json` → 改 rows/legend/units（loader 全量校验）；或编辑器生成 |
-| 改编辑器 | `scripts/scenes/map_editor.gd` + `scripts/editor/`；UI 扩展参考 `D:/phaserjs/godot/scripts/scenes/map_editor.gd` |
+| 改编辑器 | `scripts/scenes/map_editor.gd` + `scripts/editor/` |
+| 用户素材（导入/清单/回滚） | `docs/user_assets.md`（运维手册）+ `scripts/assets/` |
+| 用新 UI 组件 | `ui/README.md` + 画廊 `scenes/UIComponentGallery.tscn` |
+| 跑无表现战斗模拟 | `docs/battle_automation.md` + `tools/battle_cli.gd` + `tests/fixtures/battle_scenarios/` |
 | 3D 渲染/相机/阴影 | `scripts/iso/iso_projection_3d.gd` / `isometric_camera_3d.gd` / `isometric_terrain_3d.gd` / `sunlight_system.gd` |
 | 进战斗入口 | `main.gd._enter_battle` / `_enter_battlefield` / `_enter_battle_inline` / `_exit_battle` |
 | 跑测试 | `tests/*_contract.gd`（headless `--script`）+ `scenes/SkillTest.tscn` |
 | 调试桥 | `addons/breakpoint_mcp/`（独立 CLAUDE.md）+ `rules/mcp-debugging.md` |
-| 踩坑清单 | `HANDOFF.md`（坑列表）+ `handoff/2026-11-11-isometric-rotation.md`（2D 旋转史） |
+| 踩坑清单 | `handoff/` 3 篇专题交接（2D 旋转史 / 音效系统 / 沉浸演出） |
 | 设计规划 | `story/`（目标态 bible，勿当运行时事实） |
 
 ## 文件类型统计（git ls-files）
 
 | 类型 | 数量 | 说明 |
 | --- | --- | --- |
-| `.gd` | **229** | scripts 75 / tests 45 / addons 108 / 根 1 |
-| `.png` | 198 | meowa_tiles 126 + assets + docs/screenshots 22 等 |
-| `.md` | 96 | story 19 + rules 5 + claude/ + addons 文档等 |
-| `.tscn` | 51 | 仓库自有 6（main + scenes/5）+ addons |
-| `.json` | 29 | config 12 + data 3 + battlefields 4 + tests fixtures 等 |
-| `.gdshader` | 7 | 仓库自有 5：day_night_overlay / isometric_terrain_rotate / tilt_shift_dof / underwater_animal / weather_overlay |
-| `.mp3` | 8 | music / sound_effect |
+| 总文件 | **11560** | 含 addons vendored 与全部素材 |
+| `.gd` | **612** | scripts 113 / tests 71 / ui 17 / addons ~400 / tools 等 |
+| `.md` | 223 | story 19 + rules 4 + claude/ + docs/ + handoff/ + addons 文档 |
+| `.tscn` | 自有 16 | main + scenes/11 + ui/pixel_panel + tests 探针 + addons |
+| `.png` | 566 | meowa_tiles 165 + assets + docs/screenshots 22 等 |
+| `.json` | 41（不含 addons） | config 17 + data 8 + tests fixtures 等 |
+| `.gdshader` | 自有 6 | day_night_overlay / encounter_warp / isometric_terrain_rotate / tilt_shift_dof / underwater_animal / weather_overlay |
+| `.mp3`/`.ogg`/`.ogv` | 若干 | music / sound_effect / assets/audio / assets/video |
 | `.import` / `.uid` | 引擎生成 | 随素材/脚本走，不手编 |
 
 ## 生成物 / 已忽略
 
 - `.godot/`（引擎生成，gitignore；**改码后须删 `.godot/editor` 再重启编辑器**，否则跑旧脚本）
-- `.import` / `.uid`（Godot 自动生成）
+- `.import` / `.uid`（Godot 自动生成；`tests/zz_align_probe.gd.uid` 为孤儿 uid，对应 .gd 已删）
 - `/builds/` `/exports/` `/android/`（导出产物，gitignore）
+- `.codegraph/` / `.dsh/` / `.claude/` / `.libtv/`（本地工具目录）
 - 二进制素材（`.png`/`.mp3`）—— 本索引未分析内容，仅统计
+- `b1_debug.png` / `b1_depth_probe.png` / `b1_fixed.png` 等根目录调试截图（未入 git 也可清理）

@@ -1,17 +1,22 @@
 # 依赖与配置
 
+> 更新：2026-11-15（新增 startup.cfg / 用户素材源 / Node 工具链；项目迁至 macOS）。
+
 ## 运行时依赖
 
 - **Godot 4.7+**（本项目用 **4.7.2 stable**，`project.godot` 声明 `config/features=PackedStringArray("4.7", "GL Compatibility")`）。
-  - 本机可执行文件：`D:/Godot/Godot_v4.7.2-stable_win64.exe`（console 版 `..._console.exe`）。**console 版 stdout 是全缓冲的**：管道场景下无输出 ≠ 没输出，脚本化验证时用 `timeout` 包裹读取。
-  - 项目目录 `E:/pixel_world`（已从 `G:/` 迁移）。
-- **无第三方 GDScript / npm / cargo 依赖**：战棋代码是项目内纯 GDScript（逻辑层迁移自外部 phaserjs 项目的 TS，本仓库**不含 TS/JS 源码**）。
-- **vendored 第三方组件 3 个**（`addons/`）：
+  - **本机（macOS）**：`/Applications/Godot.app/Contents/MacOS/Godot`。Windows 历史路径 `D:/Godot/Godot_v4.7.2-stable_win64.exe`（console 版 `..._console.exe`，stdout 全缓冲：管道下无输出 ≠ 没输出）。
+  - 项目历史路径 G:/ → E:/ → 当前 `/Users/Zhuanz/Documents/pixel_world`。
+- **Node.js（仅工具链，非游戏运行时）**：`tools/build_blocks_manifest.mjs`（用户素材清单生成）+ 其 node:test 契约；任何 ≥18 LTS 均可。
+- **Python（仅素材工具）**：`tools/slice_class_sheets.py` / `slice_ui_sheet.py` / `tools/art` / `tools/audio` 生成脚本。
+- **无第三方 GDScript / npm / cargo 游戏依赖**：战棋代码是项目内纯 GDScript（逻辑层迁移自外部 phaserjs 项目的 TS，本仓库**不含 TS/JS 源码**）。
+- **vendored 第三方组件 4 个**（`addons/`）：
   | 组件 | 版本 | 用途 | 插件启用 |
   | --- | --- | --- | --- |
   | `breakpoint_mcp` | **v1.23.0** | 编辑器/运行时 MCP 调试桥（loopback 9080/9081） | ✅ |
   | `panku_console` | **v1.7.9** | 游戏内 `~` 表达式 REPL 控制台 | ✅ |
-  | `at-icons` | **v1.6.0** | 700+ SVG 图标库（MIT，release zip 安装；编辑器 UI 只用 `control/` 色系） | ❌（纯资源，无需启用） |
+  | `at-icons` | **v1.6.0** | 700+ SVG 图标库（MIT；编辑器 UI 只用 `control/` 色系） | ❌（纯资源） |
+  | `pixelfx` | **v0.3.0** | 244 个代码绘制像素特效（24 类；`PixelFx2D`/`PixelFxAct2D`；战斗演出消费） | ❌（脚本库，preload 即用） |
 - **物理**：`[physics] 3d/physics_engine = "Jolt Physics"`。3D 正交迁移后为真实使用。
 
 ## 配置文件总览
@@ -41,6 +46,7 @@
 | `config/sunlight.json` | **（2026-11-12 新增）3D 阳光**：`sun_azimuth_degrees 32.0, day_energy 0.75, day/night ambient, shadow_max_distance 72.0, shadow_bias 0.03, shadow_normal_bias 0.45` |
 | `config/audio.json` | 音乐 / 雨声环境音 / 动物叫声配置 |
 | `config/depth_of_field.json` | 景深：`enabled_by_default, focus_half_height, focus_feather, far/near_strength, vignette_strength` |
+| `config/startup.cfg` | **（2026-11-14 新增）调试启动配置**（INI）：`[startup] auto_open_last_scene / last_scene / excluded_scenes`。编辑器调试读写 res://，导出后读写 user://；权威文档 `docs/startup_config.md` |
 
 ### 战棋数据（`data/`）
 
@@ -49,9 +55,16 @@
 | `data/professions.json` | 8 职业：`swordsman, knight, archer, mage, berserker, assassin, lancer, priest`（`defaultProfession`） |
 | `data/skills.json` | 8 技能：`fireball, smite, heal, blizzard, powerSurge, guard, weaken, haste`（`defaultSkill`） |
 | `data/items.json` | 8 物品：`hpPotion, mpPotion, antidote, shuriken, bomb, armorRing, powerRing, mightPotion`（`defaultItem`） |
-| `data/battlefields/*.json` | **（2026-11-11 新增）JSON 战场 ×4**：`arena_1v1, plains_skirmish, river_crossing, mountain_pass`。schema 见 `public-interfaces.md`。用户自定义战场放 `user://battlefields/` |
+| `data/battlefields/*.json` | JSON 战场 ×4：`arena_1v1, plains_skirmish, river_crossing, mountain_pass`。schema 见 `public-interfaces.md`。用户自定义战场放 `user://battlefields/` |
+| `data/dialogue/demo_intro.json` | 分支对话演示数据（`scenes/DialogueDemo.tscn` 消费） |
 
 > ⚠️ `story/` 目录是**目标态设计 bible**（13 职业 / 27 技能 / 25 道具 / 15 章），当前 `data/` 仍是 8/8/8。以 `data/` 为运行时事实，`story/` 为规划。
+
+### 用户素材（网络清单，2026-11-14 新增）
+
+- 默认源 `http://127.0.0.1:8076/blocks.json`（本机回环 http-server，指向历史机器 F:/blocks；**换机器需重建或改源**）。
+- 清单协议 / 导入 / blob 存储 / 回滚：`docs/user_assets.md`（运维手册）；生成器 `tools/build_blocks_manifest.mjs`。
+- 落盘：`user://user_assets/`（blob + catalog）。
 
 ## 环境变量
 
@@ -68,13 +81,14 @@
 ## 资源目录约定（`config/README.md`）
 
 ```
-meowa_tiles/            世界像素素材（126 png）
+meowa_tiles/            世界像素素材（165 png：terrain 10 / animals 24 / plants 39 / trees 25 / decorations 4 / generated 39 / heroes 24）
   terrain/              地形 tile
   animals/<species_id>/ 每种动物独立目录（actions.file 相对该目录；13 种动物）
   plants/               活体灌木/草本/花卉/仙人掌/水生
   trees/                乔木
   decorations/          树桩/石块等非生长物件
-  heroes/               角色素材（仍待与职业映射 —— 已知待办）
+  generated/            程序生成/工具产出的贴图（tools/art 生成脚本产物）
+  heroes/               角色素材（24 png；仍待与职业映射 —— 已知待办，见 docs/roadmap.md）
 addons/at-icons/node*/  图标库按色系分目录（项目只用 control/）
 assets/                 战棋素材：bg / markers / ui(buttons,cursors,frames,portraits) / units
 ```

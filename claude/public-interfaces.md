@@ -1,8 +1,8 @@
 # 对外接口
 
-> 本项目是**单机游戏**，不暴露 REST API / WebSocket / SDK / CLI 给外部进程。本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**调试通道**。
+> 更新：2026-11-15（新增 3 个表现层 autoload、用户素材服务、UI 组件库、战斗自动化 CLI、演出信号）。本项目是**单机游戏**，除调试桥与素材清单源外不暴露 REST API / WebSocket / SDK；本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**自动化 CLI**、**调试通道**。
 
-## 玩家输入映射（`project.godot [input]` + `main.gd._unhandled_input` @ 3503）
+## 玩家输入映射（`project.godot [input]` + `main.gd._unhandled_input` @ 3608）
 
 ### 世界探索（main.gd）
 
@@ -36,7 +36,18 @@
 | `cancel` | Esc | 取消移动 / 返回 |
 | `end_turn` | E | 结束回合 |
 
-battle.gd 另处理鼠标选格、键盘移动光标。B1 相机由 main.gd 处理：中键或 `Space`+左键拖拽平移、边缘滚屏、滚轮缩放（编辑器画布还支持右键拖拽平移）。
+battle.gd 另处理鼠标选格、键盘移动光标。B1 相机由 main.gd 处理：中键或 `Space`+左键拖拽平移、边缘滚屏、滚轮缩放（编辑器画布还支持右键拖拽平移）。**演出播放中可按键快进/跳过**（`battle_ui.gd opening_finished/result_finished/presentation_finished` 均带 `skipped` 参数）。
+
+### 组件画廊 / 特效画廊（独立场景）
+
+| 场景 | 进入 | 退出 |
+| --- | --- | --- |
+| `scenes/UIComponentGallery.tscn` | 编辑器 F6 / 手动运行（16 组件 × 6 页交互画廊） | Esc |
+| `scenes/PixelFxGallery.tscn` | 手动运行 | — |
+
+### 调试启动快捷键（`startup_config.gd`）
+
+F5 直跑时若 `auto_open_last_scene=true`，自动从 `Game.tscn` 中转进 `last_scene`；`--battlefield` / `--reset-battle` 命令行优先级更高。详见 `docs/startup_config.md`。
 
 ## 跨场景代码契约
 
@@ -77,6 +88,54 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 | --- | --- | --- | --- |
 | `battle_inline_mode` | bool | true | true=就地战斗(B1) / false=独立场景(B2) |
 | `set_battle_inline_mode(v)` / `save()` | 方法 | — | 持久化到 `user://settings.cfg` |
+
+### 表现层 autoload（2026-11 新增三个）
+
+| Autoload | 脚本 | 公共接口 | 说明 |
+| --- | --- | --- | --- |
+| `Sfx` | `scripts/audio/game_sfx.gd` | `play(cue, throttle_seconds=0.0) -> bool`；`play_step(terrain_type)`；`play_world_step(context)`；`play_low_hp()` | 全局音效池（`res://assets/audio/sfx`，10 池）；按钮声经 `SceneTree.node_added` 自动挂接（meta `_sfx_ui_attached`，**无需手动接线**） |
+| `LoadingScreen` | `scenes/LoadingScreen.tscn` + `scripts/ui/loading_screen.gd` | `show_loading(text="")` / `hide_loading()` / `set_loading_text(t)` / `is_loading_shown()` | 幂等全局遮罩，`MOUSE_FILTER_IGNORE` 不拦输入；同步重活前弹层反馈（战斗沉浸演出预热用） |
+| `GameCursor` | `scripts/game_cursor.gd` | 全局游戏光标（纹理切换/战斗态） | 世界/战斗共用 |
+
+## 用户素材服务（`scripts/assets/`，2026-11-14 新增）
+
+外部素材（像素方块图）经**本机 HTTP 清单源**导入游戏，供编辑器/战场渲染消费。运维手册：`docs/user_assets.md`。
+
+### `UserAssetService`（`user_asset_service.gd`，非 autoload —— 场景内实例化）
+
+- 默认源 `DEFAULT_SOURCE_URL = "http://127.0.0.1:8076/blocks.json"`；blob/清单落盘 `user://custom_assets/`（`blobs/` + library JSON）。
+- **信号**：`manifest_loaded(result)` / `asset_ready(asset_id)` / `asset_failed(asset_id, error)` / `source_changed(url)`。
+- 主要接口：`set_source_url(url)` / `request_manifest()` / `request_asset_image(id)` / `get_texture(id)`（LRU 64）/ `list_assets()` / `find_by_id(id)` / `find_by_sha(sha)` / `get_asset_state(id)` / `remove_asset(id, keep_blob=true)` / `update_asset(id, changes)` / `import_local_file(path, kind)` / `import_image_bytes(...)`。
+- descriptor 契约：`id / kind / image / sha256 / render{mode: full|pivot|scale|footprint, ...}`；导入幂等（sha 去重）。
+- 并发限制：`MAX_CONCURRENT_REQUESTS=3`，超时 10s，重试 2 次。
+
+### `UserAssetVisualAdapter`（`user_asset_visual_adapter.gd`）
+
+渲染侧适配：`resolve(asset_id) / resolve_many(ids)` → 视觉描述（含烘焙贴图）；`build_visual(descriptor, image)` / `bake_image(...)`；`placeholder_visual(id)`（缺图占位）；`visual_for_entries(props, tile_overrides)`（编辑器/战场批量解析）；烘焙缓存 `invalidate_baked(id)`。
+
+## UI 组件库（`ui/`，2026-11 新增）
+
+- 16 个 `@tool` 像素风组件：`PixelButton / PixelCheckButton / PixelOptionButton / PixelDropdown / PixelLineEdit / PixelTextArea / PixelSlider / PixelSpinBox / PixelProgressBar / PixelTabs / PixelPanel / PixelPopup / PixelImage / PixelIcon / PixelAudioPlayer / PixelVideoPlayer`（`ui/components/pixel_*.gd`）。
+- 主题：`ui/theme/component_theme.gd` — `ComponentTheme.create()` 每次**新建独立 Theme**（不污染项目默认主题）。
+- 文档：`ui/README.md`（304 行：设计原则、用法、测试）。交互画廊 `scenes/UIComponentGallery.tscn`（F6）。
+- headless 契约：`tests/ui_contract.gd`（735 checks）。
+- ⚠️ **现有业务 UI（battle_ui / map_editor / HUD）尚未迁移到该库**——新旧两套并存。
+
+## 战斗自动化 CLI（`tools/battle_cli.gd`，2026-11 新增）
+
+无头跑战棋：场景 JSON → 结算 → 事件流/结果。手册：`docs/battle_automation.md`。
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path . \
+  --script res://tools/battle_cli.gd -- --scenario res://tests/fixtures/battle_scenarios/quick_duel.json --seed 42 --out user://tmp/battle_out
+# 或内联场景：--scenario-json '{"version":1,"id":"tiny","battlefield":"res://data/battlefields/arena_1v1.json","seed":1,"factions":{"player":{"mode":"ai"},"enemy":{"mode":"ai"}}}'
+```
+
+- 场景 fixture 目录：`tests/fixtures/battle_scenarios/*.json`（`quick_duel`、`deterministic_replay` 等）。
+
+- 产物：`events.jsonl`（逐事件流）/ `result.json`（终局+断言）/ `summary.txt`。
+- **退出码契约**：`0` 正常且断言通过；`1` 断言失败；`2` 输入/非法操作；`3` 步数上限（僵持保护）；`4` 输出/运行失败。
+- 内核 API：`BattleScenarioLoader.load_from_file(path, seed_override)` / `load_from_dict(d, fallback_id, seed_override)` → scenario；`BattleRunner.run(scenario)`（static）→ result；`battle_action_resolver.gd` 是 **battle.gd 与自动化共享的行动结算内核**（无表现回放路径）。
 
 ## 世界 → 战棋适配契约（`scripts/core/world_to_chapter.gd`）
 
@@ -119,6 +178,7 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 | `EditorCanvas`（editor_canvas.gd） | 内嵌 `BattlefieldRenderer` 渲染；左键按下/拖动发 `cell` 信号（多高度拾取）；右键或 Space+左键平移、滚轮缩放；已放单位显示职业头像+阵营色环+等级徽标 |
 | `map_editor.gd`（场景） | 四工具：画笔/填充/橡皮/角色放置；种子输入+🎲随机+🌱生成；侧栏分组折叠 + at-icons 图标 |
 | `TilePreview`（tile_preview.gd) | 地形调色板缩略图（真实 ColumnBatch 等距方块柱渲染，4 列 GridContainer） |
+| `AssetLibraryPanel`（asset_library_panel.gd，2026-11-14 新增） | 用户素材库面板：浏览/选用 `user://custom_assets/` 导入的方块图（消费 UserAssetService + VisualAdapter） |
 
 ## 战棋内部静态接口（被 battle.gd 调用）
 
@@ -135,13 +195,27 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 
 ## 信号（signal）
 
+### 世界侧
+
 | 发出方 | 信号 | 监听方 | 用途 |
 | --- | --- | --- | --- |
-| `battle.gd` | `battle_finished(result: StringName)` | `main.gd._exit_battle`（B1） | 战斗结束，触发恢复 |
 | `world_map_overlay.gd` | `open_state_changed(is_open: bool)` | main.gd | 大地图开合 |
 | `game_hud.gd`（BattlefieldPanel） | `battlefield_picked(path)` | `main.gd._on_battlefield_picked` | O 列表点选战场 |
 | `weather_system.gd` | water impact 相关 | `main.gd._on_weather_water_impact` | 雨滴击水反馈 |
-| `editor_canvas.gd` | `cell`（左键/拖动） | `map_editor.gd` | 画笔/填充/橡皮/放置工具解释 |
+| `user_asset_service.gd` | `manifest_loaded(result)` / `asset_ready(id)` / `asset_failed(id, error)` / `source_changed(url)` | 编辑器素材面板等 | 素材导入进度 |
+
+### 战斗侧（2026-11 演出系统新增一大批）
+
+| 发出方 | 信号 | 用途 |
+| --- | --- | --- |
+| `battle.gd` | `battle_finished(result: StringName)` | 战斗结束（B1 由 main.gd._exit_battle 恢复；B2 切回场景） |
+| `battle_ui.gd` | `nameplate_shown / boss_banner_shown / loot_shown / cheer_requested / collapse_requested / presentation_sound_requested(cue)` | 演出步骤请求（名字牌/横幅/战利品/欢呼/倒地/音效由宿主接线到 Sfx） |
+| `battle_ui.gd` | `opening_finished(skipped)` / `result_finished(result, skipped)` / `presentation_finished(kind, skipped)` | 演出阶段完成（支持快进） |
+| `battle_ui.gd` | `immersive_presentation_changed(enabled)` | 沉浸演出开关切换 |
+| `action_anim.gd` | `phase_started(phase, event)` / `impact_presented(impact)` / `float_text_requested(uid, text, color, size)` / `flash_requested(color, dur)` / `finished(event, skipped)` | 行动动画各阶段（回合导演 turn_director 驱动） |
+| `result_presentation.gd` | `nameplate_shown / boss_banner_shown / loot_shown / cheer_requested` | 结算演出同款钩子 |
+| `immersive_camera.gd` | `state_changed` | 沉浸相机状态 |
+| `editor_canvas.gd` | `cell`（左键/拖动） | 编辑器画笔/填充/橡皮/放置工具解释 |
 
 ## 给 AI / 调试进程的接口（非游戏内）
 

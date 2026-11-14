@@ -1,5 +1,7 @@
 # 数据模型
 
+> 更新：2026-11-15（新增战旗存档模型、用户素材 descriptor、对话 JSON、startup.cfg；持久化清单不再是"唯一 settings.cfg"）。
+
 本项目无数据库 / 无网络持久层。"数据模型"指**运行时领域对象**（多为 GDScript Dictionary，全 StringName key）、**流式生成的世界状态**与 **3D 正交渲染结构**。
 
 ## 世界生成核心数据结构（`scripts/world/`）
@@ -124,14 +126,38 @@
 
 渲染为等距方块柱：`water → h1`；`plain/grass/sand/snow/rocky/forest/village → h2`；`fort → h3`；`wall → h4`；`mountain → h5`。贴图取自 `config/ecology/world/base.json` 的 materials。
 
-## 用户偏好持久化（`Settings` autoload）
+### 战旗存档模型（`scripts/core/battle_save_codec.gd` + `battle_save_store.gd`，2026-11-13 新增）
 
-`user://settings.cfg`（ConfigFile）：
-```
-[battle]
-inline_mode=true   ; true=就地(B1) / false=独立场景(B2)
-```
-**这是唯一持久化到磁盘的应用状态**。
+- 落盘：`user://battle_saves/<身份清洗>+sha1[0:8].json`（version=1），tmp+bak 两段式原子写；索引 `user://battle_saves/index.json`（损坏时扫描自恢复）。
+- 存档身份：`bf:res|user/<id>`（JSON 战场）或 `world:<seed>/<x>/<y>`（世界就地战旗，同世界同位置=同战旗）。
+- 内容 = `initial`（开局 chapter 深拷贝+内容签名）+ `chapter`（当前：含死亡单位/冷却/buff/物品次数）+ `state`（回合/阶段/托管偏好/胜负）。
+- 版本策略：更新版本的存档拒绝恢复且不覆盖。
+
+### 战斗自动化场景模型（`scripts/battle/automation/`，2026-11 新增）
+
+场景 JSON：`{ version:1, id, battlefield:<path>, seed?, factions: { player: {mode: script|ai, ...}, enemy: {...} }, assertions: [...] }`（`BattleScenarioLoader` 归一化）。产物：`events.jsonl` / `result.json` / `summary.txt`，退出码 0–4 语义见 `public-interfaces.md`。
+
+## 用户素材模型（`scripts/assets/`，2026-11-14 新增）
+
+- descriptor：`{ id, kind, image, sha256, render: { mode: full|pivot|scale|footprint, ... } }`；manifest = `{ blocks: [descriptor...] }`（源 `http://127.0.0.1:8076/blocks.json`）。
+- 落盘：`user://custom_assets/`（`blobs/<sha>` + library JSON + 烘焙贴图缓存）。
+- 服务/适配器 API 见 `public-interfaces.md`。
+
+## 对话演示模型（`data/dialogue/demo_intro.json`）
+
+分支对话图（节点/选项/跳转），由 `scenes/DialogueDemo.tscn` 消费；尚未接入正式游戏流程（见 `docs/roadmap.md`）。
+
+## 用户偏好与调试配置持久化（磁盘全量清单）
+
+| 路径 | 内容 | 写入方 |
+| --- | --- | --- |
+| `user://settings.cfg` | `[battle] inline_mode` 等用户偏好 | `Settings` autoload |
+| `user://battle_saves/` | 战旗存档 + index.json | GameSession / battle_save_store |
+| `user://battlefields/` | 编辑器产出的自定义战场 JSON | map_editor |
+| `user://custom_assets/` | 用户素材 blob + 清单 + 烘焙缓存 | UserAssetService |
+| `user://startup.cfg`（导出后）/ `res://config/startup.cfg`（调试） | `[startup] auto_open_last_scene / last_scene / excluded_scenes` | startup_config.gd（编辑器调试写 res://） |
+
+> 世界探索状态（地形/动物/位置）**仍不持久化**，重启即重生成。
 
 ## 缓存 / 流式状态边界
 

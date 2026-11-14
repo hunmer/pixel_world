@@ -1,40 +1,52 @@
 # 开发约定
 
-> 本文件收集对 Agent 与人类贡献者最实用的命令、规范与禁忌。高优先级条目同时摘要在根 `CLAUDE.md`；agent 工作约束另见根 `AGENTS.md`。
+> 更新：2026-11-15（macOS 路径、主场景 Game.tscn、69 契约、battle_cli/startup.cfg 命令、HANDOFF 引用更新）。本文件收集对 Agent 与人类贡献者最实用的命令、规范与禁忌。高优先级条目同时摘要在根 `CLAUDE.md`；agent 工作约束另见根 `AGENTS.md`。
 
 ## 运行与启动
 
 ```bash
 # 打开并运行主场景（要求 Godot 4.6+，本项目用 4.7.2）
 godot --path .
-# 本机 exe（不在 PATH）：
-D:/Godot/Godot_v4.7.2-stable_win64.exe --path E:/pixel_world
+# 本机（macOS，不在 PATH）：
+/Applications/Godot.app/Contents/MacOS/Godot --path /Users/Zhuanz/Documents/pixel_world
+# Windows 历史路径：D:/Godot/Godot_v4.7.2-stable_win64.exe --path E:/pixel_world
 
 # headless 跑某个契约测试（extends SceneTree 类型，运行后自动退出）
 godot --headless --path . --script res://tests/terrain_generation_contract.gd
 
 # 从命令行带参运行场景（CmdArgs 解析 --key / --key=value / --no-key）
 godot -d --path . res://main.tscn --seed=42
+
+# 无头跑一场战斗（自动化 CLI，退出码 0–4）
+godot --headless --path . --script res://tools/battle_cli.gd -- \
+  --scenario res://tests/fixtures/battle_scenarios/quick_duel.json --out user://tmp/battle_out
+
+# 显式进某个战场 / 重置战旗档案（Game.tscn 会话路由消费）
+godot --path . -- --battlefield=plains_skirmish --reset-battle
 ```
 
-- **主场景**：`res://main.tscn`（`project.godot` 的 `run/main_scene`）。入口脚本 `main.gd`（项目已迁至 `E:\pixel_world`）。
-- **标题场景**：`res://scenes/Title.tscn` → "进入世界" 按钮切到 main.tscn。
-- **console 版 exe 的 stdout 是全缓冲的**：管道下无输出 ≠ 没输出；脚本化验证用 `timeout` 包裹或看退出码。
+- **主场景**：`res://scenes/Game.tscn`（战旗会话入口：自动续玩最近战旗）。世界场景 `res://main.tscn` 由 Game 列表进入，或被 `config/startup.cfg`（`auto_open_last_scene`）直跳。
+- **F5 直跳最近场景**：`config/startup.cfg` 记录 `last_scene`（`SkillTest` / `UIComponentGallery` 默认排除）；`--battlefield` / `--reset-battle` 优先。手册 `docs/startup_config.md`。
+- **console 版 exe 的 stdout 是全缓冲的**（Windows 历史坑）：管道下无输出 ≠ 没输出；脚本化验证用 `timeout` 包裹或看退出码。
 
 ## 编辑器脚本缓存坑（重要兼容性提醒）
 
-来自 `HANDOFF.md`，调试时极易踩：
+来自历史 HANDOFF（已删，坑仍真实存在），调试时极易踩：
 
 > `dbg_restart` **不会重新编译脚本**。改完代码后必须清 `.godot/editor` 缓存并重启编辑器，否则跑的是旧脚本。
-> Windows 上的等价操作：删除 `E:/pixel_world/.godot/editor` 目录，然后重开 Godot 编辑器。
+> 等价操作：删除项目下 `.godot/editor` 目录，然后重开 Godot 编辑器。
 
 ## 测试
 
-- **无第三方测试框架**。测试是 GDScript 自测脚本，两种形态：
-  1. `tests/*_contract.gd`（37 个）：`extends SceneTree`，在 `_initialize` → `call_deferred("_run")` 中跑断言，失败用 `push_error` + `quit(1)`。**地形生成测试用固化的 SHA-256 快照检测回归**（改了确定性会挂）。
+- **无第三方测试框架**。测试形态：
+  1. `tests/*_contract.gd`（**69 个**）：`extends SceneTree`，在 `_initialize` → `call_deferred("_run")` 中跑断言，失败用 `push_error` + `quit(1)`。**地形生成测试用固化的 SHA-256 快照检测回归**（改了确定性会挂）。
   2. `scripts/tests/*.gd`：`extends Node`，`_ready` 里自跑 `_ok/_pass/_fail/_print_summary`（仿 `debug_test.gd` 框架）。
-- 已知通过状态（2026-11-11 HANDOFF）：`SkillTest.tscn` 44/44、`debug_test.gd` 35/35（历史）、battlefields / map_editor / battle_screen_pick / battlefield_render 契约绿。⚠️ `game_hud_contract.gd` **在 HEAD 上本来就坏**（`--script` 模式无 autoload，`game_hud.gd` 引 `Settings` 编译错）。
-- **代码测试 > 截图**：调试时优先用断言 / 日志，不擅自截图（HANDOFF 明示约束）。验证等级：L1 日志 / L2 断言 / L3 断点 + `runtime_assert_*` 自动验证，不要 `print` 后肉眼判断（AGENTS.md）。
+  3. 探针 2 个：`tests/flat_rotation_probe` / `mesh_draw_probe`。
+  4. Node `--test`（素材清单生成器 7 项，`tools/build_blocks_manifest.test.mjs`）。
+  5. UI 组件库 headless 契约 `tests/ui_contract.gd`（735 checks）。
+- 已知通过状态（2026-11-11 历史记录）：`SkillTest.tscn` 44/44、`debug_test.gd` 35/35（历史）、battlefields / map_editor / battle_screen_pick / battlefield_render 契约绿。⚠️ `game_hud_contract.gd` **据旧记录在 HEAD 上本就坏**（`--script` 模式无 autoload，`game_hud.gd` 引 `Settings` 编译错；2026-11-15 macOS 未复验）。**macOS 迁移后全量基线待重建**（roadmap P1）。
+- **只跑修改过的测试，不盲目跑全量**（AGENTS.md）；首跑 headless 含资源导入，耗时偏长属正常。
+- **代码测试 > 截图**：调试时优先用断言 / 日志，不擅自截图（历史 HANDOFF 明示约束）。验证等级：L1 日志 / L2 断言 / L3 断点 + `runtime_assert_*` 自动验证，不要 `print` 后肉眼判断（AGENTS.md）。
 
 ## 代码风格
 
@@ -54,13 +66,16 @@ godot -d --path . res://main.tscn --seed=42
 - 新模块用唯一命名空间的 `stream_key`（如 `volcanic/fumaroles/member`），现有流保留旧数字 salt。
 - **`story/` 是目标态设计 bible**（13 职业/27 技能/25 道具）；运行时事实是 `data/` 的 8 职业/8 技能/8 物品。实现 story 内容 = 改 `data/*.json`，勿混用两套数字。
 
-## 战棋约定（B1 / B2 / JSON 战场 / 编辑器）
+## 战棋约定（B1 / B2 / JSON 战场 / 编辑器 / 会话与存档）
 
 - 由 `Settings.battle_inline_mode`（autoload `Settings`，持久化到 `user://settings.cfg`）切换：`true=就地(B1)` / `false=独立场景(B2)`。默认 true。**JSON 战场（O 键）固定走 B2**。
 - 改动 `main.gd` 时遵守"**新增不修改，分支注入**"：B1 逻辑一律 `if _battle_active:` 前置短路，false 时零影响；**不要动 B2 路径代码**。
+- **会话与存档**：战旗身份 `bf:res|user/<id>` / `world:<seed>/<x>/<y>` 由 `GameSession` 分配；完整行动边界 `commit()` 落盘，**不要在演出中途写档**。新版本存档拒绝恢复且不覆盖（版本策略见 `data-model.md`）。
+- **结算与表现分离**：`battle_action_resolver.gd` 是 battle.gd 与自动化共享的结算内核；改战斗规则只改它 + systems，勿在演出/UI 层复写结算逻辑。演出可开关可快进，关演出必须不影响结算正确性。
 - 战场坐标 `(0,0)` = 世界 `world_origin + (bx,by)`；`GridSystem` 完全不感知世界坐标，由 `UnitSprite` 渲染时加 origin 转换。
 - **JSON 战场**：schema 与校验规则见 `public-interfaces.md`；`rows` 是**顶层字段**；`BattlefieldLoader` 是唯一权威校验点（编辑器 `quick_validate` 只是轻校验）。用户战场放 `user://battlefields/`（与 `res://data/battlefields/` 同名时 res 优先）。
-- **编辑器扩展**参考 `D:/phaserjs/godot/scripts/scenes/map_editor.gd`（外部项目）；SpinBox 竞态用 `_syncing_boxes` 模式防。
+- **编辑器**：SpinBox 竞态用 `_syncing_boxes` 模式防；素材库面板消费 `UserAssetService`，勿绕过服务直读 blob。
+- **UI 组件库**：新 UI 优先用 `ui/` 的 Pixel* 组件 + `ComponentTheme`（别再手搓第九套按钮样式）；旧业务 UI 迁移按 roadmap 渐进，不阻塞功能开发。
 
 ## 视角 / 3D 渲染约定
 
@@ -68,7 +83,7 @@ godot -d --path . res://main.tscn --seed=42
 - 旋转是**纯相机行为**（`IsometricCamera3D`），不重建地形；`R` 复位视角、`Ctrl+R` 才重新生成世界（勿混淆）。
 - 2D 旋转渲染方案的踩坑存档在 `handoff/2026-11-11-isometric-rotation.md`，**已被 3D 迁移取代** —— 不要按它改代码，仅供回退时参考。
 
-## 常见 API 坑（HANDOFF 摘录）
+## 常见 API 坑（历史 HANDOFF / handoff/ 摘录）
 
 - `Dictionary.merge` 默认**不覆盖**已有键。
 - `TerrainMaterialRegistry.set_texture_processor(raw_texture, texture_path)` **两参必传**，漏第二参整批贴图 null 崩。
