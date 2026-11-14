@@ -1,0 +1,38 @@
+{
+	"id": "ambush_reinforce",
+	"name": "峡谷伏击·增援",
+	"description": "8×6 增援演示（A3）：先头敌军只有 2 人，但第 2 与第 3 轮敌方回合各有援军从两侧谷口包抄入场。歼灭制胜利 —— 必须撑过并清光全部波次。",
+	"rows": [
+		"..m....",
+		"m..m..m",
+		".......",
+		"..f.f..",
+		"m....m.",
+		"..m...."
+	],
+	"playerUnits": [
+		{ "class": "knight", "name": "铁盾", "level": 3, "x": 2, "y": 2 },
+		{ "class": "priest", "name": "塞西尔", "level": 2, "x": 3, "y": 3 },
+		{ "class": "archer", "name": "薇拉", "level": 2, "x": 4, "y": 3 }
+	],
+	"enemyUnits": [
+		{ "class": "berserker", "name": "血斧", "level": 2, "x": 4, "y": 2 },
+		{ "class": "lancer", "level": 2, "x": 5, "y": 3 }
+	],
+	"victory": { "type": "rout" },
+	"reinforcements": [
+		{
+			"turn": 2,
+			"units": [ { "class": "archer", "level": 2 } ],
+			"positions": [ { "x": 0, "y": 2 } ]
+		},
+		{
+			"turn": 3,
+			"units": [
+				{ "class": "berserker", "level": 2 },
+				{ "class": "assassin", "name": "影刃", "level": 3 }
+			],
+			"positions": [ { "x": 6, "y": 5 }, { "x": 6, "y": 2 } ]
+		}
+	]
+}

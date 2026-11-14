@@ -495,7 +495,23 @@ func _on_enemy_phase(turn_num: int) -> void:
 	_refresh_all_units()
 	_commit_snapshot()
 
+	# 增援：敌方回合开始时刷入到点波次（先于 AI，使新单位本回合即可行动）
+	_spawn_due_reinforcements(turn_num)
+
 	turn_director.start_enemy_phase()
+
+
+## 刷入到点增援并补齐 sprite/快照。恢复局敌方回合重入时同样走这里。
+func _spawn_due_reinforcements(turn_num: int) -> void:
+	var spawned: Array = ReinforcementSpawner.spawn_due(chapter, grid, turn, turn_num)
+	if spawned.is_empty():
+		return
+	for u in spawned:
+		_spawn_unit_sprite(u)
+		var us: UnitSprite3D = _unit_sprites[u.id]
+		us.update_state()
+	print("[reinforcement] 第 %d 轮敌方回合刷入 %d 个增援" % [turn_num, spawned.size()])
+	_commit_snapshot()
 
 
 # ============================================================
@@ -555,6 +571,7 @@ func _apply_resume_state(state: Dictionary) -> void:
 		mode = Mode.ENEMY_TURN
 		_clear_range_highlight()
 		_refresh_all_units()
+		_spawn_due_reinforcements(turn.turn_number)
 		turn_director.start_enemy_phase()
 
 
@@ -1641,7 +1658,9 @@ func _close_pref_panel() -> void:
 func _check_battle_end(p_end_of_round: bool = false) -> void:
 	if _battle_ended:
 		return  # 已结束，避免重复结算演出
-	var enemies: Array = chapter.enemyUnits
+	# 敌存活集合 = chapter.enemyUnits（含已刷入增援）+ 未到点波次（防提前判胜）
+	var enemies: Array = (chapter.enemyUnits as Array).duplicate()
+	enemies.append_array(ReinforcementSpawner.pending_units(chapter))
 	var ctx := {}
 	if p_end_of_round:
 		# 完整回合结束：defend_turns / seize 在此判定（rout 随时判定，兼容旧调用）

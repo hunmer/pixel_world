@@ -21,9 +21,14 @@
 ##     ],
 ##     "playerUnits": [ { "class": "swordsman", "name": "罗兰", "level": 3, "x": 1, "y": 2 } ],
 ##     "enemyUnits":  [ { "class": "berserker", "level": 2, "x": 6, "y": 2 } ],
-##     "victory": { "type": "rout" }      # 可选胜利条件：
+##     "victory": { "type": "rout" },      # 可选胜利条件：
 ##                                        #   rout（默认，=敌全灭）| {"type":"defend_turns","turns":N}
 ##                                        #   | {"type":"seize","cell":[x,y]}
+##     "reinforcements": [                # 可选增援波次（FE 式按回合刷敌军）：
+##       { "turn": 2,                     #   第 N 轮敌方回合开始时刷入（≥1）
+##         "units": [ { "class": "berserker", "level": 2 } ],   # 格式同 enemyUnits（无 x/y）
+##         "positions": [ { "x": 0, "y": 2 } ] }                # 与 units 等长的落点数组
+##     ]
 ##   }
 ##
 ## 校验：地形名必须是 TerrainData 已注册类型；行宽一致；单位 class 必须存在；
@@ -191,6 +196,10 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 	var victory := _parse_victory(d, width, height)
 	if not bool(victory.get("ok", false)):
 		return { "ok": false, "error": victory.get("error", "") }
+	# 5c) 增援波次（可选 "reinforcements"）：与初始单位共享 occupied 做静态重叠检查
+	var reinforcements := _parse_reinforcements(d, map, width, height, occupied)
+	if not bool(reinforcements.get("ok", false)):
+		return { "ok": false, "error": reinforcements.get("error", "") }
 	# 6) 组装 chapter（无 blockTitles → battle.gd 走 terrain fallback 渲染）
 	var chapter := {
 		"id": StringName(String(info["id"])),
@@ -210,6 +219,8 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 		chapter["user_assets"] = user_assets
 	if not (victory["victory"] as Dictionary).is_empty():
 		chapter["victory"] = victory["victory"]
+	if not (reinforcements["waves"] as Array).is_empty():
+		chapter["reinforcements"] = reinforcements["waves"]
 	return { "ok": true, "chapter": chapter, "info": info }
 
 
@@ -411,29 +422,39 @@ static func _parse_units(
 		return { "ok": false, "error": "\"%s\" 必须是数组" % key }
 	if (raw_list as Array).is_empty():
 		return { "ok": false, "error": "\"%s\" 为空（双方至少各 1 个单位）" % key }
+	return _parse_unit_entries(raw_list, "\"%s\"" % key, faction, map, width, height, occupied, id_prefix)
+
+
+## 单位条目解析（_parse_units 的内核，增援波次复用）：entries 已是非空数组，
+## label 用于错误信息定位。返回 { ok, units } 或 { ok:false, error }。
+static func _parse_unit_entries(
+		entries: Array, label: String, faction: StringName,
+		map: Array, width: int, height: int,
+		occupied: Dictionary, id_prefix: String
+		) -> Dictionary:
 	var units: Array = []
-	for i in range(raw_list.size()):
-		var raw = raw_list[i]
+	for i in range(entries.size()):
+		var raw = entries[i]
 		if not (raw is Dictionary):
-			return { "ok": false, "error": "%s 第 %d 项必须是对象" % [key, i + 1] }
+			return { "ok": false, "error": "%s 第 %d 项必须是对象" % [label, i + 1] }
 		var rd: Dictionary = raw
 		var class_str := String(rd.get("class", rd.get("classId", "")))
 		var class_id := StringName(class_str)
 		if class_str.is_empty() or not ProfessionData.has_profession(class_id):
-			return { "ok": false, "error": "%s 第 %d 项职业不存在: \"%s\"" % [key, i + 1, class_str] }
+			return { "ok": false, "error": "%s 第 %d 项职业不存在: \"%s\"" % [label, i + 1, class_str] }
 		var level := int(rd.get("level", 1))
 		if level < 1:
 			level = 1
 		var x := int(rd.get("x", -1))
 		var y := int(rd.get("y", -1))
 		if x < 0 or y < 0 or x >= width or y >= height:
-			return { "ok": false, "error": "%s 第 %d 项（%s）坐标越界: (%d,%d)，地图 %dx%d" % [key, i + 1, class_str, x, y, width, height] }
+			return { "ok": false, "error": "%s 第 %d 项（%s）坐标越界: (%d,%d)，地图 %dx%d" % [label, i + 1, class_str, x, y, width, height] }
 		var terrain: StringName = map[y][x]
 		if not _is_standable(terrain):
-			return { "ok": false, "error": "%s 第 %d 项（%s）站在不可通行地形 %s 上: (%d,%d)" % [key, i + 1, class_str, String(terrain), x, y] }
+			return { "ok": false, "error": "%s 第 %d 项（%s）站在不可通行地形 %s 上: (%d,%d)" % [label, i + 1, class_str, String(terrain), x, y] }
 		var pos := Vector2i(x, y)
 		if occupied.has(pos):
-			return { "ok": false, "error": "%s 第 %d 项与其他单位重叠在 (%d,%d)" % [key, i + 1, x, y] }
+			return { "ok": false, "error": "%s 第 %d 项与其他单位重叠在 (%d,%d)" % [label, i + 1, x, y] }
 		occupied[pos] = true
 		var uname := String(rd.get("name", ""))
 		if uname.is_empty():
@@ -442,6 +463,56 @@ static func _parse_units(
 		units.append(UnitFactory.create_random_unit(
 			uid, uname, faction, level, pos, ProfessionData.get_profession(class_id)))
 	return { "ok": true, "units": units }
+
+
+## 增援波次解析：[{turn:N, units:[unitdef...], positions:[{x,y}...]}]。
+## unitdef 格式同 enemyUnits（但不带 x/y，坐标由 positions 并列提供）。
+## 校验：turn 为 ≥1 整数；units/positions 等长非空；坐标界内、可站立、
+## 不与初始单位及其他波次单位重叠（静态检查；运行期占位由 spawner 兜底挪格）。
+## 返回 { ok, waves:[{&"turn":N, &"units":[UnitData...]}] } 或 { ok:false, error }。
+static func _parse_reinforcements(
+		d: Dictionary, map: Array, width: int, height: int, occupied: Dictionary
+		) -> Dictionary:
+	if not d.has("reinforcements"):
+		return { "ok": true, "waves": [] }
+	var raw = d["reinforcements"]
+	if not (raw is Array):
+		return { "ok": false, "error": "\"reinforcements\" 必须是数组" }
+	var waves: Array = []
+	for i in range((raw as Array).size()):
+		var wv = (raw as Array)[i]
+		if not (wv is Dictionary):
+			return { "ok": false, "error": "reinforcements[%d] 必须是对象" % i }
+		var w: Dictionary = wv
+		if not _is_json_int(w.get("turn", null)):
+			return { "ok": false, "error": "reinforcements[%d] 缺少整数 \"turn\"（第几轮敌方回合刷入）" % i }
+		var rturn := int(w["turn"])
+		if rturn < 1:
+			return { "ok": false, "error": "reinforcements[%d] 的 turn 必须 ≥1（得到 %d）" % [i, rturn] }
+		var units_raw = w.get("units", [])
+		var pos_raw = w.get("positions", [])
+		if not (units_raw is Array) or (units_raw as Array).is_empty():
+			return { "ok": false, "error": "reinforcements[%d] 的 \"units\" 必须是非空数组（格式同 enemyUnits，不带 x/y）" % i }
+		if not (pos_raw is Array) or (pos_raw as Array).size() != (units_raw as Array).size():
+			return { "ok": false, "error": "reinforcements[%d] 的 \"positions\" 必须与 units 等长（[{x,y},...]）" % i }
+		var entries: Array = []
+		for j in range((units_raw as Array).size()):
+			var ud = (units_raw as Array)[j]
+			var pd = (pos_raw as Array)[j]
+			if not (ud is Dictionary) or not (pd is Dictionary) \
+					or not _is_json_int((pd as Dictionary).get("x", null)) \
+					or not _is_json_int((pd as Dictionary).get("y", null)):
+				return { "ok": false, "error": "reinforcements[%d] 的 units[%d]/positions[%d] 非法（对象 + 整数 x/y）" % [i, j, j] }
+			var e: Dictionary = (ud as Dictionary).duplicate()
+			e["x"] = int((pd as Dictionary)["x"])
+			e["y"] = int((pd as Dictionary)["y"])
+			entries.append(e)
+		var parsed := _parse_unit_entries(
+			entries, "reinforcements[%d]" % i, &"enemy", map, width, height, occupied, "u_r%d" % i)
+		if not bool(parsed.get("ok", false)):
+			return { "ok": false, "error": parsed.get("error", "") }
+		waves.append({ &"turn": rturn, &"units": parsed["units"] })
+	return { "ok": true, "waves": waves }
 
 
 ## terrain 是否可站立（与 world_to_chapter._is_standable 同一规则）

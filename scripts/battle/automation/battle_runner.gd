@@ -96,6 +96,14 @@ func _run(scenario: Dictionary) -> Dictionary:
 		if phase == &"player":
 			_run_phase(&"player", scenario["factions"][&"player"])
 		else:
+			# 敌方回合开始时刷入到点增援（与 battle.gd _on_enemy_phase 同点位）
+			var spawned: Array = ReinforcementSpawner.spawn_due(_chapter, _grid, _turn, int(_turn.turn_number))
+			for u in spawned:
+				_emit({
+					"type": &"reinforce",
+					"turn": int(_turn.turn_number),
+					"unit": { "id": String(u[&"id"]), "pos": [int((u[&"position"] as Vector2i).x), int((u[&"position"] as Vector2i).y)] },
+				})
 			_run_phase(&"enemy", scenario["factions"][&"enemy"])
 		if _battle_over or _illegal != "":
 			break
@@ -497,7 +505,10 @@ func _check_battle_end(p_end_of_round: bool = false) -> void:
 		ctx["end_of_round"] = true
 		ctx["turns_survived"] = int(_turn.turn_number)
 		ctx["seize_held"] = _seize_cell_held()
-	var v := _turn.check_victory(_chapter["enemyUnits"], ctx)
+	# 敌存活集合 = chapter.enemyUnits（含已刷入增援）+ 未到点波次（防提前判胜）
+	var enemies: Array = (_chapter["enemyUnits"] as Array).duplicate()
+	enemies.append_array(ReinforcementSpawner.pending_units(_chapter))
+	var v := _turn.check_victory(enemies, ctx)
 	if v == &"win" or v == &"lose":
 		_battle_over = true
 		_winner = &"player" if v == &"win" else &"enemy"

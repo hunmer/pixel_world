@@ -134,6 +134,9 @@ static func _event_line(e: Dictionary) -> String:
 			return "%s → 物品 %s 剩余%d次" % [who, String(e.get("item", "")), int(e.get("uses_left", 0))]
 		"death":
 			return "[阵亡] %s" % String(e.get("unit", ""))
+		"reinforce":
+			var ru: Dictionary = e.get("unit", {})
+			return "[增援] 第 %d 轮入场 %s @(%d,%d)" % [int(e.get("turn", 0)), String(ru.get("id", "")), int((ru.get("pos", [-1, -1]) as Array)[0]), int((ru.get("pos", [-1, -1]) as Array)[1])]
 		"exp":
 			return "%s → 经验 +%d (累计 %d)" % [who, int(e.get("amount", 0)), int(e.get("exp_total", 0))]
 		"level_up":

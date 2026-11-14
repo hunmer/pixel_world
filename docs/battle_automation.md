@@ -41,7 +41,7 @@
 	"version": 1,                        // 必填，当前只支持 1
 	"id": "my_scenario",                 // 可选，缺省取文件名
 	"battlefield": "res://data/battlefields/arena_1v1.json",  // 引用预制战场（与 inline 二选一）
-	"inline": { /* 内联战场，字段同 data/battlefields/*.json：rows/map、legend、playerUnits、enemyUnits */ },
+	"inline": { /* 内联战场，字段同 data/battlefields/*.json：rows/map、legend、playerUnits、enemyUnits、victory、reinforcements（按回合增援波次，事件流输出 reinforce 条目） */ },
 	"seed": 7,                           // 整数；命中/必杀/技能/升级成长共用这一条 randf 流
 	"limits": { "max_turns": 50, "max_steps": 1000 },   // 可选，僵持保护
 	"stop_after_steps": 12,              // 可选，短复现：执行到第 N 步正常停（exit 0）
