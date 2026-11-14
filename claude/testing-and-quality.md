@@ -69,8 +69,8 @@
 | UI 组件库 | ✅ | `ui_components_contract` headless 735 checks（ui/README 记录）+ MCP 画廊运行态验收 |
 | 用户素材 | ✅ | 5 个 user_asset_* 契约 + node --test 7 项（docs/user_assets.md 记录） |
 | 沉浸战斗演出 | ✅ | handoff/2026-11-14-immersive-battle-presentation.md 记录契约 + 运行态验收通过 |
-| **`tests/game_hud_contract.gd`** | ❌ **HEAD 上本来就坏** | `--script` 模式无 autoload，`game_hud.gd` 引 `Settings` 编译错（git stash 验证非近期引入）；待改造为场景内测试或 mock Settings |
-| 其余契约（69 个总） | ❓ 未逐一执行 | 2026-11-15 索引更新未跑全量；建议先跑一轮基线（注意首次运行导入耗时） |
+| **`tests/game_hud_contract.gd`** | ✅ 已修复 | `e8fda38` 改造为 headless 可跑，2026-11-15 基线通过 |
+| 全量契约基线 | ⚠️ 62/72 通过 | **2026-11-15 macOS 全量基线**（HEAD `3a08327`，`tools/run_contract_baseline.sh`）：6 失败（battle_action_chain / battle_presentation_hooks / isometric_view / map_editor_ui / ui / sunlight_3d_gl）、4 超时（action_anim / immersive_battle_camera / world_map_overlay 均 autoload 依赖编译失败挂起；user_asset_source_live 依赖本机 8076 源）。详见 [docs/testing_baseline_2026-11-15.md](../docs/testing_baseline_2026-11-15.md)。实际契约数为 72（非 69，前置卡新增 3 个） |
 
 ## Lint / 类型检查
 
