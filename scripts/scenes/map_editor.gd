@@ -19,7 +19,8 @@
 ## 自动回退文字标签。保存为 res://data/battlefields/<id>.json（loader schema，
 ## 保存即回读校验），战场列表（O 键）立即可见可开战。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
-## 本文件不再自带样式 helper；领域按钮工厂（_add_tool_btn 等）保留。
+## 按钮一律由 ui/components 像素组件创建（UIFactory / PixelButton 预加载），
+## 本文件不再自带样式 helper 与裸 Button.new；领域按钮工厂（_add_tool_btn 等）保留。
 ##
 ## 入口：世界内 E 键 / 战场面板「打开编辑器」按钮；返回 -> res://main.tscn。
 
@@ -45,6 +46,8 @@ const TAB_BLOCK := 3
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+## 统一按钮组件（ui/components）：tile/工具条等领域 toggle 按钮直接创建用。
+const PixelButtonScript = preload("res://ui/components/pixel_button.gd")
 
 ## 配色常量统一取自 ui_theme.gd（本文件别名保持既有引用不变）。
 const BG := UIThemeScript.BG
@@ -310,27 +313,27 @@ func _build_file_tab(tabs: TabContainer) -> void:
 	tab.add_child(name_row)
 	UIFactoryScript.center_row(name_row)
 
-	_hosting_check = CheckButton.new()
-	_hosting_check.text = "托管"
-	_hosting_check.tooltip_text = "开启后战斗自动托管运行（AI 对 AI），调试观察用"
+	_hosting_check = UIFactoryScript.check_button(
+		"托管", "开启后战斗自动托管运行（AI 对 AI），调试观察用"
+	)
 	tab.add_child(_hosting_check)
 
-	_load_box = OptionButton.new()
+	_load_box = UIFactoryScript.option_button()
 	_load_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_refresh_load_box()
 	tab.add_child(_load_box)
 
 	var io_row := HBoxContainer.new()
 	io_row.add_theme_constant_override("separation", 4)
-	var load_btn := _action_btn("读取", _load_selected, "folder_open")
+	var load_btn := UIFactoryScript.button("读取", _load_selected, "folder_open")
 	load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	io_row.add_child(load_btn)
-	var save_btn := _action_btn("保存", _save, "floppy_disk")
+	var save_btn := UIFactoryScript.button("保存", _save, "floppy_disk")
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	io_row.add_child(save_btn)
 	tab.add_child(io_row)
 
-	var back_btn := _action_btn("返回(Esc)", _back_to_world, "doorway_exit")
+	var back_btn := UIFactoryScript.button("返回(Esc)", _back_to_world, "doorway_exit")
 	back_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tab.add_child(back_btn)
 
@@ -349,7 +352,7 @@ func _build_generate_tab(tabs: TabContainer) -> void:
 	tab.add_child(seed_row)
 	UIFactoryScript.center_row(seed_row)
 
-	var dice_btn := _action_btn("随机种子", func():
+	var dice_btn := UIFactoryScript.button("随机种子", func():
 		_seed_edit.text = str(Time.get_unix_time_from_system()).sha1_text().substr(0, 8)
 		_generate(), "dice")
 	dice_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -378,10 +381,10 @@ func _build_generate_tab(tabs: TabContainer) -> void:
 
 	var gen_row := HBoxContainer.new()
 	gen_row.add_theme_constant_override("separation", 4)
-	var gen_btn := _action_btn("生成", _generate, "sprout")
+	var gen_btn := UIFactoryScript.button("生成", _generate, "sprout")
 	gen_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gen_row.add_child(gen_btn)
-	var clear_btn := _action_btn("清空地形", func():
+	var clear_btn := UIFactoryScript.button("清空地形", func():
 		_push_undo("清空地形")
 		model.rows = BattlefieldDocScript.create_empty(model.width, model.height).rows
 		model.props = []  # 植物层一并清空
@@ -567,7 +570,7 @@ func _scan_prop_paths() -> Dictionary:
 
 ## 植物按钮：独立贴图 tile（无文字，悬停提示素材名），选中写 current_prop
 func _plant_btn(path: String, group: ButtonGroup) -> Button:
-	var tb := Button.new()
+	var tb := _pixel_btn()
 	tb.toggle_mode = true
 	tb.button_group = group
 	tb.custom_minimum_size = Vector2(46, 96)
@@ -709,7 +712,7 @@ func _rebuild_block_asset_grid() -> void:
 ## 素材方块按钮：与地形调色板同风格的 tile 缩略图（无文字，悬停提示名称与 id）
 ## visual 由调用方批量解析传入（resolve_many），缺省才回退单条 resolve。
 func _block_asset_btn(asset_id: String, d: Dictionary, visual: Dictionary = {}) -> Button:
-	var tb := Button.new()
+	var tb := _pixel_btn()
 	tb.toggle_mode = true
 	tb.button_group = _block_asset_group
 	tb.custom_minimum_size = Vector2(46, 96)
@@ -832,16 +835,30 @@ func _on_tab_changed(_idx: int) -> void:
 # ============================================================
 # UI 构建辅助（统一样式系统 + 控件工厂）
 # ============================================================
+## 统一按钮组件入口：PixelButton + 禁用自带音效。
+## 编辑器内按钮音效由全局 Sfx autoload（game_sfx.gd）对 BaseButton 统一挂接，
+## 组件自带 HoverSfx/ClickSfx 会叠加双声，故一律关闭、只留全局钩子。
+func _pixel_btn() -> Button:
+	var b := PixelButtonScript.new()
+	b.hover_sfx_enabled = false
+	b.click_sfx_enabled = false
+	return b
+
+
 func _add_tool_btn(parent: Node, group: ButtonGroup, tool: int, text: String, icon_name := "") -> void:
-	var b := Button.new()
+	var b := _pixel_btn()
 	b.toggle_mode = true
 	b.button_group = group
 	var icon: Texture2D = null
 	if icon_name != "":
 		icon = UIThemeScript.icon(icon_name)
 	if icon != null:
-		# 垂直工具条：只显示图标（tooltip 提示名称），固定方形按钮
+		# 垂直工具条：只显示图标（tooltip 提示名称），固定方形按钮。
+		# icon_size=22 对齐 34×34 按钮内容区（34-2×6），保住 expand_icon 原观感
+		# （组件默认 icon_max_width=18 会把放大后的图标截小）；b 静态类型是
+		# Button，组件属性经 set() 走 PixelButton setter（触发 _refresh 生效）。
 		b.icon = icon
+		b.set("icon_size", 22)
 		b.text = ""
 		b.tooltip_text = "%s工具" % text
 		b.custom_minimum_size = Vector2(34, 34)
@@ -855,22 +872,9 @@ func _add_tool_btn(parent: Node, group: ButtonGroup, tool: int, text: String, ic
 	_tool_buttons[tool] = b
 
 
-## 动作按钮：图标 + 文字并排（图标缺失只显示文字）
-func _action_btn(text: String, cb: Callable, icon_name := "") -> Button:
-	var b := Button.new()
-	b.text = text
-	var icon: Texture2D = null
-	if icon_name != "":
-		icon = UIThemeScript.icon(icon_name)
-	if icon != null:
-		b.icon = icon
-	UIThemeScript.style_button(b)
-	b.pressed.connect(cb)
-	return b
-
 ## 阵营切换按钮（盾=我方 / 骷髅=敌方，ButtonGroup 单选；缺图回退纯文字）
 func _faction_btn(faction: String, label: String, icon_name: String, group: ButtonGroup) -> Button:
-	var b := Button.new()
+	var b := _pixel_btn()
 	b.toggle_mode = true
 	b.button_group = group
 	b.set_meta("faction", faction)
@@ -891,7 +895,7 @@ func _faction_btn(faction: String, label: String, icon_name: String, group: Butt
 ## 调色板按钮：每项一个 tile 缩略图（无文字，悬停提示地形名）。
 ## plant=true 用独立植物贴图（树单独成块，不叠在方块柱上）。
 func _terrain_btn(t: StringName, group: ButtonGroup, plant := false) -> Button:
-	var tb := Button.new()
+	var tb := _pixel_btn()
 	tb.toggle_mode = true
 	tb.button_group = group
 	tb.custom_minimum_size = Vector2(46, 96)
@@ -910,7 +914,7 @@ func _terrain_btn(t: StringName, group: ButtonGroup, plant := false) -> Button:
 
 ## 职业头像按钮：48×48；有立绘显示 TextureRect，缺图回退职业首字（按钮文本自动居中）
 func _class_btn(cid: String, group: ButtonGroup) -> Button:
-	var b := Button.new()
+	var b := _pixel_btn()
 	b.toggle_mode = true
 	b.button_group = group
 	b.custom_minimum_size = PORTRAIT_BTN_SIZE

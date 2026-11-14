@@ -7,9 +7,12 @@
 ##   2. UIFactory：button/label/shadow_label/outline_label/line_edit/
 ##      option_button/check_button/tab_container/add_tab/log_label/center_row
 ##      的类型、名称、默认配置与信号接线（add_tab 产 "<标题>Scroll/<标题>Tab"
-##      结构，与 map_editor/battle_ui 既有契约一致）。
-##   3. 迁移接线（静态源检查）：8 个迁移文件引用工厂/主题且不再保留被
-##      删除的本地样式 helper 定义。
+##      结构，与 map_editor/battle_ui 既有契约一致）；按钮族由 ui/components
+##      像素组件创建（PixelButton/PixelOptionButton/PixelCheckButton），且
+##      PixelButton 自带音效禁用（全局 Sfx autoload 负责发声，防双声）。
+##   3. 迁移接线（静态源检查）：迁移文件引用工厂/主题且不再保留被删除的本地
+##      样式 helper 定义；一方源码不再裸创建按钮（Button/CheckButton/
+##      OptionButton .new() 一律走组件/工厂；tests 原生夹具与 addons 除外）。
 ## 注：game_hud_contract.gd 在 HEAD 上本就无法以 --script 模式编译
 ## （Settings autoload 限制，见 hint_bar_contract.gd 头部注释），
 ## HUD 运行态断言由 Godot MCP runtime_assert_* 覆盖，不在本测试重复。
@@ -18,6 +21,9 @@ extends SceneTree
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+const PixelButtonScript = preload("res://ui/components/pixel_button.gd")
+const PixelOptionButtonScript = preload("res://ui/components/pixel_option_button.gd")
+const PixelCheckButtonScript = preload("res://ui/components/pixel_check_button.gd")
 
 var failures: Array[String] = []
 
@@ -78,10 +84,14 @@ func _run() -> void:
 	var cb_called := [false]
 	var btn := UIFactoryScript.button("确定", func(): cb_called[0] = true)
 	_expect(btn is Button, "button 返回 Button")
+	_expect(btn.get_script() == PixelButtonScript, "button 由 PixelButton 组件创建")
+	_expect(not btn.get("hover_sfx_enabled"), "button 组件悬停音效已禁用（全局 Sfx 挂接）")
+	_expect(not btn.get("click_sfx_enabled"), "button 组件点击音效已禁用（全局 Sfx 挂接）")
 	_expect(btn.text == "确定", "button 文本")
 	btn.pressed.emit()
 	_expect(cb_called[0], "button 信号接线")
-	UIThemeScript.style_button(btn)
+	# 工厂已内置 style_button 覆盖（不必再显式调用）；主题兼容：逐控件
+	# override 优先于组件主题/variation，观感与迁移前一致。
 	_expect(btn.get_theme_stylebox("normal") is StyleBoxFlat, "button normal 样式")
 	_expect(btn.get_theme_stylebox("hover") is StyleBoxFlat, "button hover 样式")
 	_expect(btn.get_theme_stylebox("pressed") is StyleBoxFlat, "button pressed 样式")
@@ -119,11 +129,15 @@ func _run() -> void:
 
 	var opt := UIFactoryScript.option_button()
 	_expect(opt is OptionButton, "option_button 返回 OptionButton")
+	_expect(opt.get_script() == PixelOptionButtonScript,
+		"option_button 由 PixelOptionButton 组件创建")
 	opt.queue_free()
 
 	var check := UIFactoryScript.check_button("开关", "提示")
 	_expect(check is CheckButton and check.text == "开关", "check_button 文本")
 	_expect(check.tooltip_text == "提示", "check_button 提示")
+	_expect(check.get_script() == PixelCheckButtonScript,
+		"check_button 由 PixelCheckButton 组件创建")
 	check.queue_free()
 
 	# ---- 4. tab_container / add_tab / log_label / center_row ----
@@ -164,8 +178,15 @@ func _run() -> void:
 
 	# ---- 5. 迁移接线（静态源检查） ----
 	_check_source("res://scripts/scenes/map_editor.gd",
-		["UIFactoryScript.add_tab(", "UIThemeScript.overlay_panel_style("],
-		["func _new_tab(", "func _btn_styles(", "func _panel_style("])
+		["UIFactoryScript.add_tab(", "UIThemeScript.overlay_panel_style(",
+			"UIFactoryScript.button(", "UIFactoryScript.check_button(",
+			"UIFactoryScript.option_button(", "PixelButtonScript.new("],
+		["func _new_tab(", "func _btn_styles(", "func _panel_style(",
+			"func _action_btn(", "Button.new(", "CheckButton.new(", "OptionButton.new("])
+	_check_source("res://scripts/ui/ui_factory.gd",
+		["PixelButtonScript.new()", "PixelOptionButtonScript.new()",
+			"PixelCheckButtonScript.new()"],
+		["Button.new(", "CheckButton.new(", "OptionButton.new("])
 	_check_source("res://scripts/battle/battle_ui.gd",
 		["UIFactoryScript.button(", "UIThemeScript.menu_panel_style("],
 		["func _btn_styles(", "func _make_panel_style(", "func _sidebar_panel_style(",
@@ -188,6 +209,25 @@ func _run() -> void:
 		["UIFactoryScript.button("], [])
 	_check_source("res://scripts/scenes/pixelfx_gallery.gd",
 		["UIFactoryScript.option_button(", "UIFactoryScript.check_button("], [])
+	# 一方源码不再裸创建按钮：按钮族一律经 ui/components 组件 / UIFactory
+	# 创建（tests 原生夹具与 addons 第三方不在其列）。
+	for path: String in [
+		"res://main.gd",
+		"res://scripts/game_hud.gd",
+		"res://scripts/side_panel.gd",
+		"res://scripts/scenes/battle.gd",
+		"res://scripts/scenes/title.gd",
+		"res://scripts/scenes/game_entry.gd",
+		"res://scripts/scenes/home_entry.gd",
+		"res://scripts/scenes/dialogue_demo.gd",
+		"res://scripts/scenes/pixelfx_gallery.gd",
+		"res://scripts/scenes/ui_component_gallery.gd",
+		"res://scripts/editor/asset_library_panel.gd",
+		"res://scripts/battle/battle_ui.gd",
+		"res://scripts/battle/battle_settings_tab.gd",
+		"res://scripts/battle/result_presentation.gd",
+	]:
+		_check_source(path, [], ["Button.new(", "CheckButton.new(", "OptionButton.new("])
 
 	_finish()
 

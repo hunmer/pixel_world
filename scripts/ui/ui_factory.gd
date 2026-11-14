@@ -5,18 +5,34 @@
 ## 契约注意（tests 按路径/名字断言）：
 ##   - add_tab 生成 "<标题>Scroll / <标题>Tab" 两级节点，VBox separation 6
 ##   - log_label 名字固定 "LogLabel"（side_panel / battle_ui 共用）
+##   - 按钮族（button/option_button/check_button）一律由 ui/components 像素组件
+##     创建（PixelButton/PixelOptionButton/PixelCheckButton），返回类型仍是
+##     Button/OptionButton/CheckButton 基类注解（子类满足，调用方零改动）。
 ## 样式一律走 ui_theme.gd；工厂只管「怎么造」，主题只管「长什么样」。
+## 主题兼容：button() 在组件之上保留 UITheme.style_button 的逐控件 override
+## （优先级高于组件主题/variation），像素级维持既有观感；option/check 此前
+## 是引擎默认观感，统一为组件 pixel 变体。
+## 音效兼容：Sfx autoload（game_sfx.gd）对每个 BaseButton 挂 pressed/hover
+## 全局音效，组件自带 HoverSfx/ClickSfx 会与之叠加成双声 → 工厂统一禁用
+## 组件自带音效，仅保留全局钩子发声。
 class_name UIFactory
 extends RefCounted
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const PixelButtonScript = preload("res://ui/components/pixel_button.gd")
+const PixelOptionButtonScript = preload("res://ui/components/pixel_option_button.gd")
+const PixelCheckButtonScript = preload("res://ui/components/pixel_check_button.gd")
 
 
 ## 主题三态按钮；cb 非空时接 pressed 信号，icon_name 非空时设置图标。
+## 由 ui/components PixelButton 创建（统一样式组件）；组件自带音效禁用，
+## 交给全局 Sfx autoload 挂接；style_button override 叠加维持既有观感。
 static func button(
 	text := "", cb := Callable(), icon_name := ""
 ) -> Button:
-	var b := Button.new()
+	var b := PixelButtonScript.new()
+	b.hover_sfx_enabled = false
+	b.click_sfx_enabled = false
 	b.text = text
 	UIThemeScript.style_button(b)
 	if cb.is_valid():
@@ -66,13 +82,14 @@ static func line_edit(placeholder := "") -> LineEdit:
 
 
 ## 下拉框（由调用方 add_item / 设置最小宽度）。
+## 由 ui/components PixelOptionButton 创建（pixel 变体主题）。
 static func option_button() -> OptionButton:
-	return OptionButton.new()
+	return PixelOptionButtonScript.new()
 
 
-## 开关勾选按钮。
+## 开关勾选按钮。由 ui/components PixelCheckButton 创建（pixel 变体主题）。
 static func check_button(text := "", tooltip := "") -> CheckButton:
-	var c := CheckButton.new()
+	var c := PixelCheckButtonScript.new()
 	c.text = text
 	c.tooltip_text = tooltip
 	return c
