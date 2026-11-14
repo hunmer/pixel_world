@@ -14,6 +14,7 @@ const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_rendere
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const IsoBoardScript = preload("res://scripts/iso/iso_board.gd")
+const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
 
 signal cell_pressed(cell: Vector2i)
 signal cell_dragged(cell: Vector2i)
@@ -41,6 +42,15 @@ var selected_cell := Vector2i(-1, -1):
 var _world: Node2D = null
 var _renderer: Node2D = null
 var _board: IsoBoard = null
+## 用户素材视觉适配器（asset_id → 烘焙 visual；缺图返回占位）。
+## map_editor.gd 可注入共享实例（与素材面板同库同缓存）；默认独立读 user://custom_assets。
+var asset_adapter: RefCounted = UserAssetVisualAdapterScript.new()
+## 素材悬停预览（map_editor 选中素材时由 adapter.resolve 烘焙写入；空=不显示）
+var asset_preview_visual: Dictionary = {}:
+	set(v):
+		asset_preview_visual = v
+		_update_asset_preview_marker()
+var _asset_preview_marker: Node2D = null
 var _hover_marker: Polygon2D = null
 var _selection_marker: Polygon2D = null
 var _unit_markers: Array[Node2D] = []
@@ -85,6 +95,12 @@ func _ready() -> void:
 	_selection_marker.color = SELECTION_COLOR
 	_selection_marker.visible = false
 	_world.add_child(_selection_marker)
+	# 素材预览块（选中素材时跟随悬停格顶面中心，z 介于选中与悬停标记之间）
+	_asset_preview_marker = _AssetPreviewMark.new()
+	_asset_preview_marker.name = "AssetPreviewMark"
+	_asset_preview_marker.z_index = 18
+	_asset_preview_marker.visible = false
+	_world.add_child(_asset_preview_marker)
 	# 容器化布局：尺寸由父容器分配（首帧 0->实际值），变化时重居中地图
 	resized.connect(_on_canvas_resized)
 
@@ -99,6 +115,9 @@ func _rebuild() -> void:
 		_selection_marker.visible = false
 		return
 	_renderer.set_custom_props(model.get("props", []))  # 植物层（setup 前注入）
+	_renderer.set_custom_assets(
+		asset_adapter.visual_for_entries(model.get("props", []), model.get("tile_overrides", {}))
+	)  # 用户素材视觉层（props 的 asset_id + tile_overrides）
 	_renderer.set_block_layout(model.get("block_layout", {}))
 	_renderer.setup(_build_grid())
 	_rebuild_unit_markers()
@@ -131,6 +150,8 @@ func _refresh_cell(cell: Vector2i) -> void:
 	(_renderer.grid.tiles[cell.y][cell.x] as Dictionary)["type"] = terrain
 	# 植物层同步：该格 props 覆盖表条目（无则清空覆盖，恢复地形默认装饰）
 	_renderer.set_cell_prop(cell, BattlefieldDocScript.prop_at(model, cell))
+	# 用户素材视觉层同步：prop 层（props 的 asset_id）与 tile 层（tile_overrides）独立清除
+	_sync_cell_assets(cell)
 	# renderer 持有布局深拷贝；每次单格刷新都必须同步，否则 z 改了模型却不改画面。
 	_renderer.set_block_layout(model.get("block_layout", {}))
 	_renderer.refresh_cell(cell.x, cell.y)
@@ -141,6 +162,21 @@ func _center_map() -> void:
 	if _board == null or _board.camera == null or model.is_empty():
 		return
 	_board.center_on_map(int(model.width), int(model.height))
+
+
+## 单格素材视觉同步：prop 层（props 的 asset_id）与 tile 层（tile_overrides）
+## 各自独立设置/清除（renderer 两层并存；空 visual = 清除该层）。
+func _sync_cell_assets(cell: Vector2i) -> void:
+	var prop_aid: String = BattlefieldDocScript.prop_asset_at(model, cell)
+	_renderer.set_cell_asset(cell, "prop", _visual_or_empty(prop_aid))
+	var tile_aid: String = BattlefieldDocScript.tile_override_at(model, cell)
+	_renderer.set_cell_asset(cell, "tile", _visual_or_empty(tile_aid))
+
+
+func _visual_or_empty(asset_id: String) -> Dictionary:
+	if asset_id.is_empty():
+		return {}
+	return asset_adapter.resolve(asset_id)
 
 
 ## 容器尺寸变化（含首次布局 0->实际值）-> 重居中，保持地图可见。
@@ -283,6 +319,21 @@ func _update_hover_marker() -> void:
 		return
 	_hover_marker.polygon = _poly_to_local(_renderer.top_polygon_for(hover_cell.x, hover_cell.y))
 	_hover_marker.visible = true
+	_update_asset_preview_marker()
+
+
+## 素材预览跟随悬停格（视觉烘焙含 render_offset；与 renderer 素材块同一套锚点规则）
+func _update_asset_preview_marker() -> void:
+	if _asset_preview_marker == null:
+		return
+	if asset_preview_visual.is_empty() or hover_cell.x < 0 \
+			or _renderer == null or _renderer.grid == null:
+		_asset_preview_marker.visible = false
+		return
+	_asset_preview_marker.visual = asset_preview_visual
+	_asset_preview_marker.position = _screen_to_local(
+		_renderer.top_center_for(hover_cell.x, hover_cell.y))
+	_asset_preview_marker.visible = true
 
 
 func _update_selection_marker() -> void:
@@ -389,3 +440,19 @@ class _UnitMark:
 			draw_arc(Vector2.ZERO, r, 0, TAU, 24, Color(0, 0, 0, 0.6), 2.0)
 			draw_string(font, Vector2(-7, 4), tag,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.95))
+
+
+## 素材预览块（自绘）：纹理中心锚点 + render_offset（同 renderer _asset_block_for 规则）。
+## 画布走 3D 管线（IsoBoard Camera3D），同 3D 路径：顶面中心不加 2D 偏移。
+## 缺图占位（missing=true）淡红染色提示，与正式渲染层一致。
+class _AssetPreviewMark:
+	extends Node2D
+	var visual: Dictionary = {}
+
+	func _draw() -> void:
+		var tex: Texture2D = visual.get("texture")
+		if tex == null:
+			return
+		var offset: Vector2 = visual.get("render_offset", Vector2.ZERO)
+		draw_texture(tex, offset - tex.get_size() * 0.5,
+			Color(1.0, 0.55, 0.55) if bool(visual.get("missing", false)) else Color.WHITE)

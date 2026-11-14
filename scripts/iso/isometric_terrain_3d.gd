@@ -31,6 +31,13 @@ var _prop_instances: Dictionary = {}
 ## 呈现残余透明度，避免改动共享 prop 材质影响其他植物。
 var _prop_fades: Dictionary = {}
 var _fade_layer: Node3D = null
+## 战斗沉浸遮挡：临时隐藏的柱格集合。chunk 重建时整格跳过（含植物），
+## 恢复隐藏后按 _cells 原样重建回来；流式重建/编辑器重建同样尊重本集合。
+var _hidden_columns: Dictionary = {}
+## 植物透明度外部锁定（战斗沉浸遮挡）：锁定期间 set_prop_fade_target 对该格无效，
+## 防止 main.gd 玩家遮挡的 0.5s 周期重建把战斗淡出的植物拉回可见；
+## chunk 重建会清掉淡化状态，重建末尾按本表重放锁定。
+var _prop_fade_holds: Dictionary = {}
 
 
 func set_cell(cell: Vector2i, blocks: Array, stand_level: float = 0.0) -> void:
@@ -55,6 +62,8 @@ func clear() -> void:
 	_dirty_chunks.clear()
 	_water_ripples.clear()
 	_refresh_ripple_multimesh()
+	_hidden_columns.clear()
+	_prop_fade_holds.clear()
 	for chunk_value in _chunks.values():
 		var chunk: Node3D = chunk_value
 		if is_instance_valid(chunk):
@@ -108,7 +117,68 @@ func get_active_prop_fade_cells() -> Array:
 
 ## 设定某格植物的目标透明度：<1 时隐藏原 multimesh 实例（共享材质不受影响），
 ## 改为逐节点代理呈现；=1 时恢复到原实例。逐帧调用 advance_prop_fades 驱动缓动。
+## 被 set_prop_fade_hold 锁定的格忽略本写入（main.gd 玩家遮挡周期重建不会顶掉战斗锁定）。
 func set_prop_fade_target(cell: Vector2i, alpha: float) -> void:
+	if _prop_fade_holds.has(cell):
+		return
+	_apply_prop_fade_target(cell, alpha)
+
+
+## 透明度锁定：锁定期间 set_prop_fade_target 对该格无效；chunk 重建后自动重放锁定。
+## clear 时目标回到 1.0（交还 main.gd，其 0.5s 周期重建会按需重新淡化）。
+func set_prop_fade_hold(cell: Vector2i, alpha: float) -> void:
+	_prop_fade_holds[cell] = clampf(alpha, 0.0, 1.0)
+	_apply_prop_fade_target(cell, float(_prop_fade_holds[cell]))
+
+
+func clear_prop_fade_hold(cell: Vector2i) -> void:
+	if not _prop_fade_holds.has(cell):
+		return
+	_prop_fade_holds.erase(cell)
+	_apply_prop_fade_target(cell, 1.0)
+
+
+func has_prop_fade_hold(cell: Vector2i) -> bool:
+	return _prop_fade_holds.has(cell)
+
+
+## 战斗沉浸遮挡：临时隐藏整柱（幂等，flush 后生效）。柱体与格上植物一并消失。
+func set_column_hidden(cell: Vector2i, hidden: bool) -> void:
+	if _hidden_columns.has(cell) == hidden:
+		return
+	if hidden:
+		_hidden_columns[cell] = true
+	else:
+		_hidden_columns.erase(cell)
+	_mark_chunk_dirty(cell)
+
+
+func is_column_hidden(cell: Vector2i) -> bool:
+	return _hidden_columns.has(cell)
+
+
+func get_hidden_columns() -> Array:
+	return _hidden_columns.keys()
+
+
+## 战斗沉浸遮挡查询：bounds 内的柱数据 [{cell, center, top}]，center 为柱顶面中心，
+## top 为柱顶世界 Y（取 blocks 最大 level）。调用方按有界 bounds 查询，不遍历无限世界。
+func get_column_occlusion_data(bounds_min: Vector2i, bounds_max: Vector2i) -> Array:
+	var result: Array = []
+	for cell_value in _cells.keys():
+		var cell: Vector2i = cell_value
+		if cell.x < bounds_min.x or cell.x > bounds_max.x:
+			continue
+		if cell.y < bounds_min.y or cell.y > bounds_max.y:
+			continue
+		var top := 0.0
+		for block_value in (_cells[cell]["blocks"] as Array):
+			top = maxf(top, float((block_value as Dictionary).get("level", 0)) * IsoProjection.LEVEL_HEIGHT)
+		result.append({"cell": cell, "center": IsoProjection.grid_to_world(cell, top), "top": top})
+	return result
+
+
+func _apply_prop_fade_target(cell: Vector2i, alpha: float) -> void:
 	var clamped := clampf(alpha, 0.0, 1.0)
 	var state: Dictionary = _prop_fades.get(cell, {})
 	if state.is_empty():
@@ -342,6 +412,8 @@ func _rebuild_chunk(chunk_coord: Vector2i) -> void:
 			var cell := Vector2i(x, y)
 			# chunk 重建会替换该格全部 prop 实例，旧注册与代理同步清理。
 			_clear_prop_cell(cell)
+			if _hidden_columns.has(cell):
+				continue
 			if not _cells.has(cell):
 				continue
 			var blocks: Array = _cells[cell]["blocks"]
@@ -355,6 +427,13 @@ func _rebuild_chunk(chunk_coord: Vector2i) -> void:
 		_commit_mesh_group(chunk, group_value)
 	for prop_value in props.values():
 		_commit_prop_group(chunk, prop_value)
+	# 透明度锁定重放：_clear_prop_cell 已清掉本 chunk 全部淡化状态，
+	# 被外部（战斗沉浸遮挡）锁定的格需要按锁定表重新隐藏。
+	for y in range(min_cell.y, min_cell.y + CHUNK_SIZE):
+		for x in range(min_cell.x, min_cell.x + CHUNK_SIZE):
+			var held := Vector2i(x, y)
+			if _prop_fade_holds.has(held):
+				_apply_prop_fade_target(held, float(_prop_fade_holds[held]))
 
 
 func _append_block(groups: Dictionary, cell: Vector2i, block: Dictionary) -> void:

@@ -168,8 +168,15 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 	var eu := _parse_units(d, "enemyUnits", &"enemy", map, width, height, occupied, "u_e")
 	if not bool(eu.get("ok", false)):
 		return { "ok": false, "error": eu.get("error", "") }
-	# 4) 植物层（可选 "props": [{x,y,texture}]；越界/贴图缺失的条目跳过不报错）
+	# 4) 植物层（可选 "props"：{x,y,texture} 或 {x,y,asset_id}；越界/贴图缺失的 texture 条目跳过）
 	var props: Array = _parse_props(d, width, height)
+	# 4b) 地块视觉覆盖层与引用素材快照（可选；缺图不丢引用，渲染层占位）
+	var tile_overrides: Dictionary = _parse_tile_overrides(d, width, height)
+	var user_assets: Dictionary = {}
+	if d.has("user_assets"):
+		if not (d["user_assets"] is Dictionary):
+			return { "ok": false, "error": "\"user_assets\" 必须是对象（asset_id → 描述符）" }
+		user_assets = d["user_assets"]
 	# 5) 显式单块布局（可选）：缺省字段保留旧柱体路径，出现时严格校验并规范化。
 	var block_layout: Dictionary = {}
 	if d.has("block_layout"):
@@ -190,13 +197,20 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 	}
 	if not block_layout.is_empty():
 		chapter["block_layout"] = block_layout
+	if not tile_overrides.is_empty():
+		chapter["tile_overrides"] = tile_overrides
+	if not user_assets.is_empty():
+		chapter["user_assets"] = user_assets
 	return { "ok": true, "chapter": chapter, "info": info }
 
 
 ## ---- 内部实现 ----------------------------------------------------------
 
 
-## 植物层解析（宽松）：条目须为 {x,y,texture}；越界或贴图文件不存在的跳过
+## 植物层解析（宽松）：
+##   - texture 条目 {x,y,texture}：越界或贴图文件不存在的跳过（旧行为，旧地图不回归）
+##   - asset_id 条目 {x,y,asset_id}：用户素材引用，只查坐标界内，不查文件——
+##     缺图（素材库无该 ID/blob 未下载）由渲染层显示占位，引用永不丢失
 static func _parse_props(d: Dictionary, width: int, height: int) -> Array:
 	var out: Array = []
 	var raw = d.get("props", [])
@@ -207,6 +221,13 @@ static func _parse_props(d: Dictionary, width: int, height: int) -> Array:
 			continue
 		var x := int(p.get("x", -1))
 		var y := int(p.get("y", -1))
+		var aid := String(p.get("asset_id", ""))
+		if not aid.is_empty():
+			if x < 0 or y < 0 or x >= width or y >= height:
+				push_warning("[battlefield_loader] 跳过非法素材植物条目: %s" % str(p))
+				continue
+			out.append({ "x": x, "y": y, "asset_id": aid })
+			continue
 		var tex := String(p.get("texture", ""))
 		if tex.is_empty() or x < 0 or y < 0 or x >= width or y >= height:
 			push_warning("[battlefield_loader] 跳过非法植物条目: %s" % str(p))
@@ -215,6 +236,35 @@ static func _parse_props(d: Dictionary, width: int, height: int) -> Array:
 			push_warning("[battlefield_loader] 植物贴图不存在，跳过: %s" % tex)
 			continue
 		out.append({ "x": x, "y": y, "texture": tex })
+	return out
+
+
+## 地块视觉覆盖层解析（宽松）：{"x,y": {"asset_id": ...}}。
+## 坐标解析失败/越界/asset_id 空的条目跳过 + warning（逻辑地形不受影响）。
+static func _parse_tile_overrides(d: Dictionary, width: int, height: int) -> Dictionary:
+	var out: Dictionary = {}
+	var raw = d.get("tile_overrides", {})
+	if not (raw is Dictionary):
+		push_warning("[battlefield_loader] tile_overrides 必须是对象，已忽略")
+		return out
+	for key in (raw as Dictionary).keys():
+		var e: Variant = (raw as Dictionary)[key]
+		var aid := ""
+		if e is Dictionary:
+			aid = String((e as Dictionary).get("asset_id", ""))
+		if aid.is_empty():
+			push_warning("[battlefield_loader] 跳过非法地块覆盖条目: %s" % str(key))
+			continue
+		var parts := String(key).split(",")
+		if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
+			push_warning("[battlefield_loader] 跳过非法地块覆盖坐标: %s" % str(key))
+			continue
+		var x := int(parts[0])
+		var y := int(parts[1])
+		if x < 0 or y < 0 or x >= width or y >= height:
+			push_warning("[battlefield_loader] 地块覆盖坐标越界，跳过: %s" % str(key))
+			continue
+		out[String(key)] = { "asset_id": aid }
 	return out
 
 

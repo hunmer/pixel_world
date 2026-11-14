@@ -18,7 +18,7 @@ pixel_world/  (E:/pixel_world)
 ├── tests/                 37 个契约测试 + flat_rotation_probe + fixtures/(18 文件)
 ├── config/                JSON 配置（生态 + 表现层 + sunlight.json）
 ├── data/                  战棋 JSON：professions/skills/items + battlefields/(4 战场)
-├── rules/                 5 篇 agent 规则文档（godot-tools-map 298 工具、mcp-debugging、image-viewing、autoplay-hosting、skill-item-system）
+├── rules/                 5 篇 agent 规则文档（godot-tools-map 295 工具/49 可激活、mcp-debugging、image-viewing、autoplay-hosting、skill-item-system）
 ├── story/                 19 篇设计 bible（目标态：13 职业/27 技能/25 道具/15 章；当前 data/ 仅 8/8/8）
 ├── handoff/               2026-11-11-isometric-rotation.md（2D 旋转踩坑，已被 3D 迁移取代）
 ├── docs/screenshots/      README 截图（22 张）

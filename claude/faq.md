@@ -46,7 +46,7 @@
 角色素材目录，**尚未与 `data/professions.json` 的 8 个职业做映射**（已知待办）。
 
 ### Q14：调试用的 MCP 工具怎么用？
-按 `AGENTS.md`：MCP 工具**按会话激活**（`mcp_connector_session_tools` search → preview-activate → activate，ttl 1–30 分钟）；会话首条先激活并调用 `editor_ping`，返回 `pong:true` 才继续；`Cannot reach ... 9080` = 编辑器没开或插件未启用。`dbg_launch` 必传 `scene`。298 个工具地图见 `rules/godot-tools-map.md`，调试流程见 `rules/mcp-debugging.md`，插件细节见 `addons/breakpoint_mcp/CLAUDE.md`。
+按 `AGENTS.md`：godot MCP 工具**默认不在工具表里**（连接已配置、注入模式「按会话启用」，实测激活 0 / 会话层隐藏 285），用前必须 `mcp_connector_session_tools` preview-activate → activate（`connectionKey: json-godot`，ttl 1–30 分钟，用户点名这些精确工具后才 `confirmed:true`；不跨会话继承）。`tool not found` / 看不见 `mcp__godot__*` **不等于没装 godot MCP**；自检用 `find_symbol` + `runtime_get_monitors`（`editor_ping` 不在可激活的 `runtime,dap,knowledge` 三组内）。`Cannot reach ... 9080` = 编辑器没开或插件未启用。`dbg_launch` 必传 `scene`。295 个工具地图与激活配方见 `rules/godot-tools-map.md`，调试流程见 `rules/mcp-debugging.md`，插件细节见 `addons/breakpoint_mcp/CLAUDE.md`。
 
 ### Q15：游戏内 `~` 控制台有什么命令？
 Panku REPL（autoload `Panku`），项目命令集 `dbg.*` 注册于 `scripts/debug_console_commands.gd`：`help / list_battlefields / battlefield(id) / editor / enter_battle / battle_mode / player / time_scale`。加新命令 = 对象公共方法 + `_HELP_方法名` 常量，再 `Panku.gd_exprenv.register_env(name, obj)` 注册。

@@ -145,5 +145,5 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 
 ## 给 AI / 调试进程的接口（非游戏内）
 
-- **`addons/breakpoint_mcp`**：`127.0.0.1:9080`（编辑器）/ **9081**（运行时）loopback newline-delimited JSON，方法名 1:1 对应 `editor_*` / `scene_*` / `node_*` / `dbg_*` / `runtime_*` 工具。经 MCP 按会话激活后调用（见 `AGENTS.md` 与 `rules/godot-tools-map.md`，298 个工具地图）。
+- **`addons/breakpoint_mcp`**：`127.0.0.1:9080`（编辑器）/ **9081**（运行时）loopback newline-delimited JSON，方法名 1:1 对应 `editor_*` / `scene_*` / `node_*` / `dbg_*` / `runtime_*` 工具。经 MCP **按会话激活**后调用（见 `AGENTS.md` 与 `rules/godot-tools-map.md`：295 个工具、49 个可激活；`editor_*` 等 246 个激活也拿不到）。
 - **`addons/panku_console`**：游戏内 `~` REPL；项目命令集 `scripts/debug_console_commands.gd` 注册为 `dbg.*`（`help / list_battlefields / battlefield(id) / editor / enter_battle / battle_mode / player / time_scale`）。新命令 = 对象公共方法 + `_HELP_方法名` 常量；新对象用 `Panku.gd_exprenv.register_env(name, obj)` 注册。autoload 单例与场景根 `current` 自动可用。

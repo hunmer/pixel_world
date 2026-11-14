@@ -79,6 +79,9 @@ func _run() -> void:
 	battle.battle_ui.immersive_toggle.button_pressed = false
 	await _wait_state(rig, 0)
 	_assert_restored(rig, camera, original, "真实进入期关闭")
+	# 演出预热在 begin() 之前 await 时，恢复信号会先于 play() 到达这里；等一帧让
+	# 同步级联落定再采样 _skipped，否则读到的是上一次演出的残留值。
+	await get_tree().process_frame
 	_check(not battle.action_anim._skipped, "进入期关闭只恢复镜头，不错误跳过动作")
 
 	Settings.set_battle_immersive_presentation(old_setting)

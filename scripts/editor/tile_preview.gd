@@ -35,6 +35,13 @@ var prop_path := "":
 		prop_path = v
 		_refresh_column()
 
+## 用户素材 visual（UserAssetVisualAdapter 产出；非空时优先于 plant/terrain，
+## 与 prop_path 互斥：素材缩略图用，渲染走 preview_visual_block，所见即所得）
+var asset_visual: Dictionary = {}:
+	set(v):
+		asset_visual = v
+		_refresh_column()
+
 var _column: Node2D = null
 
 
@@ -53,7 +60,8 @@ func _ready() -> void:
 
 ## 用真实 ColumnBatch 重建柱：绘制路径与游戏内完全一致。
 ## 地形 = 单块 tile（preview_blocks(single=true)，不再叠成高塔）；
-## prop_path 优先；其次 plant（地形默认装饰独立成块）；都无则纯地形单块。
+## prop_path 优先；其次 asset_visual（用户素材）；再 plant（地形默认装饰独立成块）；
+## 都无则纯地形单块。
 func _refresh_column() -> void:
 	if not is_inside_tree():
 		return  # _ready 会再触发一次
@@ -65,6 +73,10 @@ func _refresh_column() -> void:
 		var pb: Dictionary = BattlefieldRendererScript.preview_path_block(prop_path)
 		if not pb.is_empty():
 			raw.append(pb)
+	elif not asset_visual.is_empty():
+		var ab: Dictionary = BattlefieldRendererScript.preview_visual_block(asset_visual)
+		if not ab.is_empty():
+			raw.append(ab)
 	if raw.is_empty() and plant:
 		var prop: Dictionary = BattlefieldRendererScript.preview_prop_block(terrain)
 		if not prop.is_empty():

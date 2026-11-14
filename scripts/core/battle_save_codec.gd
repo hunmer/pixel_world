@@ -274,6 +274,36 @@ static func validate_chapter(chapter: Dictionary) -> String:
 				return "props[%d] 坐标无效" % i
 			if int(px) < 0 or int(px) >= int(width) or int(py) < 0 or int(py) >= int(height):
 				return "props[%d] 坐标越界: (%d,%d)" % [i, int(px), int(py)]
+			# 用户素材条目：asset_id 须为非空 String（缺图不丢引用，不校验文件存在）
+			if prop.has("asset_id"):
+				var aid: Variant = prop.get("asset_id")
+				if not (aid is String) or String(aid).is_empty():
+					return "props[%d] asset_id 必须是非空字符串" % i
+
+	# 地块视觉覆盖层（可选；存档严格：形状/坐标错报错，逻辑地形不变）
+	if chapter.has("tile_overrides"):
+		var overrides: Variant = chapter["tile_overrides"]
+		if not overrides is Dictionary:
+			return "tile_overrides 不是对象"
+		for key in (overrides as Dictionary).keys():
+			var entry: Variant = (overrides as Dictionary)[key]
+			if not entry is Dictionary:
+				return "tile_overrides[%s] 不是对象" % str(key)
+			var oaid: Variant = (entry as Dictionary).get("asset_id")
+			if not (oaid is String) or String(oaid).is_empty():
+				return "tile_overrides[%s] asset_id 必须是非空字符串" % str(key)
+			var parts := String(key).split(",")
+			if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
+				return "tile_overrides 键必须是 \"x,y\" 整数坐标: %s" % str(key)
+			var ox := int(parts[0])
+			var oy := int(parts[1])
+			if ox < 0 or ox >= int(width) or oy < 0 or oy >= int(height):
+				return "tile_overrides[%s] 坐标越界" % str(key)
+
+	# 引用素材描述符快照（可选；形状宽松：纯 JSON 字典即可，深校验在素材库层）
+	if chapter.has("user_assets"):
+		if not chapter["user_assets"] is Dictionary:
+			return "user_assets 不是对象"
 
 	if chapter.has("block_layout"):
 		var layout: Variant = chapter["block_layout"]

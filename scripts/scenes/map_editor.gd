@@ -9,9 +9,9 @@
 ##   3. 添加阵营角色：阵营（我方/敌方）+ 8 职业头像网格（48×48，缺图回退职业
 ##      首字）+ 等级 + 姓名放置，左键放置/再点删除
 ## 布局（右侧 Tabs 面板版）：全部 UI 收进右侧固定宽面板（标题 + Tab 页 +
-## 状态栏），左侧画布伸展填充最大化；Tab 共 6 页 —— 文件/生成/地形/方块/角色/
-## 历史，内容超高走 ScrollContainer 纵向滚动；1280×800 与 1024×640 自适应。
-## 画布生效工具跟随激活 Tab：地形页=画笔刷选中地形（选植物则放植物）、
+## 状态栏），左侧画布伸展填充最大化；Tab 共 7 页 —— 文件/生成/地形/方块/角色/
+## 历史/素材，内容超高走 ScrollContainer 纵向滚动；1280×800 与 1024×640 自适应。
+## 画布生效工具跟随激活 Tab：地形页=画笔刷选中地形（选植物放植物、选素材放素材）、
 ## 角色页=放置单位，其余 Tab 沿用左上角悬浮工具条的手动单选（_active_tool）。
 ## 撤销/重做：Ctrl+Z / Ctrl+Y（或 Ctrl+Shift+Z），快照式历史时间线覆盖全部
 ## 编辑动作；历史 Tab 列出动作时间线，点击任意记录可一步跳转到该状态。
@@ -32,10 +32,14 @@ const TilePreviewScript = preload("res://scripts/editor/tile_preview.gd")
 const ProfessionDataScript = preload("res://scripts/core/professions.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const HintBarScript = preload("res://scripts/hint_bar.gd")
+const AssetLibraryPanelScript = preload("res://scripts/editor/asset_library_panel.gd")
+const UserAssetServiceScript = preload("res://scripts/assets/user_asset_service.gd")
+const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
+const UserAssetCatalogScript = preload("res://scripts/assets/user_asset_catalog.gd")
 
 const Tool = {
 	PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5,
-	HEIGHT_UP = 6, HEIGHT_DOWN = 7,
+	HEIGHT_UP = 6, HEIGHT_DOWN = 7, ASSET = 8,
 }
 const TAB_BLOCK := 3
 
@@ -96,6 +100,20 @@ var _load_box: OptionButton
 var _block_z_box: SpinBox
 var _cell_info_label: Label
 var _syncing_block_z := false
+## 用户素材库：服务（场景持有非 autoload）+ 共享视觉适配器（画布/预览/面板同库同缓存）
+var _asset_service: UserAssetService
+var _asset_adapter: UserAssetVisualAdapter
+var _asset_panel: AssetLibraryPanel
+## 素材页当前选中的素材描述符（asset_selected 写入；选地形/植物调色板时清空，互斥）
+var _selected_asset: Dictionary = {}
+## 方块页「素材方块」选中（asset_id）；与素材 Tab 选中互斥，非空时方块页画笔=ASSET 放置
+var _selected_block_asset := ""
+var _block_asset_buttons: Dictionary = {}  # asset_id -> Button
+## 下载完成待刷缩略图的素材集合 + 0.3s 合批定时器（见 _on_block_asset_ready）
+var _pending_asset_thumbs: Dictionary = {}
+var _asset_thumb_timer: Timer = null
+var _block_asset_grid: GridContainer = null
+var _block_asset_group: ButtonGroup = null
 var _tool_buttons: Dictionary = {}   # Tool -> Button
 var _terrain_buttons: Dictionary = {}  # StringName(terrain) -> Button
 var _class_buttons: Dictionary = {}  # String(class_id) -> Button
@@ -107,8 +125,19 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	model = BattlefieldDocScript.create_empty()
 	_prop_paths = _scan_prop_paths()  # 植物素材枚举（_build_terrain_tab 用）
+	_init_asset_service()  # 素材服务必须先于 UI（画布/面板注入共享 adapter）
 	_build_ui()
 	_init_history()  # 初始空板定格为历史第 0 条「初始地图」
+
+
+## 素材服务（场景持有，非 autoload）：管理 user://custom_assets 素材库
+func _init_asset_service() -> void:
+	_asset_service = UserAssetServiceScript.new()
+	_asset_service.name = "UserAssetService"
+	add_child(_asset_service)
+	_asset_adapter = UserAssetVisualAdapterScript.new()
+	# 下载完成 → 方块页「素材方块」网格补入新下载的方块（只重建该网格，不动画布）
+	_asset_service.asset_ready.connect(_on_block_asset_ready)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -128,6 +157,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			_redo()
 		elif key.physical_keycode == KEY_ESCAPE or key.keycode == KEY_ESCAPE:
+			# 素材面板弹窗（导入文件选择/隐藏确认）打开时：Esc 先关弹窗，不返回世界
+			if _asset_panel != null and _asset_panel.is_dialog_open():
+				_asset_panel.close_dialogs()
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
 			# 先标记已处理再切场景：change_scene 后本节点被释放，get_viewport() 会变 null
 			if get_viewport() != null:
 				get_viewport().set_input_as_handled()
@@ -181,6 +216,7 @@ func _build_ui() -> void:
 	_canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# 3D 取景让出右侧栏宽度（同世界 reserved_right_px），画布内容对齐舞台中心
 	_canvas.sidebar_reserved_px = SIDEBAR_WIDTH
+	_canvas.asset_adapter = _asset_adapter  # 画布与素材面板共享同一库缓存
 	holder.add_child(_canvas)
 
 	# ---- 左上角垂直工具条（悬浮在画布上，取代旧「工具」Tab） ----
@@ -221,7 +257,7 @@ func _build_ui() -> void:
 	title_row.add_child(UIFactoryScript.label("战场编辑器", 16, ACCENT))
 	sv.add_child(title_row)
 
-	# ---- 6 个 Tab：文件 / 生成 / 地形 / 方块 / 角色 / 历史 ----
+	# ---- 7 个 Tab：文件 / 生成 / 地形 / 方块 / 角色 / 历史 / 素材 ----
 	# Tab 样式统一走 ui_factory.tab_container（含页签三态与面板底）
 	var tabs := UIFactoryScript.tab_container("ToolTabs")
 	_tabs = tabs
@@ -235,6 +271,7 @@ func _build_ui() -> void:
 	_build_block_tab(tabs)
 	_build_units_tab(tabs)
 	_build_history_tab(tabs)
+	_build_asset_tab(tabs)
 
 	# ---- 状态栏（贴面板底部，自动换行） ----
 	_status_label = UIFactoryScript.label("就绪 — 左键操作画布；同种子+同尺寸生成结果确定", 11, TEXT_DIM)
@@ -435,8 +472,12 @@ func _build_terrain_tab(tabs: TabContainer) -> void:
 		if btn.has_meta("terrain"):
 			current_terrain = btn.get_meta("terrain")
 			current_prop = ""
+			_clear_asset_selection()
+			_clear_block_asset_selection()
 		elif btn.has_meta("prop"):
-			current_prop = btn.get_meta("prop"))
+			current_prop = btn.get_meta("prop")
+			_clear_asset_selection()
+			_clear_block_asset_selection())
 	# ---- 地形组（单块 tile，不叠装饰物/高塔）----
 	tab.add_child(UIFactoryScript.label("地形", 12, TEXT_DIM))
 	var tgrid := GridContainer.new()
@@ -464,7 +505,8 @@ func _build_terrain_tab(tabs: TabContainer) -> void:
 	_terrain_buttons[current_terrain].button_pressed = true
 
 
-## Tab【方块】：只编辑当前选格的独立高度，不修改同列/其他格。
+## Tab【方块】：编辑当前选格的独立高度（不修改同列/其他格）；
+## 下方「素材方块」列表展示已下载的素材方块，点选后画笔放置（tile_overrides 层），再点取消。
 func _build_block_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "方块", "cube")
 	tab.add_child(UIFactoryScript.label("用「选择」工具点选格子；拖动其他工具不会改变选择。", 11, TEXT_DIM))
@@ -486,6 +528,16 @@ func _build_block_tab(tabs: TabContainer) -> void:
 	tab.add_child(row)
 	UIFactoryScript.center_row(row)
 	tab.add_child(UIFactoryScript.label("每格只有一个独立方块；z=0 为统一平面。", 10, TEXT_DIM))
+	tab.add_child(UIFactoryScript.label("素材方块（已下载，点选后用画笔放置；再点取消选中）", 11, TEXT_DIM))
+	_block_asset_group = ButtonGroup.new()
+	_block_asset_group.allow_unpress = true  # 再点已选中按钮 = 取消选中
+	_block_asset_grid = GridContainer.new()
+	_block_asset_grid.name = "BlockAssetGrid"
+	_block_asset_grid.columns = 4
+	_block_asset_grid.add_theme_constant_override("h_separation", 2)
+	_block_asset_grid.add_theme_constant_override("v_separation", 2)
+	tab.add_child(_block_asset_grid)
+	_rebuild_block_asset_grid()
 
 
 ## 扫描植物素材目录（BattlefieldDoc.PLANT_DIRS）→ { 组名: [res://路径] }（排序）
@@ -581,6 +633,201 @@ func _build_history_tab(tabs: TabContainer) -> void:
 			_jump_history(idx))
 	tab.add_child(_history_list)
 	tab.add_child(UIFactoryScript.label("点击记录跳转到该状态；Ctrl+Z / Ctrl+Y 撤销重做", 10, TEXT_DIM))
+
+
+## Tab【素材】：用户素材库管理（本地导入/远程清单/编辑 render/隐藏），
+## 选中素材后回「地形」页用画笔放置（地块→tile_overrides 层，植物→props 层）。
+func _build_asset_tab(tabs: TabContainer) -> void:
+	var tab := UIFactoryScript.add_tab(tabs, "素材", "library")
+	_asset_panel = AssetLibraryPanelScript.new()
+	_asset_panel.name = "AssetLibraryPanel"
+	_asset_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_asset_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_asset_panel.asset_selected.connect(_on_asset_selected)
+	_asset_panel.library_changed.connect(_on_asset_library_changed)
+	tab.add_child(_asset_panel)
+	_asset_panel.setup(_asset_service, _asset_adapter)
+
+
+## 素材面板选中变化：写入选中态并同步画布预览格
+func _on_asset_selected(descriptor: Dictionary) -> void:
+	_selected_asset = descriptor
+	_clear_block_asset_selection()  # 与方块页选中互斥
+	_update_asset_preview()
+
+
+## 重建方块页「素材方块」网格：全部地形素材（未缓存的顺手触发自动加载），按 id 稳定排序；
+## 缩略图走 adapter.resolve_many 一次库加载批量出图（逐 id resolve 会重复整库 JSON 解析，
+## 1455 素材 × 每 asset_ready 全网格重建曾直接把编辑器卡死）；asset_ready 只换单按钮缩略图。
+## 选中项仍存在则恢复按下态，已消失（被隐藏）则清空选中。
+func _rebuild_block_asset_grid() -> void:
+	if _block_asset_grid == null or _asset_service == null or _asset_adapter == null:
+		return
+	for child in _block_asset_grid.get_children():
+		_block_asset_grid.remove_child(child)
+		child.queue_free()
+	_block_asset_buttons.clear()
+	var assets: Array = _asset_service.list_assets()
+	assets.sort_custom(func(a, b): return String((a as Dictionary).get("id", "")) < String((b as Dictionary).get("id", "")))
+	var ids: Array = []
+	var descs := {}
+	for raw in assets:
+		var d := raw as Dictionary
+		if String(d.get("kind", "")) != UserAssetCatalogScript.KIND_TERRAIN:
+			continue
+		var aid := String(d.get("id", ""))
+		ids.append(aid)
+		descs[aid] = d
+	# p_cache=false：1455 项不灌 LRU（防挤穿热缓存）；放置时低频 resolve 重解析可接受
+	var visuals: Dictionary = _asset_adapter.resolve_many(ids, false)
+	for aid in ids:
+		if String(_asset_service.get_asset_state(aid).get("status", "")) == "missing":
+			_asset_service.request_asset_image(aid)
+		var tb := _block_asset_btn(aid, descs[aid], visuals.get(aid, {}))
+		_block_asset_grid.add_child(tb)
+		_block_asset_buttons[aid] = tb
+	if not _selected_block_asset.is_empty():
+		if _block_asset_buttons.has(_selected_block_asset):
+			(_block_asset_buttons[_selected_block_asset] as Button).set_pressed_no_signal(true)
+		else:
+			_selected_block_asset = ""
+			_update_asset_preview()
+
+
+## 素材方块按钮：与地形调色板同风格的 tile 缩略图（无文字，悬停提示名称与 id）
+## visual 由调用方批量解析传入（resolve_many），缺省才回退单条 resolve。
+func _block_asset_btn(asset_id: String, d: Dictionary, visual: Dictionary = {}) -> Button:
+	var tb := Button.new()
+	tb.toggle_mode = true
+	tb.button_group = _block_asset_group
+	tb.custom_minimum_size = Vector2(46, 96)
+	tb.tooltip_text = "%s（%s）" % [String(d.get("name", asset_id)), asset_id]
+	tb.set_meta("block_asset", asset_id)
+	UIThemeScript.style_button(tb)
+	var prev := TilePreviewScript.new(&"plain", false)
+	if not visual.is_empty():
+		prev.asset_visual = visual
+	elif _asset_adapter != null:
+		prev.asset_visual = _asset_adapter.resolve(asset_id)
+	tb.add_child(prev)
+	prev.position = (tb.custom_minimum_size - prev.size) * 0.5
+	tb.set_pressed_no_signal(asset_id == _selected_block_asset)
+	tb.pressed.connect(_on_block_asset_btn_pressed.bind(asset_id))
+	return tb
+
+
+func _on_block_asset_btn_pressed(asset_id: String) -> void:
+	if _selected_block_asset == asset_id:
+		_selected_block_asset = ""
+	else:
+		_selected_block_asset = asset_id
+		_clear_asset_selection()  # 与素材 Tab 选中互斥
+	_update_asset_preview()
+	if _selected_block_asset.is_empty():
+		_status("已取消方块素材选择")
+	else:
+		_status("方块素材 %s（画笔放置）" % asset_id)
+
+
+## 清空方块页素材选中（素材 Tab 选中 / 地形调色板选中时调用，互斥）
+func _clear_block_asset_selection() -> void:
+	if _selected_block_asset.is_empty():
+		return
+	_selected_block_asset = ""
+	if _block_asset_group != null:
+		var pb := _block_asset_group.get_pressed_button()
+		if pb != null:
+			pb.set_pressed_no_signal(false)
+
+
+## 当前生效的素材描述符：素材 Tab 选中优先，其次方块页选中
+func _active_asset() -> Dictionary:
+	if not _selected_asset.is_empty():
+		return _selected_asset
+	if _selected_block_asset.is_empty() or _asset_service == null:
+		return {}
+	var d: Variant = _asset_service.find_by_id(_selected_block_asset)
+	return d if d is Dictionary else {}
+
+
+## 素材图片下载完成：不立即逐张刷新——下载洪流期间每个事件都 clear_cache+resolve
+## 会反复整库解析刷屏（每事件一次 654KB JSON parse）。记入待刷集合，0.3s 合批一次
+## resolve_many 单库解析，只换受影响按钮的缩略图（全网格重建曾是进编辑器卡死的根因）。
+func _on_block_asset_ready(asset_id: String) -> void:
+	_pending_asset_thumbs[asset_id] = true
+	if _asset_thumb_timer == null or not is_instance_valid(_asset_thumb_timer):
+		_asset_thumb_timer = Timer.new()
+		_asset_thumb_timer.name = "AssetThumbBatchTimer"
+		_asset_thumb_timer.one_shot = true
+		_asset_thumb_timer.wait_time = 0.3
+		_asset_thumb_timer.timeout.connect(_flush_asset_thumbs)
+		add_child(_asset_thumb_timer)
+	_asset_thumb_timer.start()
+	# 选中素材刚下载完时预览立即升级真图（单个 resolve，量小；先清陈旧占位缓存）
+	if asset_id == String(_selected_asset.get("id", "")) or asset_id == _selected_block_asset:
+		if _asset_adapter != null:
+			_asset_adapter.clear_cache(asset_id)
+		_update_asset_preview()
+
+
+## 合批刷新待刷缩略图：整批一次 clear_cache + 一次 resolve_many（单库解析）。
+func _flush_asset_thumbs() -> void:
+	if _asset_adapter == null:
+		_pending_asset_thumbs.clear()
+		return
+	var ids: Array = _pending_asset_thumbs.keys()
+	_pending_asset_thumbs.clear()
+	for raw_id in ids:
+		_asset_adapter.clear_cache(String(raw_id))
+	var visuals: Dictionary = _asset_adapter.resolve_many(ids, false)
+	for raw_id in ids:
+		var aid := String(raw_id)
+		var tb: Button = _block_asset_buttons.get(aid)
+		if tb == null:
+			continue
+		var visual: Dictionary = visuals.get(aid, {})
+		if visual.is_empty():
+			continue
+		for child in tb.get_children():
+			if child is TilePreviewScript:
+				child.asset_visual = visual
+
+
+## 选地形/植物调色板时清空素材选中（两组互斥，避免误放置）
+func _clear_asset_selection() -> void:
+	if _selected_asset.is_empty():
+		return
+	_selected_asset = {}
+	if _asset_panel != null:
+		_asset_panel.deselect()
+	_update_asset_preview()
+
+
+## 库内容变化（导入/隐藏/编辑/清单同步）：校正方块页素材网格；
+## 选中素材已不存在则清空选中；画布烘焙缓存已随库失效，整图刷新
+func _on_asset_library_changed() -> void:
+	_rebuild_block_asset_grid()
+	if _selected_asset.is_empty():
+		_refresh_canvas()
+		return
+	var aid := String(_selected_asset.get("id", ""))
+	if not (_asset_service.find_by_id(aid) is Dictionary):
+		_selected_asset = {}
+		if _asset_panel != null:
+			_asset_panel.deselect()
+	_update_asset_preview()
+	_refresh_canvas()
+
+
+## 画布预览格跟随素材选中（地块/植物素材统一走 adapter.resolve 烘焙视觉）
+func _update_asset_preview() -> void:
+	if _canvas == null:
+		return
+	var d := _active_asset()
+	if d.is_empty():
+		_canvas.asset_preview_visual = {}
+		return
+	_canvas.asset_preview_visual = _asset_adapter.resolve(String(d.get("id", "")))
 
 
 ## 切 Tab 时封存上一动作（画笔拖动在换页瞬间定格为一步）
@@ -703,9 +950,11 @@ func _active_tool() -> int:
 		return current_tool
 	var title := _tabs.get_tab_title(_tabs.current_tab)
 	if title == "地形":
+		if not _selected_asset.is_empty():
+			return Tool.ASSET
 		return Tool.PLANT if not current_prop.is_empty() else Tool.PAINT
 	if title == "方块":
-		return Tool.SELECT
+		return Tool.ASSET if not _selected_block_asset.is_empty() else Tool.SELECT
 	if title == "角色":
 		return Tool.UNIT
 	return current_tool
@@ -727,9 +976,13 @@ func _on_cell_dragged(cell: Vector2i) -> void:
 		_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH[current_terrain])
 	elif tool == Tool.PLANT:
 		_set_prop(cell, current_prop)
+	elif tool == Tool.ASSET:
+		_apply_asset_tool(cell)
 	elif tool == Tool.ERASE:
 		_set_glyph(cell, ".")
 		_set_prop(cell, "")
+		_set_tile_override(cell, "")
+		_set_prop_asset(cell, "")
 	elif tool == Tool.HEIGHT_UP or tool == Tool.HEIGHT_DOWN:
 		_apply_height_brush(cell, tool)
 
@@ -742,6 +995,7 @@ func _apply_tool(cell: Vector2i) -> void:
 	var names := {
 		Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮", Tool.UNIT: "角色",
 		Tool.PLANT: "植物", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
+		Tool.ASSET: "素材",
 	}
 	_push_undo(names[tool])  # 按下一次=一步；后续拖动不再入栈（整笔一笔撤销）
 	match tool:
@@ -755,11 +1009,15 @@ func _apply_tool(cell: Vector2i) -> void:
 			else:
 				_set_glyph(cell, ".")
 				_set_prop(cell, "")
+				_set_tile_override(cell, "")
+				_set_prop_asset(cell, "")
 		Tool.UNIT:
 			if not _remove_unit_at(cell):
 				place_unit(cell, selected_faction, selected_class, int(_level_box.value), _unit_name_edit.text)
 		Tool.PLANT:
 			_set_prop(cell, current_prop)
+		Tool.ASSET:
+			_apply_asset_tool(cell)
 		Tool.HEIGHT_UP, Tool.HEIGHT_DOWN:
 			_apply_height_brush(cell, tool)
 
@@ -862,6 +1120,47 @@ func _set_prop(cell: Vector2i, path: String) -> void:
 		return
 	_canvas._refresh_cell(cell)
 	_status("放置植物 %s @(%d,%d)" % [path.get_file().get_basename(), cell.x, cell.y])
+
+
+## 放置/清除某格的素材覆盖（asset_id 为空=清除）：
+## kind=terrain → tile_overrides 层（整格替换为素材块，与地形字符解耦）；
+## kind=plant   → props 层 asset 通道（与 texture 通道植物同层共存，同格至多一株）
+func _set_tile_override(cell: Vector2i, asset_id: String) -> void:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return
+	if not BattlefieldDocScript.set_tile_override(model, cell, asset_id):
+		return
+	_canvas._refresh_cell(cell)
+	if not asset_id.is_empty():
+		_status("地块素材 %s @(%d,%d)" % [asset_id, cell.x, cell.y])
+
+
+func _set_prop_asset(cell: Vector2i, asset_id: String) -> void:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return
+	if not BattlefieldDocScript.set_prop_asset(model, cell, asset_id):
+		return
+	_canvas._refresh_cell(cell)
+	if not asset_id.is_empty():
+		_status("植物素材 %s @(%d,%d)" % [asset_id, cell.x, cell.y])
+
+
+## 素材放置 / 同格再点取消覆盖（拖动路径只放置不取消）
+func _apply_asset_tool(cell: Vector2i) -> void:
+	var d := _active_asset()
+	var asset_id := String(d.get("id", ""))
+	if asset_id.is_empty():
+		return
+	if String(d.get("kind", "")) == UserAssetCatalogScript.KIND_PLANT:
+		if BattlefieldDocScript.prop_asset_at(model, cell) == asset_id:
+			_set_prop_asset(cell, "")
+		else:
+			_set_prop_asset(cell, asset_id)
+	else:
+		if BattlefieldDocScript.tile_override_at(model, cell) == asset_id:
+			_set_tile_override(cell, "")
+		else:
+			_set_tile_override(cell, asset_id)
 
 
 ## 设置地形图例字符（含画笔/橡皮/拖动路径）
@@ -1102,6 +1401,7 @@ func _snapshot(label: String = "") -> Dictionary:
 		"rows": (model.rows as Array).duplicate(),
 		"units": units,
 		"props": props,
+		"tile_overrides": (model.get("tile_overrides", {}) as Dictionary).duplicate(true),
 		"block_layout": (model.get("block_layout", {}) as Dictionary).duplicate(true),
 		"width": int(model.width),
 		"height": int(model.height),
@@ -1112,6 +1412,7 @@ func _snapshot(label: String = "") -> Dictionary:
 func _state_equal(snap: Dictionary, other: Dictionary) -> bool:
 	return snap.rows == other.rows and snap.units == other.units \
 		and snap.get("props", []) == other.get("props", []) \
+		and snap.get("tile_overrides", {}) == other.get("tile_overrides", {}) \
 		and snap.get("block_layout", {}) == other.get("block_layout", {})
 
 
@@ -1126,6 +1427,7 @@ func _restore(snap: Dictionary) -> void:
 	for p in snap.get("props", []):
 		props.append((p as Dictionary).duplicate())
 	model.props = props
+	model["tile_overrides"] = (snap.get("tile_overrides", {}) as Dictionary).duplicate(true)
 	model["block_layout"] = (snap.get("block_layout", {}) as Dictionary).duplicate(true)
 	model.width = int(snap.width)
 	model.height = int(snap.height)
@@ -1212,12 +1514,39 @@ func save_current() -> Dictionary:
 	model.id = _id_edit.text
 	model.name = _name_edit.text if not _name_edit.text.strip_edges().is_empty() else "自定义战场"
 	model.hosting = _hosting_check.button_pressed
+	_sync_model_user_assets()  # 被引用素材描述符快照入档（B2 渲染离线自包含）
 	var result: Dictionary = BattlefieldDocScript.save_model(model)
 	if bool(result.get("ok", false)):
 		print("[editor] 保存战场: %s" % result.get("path", ""))  # L1 埋点
 	else:
 		print("[editor] 保存失败: %s" % result.get("error", ""))  # L1 埋点
 	return result
+
+
+## 保存前从素材库拷贝被引用素材的描述符快照进 model.user_assets：
+## B2 渲染离线读档自包含（user_assets 缺失时按 id 回退库+占位）；
+## 库中已隐藏/删除的素材保留模型里的旧快照，保证存档与历史引用不丢
+func _sync_model_user_assets() -> void:
+	var referenced := {}
+	for p in model.get("props", []):
+		var aid := String((p as Dictionary).get("asset_id", ""))
+		if not aid.is_empty():
+			referenced[aid] = true
+	for key: String in model.get("tile_overrides", {}):
+		var tval: Variant = model.tile_overrides[key]
+		# 运行期/JSON 形状均为 {"x,y": {"asset_id": ...}}
+		var tid := String((tval as Dictionary).get("asset_id", "") if tval is Dictionary else tval)
+		if not tid.is_empty():
+			referenced[tid] = true
+	var lib: Dictionary = model.get("user_assets", {})
+	for aid: String in referenced:
+		var d: Variant = _asset_service.find_by_id(aid)
+		if d is Dictionary:
+			lib[aid] = (d as Dictionary).duplicate(true)
+	if lib.is_empty():
+		model.erase("user_assets")
+	else:
+		model["user_assets"] = lib
 
 
 func _back_to_world() -> void:

@@ -15,6 +15,8 @@
 ### Q5：本项目 HANDOFF 里的 `editor_ping`/`dbg_launch`/`runtime_assert_*` 哪来的？
 正是经此桥由**外部 MCP host** 暴露的工具（`mcp__godot__*`）。本仓库只提供桥（addon），不提供 host。host 在用户的 MCP 客户端侧配置。
 
+> 在本仓库的 DSH 里，host 侧连接 `json-godot` 是**按会话启用**：默认工具表里没有 `mcp__godot__*`（实测激活 0 / 隐藏 285），要先激活；且只有 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 的 49 个可激活（`editor_ping` 等 `editor_*` **不在**其中）。`tool not found` ≠ 没装。详见 `AGENTS.md` 与 `rules/godot-tools-map.md`。
+
 ### Q6：改了插件代码不生效？
 插件是 `@tool`，改 `operations.gd` 等后可能需要在编辑器里重新加载插件（禁用→启用）或重启编辑器。运行时桥改动需重启游戏。
 

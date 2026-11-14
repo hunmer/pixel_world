@@ -17,7 +17,7 @@ Pixel World 是一个 **Godot 4.7.2（GL Compatibility）/ Node2D** 单体 2D �
 - **确定性契约**：内容 ID / `stream_key` / legacy `placement_seed` 是存档/世界契约；文件路径与显示名绝不能当随机种子；重排 manifest / 改稳定 ID 需 world version 迁移。
 - **战棋双模式**：`Settings.battle_inline_mode`（默认 true）切 B1/B2；JSON 战场固定 B2。改 `main.gd` 遵守"新增不修改，分支注入"：B1 逻辑一律 `if _battle_active:` 前置短路。
 - **视角只支持 4 正交角度**（0/90/180/270，`isometric_view.gd`）：素材其余角度有拼缝，勿放开连续角度。
-- **MCP 调试按会话激活**（见 `AGENTS.md`）：`mcp_connector_session_tools` search → preview-activate → activate；会话首条 `editor_ping` 返回 `pong:true` 才继续；`dbg_launch` 必传 `scene`；验证用 `runtime_assert_*`，不要 `print` 肉眼判断。
+- **MCP 调试按会话激活**（见 `AGENTS.md`）：godot 工具**默认不在工具表里**（注入模式「按会话启用」，实测激活 0 / 隐藏 285），先 `mcp_connector_session_tools` preview-activate → activate（用户点名后才 `confirmed:true`）；`tool not found` ≠ 没装 godot MCP，别改用 bash 跑 godot。自检用 `find_symbol` + `runtime_get_monitors`（`editor_ping` 不在可激活组）；`dbg_launch` 必传 `scene`；验证用 `runtime_assert_*`，不要 `print` 肉眼判断。
 - **`story/` 是目标态设计 bible**（13 职业/27 技能/25 道具），运行时事实是 `data/` 的 8/8/8 —— 勿混用。
 
 > 详细命令、规范与禁忌见 [conventions.md](claude/conventions.md)；agent 工作约束见根 `AGENTS.md`。
@@ -38,7 +38,7 @@ Pixel World 是一个 **Godot 4.7.2（GL Compatibility）/ Node2D** 单体 2D �
 | [claude/faq.md](claude/faq.md) | 18 条常见问题与定位路径 | 卡住时先查 |
 | [claude/changelog.md](claude/changelog.md) | 本索引自身的生成/更新记录（最近 5 条） | 查索引何时/how 更新 |
 
-另有三处专题文档：`rules/`（5 篇 agent 规则：godot-tools-map 298 工具地图 / mcp-debugging / image-viewing / autoplay-hosting / skill-item-system）、`story/`（19 篇目标态设计 bible）、`HANDOFF.md` + `handoff/`（战棋融合交接与踩坑存档，改战棋前必读）。
+另有三处专题文档：`rules/`（5 篇 agent 规则：godot-tools-map 295 工具 / 49 可激活地图、mcp-debugging、image-viewing、autoplay-hosting、skill-item-system）、`story/`（19 篇目标态设计 bible）、`HANDOFF.md` + `handoff/`（战棋融合交接与踩坑存档，改战棋前必读）。
 
 ## 模块索引
 

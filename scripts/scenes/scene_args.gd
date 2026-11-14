@@ -3,6 +3,24 @@
 
 extends Node
 
+const StartupConfigScript = preload("res://scripts/scenes/startup_config.gd")
+var startup_config := StartupConfigScript.new()
+var startup_consumed: bool = false
+
+
+func _ready() -> void:
+	get_tree().scene_changed.connect(_record_current_scene)
+	# F6 直接运行场景也应记录；初始场景不一定触发 scene_changed。
+	_record_current_scene.call_deferred()
+
+
+func _record_current_scene() -> void:
+	var scene: Node = get_tree().current_scene
+	if scene == null or scene.scene_file_path == StartupConfigScript.GAME_SCENE:
+		return
+	startup_consumed = true
+	startup_config.record_scene(scene.scene_file_path)
+
 ## 战斗参数：{ chapter, return_to }
 var battle_args: Dictionary = {}
 ## 关卡选择传给 LevelPreload 的 levelId

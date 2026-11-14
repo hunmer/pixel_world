@@ -77,6 +77,11 @@ var _terrain_3d: Node3D = null
 var _custom_props: Dictionary = {}
 ## 空字典 = 旧柱体模式；非空 = 每格仅在指定 z 绘制一个独立方块。
 var _block_layout: Dictionary = {}
+## 用户素材视觉覆盖表（运行时 Texture，不参与序列化）：cell -> {layer:"tile"|"prop", visual}。
+## visual 来自 UserAssetVisualAdapter：{texture, render_offset, canvas_size, asset_id, kind, missing}。
+## layer="tile"：整图替换该格地块视觉（隐藏常规柱/装饰，避免与预渲染场景块重复叠画），
+##               逻辑地形/高度/拾取不变；layer="prop"：素材植物块替代该格装饰物选取。
+var _asset_overrides: Dictionary = {}
 
 ## ---- 材质/贴图缓存（battle 与 editor 场景共享，静态避免重复加载） ----
 static var _shared_registry: TerrainMaterialRegistry = null
@@ -175,6 +180,57 @@ func set_cell_prop(cell: Vector2i, texture: String) -> void:
 		_custom_props.erase(cell)
 	else:
 		_custom_props[cell] = texture
+
+
+## 批量设置用户素材视觉覆盖（setup 前调用生效；setup 后需 rebuild_all）。
+## entries: [{x:int, y:int, layer:"prop"|"tile", visual:Dictionary}]（UserAssetVisualAdapter.visual_for_entries 产出）。
+## 同格允许 tile+prop 两层并存（地块整图 + 素材植物叠加）。
+func set_custom_assets(entries: Array) -> void:
+	_asset_overrides.clear()
+	for e in entries:
+		if not (e is Dictionary):
+			continue
+		var cell := Vector2i(int(e.get("x", -1)), int(e.get("y", -1)))
+		if cell.x < 0 or cell.y < 0:
+			continue
+		var visual: Dictionary = e.get("visual", {})
+		if visual.is_empty():
+			continue
+		var rec: Dictionary = _asset_overrides.get(cell, {})
+		rec[String(e.get("layer", "prop"))] = visual
+		_asset_overrides[cell] = rec
+
+
+## 单格设置/清除某层素材视觉覆盖（不重建，随下一次 refresh_cell 生效）。
+## visual 为空 Dictionary = 清除该层；两层都清空后整格记录移除。
+func set_cell_asset(cell: Vector2i, layer: String, visual: Dictionary) -> void:
+	var rec: Dictionary = _asset_overrides.get(cell, {})
+	if visual.is_empty():
+		rec.erase(layer)
+	else:
+		rec[layer] = visual
+	if rec.is_empty():
+		_asset_overrides.erase(cell)
+	else:
+		_asset_overrides[cell] = rec
+
+
+## 某格当前素材覆盖记录（无则空字典；形如 {"tile": visual, "prop": visual}；调试/测试用）
+func asset_override_at(cell: Vector2i) -> Dictionary:
+	return _asset_overrides.get(cell, {})
+
+
+## 只读快照：该格当前渲染 blocks（测试契约用；须在 setup/refresh_cell 之后调用）。
+## 3D 路径返回 _columns[cell]["_blocks"]；2D 路径读 ColumnBatch._blocks（只读 duplicate）。
+func cell_blocks_snapshot(cell: Vector2i) -> Array:
+	var rec: Variant = _columns.get(cell, null)
+	if rec == null:
+		return []
+	if rec is Dictionary:
+		return (rec["_blocks"] as Array).duplicate(true)
+	if rec is Node and is_instance_valid(rec):
+		return (rec._blocks as Array).duplicate(true)
+	return []
 
 
 func column_count() -> int:
@@ -319,8 +375,24 @@ func _build_column(cell: Vector2i) -> void:
 	var style: Dictionary = TERRAIN_STYLES.get(tile_type, TERRAIN_STYLES[&"plain"])
 	var height := stand_level(cell.x, cell.y) if has_explicit_block_layout() else int(style["height"])
 
+	# 用户素材地块整图覆盖：隐藏常规柱与装饰（预渲染场景块自带块体，
+	# 与常规柱重复叠画会穿帮）；素材植物层仍叠加。逻辑高度/拾取不变（stand_level 照传）
+	var asset_rec: Dictionary = _asset_overrides.get(cell, {})
+	var tile_visual: Dictionary = asset_rec.get("tile", {})
+	if not tile_visual.is_empty():
+		var tile_asset := _asset_block_for(cell, tile_visual)
+		if not tile_asset.is_empty():
+			blocks.append(tile_asset)
+			var prop_visual: Dictionary = asset_rec.get("prop", {})
+			if not prop_visual.is_empty():
+				var pb := _asset_block_for(cell, prop_visual)
+				if not pb.is_empty():
+					blocks.append(pb)
+			_commit_column(cell, blocks, height)
+			return
+
 	if has_explicit_block_layout():
-		_append_explicit_block(cell, blocks, tile_type, style)
+		_append_explicit_block(cell, blocks, tile_type, style, asset_rec)
 	elif tile_type == &"water":
 		_append_water_column(cell, blocks)
 	else:
@@ -330,10 +402,14 @@ func _build_column(cell: Vector2i) -> void:
 		for lvl in range(height):
 			var tex: Texture2D = top_tex if lvl == height - 1 else col_tex
 			blocks.append(_block(tex, lvl, tint))
-		var prop := _prop_for(cell, tile_type)
+		var prop := _asset_prop_or_default(cell, asset_rec, tile_type)
 		if not prop.is_empty():
 			blocks.append(prop)
 
+	_commit_column(cell, blocks, height)
+
+
+func _commit_column(cell: Vector2i, blocks: Array[Dictionary], height: int) -> void:
 	if _active_camera() != null:
 		_ensure_terrain_3d()
 	if _terrain_3d != null:
@@ -353,7 +429,13 @@ func _build_column(cell: Vector2i) -> void:
 
 
 ## 显式布局：只生成所在 z 的一个顶块，绝不补地下层；水也只有水面，无湖床/侧壁。
-func _append_explicit_block(cell: Vector2i, blocks: Array[Dictionary], tile_type: StringName, style: Dictionary) -> void:
+func _append_explicit_block(
+	cell: Vector2i,
+	blocks: Array[Dictionary],
+	tile_type: StringName,
+	style: Dictionary,
+	asset_rec: Dictionary
+) -> void:
 	var z := cell_z(cell)
 	if tile_type == &"water":
 		var surface := _water_block(_water_tex(&"surface"), z, WATER_SURFACE_ALPHA, &"surface")
@@ -372,7 +454,7 @@ func _append_explicit_block(cell: Vector2i, blocks: Array[Dictionary], tile_type
 		return
 	var top_tex := _surface_texture(style["top"], &"top")
 	blocks.append(_block(top_tex, z, _terrain_tint(tile_type)))
-	var prop := _prop_for(cell, tile_type)
+	var prop := _asset_prop_or_default(cell, asset_rec, tile_type)
 	if not prop.is_empty():
 		blocks.append(prop)
 
@@ -443,6 +525,34 @@ func _prop_for(cell: Vector2i, tile_type: StringName) -> Dictionary:
 	var offset := Vector2(0.0, top_offset_y - bottom_from_center)
 	var block := _block(tex, visual_top_level(cell.x, cell.y), Color.WHITE, 1, offset)
 	block["occluder_class"] = &"prop"
+	return block
+
+
+## 装饰物选取：用户素材 prop 覆盖优先（渲染层资产视觉替代默认/贴图装饰），
+## 否则走 _prop_for（自定义贴图表 > TERRAIN_PROPS 确定性选取）。
+## asset_rec: 该格素材覆盖记录 {"tile":visual?, "prop":visual?}（可为空字典）。
+func _asset_prop_or_default(cell: Vector2i, asset_rec: Dictionary, tile_type: StringName) -> Dictionary:
+	var prop_visual: Dictionary = asset_rec.get("prop", {})
+	if not prop_visual.is_empty():
+		return _asset_block_for(cell, prop_visual)
+	return _prop_for(cell, tile_type)
+
+
+## 素材 visual（UserAssetVisualAdapter 产出）→ 渲染 block。
+## render_offset 已按 pivot 烘焙（相对纹理中心）；2D 路径再加顶面中心屏幕偏移（同 _prop_for）。
+## 缺图占位（missing=true）淡红染色提示，引用不丢失。
+func _asset_block_for(cell: Vector2i, visual: Dictionary) -> Dictionary:
+	var tex: Texture2D = visual.get("texture", null)
+	if tex == null:
+		return {}
+	var top_offset_y := 0.0 if _terrain_3d != null else ColumnBatchScript.TOP_CENTER_OFFSET.y
+	var offset: Vector2 = visual.get("render_offset", Vector2.ZERO)
+	offset.y += top_offset_y
+	var block := _block(tex, visual_top_level(cell.x, cell.y), Color.WHITE, 1, offset)
+	block["occluder_class"] = &"prop"
+	block["asset_id"] = String(visual.get("asset_id", ""))  # cell_blocks_snapshot 测试可断言
+	if bool(visual.get("missing", false)):
+		block["modulate"] = Color(1.0, 0.55, 0.55, 0.92)
 	return block
 
 
@@ -654,6 +764,23 @@ static func preview_path_block(path: String) -> Dictionary:
 	var prop := _preview_block(tex, 0, Color.WHITE)
 	prop["render_offset"] = Vector2(0.0, -lift)
 	prop["occluder_class"] = &"prop"
+	return prop
+
+
+## 用户素材 visual → 调色板预览块（tile_preview 素材缩略图用）。
+## 偏移沿用落地的 pivot 规则（visual.render_offset）+ 底缘对齐 TOP_TEXTURE_BASE/2，
+## 预览与战场同一烘焙结果（crop/scale 已烘进 texture），所见即所得。
+static func preview_visual_block(visual: Dictionary) -> Dictionary:
+	var tex: Texture2D = visual.get("texture", null)
+	if tex == null:
+		return {}
+	var offset: Vector2 = visual.get("render_offset", Vector2.ZERO)
+	offset.y += TOP_TEXTURE_BASE * 0.5
+	var prop := _preview_block(tex, 0, Color.WHITE)
+	prop["render_offset"] = offset
+	prop["occluder_class"] = &"prop"
+	if bool(visual.get("missing", false)):
+		prop["modulate"] = Color(1.0, 0.55, 0.55, 0.92)
 	return prop
 
 

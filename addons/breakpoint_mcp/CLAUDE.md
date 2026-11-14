@@ -15,6 +15,7 @@
 - **安全边界**：仅绑定 loopback；mutation 操作经 host 的 elicitation 门控；**不要把端口暴露到 `127.0.0.1` 之外**。
 - **主线程**：所有 handler 在主线程跑（socket 从 `_process` 轮询），无需 marshal。
 - **协议**：每行一个 JSON 对象（`\n` 结尾），双向。方法名 1:1 对应 host 的 `editor_*`/`scene_*`/`node_*`/`runtime_*` 工具。
+- **host 侧可见性**：本仓库 DSH 里的连接 `json-godot` 是「按会话启用」——默认工具表里**没有** `mcp__godot__*`（实测激活 0 / 隐藏 285），用前必须激活；且只有 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 的 **49 个**可激活，`editor_*` 等 246 个激活也拿不到。`tool not found` ≠ 桥坏、≠ 没装，见根 `AGENTS.md` 与 `rules/godot-tools-map.md`。
 
 > 细节见 [claude/conventions.md](claude/conventions.md)。
 

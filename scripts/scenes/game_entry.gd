@@ -1,7 +1,7 @@
 ## game_entry.gd — 新默认入口场景 Game.tscn
 ## 职责：
-##   - 冷启动（进程首次打开）：按 GameSession 决策自动续玩最近战旗，直接进战斗
-##   - 从战斗/编辑器返回（in_session=true）：显示战场列表（继续/进入/重置）+ 附属入口
+##   - 冷启动：按 config/startup.cfg 打开最近场景；战斗入口由 GameSession 准备参数
+##   - 从战斗/编辑器返回：显示战场列表（继续/进入/重置）+ 附属入口
 ## 不做任何世界生态生成 —— 任务要求进入游戏默认打开的是战旗，不是随机地图。
 
 extends Control
@@ -25,14 +25,27 @@ func _ready() -> void:
 
 
 func _start() -> void:
-	if not GameSession.in_session:
-		var entry: Dictionary = GameSession.prepare_entry()
-		if String(entry.get("mode", "list")) != "list":
-			_enter_battle(entry)
+	if not SceneArgs.startup_consumed:
+		SceneArgs.startup_consumed = true
+		# 显式战场参数优先于调试配置，重置参数仍由 GameSession 消费。
+		var explicit_battle: bool = CmdArgs.get_string("battlefield", "") != "" \
+			or CmdArgs.has_flag("reset-battle")
+		var target: String = BATTLE_SCENE if explicit_battle else SceneArgs.startup_config.launch_scene()
+		if target == BATTLE_SCENE:
+			var entry: Dictionary = GameSession.prepare_entry()
+			if String(entry.get("mode", "list")) != "list":
+				_enter_battle(entry)
+				return
+			_build_list(String(entry.get("notice", "")))
 			return
-		_build_list(String(entry.get("notice", "")))
-	else:
-		_build_list("")
+		if target != GAME_SCENE:
+			SceneArgs.map_editor_return_to = GAME_SCENE
+			var err: Error = get_tree().change_scene_to_file(target)
+			if err == OK:
+				print("[StartupConfig] 直接打开 → %s" % target)
+				return
+			push_warning("[StartupConfig] 场景打开失败：%s (%d)" % [target, err])
+	_build_list("")
 
 
 # ============================================================
@@ -69,6 +82,7 @@ func _enter_battle(entry: Dictionary) -> void:
 # ============================================================
 
 func _build_list(notice: String) -> void:
+	SceneArgs.startup_config.record_scene(GAME_SCENE)
 	var bg := ColorRect.new()
 	bg.color = Color(0.07, 0.08, 0.11)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)

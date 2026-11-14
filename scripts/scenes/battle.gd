@@ -12,6 +12,7 @@
 extends Node2D
 
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
+const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
 const AIDifficulty = preload("res://scripts/systems/ai_difficulty.gd")
 const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
@@ -159,6 +160,9 @@ func _ready() -> void:
 	_immersive_camera.setup(_world._cam if _b1_mode else board.camera)
 	_immersive_camera.set_enabled(Settings.battle_immersive_presentation)
 	battle_ui.immersive_presentation_changed.connect(_immersive_camera.set_enabled)
+	# 沉浸遮挡：B1 用世界柱地形，B2 用战场柱地形（同一 IsometricTerrain3D 接口）。
+	# B2 headless 无相机时 renderer._terrain_3d 为 null，遮挡自然停用。
+	_immersive_camera.setup_occlusion(_world._terrain if _b1_mode else renderer._terrain_3d)
 	# 受伤特效：impacts 带 hp_before/hp_after，比 float_text 回调信息全。
 	action_anim.impact_presented.connect(_on_impact_presented)
 	await get_tree().process_frame
@@ -296,6 +300,14 @@ func _setup_b2_render() -> void:
 	board.add_child(renderer)
 	# JSON 战场植物层（chapter.props，编辑器放置的具体树/植物）——setup 前注入生效
 	renderer.set_custom_props(chapter.get("props", []))
+	# 用户素材视觉层（props 的 asset_id + tile_overrides；离线读 user://custom_assets 库+blob，
+	# 缺图返回占位 visual，引用不丢失）——setup 前注入生效
+	var visual_adapter: RefCounted = UserAssetVisualAdapterScript.new()
+	renderer.set_custom_assets(
+		visual_adapter.visual_for_entries(
+			chapter.get("props", []), chapter.get("tile_overrides", {})
+		)
+	)
 	renderer.set_block_layout(chapter.get("block_layout", {}))
 	renderer.setup(grid)
 	# 范围/光标标记走注入模式：坐标/排序/高度由 renderer 提供（同 B1 的注入方式）
@@ -1060,10 +1072,11 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 		str(options.get(&"skip", false)),
 	])
 	if action_anim != null and not event.is_empty():
-		_prewarm_damage_fx_variants(event.get(&"impacts", []))
-		_set_unit_bars_visible(false)
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
+		if not await _prewarm_action_fx(event, event.get(&"impacts", []), skipped):
+			return
+		_set_unit_bars_visible(false)
 		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
 		if not is_inside_tree():
 			return
@@ -1150,6 +1163,34 @@ func _prewarm_damage_fx_variants(impacts: Array) -> void:
 			"from": clampf(float(hp_before) / float(max_hp), 0.0, 1.0),
 			"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),
 		})
+
+
+## 遮罩只在本场战斗首次预热时展示：缓存键含伤害值文本，几乎每个伤害值都是冷变体，
+## 每次出手都真烘焙；但玩家只需第一次感知"加载"，之后静默烘焙不再闪遮罩。
+var _action_fx_mask_shown := false
+
+
+## 演出前预热（含可选全局加载遮罩）：沉浸镜头确认会接管时，先弹 LoadingScreen 并
+## await 2 帧让遮罩真正上屏，再在遮罩下同步预烘焙特效变体（烘焙卡顿由遮罩覆盖），随后立即隐藏。
+## 默认关闭/空事件/预先跳过时走原同步预热路径，不弹遮罩。返回 false = 等待期间战斗已退出。
+func _prewarm_action_fx(event: Dictionary, impacts: Array, skipped: bool) -> bool:
+	var use_loading_screen: bool = (
+		_immersive_camera.would_begin(event, _unit_sprites, skipped)
+		and not _action_fx_mask_shown
+	)
+	if use_loading_screen:
+		_action_fx_mask_shown = true
+		LoadingScreen.show_loading()
+		# 同步烘焙会卡住当前帧渲染；必须等遮罩先绘制出来，否则卡顿期间全屏无反馈。
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if not is_inside_tree():
+			LoadingScreen.hide_loading()
+			return false
+	_prewarm_damage_fx_variants(impacts)
+	if use_loading_screen:
+		LoadingScreen.hide_loading()
+	return true
 
 
 ## 单变体烘焙：缓存未命中才创建 Track 并强制渲染全部帧（Track 是懒渲染，get_textures(n-1) 一次拉全）。
@@ -1239,10 +1280,11 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 		str(options.get(&"skip", false)),
 	])
 	if action_anim != null and not event.is_empty():
-		_prewarm_damage_fx_variants(event.get(&"impacts", []))
-		_set_unit_bars_visible(false)
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
+		if not await _prewarm_action_fx(event, event.get(&"impacts", []), skipped):
+			return true
+		_set_unit_bars_visible(false)
 		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
 		if not is_inside_tree():
 			return true
@@ -1744,6 +1786,8 @@ func _alive_count(faction: StringName) -> int:
 func _exit_tree() -> void:
 	if is_instance_valid(_immersive_camera):
 		_immersive_camera.cancel()
+	# 防御：加载遮罩只在战斗演出预热窗口内使用，任何退出路径（胜/负/切场景/异常）都不残留。
+	LoadingScreen.hide_loading()
 	# 防御：退出战斗（含 B1 就地模式）时恢复全部常驻血条。
 	_set_unit_bars_visible(true)
 	_restore_result_visuals()

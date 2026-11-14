@@ -13,6 +13,9 @@ const IMMERSIVE_ELEVATION := deg_to_rad(10.0)
 const CHARACTER_CENTER_Y := 0.45
 const CHARACTER_HEIGHT := 0.90
 
+const BattleOccluderScript = preload("res://scripts/iso/battle_occluder.gd")
+const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
+
 # 数值与 State 名称供运行态断言使用，不依赖全局 class cache。
 enum State { INACTIVE, ENTERING, ACTIVE, RESTORING }
 
@@ -26,12 +29,24 @@ var _current: Dictionary = {}
 var _transition: Tween = null
 var _animation_speed := 1.0
 var _skip_requested := false
+## 沉浸遮挡目标地形（B1=世界柱地形，B2=战场柱地形，同一 IsometricTerrain3D 接口），
+## 由 battle.gd 在 setup 后注入；null 表示不启用遮挡（默认关闭时零开销零行为变化）。
+var _occlusion_terrain: Node3D = null
+var _occlusion_columns: Array = []
+var _occlusion_props: Array = []
 
 
 func setup(camera: Camera3D) -> void:
 	_camera = camera
 	# main.gd / IsoBoard 先完成常规 advance，再由本模块刷新有效焦点。
 	process_priority = 100
+
+
+## 注入遮挡目标地形（B1 世界 / B2 战场共用的 IsometricTerrain3D）；传 null 不启用。
+## 换地形前先恢复旧地形上的隐藏/锁定，避免残留。
+func setup_occlusion(terrain: Node3D) -> void:
+	_restore_occlusion()
+	_occlusion_terrain = terrain
 
 
 func is_engaged() -> bool:
@@ -50,6 +65,18 @@ func set_enabled(value: bool) -> void:
 	# 避免它的 return/_restore_camera_immediate 在恢复 tween 之后写回中间值。
 	if not enabled and _state == State.ENTERING:
 		_start_restore()
+
+
+## begin() 的无副作用预演：battle 据此决定是否在特效预烘焙前弹出全局加载遮罩。
+## 条件与 begin() 的接管判定严格一致（enabled / skipped / 相机有效 / 有有效参战点）。
+func would_begin(
+	event: Dictionary,
+	unit_sprites: Dictionary,
+	skipped: bool = false
+) -> bool:
+	if not enabled or skipped or not is_instance_valid(_camera):
+		return false
+	return not _participation_points(event, unit_sprites).is_empty()
 
 
 ## 在 ActionAnim.play 前 await。预先 skip 的托管事件不做无意义的双向转场。
@@ -74,6 +101,8 @@ func begin(
 	_current = _snapshot.duplicate(true)
 	_kill_transition()
 	_state = State.ENTERING
+	# 进入期即隐藏挡视线的柱与植物（含最终机位与转场中点），避免到位后才穿模再隐藏。
+	_apply_occlusion(points)
 	_transition = create_tween()
 	_transition.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_transition.tween_method(
@@ -88,6 +117,9 @@ func begin(
 		float(_to["size"]),
 		rad_to_deg(float(_to["elevation"])),
 	])
+	# 与 _start_restore 进入 RESTORING 发信号一致：进入 ENTERING 也通知一次。
+	# 调用方在 begin() 之前若还有别的 await（如演出预热遮罩），靠本信号才能采样到 ENTERING。
+	state_changed.emit()
 	while _state == State.ENTERING and is_inside_tree():
 		await state_changed
 	# 进入期关闭时，先让战术相机恢复完成再启动普通 ActionAnim；否则两套 size
@@ -329,8 +361,107 @@ func _finish_restore() -> void:
 	_state = State.INACTIVE
 	_current.clear()
 	_snapshot.clear()
+	# end()/cancel()/退出/关开关统一在这里恢复遮挡：相机回位、遮挡物还原。
+	_restore_occlusion()
 	print("[ImmersiveCamera] Restored")
 	state_changed.emit()
+
+
+## 进入期生效：隐藏所有"相机→参战单位"视线上的柱与植物。
+## 判定覆盖三个机位（当前战术机位 / 转场中点 / 最终沉浸机位）的并集——
+## ENTERING tween 是线性插值，三点并集足以覆盖扫掠路径，无需每帧重算。
+func _apply_occlusion(points: Array[Vector3]) -> void:
+	if _occlusion_terrain == null or not is_instance_valid(_occlusion_terrain):
+		return
+	var poses: Array[Vector3] = [_camera.global_position]
+	poses.append(_shot_camera_position(_to))
+	poses.append(_shot_camera_position(_lerp_shot(_from, _to, 0.5)))
+	var columns := {}
+	var props := {}
+	var query := Callable(self, "_query_occlusion_candidates")
+	for pose_value in poses:
+		var result: Dictionary = BattleOccluderScript.compute(pose_value, points, query)
+		for cell_value in result["columns"]:
+			columns[cell_value] = true
+		for cell_value in result["props"]:
+			props[cell_value] = true
+	for cell_value in columns.keys():
+		_occlusion_terrain.set_column_hidden(cell_value, true)
+	for cell_value in props.keys():
+		if columns.has(cell_value):
+			continue  # 整柱已隐藏，格上植物随柱消失，无需再锁定淡化
+		_occlusion_terrain.set_prop_fade_hold(cell_value, 0.0)
+	_occlusion_columns = columns.keys()
+	_occlusion_props = props.keys()
+	if not _occlusion_columns.is_empty() or not _occlusion_props.is_empty():
+		_occlusion_terrain.flush()
+		print("[ImmersiveCamera] Occlusion columns=%d props=%d" % [
+			_occlusion_columns.size(), _occlusion_props.size()
+		])
+
+
+## _finish_restore 的统一反向操作：恢复全部隐藏柱与植物透明度锁定。
+func _restore_occlusion() -> void:
+	if _occlusion_columns.is_empty() and _occlusion_props.is_empty():
+		return
+	if _occlusion_terrain != null and is_instance_valid(_occlusion_terrain):
+		for cell_value in _occlusion_columns:
+			_occlusion_terrain.set_column_hidden(cell_value, false)
+		for cell_value in _occlusion_props:
+			_occlusion_terrain.clear_prop_fade_hold(cell_value)
+		_occlusion_terrain.flush()
+	_occlusion_columns = []
+	_occlusion_props = []
+
+
+## 候选格查询（BattleOccluder 回调）：柱用地形查询 API；植物取格内最高实例，
+## top = billboard 中心 + 半高。只收集 bounds 内的格，不遍历无限世界。
+func _query_occlusion_candidates(bounds_min: Vector2i, bounds_max: Vector2i) -> Array:
+	var items: Array = _occlusion_terrain.get_column_occlusion_data(bounds_min, bounds_max)
+	for cell_value in _occlusion_terrain.get_prop_cells():
+		var cell: Vector2i = cell_value
+		if cell.x < bounds_min.x or cell.x > bounds_max.x:
+			continue
+		if cell.y < bounds_min.y or cell.y > bounds_max.y:
+			continue
+		var top := -INF
+		var highest_center := Vector3.ZERO
+		for block_value in _occlusion_terrain.get_prop_block_occlusion_data(cell):
+			var block: Dictionary = block_value
+			var block_center: Vector3 = block["center"]
+			var block_top: float = (
+				block_center.y
+				+ float((block["size_px"] as Vector2).y) / IsoProjection.TILE_PIXELS * 0.5
+			)
+			if block_top > top:
+				top = block_top
+				highest_center = block_center
+		if top > -INF:
+			items.append({"cell": cell, "center": highest_center, "top": top, "prop": true})
+	return items
+
+
+## 由 shot 字典（focus/yaw/elevation/distance）解析相机世界坐标，
+## 公式与 isometric_camera_3d.gd _apply_view 的 offset 一致。
+func _shot_camera_position(shot: Dictionary) -> Vector3:
+	var yaw := float(shot["yaw"])
+	var elevation := float(shot["elevation"])
+	var horizontal := cos(elevation)
+	var offset := Vector3(
+		sin(yaw) * horizontal,
+		sin(elevation),
+		cos(yaw) * horizontal
+	) * float(shot["distance"])
+	return (shot["focus"] as Vector3) + offset
+
+
+func _lerp_shot(from: Dictionary, to: Dictionary, weight: float) -> Dictionary:
+	return {
+		"focus": (from["focus"] as Vector3).lerp(to["focus"], weight),
+		"yaw": lerp_angle(float(from["yaw"]), float(to["yaw"]), weight),
+		"elevation": lerpf(float(from["elevation"]), float(to["elevation"]), weight),
+		"distance": lerpf(float(from["distance"]), float(to["distance"]), weight),
+	}
 
 
 func _kill_transition() -> void:

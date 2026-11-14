@@ -93,6 +93,8 @@ static func create_empty(w: int = DEFAULT_WIDTH, h: int = DEFAULT_HEIGHT) -> Dic
 		"units": [],
 		"props": [],  # 植物层 [{x,y,texture}]，与地形解耦（一格至多一株）
 		"block_layout": BlockLayoutScript.create(w, h),
+		"tile_overrides": {},  # 地块视觉覆盖层 {"x,y": {asset_id}}——逻辑地形不变
+		"user_assets": {},     # 引用的用户素材描述符快照 {asset_id: descriptor}（保存时从素材库拷贝）
 	}
 
 
@@ -125,12 +127,19 @@ static func resize(model: Dictionary, w: int, h: int) -> Dictionary:
 	var units: Array = (model.units as Array).filter(func(u): return u.x < w and u.y < h)
 	var props: Array = (model.get("props", []) as Array).filter(
 		func(p): return int(p.x) < w and int(p.y) < h)
+	# 地块覆盖层：越界键剔除
+	var overrides: Dictionary = {}
+	for key in (model.get("tile_overrides", {}) as Dictionary).keys():
+		var parts := String(key).split(",")
+		if parts.size() == 2 and int(parts[0]) < w and int(parts[1]) < h:
+			overrides[key] = (model["tile_overrides"] as Dictionary)[key]
 	var out: Dictionary = model.duplicate(true)
 	out.width = w
 	out.height = h
 	out.rows = rows
 	out.units = units
 	out.props = props
+	out["tile_overrides"] = overrides
 	var old_layout: Dictionary = model.get("block_layout", {})
 	var default_z := int(old_layout.get("default_z", BlockLayoutScript.DEFAULT_Z))
 	out["block_layout"] = BlockLayoutScript.create(w, h, clampi(default_z, BLOCK_MIN_Z, BLOCK_MAX_Z))
@@ -233,7 +242,7 @@ static func glyph_to_terrain(g: String) -> StringName:
 static func prop_at(model: Dictionary, cell: Vector2i) -> String:
 	for p in model.get("props", []):
 		if int(p.x) == cell.x and int(p.y) == cell.y:
-			return String(p.texture)
+			return String(p.get("texture", ""))  # asset 通道条目无 texture 键
 	return ""
 
 
@@ -255,6 +264,56 @@ static func remove_prop(model: Dictionary, cell: Vector2i) -> bool:
 			props.remove_at(i)
 			return true
 	return false
+
+
+## 取某格植物的用户素材 ID（无则 ""；与 texture 通道互斥：一格至多一株）
+static func prop_asset_at(model: Dictionary, cell: Vector2i) -> String:
+	for p in model.get("props", []):
+		if int(p.x) == cell.x and int(p.y) == cell.y:
+			return String(p.get("asset_id", ""))
+	return ""
+
+
+## 在某格放置/替换用户素材植物（asset_id 引用素材库；同格旧 texture 条目一并替换）。
+## asset_id 为空时等价 remove_prop。返回是否改动了模型。
+static func set_prop_asset(model: Dictionary, cell: Vector2i, asset_id: String) -> bool:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return false
+	if asset_id.is_empty():
+		return remove_prop(model, cell)
+	remove_prop(model, cell)
+	(model.get("props", []) as Array).append({ "x": cell.x, "y": cell.y, "asset_id": asset_id })
+	return true
+
+
+## ---- 地块视觉覆盖层（tile_overrides）------------------------------------
+## 逻辑地形（rows/高度/拾取）不变，仅替换该格的地块视觉为用户素材整图。
+
+static func _cell_key(cell: Vector2i) -> String:
+	return "%d,%d" % [cell.x, cell.y]
+
+
+## 取某格的地块覆盖素材 ID（无则 ""）
+static func tile_override_at(model: Dictionary, cell: Vector2i) -> String:
+	var entry: Dictionary = model.get("tile_overrides", {}).get(_cell_key(cell), {})
+	return String(entry.get("asset_id", ""))
+
+
+## 设置/清除（asset_id 空）某格的地块视觉覆盖；返回是否改动了模型
+static func set_tile_override(model: Dictionary, cell: Vector2i, asset_id: String) -> bool:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return false
+	if not model.has("tile_overrides"):
+		model["tile_overrides"] = {}
+	var overrides: Dictionary = model["tile_overrides"]
+	var key := _cell_key(cell)
+	if asset_id.is_empty():
+		if overrides.has(key):
+			overrides.erase(key)
+			return true
+		return false
+	overrides[key] = { "asset_id": asset_id }
+	return true
 
 
 ## 模型 -> 战场 JSON dict（loader schema：rows + 显式 legend + 双阵营单位）
@@ -289,15 +348,33 @@ static func to_json_dict(model: Dictionary) -> Dictionary:
 		"playerUnits": players,
 		"enemyUnits": enemies,
 	}
-	# 植物层（可选字段：空则不写，保持旧 JSON 兼容）
+	# 植物层（可选字段：空则不写，保持旧 JSON 兼容；asset_id 条目与 texture 条目并存）
 	var props: Array = model.get("props", [])
 	if not props.is_empty():
 		var jprops: Array = []
 		for p in props:
-			jprops.append({
-				"x": int(p.x), "y": int(p.y), "texture": String(p.texture),
-			})
+			var entry := { "x": int(p.x), "y": int(p.y) }
+			var aid := String(p.get("asset_id", ""))
+			if not aid.is_empty():
+				entry["asset_id"] = aid
+			else:
+				entry["texture"] = String(p.get("texture", ""))
+			jprops.append(entry)
 		out["props"] = jprops
+	# 地块视觉覆盖层（可选字段：空则不写）
+	var overrides: Dictionary = model.get("tile_overrides", {})
+	if not overrides.is_empty():
+		var joverrides: Dictionary = {}
+		for key in overrides.keys():
+			var e: Dictionary = overrides[key]
+			var aid := String(e.get("asset_id", ""))
+			if not aid.is_empty():
+				joverrides[key] = { "asset_id": aid }
+		out["tile_overrides"] = joverrides
+	# 引用素材描述符快照（可选字段：空则不写；运行时纹理不序列化，只存纯 JSON 描述）
+	var user_assets: Dictionary = model.get("user_assets", {})
+	if not user_assets.is_empty():
+		out["user_assets"] = user_assets.duplicate(true)
 	if model.has("block_layout"):
 		out["block_layout"] = (model["block_layout"] as Dictionary).duplicate(true)
 	return out
@@ -338,19 +415,42 @@ static func from_json_dict(d: Dictionary) -> Dictionary:
 				"y": int(u.get("y", 0)),
 				"faction": faction,
 			})
-	# 植物层（可选；宽松解析：非法条目跳过）
+	# 植物层（可选；宽松解析：非法条目跳过；texture 与 asset_id 至少其一）
 	var props: Array = []
 	for p in d.get("props", []):
 		if not (p is Dictionary):
 			continue
 		var tex := String(p.get("texture", ""))
-		if tex.is_empty():
+		var aid := String(p.get("asset_id", ""))
+		if tex.is_empty() and aid.is_empty():
 			continue
-		props.append({
-			"x": int(p.get("x", 0)),
-			"y": int(p.get("y", 0)),
-			"texture": tex,
-		})
+		var entry := { "x": int(p.get("x", 0)), "y": int(p.get("y", 0)) }
+		if not aid.is_empty():
+			entry["asset_id"] = aid
+		else:
+			entry["texture"] = tex
+		props.append(entry)
+	# 地块视觉覆盖层（可选；宽松解析：坐标非法/asset_id 空的条目跳过）
+	var overrides: Dictionary = {}
+	for key in (d.get("tile_overrides", {}) as Dictionary).keys():
+		var e: Dictionary = d["tile_overrides"][key] if d["tile_overrides"][key] is Dictionary else {}
+		var aid := String(e.get("asset_id", ""))
+		if aid.is_empty():
+			continue
+		var parts := String(key).split(",")
+		if parts.size() != 2:
+			continue
+		if int(parts[0]) < 0 or int(parts[1]) < 0:
+			continue
+		overrides[key] = { "asset_id": aid }
+	# 引用素材描述符快照（可选；形状宽松：只要键是 asset_id 的 Dictionary 就收）
+	var user_assets: Dictionary = {}
+	var raw_assets: Variant = d.get("user_assets", {})
+	if raw_assets is Dictionary:
+		for aid in (raw_assets as Dictionary).keys():
+			var desc: Variant = (raw_assets as Dictionary)[aid]
+			if desc is Dictionary and not String(aid).is_empty():
+				user_assets[String(aid)] = (desc as Dictionary).duplicate(true)
 	var out := {
 		"id": String(d.get("id", "")),
 		"name": String(d.get("name", "")),
@@ -361,6 +461,8 @@ static func from_json_dict(d: Dictionary) -> Dictionary:
 		"rows": rows,
 		"units": units,
 		"props": props,
+		"tile_overrides": overrides,
+		"user_assets": user_assets,
 	}
 	# 旧 JSON 进入编辑器后统一成为 z=0 的显式单块平面；仅磁盘中途加载器保留旧柱路径。
 	if d.has("block_layout"):
@@ -420,7 +522,11 @@ static func sanitize_id(id: String) -> String:
 
 
 ## 保存：优先 res://data/battlefields/<id>.json（开发运行），失败落 user://battlefields/。
-## 写入后立刻用 BattlefieldLoader.load_battlefield 回读校验；校验失败删除文件并返回错误。
+## 原子写流程（不毁旧图）：
+##   1. quick_validate + load_battlefield_inline 权威预校验（不动磁盘）
+##   2. 写 <path>.tmp → 回读 tmp 校验
+##   3. 旧文件 rename 为 <path>.bak（先删旧 bak）→ rename tmp → 正式路径
+##   4. 任一步失败：删 tmp / 回滚 bak，原文件保持原样
 static func save_model(model: Dictionary) -> Dictionary:
 	var id := sanitize_id(String(model.get("id", "")))
 	var err := quick_validate(model)
@@ -428,22 +534,50 @@ static func save_model(model: Dictionary) -> Dictionary:
 		return { "ok": false, "error": "校验失败：%s" % err }
 	var doc := to_json_dict(model)
 	doc["id"] = id
+	# 权威预校验：走 loader 完整规则（单位职业/站住合法性等），磁盘零改动
+	var pre := BattlefieldLoaderScript.load_battlefield_inline(doc, id)
+	if not bool(pre.get("ok", false)):
+		return { "ok": false, "error": "预校验失败：%s" % String(pre.get("error", "")) }
 	var pretty := JSON.stringify(doc, "\t")
 
 	var path := "res://data/battlefields/%s.json" % id
-	var f := FileAccess.open(path, FileAccess.WRITE)
+	var f := FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if f == null:
+		# res:// 不可写（导出版）→ 落 user://
 		path = "user://battlefields/%s.json" % id
 		DirAccess.make_dir_recursive_absolute("user://battlefields")
-		f = FileAccess.open(path, FileAccess.WRITE)
+		f = FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if f == null:
-		return { "ok": false, "error": "无法写入文件（res:// 与 user:// 均失败）" }
+		return { "ok": false, "error": "无法写入临时文件（res:// 与 user:// 均失败）" }
+	var tmp := path + ".tmp"
+	var bak := path + ".bak"
 	f.store_string(pretty)
 	f.close()
 
-	# 权威校验：loader 回读（含单位站合法性 / 职业存在性等完整规则）
-	var back := BattlefieldLoaderScript.load_battlefield(path)
+	# 回读 tmp 校验；失败删 tmp，原文件未动
+	var back := BattlefieldLoaderScript.load_battlefield(tmp)
 	if not bool(back.get("ok", false)):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
 		return { "ok": false, "error": String(back.get("error", "回读校验失败")) }
+
+	# 旧文件 → .bak（Windows rename 需先清目标），tmp → 正式路径；失败回滚
+	if FileAccess.file_exists(path):
+		var gpath := ProjectSettings.globalize_path(path)
+		if FileAccess.file_exists(bak):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(bak))
+		var ren_old := DirAccess.rename_absolute(gpath, ProjectSettings.globalize_path(bak))
+		if ren_old != OK:
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
+			return { "ok": false, "error": "备份旧文件失败（原文件未动）" }
+		var ren_new := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), gpath)
+		if ren_new != OK:
+			# 回滚：bak 恢复为正式文件
+			DirAccess.rename_absolute(ProjectSettings.globalize_path(bak), gpath)
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
+			return { "ok": false, "error": "落盘失败（已回滚为原文件）" }
+	else:
+		var ren := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
+		if ren != OK:
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
+			return { "ok": false, "error": "落盘失败: %s" % path }
 	return { "ok": true, "path": path }

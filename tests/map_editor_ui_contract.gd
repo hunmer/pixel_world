@@ -1,8 +1,8 @@
 ## tests/map_editor_ui_contract.gd — 战场地图编辑器 UI 契约（右侧 Tabs 面板版）
 ##
 ## 跑法：godot --headless --path . --script res://tests/map_editor_ui_contract.gd
-## 覆盖：右侧 Tabs 面板布局（画布左满幅 + 面板右停靠固定宽）、6 Tab 结构
-##       （文件/生成/地形/方块/角色/历史）+ 画布左上角悬浮工具条（画笔/填充/橡皮/地形上升/地形下降/角色/选择 垂直图标）、每 Tab 关键控件齐全、
+## 覆盖：右侧 Tabs 面板布局（画布左满幅 + 面板右停靠固定宽）、7 Tab 结构
+##       （文件/生成/地形/方块/角色/历史/素材）+ 画布左上角悬浮工具条（画笔/填充/橡皮/地形上升/地形下降/角色/选择 垂直图标）、每 Tab 关键控件齐全、
 ##       地形调色板分「地形/植物」两组：地形=单块 tile（不叠高塔），
 ##       植物枚举 meowa_tiles 全部素材（树木/植物/装饰三小节）+ 植物层 props，
 ##       ButtonGroup 交互（工具/地形/植物/阵营/职业单选）联动 editor 状态、
@@ -62,7 +62,7 @@ func _run() -> void:
 		_expect(side.size_flags_horizontal == Control.SIZE_FILL,
 			"侧边栏不参与水平伸展（多余宽度全给画布）")
 
-	# ---- 2. 面板结构：SideVBox -> ToolTabs(6 Tab) + StatusLabel ----
+	# ---- 2. 面板结构：SideVBox -> ToolTabs(7 Tab) + StatusLabel ----
 	var sv: VBoxContainer = side.get_node_or_null("SideVBox") if side != null else null
 	_expect(sv != null, "SideVBox 存在")
 	var tabs: TabContainer = sv.get_node_or_null("ToolTabs") if sv != null else null
@@ -73,8 +73,8 @@ func _run() -> void:
 	var titles := []
 	for i in range(tabs.get_tab_count()):
 		titles.append(tabs.get_tab_title(i))
-	_expect(titles == ["文件", "生成", "地形", "方块", "角色", "历史"],
-		"6 个 Tab 且顺序为 文件/生成/地形/方块/角色/历史（实际 %s）" % str(titles))
+	_expect(titles == ["文件", "生成", "地形", "方块", "角色", "历史", "素材"],
+		"7 个 Tab 且顺序为 文件/生成/地形/方块/角色/历史/素材（实际 %s）" % str(titles))
 	var status: Label = sv.get_node_or_null("StatusLabel")
 	_expect(status != null and status is Label, "状态栏贴面板底部（SideVBox 内）")
 	if status != null:
@@ -154,6 +154,48 @@ func _run() -> void:
 	_expect(portrait_grid != null and portrait_grid.get_child_count() == editor.CLASS_IDS.size(),
 		"角色 Tab：8 职业头像网格")
 
+	# ---- 素材 Tab：素材库面板（列表/过滤/导入/详情/弹窗）齐全 ----
+	var asset_tab: VBoxContainer = tabs.get_node_or_null("素材Scroll/素材Tab")
+	_expect(asset_tab != null, "素材 Tab 存在")
+	var asset_panel: Node = asset_tab.get_node_or_null("AssetLibraryPanel") if asset_tab != null else null
+	_expect(asset_panel != null, "素材 Tab 承载 AssetLibraryPanel")
+	if asset_panel != null:
+		var asset_list: ItemList = asset_panel.get_node_or_null("AssetList") as ItemList
+		_expect(asset_list != null, "素材面板：AssetList 列表存在")
+		_expect(asset_list != null and asset_list.select_mode == ItemList.SELECT_MULTI,
+			"素材面板：AssetList 为多选模式（Ctrl+点击批量选择）")
+		var dlb: Node = asset_panel.find_child("DownloadSelectedButton", true, false)
+		_expect(dlb is Button, "素材面板：下载选中按钮存在")
+		_expect(asset_panel.get_node_or_null("SearchEdit") is LineEdit, "素材面板：搜索框存在")
+		# 过滤/导入/详情按钮嵌在各自的行容器里，用递归查找
+		var kf: Node = asset_panel.find_child("KindFilter", true, false)
+		var sf: Node = asset_panel.find_child("SourceFilter", true, false)
+		var tf: Node = asset_panel.find_child("TagFilter", true, false)
+		_expect(kf is OptionButton and sf is OptionButton and tf is OptionButton,
+			"素材面板：分类/来源/标签过滤存在")
+		var ib: Node = asset_panel.find_child("ImportButton", true, false)
+		var ifd: Node = asset_panel.find_child("ImportFileDialog", true, false)
+		var hcd: Node = asset_panel.find_child("HideConfirmDialog", true, false)
+		_expect(ib is Button and ifd is FileDialog and hcd is ConfirmationDialog,
+			"素材面板：导入按钮 + 文件/确认弹窗存在")
+		var db: Node = asset_panel.find_child("DetailBox", true, false)
+		var ab: Node = asset_panel.find_child("ApplyButton", true, false)
+		var hb: Node = asset_panel.find_child("HideButton", true, false)
+		_expect(db is VBoxContainer and ab is Button and hb is Button, "素材面板：详情编辑区存在")
+		_expect(asset_panel.get_node_or_null("PageRow") is HBoxContainer,
+			"素材面板：翻页条存在")
+		_expect(asset_panel.get_node_or_null("PageRow/PagePrevButton") is Button
+			and asset_panel.get_node_or_null("PageRow/PageNextButton") is Button,
+			"素材面板：上一页/下一页按钮存在")
+		_expect(asset_panel.get_node_or_null("PageRow/PageLabel") is Label,
+			"素材面板：页码标签存在")
+		_expect(asset_panel.service != null and asset_panel.adapter != null,
+			"素材面板已注入共享 service/adapter（与画布同库）")
+		_expect(editor._asset_service != null and editor._asset_service.get_parent() == editor,
+			"map_editor 场景持有素材服务（非 autoload）")
+		_expect(editor._canvas.asset_adapter == editor._asset_adapter,
+			"画布与素材面板共享同一视觉适配器实例")
+
 	# ---- 4. 交互契约：ButtonGroup 单选联动 editor 状态 ----
 	editor._tool_buttons[editor.Tool.FILL].button_pressed = true
 	_expect(editor.current_tool == editor.Tool.FILL, "点填充按钮 → current_tool=FILL")
@@ -206,6 +248,8 @@ func _run() -> void:
 
 	# ---- 4b. 独立选择 / 方块属性 / 高度历史 / 缩放平移后的真实顶面命中 ----
 	_expect(block_tab != null and editor._block_z_box != null, "方块 Tab：BlockZSpin 存在")
+	_expect(block_tab.find_child("BlockAssetGrid", true, false) is GridContainer,
+		"方块 Tab：BlockAssetGrid（素材方块列表）存在")
 	_expect(not editor._block_z_box.editable and editor._canvas.selected_cell == Vector2i(-1, -1),
 		"初始无选择：高度输入禁用")
 	editor._seal_pending()

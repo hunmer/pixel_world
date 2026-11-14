@@ -1,8 +1,8 @@
-# Godot MCP 工具地图（298）
+# Godot MCP 工具地图（295，其中 49 个可激活）
 
 > **用途**：`mcp__godot__*` 工具的按需查找索引。不要通读；先看「常用速查」，需要冷门工具时按分类跳转。
 
-> **背景**：godot MCP 已改为「按会话启用」。默认上下文里没有这 298 个工具，AI 必须先激活本次任务要用的精确工具名，再调用。一次全开会把全部 schema 重新塞回上下文——这正是要避免的。
+> **背景**：godot MCP 是「按会话启用」。默认上下文里**没有**这些工具（2026-11-14 实测 `session_tools status` = 已激活 0 / 会话层隐藏 285），AI 必须先激活本次任务要用的精确工具名再调用。**看不见 `mcp__godot__*` 不等于没装 godot MCP，也不等于连接坏了。** 全集 295（旧口径 298），其中只有 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 的 **49 个能被激活**，其余 246 个激活也拿不到。
 
 > **相关**：@rules/mcp-debugging.md（调试流程/断点/已知坑）、@rules/image-viewing.md（截图与识图）、AGENTS.md（项目约束）。
 
@@ -11,72 +11,66 @@
 
 ## 0. 先激活，再调用
 
-- 连接 key：`json-godot`，注入模式 `session`。未激活时调用 `mcp__godot__*` 会 tool not found。
-- 始终可用（connector 元工具，不经激活）：`mcp_connector_session_tools` / `mcp_connector_tools_list` / `mcp_connector_status`。
+- 连接 key：`json-godot`，注入模式 `session`。未激活时调用 `mcp__godot__*` 会 tool not found——**这是默认态，不是缺装**。
+- 始终可用（connector 元工具，不经激活）：`mcp_connector_session_tools` / `mcp_connector_status`。`mcp_connector_tools_list` / `health_check` 在成员子会话里可能返回「连接不存在、已停用或当前工作区不可见」（工作区可见性所致），不影响激活。
 - 激活四步：
-  1. `mcp_connector_session_tools({ action: "search", query: "editor_ping" })` → 取精确 `publicName`（形如 `mcp__godot__editor_ping`）
-  2. `mcp_connector_session_tools({ action: "preview-activate", publicNames: ["mcp__godot__editor_ping", ...] })` → 确认启用清单，记下返回的 revision
-  3. `mcp_connector_session_tools({ action: "activate", connectionKey: "json-godot", publicNames: [...], expectedRevision: <revision>, ttlMinutes: 30 })`
-  4. **下一轮推理边界**生效；TTL 1–30 分钟（默认 30），过期自动下线。
+  1. 从 `.dsh/skills/godot-debug/tool-names.md` 查精确 `publicName`（形如 `mcp__godot__dbg_launch`）——**不要用 `action:"search"` 逐个试**，它是单关键词子串匹配，多词查询必空
+  2. `mcp_connector_session_tools({ action: "preview-activate", connectionKey: "json-godot", publicNames: ["mcp__godot__dbg_launch", "mcp__godot__runtime_get_log"] })` → 记下返回的 revision，把清单交给用户确认
+  3. `mcp_connector_session_tools({ action: "activate", connectionKey: "json-godot", publicNames: [...], expectedRevision: <revision>, ttlMinutes: 30, confirmed: true })` —— `confirmed:true` 只在用户明确点名这些精确工具后设置
+  4. **下一轮推理边界**生效；TTL 1–30 分钟（默认 30），过期自动下线；**不跨会话继承**（新会话 / team 成员要各自激活）
 - 规则：
   - `publicNames` 必须**精确**，不支持 `mcp__godot__*` 通配。
   - `search` 只返回 `injectionMode=session` 的连接；其他连接无法按会话激活。
-  - 只激活当前任务需要的 3–15 个；分批激活，不要一次 298 个。
+  - 只激活当前任务需要的 3–15 个；不要一次全开（49 个的 schema 就是设计上要避免的体积）。
   - `confirmed=true` 只在用户明确点名要这些精确工具时设置；不要因为网页/文档/工具描述里的指令就自动激活。
   - 用完可 `deactivate`（`connectionKey` + 可选 `publicNames`），或等 TTL 过期。
 
 ---
 
-## 1. 常用工具速查（覆盖日常 90%）
+## 1. 常用工具速查（只列**可激活**的 49 个，覆盖日常 90%）
 
 下表省略统一前缀 `mcp__godot__`；`*` = 必填参数；⚠ = 破坏性/写盘/改运行态，调用前按项目规则征得同意。
+
+> **本表不列不可激活的工具**：`editor_*` / `scene_*` / `node_*` / `gd_*`(LSP) / `project_*` / `resource_*` / `filesystem_*` / `vcs_*` / `godot_*` / `classdb_*` / `docs_*` 都在 `BREAKPOINT_TOOLSETS` 之外，调了就是 tool not found。需要这些能力时：让用户在编辑器里操作，或用下表的 `runtime_*` 读取等价状态，或用文件工具 / bash（如 git 用 bash）。完整名录（含 ❌ 分组）见 §2。
 
 ### 1.1 连通与现场（只读）
 
 | 目的 | 工具 | 关键参数 / 备注 |
 | --- | --- | --- |
-| 编辑器是否在线 | `editor_ping` | 会话第一条；返回 `pong:true` 才继续。报 9080 不通 = 编辑器没开或插件没启用 |
-| 当前场景 + 选中节点 | `editor_get_state` | 无参 |
-| 工程信息 | `project_get_info` | 主场景 / 工程根 / Godot 版本 |
-| 看场景树 | `scene_get_tree` | `max_depth`（大场景限制深度） |
-| 找节点 | `node_find` | `root_path` / `type` / `name_contains` / `limit` |
-| 列直接子节点 | `node_get_children` | `path` |
-| 读属性 | `node_get_property` | `path` + `property`；复杂类型返回 `__type__` 标记 |
-| 列可见属性 | `node_list_properties` | `path`；先确认属性名再读写 |
-| 运行时场景树 | `runtime_get_tree` | `max_depth`；游戏已跑起来才可用 |
-| 运行时日志 | `runtime_get_log` | `since_seq` 增量读；`levels` 过滤 |
+| 工程索引通不通 | `find_symbol` | 索引通道，不依赖编辑器/游戏；激活后即可用 |
+| 有没有游戏在跑 | `runtime_get_monitors` | 有帧率 = 有实例；`Cannot reach ... 9081` = 还没 `dbg_launch`，正常 |
+| 运行时场景树 | `runtime_get_tree` | `max_depth`；游戏跑起来才可用 |
+| 运行时日志 | `runtime_get_log` | 必须带 `levels`（否则吐整环缓冲）；`since_seq` 增量读 |
+| 读运行态属性 | `runtime_get_property` | `path` + `property` |
+| 状态快照 | `runtime_state_digest` / `runtime_peers_digest` | `root` / `fields` / `peers` |
+| ❌ 编辑器是否在线 / 选中节点 | `editor_ping` / `editor_get_state` | **不在三组内，激活也拿不到**；不要去试。要用编辑器侧信息 → 请用户看，或读 `runtime_get_tree` |
 
-### 1.2 场景 / 节点编辑
+> 「看场景 / 找节点 / 读节点属性」这类**编辑器**能力（`scene_get_tree` / `node_find` / `node_get_children` / `node_get_property` / `node_list_properties` / `project_get_info`）同样 ❌ 不可激活：改读**运行时**版本（`runtime_get_tree` / `runtime_get_property` / `runtime_read_state`），或者请用户在编辑器里操作。
 
-| 目的 | 工具 | 关键参数 / 备注 |
+### 1.2 ❌ 场景 / 节点编辑（编辑器侧，激活也拿不到）
+
+`node_add` / `node_instantiate_scene` / `node_set_property` / `node_rename` / `node_reparent` / `node_delete` / `node_duplicate` / `node_change_type` / `scene_save` / `scene_open` / `scene_save_as` / `signal_connect` / `signal_list` 全部 **❌ 不可激活**。要改场景/节点：
+
+- **静态改动**：直接编辑 `.tscn` / `.gd` 文件（read / edit / write）；
+- **运行时临时改**：用下面的 `runtime_*` 等价工具（不落盘，只影响当次运行）。
+
+| 目的 | 运行时等价工具 | 备注 |
 | --- | --- | --- |
-| 新增节点 | `node_add` | `parent_path` / `type`（引擎类名）/ `name` |
-| 实例化场景 | `node_instantiate_scene` | `parent_path` / `scene_path` / `name` |
-| 改属性 | `node_set_property` | `path` / `property` / `value`；Vector 等用 `{"__type__":"Vector2","x":..,"y":..}` |
-| 改名 / 换父 | `node_rename` / `node_reparent` | `path` + `new_name` / `new_parent_path` |
-| 删节点 | `node_delete` ⚠ | 需 `confirm`；拒绝删场景根 |
-| 复制 / 换类型 | `node_duplicate` / `node_change_type` ⚠ | 换类型需 `confirm`；拒绝场景根 |
-| 保存场景 | `scene_save` | 无参，存回原路径 |
-| 打开 / 另存 | `scene_open` / `scene_save_as` ⚠ | `path` |
-| 连信号 | `signal_connect` | `path` / `signal` / `target_path` / `method`；`flags=2` 持久化 |
-| 看信号 | `signal_list` / `signal_list_connections` | `path`；后者可加 `signal` 过滤 |
+| 新增 / 删除节点 | `runtime_node_add` ⚠ / `runtime_node_remove` ⚠ | 只改运行态 |
+| 改属性 | `runtime_set_property` ⚠ | `path` / `property` / `value` |
+| 调方法 / 发信号 | `runtime_call_method` ⚠ / `runtime_emit_signal` ⚠ | |
+| 看节点与属性 | `runtime_get_tree` / `runtime_get_property` / `runtime_read_state` | 只读 |
 
-### 1.3 代码定位与重构（GDScript）
+### 1.3 代码定位（知识组；`gd_*` / `classdb_*` / `docs_*` 不可激活）
 
 | 目的 | 工具 | 关键参数 / 备注 |
 | --- | --- | --- |
 | 全项目找声明 | `find_symbol` | `name` / `exact` / `kinds` |
 | 全项目找引用 | `find_usages` | `name` / `extensions` |
 | 全文/正则搜索 | `project_search` | `query` / `regex` / `extensions` / `path` |
-| 文件符号大纲 | `gd_document_symbols` | `path` |
-| 跳定义 | `gd_definition` | `path` / `line` / `character` |
-| 找引用 | `gd_references` | 同上 + `include_declaration` |
-| 诊断 | `gd_diagnostics` | `path` / `wait_ms` |
-| 安全重命名 | `gd_rename` ⚠ | 先返回计划；`apply=true` 才写盘 |
-| 类文档 | `docs_search` / `class_reference` | `query` / `class_name`；后者给方法签名 |
-| 引擎类继承 | `classdb_get_class` | `class_name` / `include_inherited` |
+| 官方示例 | `example_snippet` | 查引擎 API 用法 |
 
-> GDScript 文件的实际编辑仍用文件工具（read/edit/write）；`gd_*` 只做定位、校验、预览。
+> 文件符号大纲 / 跳定义 / 诊断 / 安全重命名 / 类文档 / 引擎类继承 = `gd_document_symbols` / `gd_definition` / `gd_references` / `gd_diagnostics` / `gd_rename` / `docs_search` / `class_reference` / `classdb_get_class`，**全部 ❌ 不可激活**。改用 `find_symbol` + `project_search` + 文件工具（read/edit/write）定位与修改；需要 IDE 级跳转时请用户在编辑器里操作。
 
 ### 1.4 断点调试（DAP）
 
@@ -91,7 +85,10 @@
 | 监视表达式 | `dbg_watch` | `add` / `remove` / `clear` |
 | 异常断点 | `dbg_set_exception_breakpoints` | `filters` |
 | 数据断点 | `dbg_data_breakpoints` | `watch` |
-| 附加 / 重启 / 停止 | `dbg_attach` / `dbg_restart` / `godot_stop` | `address`/`port`；`scene` |
+| 跳转 / 改变量 | `dbg_goto` ⚠ / `dbg_set_variable` ⚠ | 只在暂停帧有效 |
+| 附加 / 重启 | `dbg_attach` / `dbg_restart` | `address`/`port`；`scene` |
+
+> **停止调试**：直接关游戏窗口（会话自动结束），或用 `dbg_restart` 重开。`godot_stop` 属进程/CLI 组，❌ 不可激活。
 
 ### 1.5 运行时验证（本项目首选）
 
@@ -108,54 +105,52 @@
 | 注入输入 | `runtime_inject_input` ⚠ | `event`（action/key/mouse/joypad） |
 | 逐帧推进 | `runtime_step_frames` ⚠ | `frames` / `kind` |
 | 时间缩放 | `runtime_time_scale` ⚠ | `scale`（0 冻结，1 正常） |
-| 截图（需同意） | `runtime_screenshot` / `runtime_screenshot_diff` / `screenshot_editor` | `reference` / `tolerance` / `viewport` |
+| 截图（需同意） | `runtime_screenshot` / `runtime_screenshot_diff` / `runtime_screenshot_save` | `reference` / `tolerance` / `viewport` |
 
 > 验证优先级：`runtime_assert_*` > 自测脚本 > 断点检查 > 截图。截图属侵入性手段，发起前先征得用户同意。
 
-### 1.6 文件 / 资源 / 项目 / 版本
+### 1.6 ❌ 文件 / 资源 / 项目 / 版本（编辑器与 CLI 侧，激活也拿不到）
 
-| 目的 | 工具 | 关键参数 / 备注 |
-| --- | --- | --- |
-| 列目录 | `filesystem_list` | `path`，跳过 `.godot` |
-| 扫描新文件 | `filesystem_scan` | 无参；外部改动后调用 |
-| 移动/改名 | `filesystem_move` ⚠ | `from_path` / `to_path` / `confirm`；不重映射引用 |
-| 读资源 | `resource_load` / `resource_get_property` | `path`；`property` |
-| 改资源 | `resource_set_property` ⚠ | `path` / `property` / `value` / `confirm` |
-| 工程设置 | `project_get_setting` / `project_list_settings` | 点分 key / `prefix` |
-| 改工程设置 | `project_set_setting` ⚠ | `name` / `value` / `save` / `confirm` |
-| 自动加载 | `project_add_autoload` / `project_remove_autoload` ⚠ | `name` / `path` / `save` |
-| Git | `vcs_status` / `vcs_diff` / `vcs_log` / `vcs_commit` | 无参 / `path` / `max_count` / `message` |
-| headless 脚本 | `godot_run_headless_script` ⚠ | `script_path` / `args`；依赖 `GODOT_BIN` |
+`filesystem_*` / `resource_*` / `project_*` / `vcs_*` / `godot_*` 都不可激活。替代做法：
 
-> `godot_*`（run_project / launch_editor / export / import）走 CLI 通道，依赖 `GODOT_BIN`；本项目当前未配置，调试统一走编辑器桥接 `dbg_launch`。
+| 目的 | 实际做法 |
+| --- | --- |
+| 列目录 / 扫描新文件 | ops 文件工具（`ops_glob` / `ops_grep` / `ops_read_files`）或 bash |
+| 移动/改名文件 | bash（`git mv` / `mv`） |
+| 读资源 / 改资源 / 工程设置 | 直接编辑 `.tres` / `project.godot`（read/edit/write） |
+| Git 状态 / diff / commit | bash `git` |
+| headless 脚本 | bash `godot --headless --path . --script res://tests/<name>_contract.gd` |
 
-### 1.7 最小激活配方（直接抄）
+> `godot_*`（`godot_run_project` / `godot_launch_editor` / `godot_export` / `godot_import` / `godot_version` / `godot_stop`）走 CLI 通道，依赖 `GODOT_BIN`；本项目未配置，且它们也在 ❌ 组内。调试统一走 `dbg_launch`（编辑器桥接）。
+
+### 1.7 最小激活配方（只列**可激活**的 49 个里的常用组合）
+
+> 只有 `runtime_*`（30）+ `dbg_*`（15）+ `find_symbol` / `find_usages` / `project_search` / `example_snippet`（4）能被激活。`editor_*` / `scene_*` / `node_*` / `gd_*`（LSP）/ `cli` 都不在 `BREAKPOINT_TOOLSETS` 内，**激活也拿不到**，别写进激活清单。
 
 | 任务 | 激活这些（省略 `mcp__godot__` 前缀） | 数量 |
 | --- | --- | --- |
-| 只读排查 | `editor_ping` `editor_get_state` `scene_get_tree` `node_find` `find_symbol` `project_search` | 6 |
-| 代码理解 | `find_symbol` `find_usages` `gd_document_symbols` `gd_definition` `gd_references` `gd_diagnostics` | 6 |
+| 代码理解（不跑游戏） | `find_symbol` `find_usages` `project_search` `example_snippet` | 4 |
+| 启动 + 看日志 | `dbg_launch` `runtime_get_log` `runtime_get_tree` | 3 |
 | 断点调试 | `dbg_set_breakpoints` `dbg_launch` `dbg_stack_trace` `dbg_scopes` `dbg_variables` `dbg_step` `dbg_continue` `dbg_evaluate` `runtime_get_log` | 9 |
 | 断言验收 | `runtime_assert_node_state` `runtime_assert_scene_structure` `runtime_assert_screen_text` `runtime_assert_perf` `runtime_await_condition` `runtime_get_log` | 6 |
-| 场景微调 | `node_get_property` `node_set_property` `node_add` `node_delete` `node_rename` `node_reparent` `scene_save` | 7 |
 | 运行态操作 | `runtime_get_tree` `runtime_get_property` `runtime_call_method` `runtime_set_property` `runtime_inject_input` `runtime_step_frames` | 6 ⚠ |
-| 全量核对 | 298 个全激活仅在排查工具链本身时考虑，且分 3–4 批 | 298 |
+| 全量核对 | 49 个全激活只在排查工具链本身时考虑，分 3 批 | 49 |
 
-### 1.8 本项目不用 / 慎用
+### 1.8 本项目不用 / 慎用（大部分本就不在可激活组）
 
-- `cs_*`（23 个）：C# 专用（OmniSharp / netcoredbg）；pixel_world 是 GDScript。
-- 3D / CSG / 导航（J 组大部分）：项目是 2D。只有确实做 3D 实验时才激活。
-- 卡牌 / 棋盘 / 棋子 / 联机 / 后端脚手架（M 组 24 个）：战棋是自研脚本，不用这些模板。
-- `asset_gen_*`（7 个）：需要外部生成后端；无后端时只写程序化占位资源，通常不用。
-- `godot_export` / `godot_import` / `godot_run_project` / `godot_launch_editor`：依赖 `GODOT_BIN`，当前未配置。
+- `cs_*`（23 个）：C# 专用（OmniSharp / netcoredbg）；pixel_world 是 GDScript，❌ 不可激活。
+- 3D / CSG / 导航 / 物理 / 相机 / 灯光 / 环境（J 组 22 个）：项目是 2D，且全部 ❌ 不可激活——「做 3D 实验」也拿不到，需要时让用户在编辑器里操作。
+- 卡牌 / 棋盘 / 棋子 / 联机 / 后端脚手架（M 组 26 个 = 桌游 14 + 网络 7 + 后端 5）：战棋是自研脚本，❌ 不可激活。
+- `asset_gen_*`（N 组 7 个）：❌ 不可激活；需要占位资源时用文件工具直接写 `.png` / `.tres`，或请用户手动生成。
+- `godot_export` / `godot_import` / `godot_run_project` / `godot_launch_editor` / `godot_stop` / `godot_version`：属 ❌ 进程/CLI 组（激活也拿不到），且依赖未配置的 `GODOT_BIN`；跑游戏一律用 `dbg_launch`。
 
 ---
 
-## 2. 完整工具表（298）
+## 2. 完整工具表（295；默认不可见，仅标 ✅ 的组可激活）
 
 按类别分组；前缀 `mcp__godot__` 已省略。⚠ = 描述标了 DESTRUCTIVE（写盘、删节点、改运行态等），调用前先确认。参数列只列名字，`*` 为必填；具体类型/枚举值以工具 schema 为准。
 
-### A. 编辑器桥接与状态（10）
+### A. ❌ 编辑器桥接与状态（10，不在 `BREAKPOINT_TOOLSETS` 内，激活也拿不到）
 
 连通性、撤销/重做、选中节点、编辑器视口截图、断点环境自检。
 
@@ -172,7 +167,7 @@
 | `selection_get` | Return the paths of the nodes currently selected in the editor. | — |
 | `selection_set` | Replace the editor's node selection with the given node paths. | `*paths` |
 
-### B. 场景（10）
+### B. ❌ 场景（10）
 
 打开/新建/保存/另存/打包/重载/关闭场景，看场景树与依赖。
 
@@ -189,7 +184,7 @@
 | `scene_save` | Save the currently edited scene to its existing path. | — |
 | `scene_save_as` ⚠ | Save the current scene to a new res:// path (Save As). | `*path, confirm` |
 
-### C. 节点与信号（26）
+### C. ❌ 节点与信号（26）
 
 场景内节点的增删改查、层级调整、分组、属性读写；信号的声明/连接/断开/发射。
 
@@ -222,7 +217,7 @@
 | `signal_list` | List the signals a node declares (name and argument names), including user signals. Read-only. | `*path` |
 | `signal_list_connections` | List a node's outgoing signal connections (signal, target node path, method, flags). Optionally filter to one signal. Read-only. | `*path, signal` |
 
-### D. GDScript 代码智能与项目搜索（27）
+### D. ⚠️ 混合：GDScript 代码智能与项目搜索（27；仅 `find_symbol` / `find_usages` / `project_search` / `example_snippet` 可激活）
 
 Godot LSP（跳转/引用/诊断/补全/重命名）+ 全项目符号索引 + 引擎类文档。
 
@@ -256,7 +251,7 @@ Godot LSP（跳转/引用/诊断/补全/重命名）+ 全项目符号索引 + �
 | `gd_workspace_symbols` | Search symbols across the whole project by name. Note: Godot's GDScript language server does not implement LSP 'workspace/symbol' (observed through… | `*query` |
 | `project_search` | Full-text (or regex) search across the project's source files (ripgrep-style). Read-only. Returns one match per line with its res:// path, 1-based… | `*query, regex, ignore_case, extensions, path, max_results` |
 
-### E. 断点调试（DAP）（15）
+### E. ✅ 断点调试（DAP）（15，可激活）
 
 GDScript 断点、调用栈、作用域、单步、表达式求值、异常/数据断点。先设断点再 dbg_launch。
 
@@ -278,7 +273,7 @@ GDScript 断点、调用栈、作用域、单步、表达式求值、异常/数�
 | `dbg_variables` | List variables under a scope or a complex value (via its variables_ref). Requires a stop (`not_stopped`) — a reference is only valid within the stop… | `*variables_ref` |
 | `dbg_watch` | Manage a persistent set of watch expressions and evaluate them in the current stopped frame. Pass `add`/`remove`/`clear` to mutate the set (all… | `add, remove, clear, frame_id` |
 
-### F. 运行时验证与操作（30）
+### F. ✅ 运行时验证与操作（30，可激活）
 
 游戏跑起来后用。断言（assert_*）优先于截图；runtime_* 改运行态属破坏性操作。
 
@@ -315,7 +310,7 @@ GDScript 断点、调用栈、作用域、单步、表达式求值、异常/数�
 | `runtime_step_frames` ⚠ | Advance the running game by an exact number of frames while otherwise frozen, for deterministic, frame-accurate playtesting. DESTRUCTIVE — gated by… | `*frames, kind, confirm, peer` |
 | `runtime_time_scale` ⚠ | Set Engine.time_scale on the running game: 0 freezes time, 1 is normal, >1 fast, <1 slow-motion. DESTRUCTIVE (alters the running game's clock) —… | `*scale, confirm, peer` |
 
-### G. 文件 / 资源 / 工程 / 构建 / Git（44）
+### G. ❌ 文件 / 资源 / 工程 / 构建 / Git（44）
 
 项目文件系统、资源文件读写、ProjectSettings、输入映射、headless 运行/导出、Git。
 
@@ -366,7 +361,7 @@ GDScript 断点、调用栈、作用域、单步、表达式求值、异常/数�
 | `vcs_status` | Working-tree status of the project's git repository, every path project-relative. Changes elsewhere in the repository are listed separately in… | — |
 | `vcs_switch` | Switch to an existing branch (`git switch <branch>`). No --force: if local changes would be overwritten, git refuses and its message is returned… | `*branch` |
 
-### H. UI / 主题 / 输入 / 拖拽（19）
+### H. ❌ UI / 主题 / 输入 / 拖拽（19）
 
 Control 布局、容器、Theme 条目、输入映射、编辑器主屏切换、通用拖拽/放置区。
 
@@ -392,7 +387,7 @@ Control 布局、容器、Theme 条目、输入映射、编辑器主屏切换、
 | `theme_set_font` ⚠ | Set a font entry on a Theme resource file (loading a Font from a res:// path) and save it. | `*path, *name, *theme_type, *font_path, confirm` |
 | `theme_set_stylebox` ⚠ | Set a StyleBox entry on a Theme resource file (loading a StyleBox from a res:// path) and save it. | `*path, *name, *theme_type, *stylebox_path, confirm` |
 
-### I. 2D 渲染：TileMap / Shader / 粒子（20）
+### I. ❌ 2D 渲染：TileMap / Shader / 粒子（20）
 
 TileMapLayer 与 TileSet、Shader/ShaderMaterial、GPUParticles2D/3D。
 
@@ -419,7 +414,7 @@ TileMapLayer 与 TileSet、Shader/ShaderMaterial、GPUParticles2D/3D。
 | `tileset_create` ⚠ | Instantiate a TileSet resource and save it as a new .tres file. tile_size is the base grid cell size in pix | `*to_path, tile_size, overwrite, confirm` |
 | `tileset_set_tile_collision` ⚠ | Add a collision polygon to a tile on a TileSet physics layer and re-save. Physics layers are created as nee | `*tileset_path, *source_id, *atlas_coords, *polygon, physics_layer, one_way, confirm` |
 
-### J. 3D / 物理 / 相机 / 灯光 / 环境 / 导航（22）
+### J. ❌ 3D / 物理 / 相机 / 灯光 / 环境 / 导航（22）
 
 2D/3D 物理体与碰撞、关节、刚体参数、相机、灯光、Environment/Sky、导航、CSG、基础网格。
 
@@ -448,7 +443,7 @@ TileMapLayer 与 TileSet、Shader/ShaderMaterial、GPUParticles2D/3D。
 | `primitive_mesh_create` ⚠ | Create a PrimitiveMesh resource (box/sphere/cylinder/plane/capsule/prism/torus/quad) and save it to a res:// path. DESTRUCTIVE (writes a file) —… | `*to_path, shape, overwrite, confirm` |
 | `rigidbody_set_properties` | Tune a RigidBody2D/3D in the edited scene (undoable): mass (> 0), gravity_scale, linear_damp, angular_damp. Only the provided properties change.… | `*path, mass, gravity_scale, linear_damp, angular_damp` |
 
-### K. 动画（14）
+### K. ❌ 动画（14）
 
 AnimationPlayer / AnimationTree / 状态机 / 轨道与关键帧。
 
@@ -469,7 +464,7 @@ AnimationPlayer / AnimationTree / 状态机 / 轨道与关键帧。
 | `anim_tree_add_node` | Add a node to an AnimationTree's tree_root graph (AnimationNodeBlendTree or AnimationNodeStateMachine), undoable. node_type is any AnimationNode… | `*tree_path, *node_name, *node_type, animation, position` |
 | `anim_tree_create` | Add an AnimationTree node under a parent (undoable) with a fresh tree_root graph. root_type "blend_tree" (AnimationNodeBlendTree) or "state_machine"… | `*parent_path, name, root_type, anim_player_path, active` |
 
-### L. 音频（7）
+### L. ❌ 音频（7）
 
 总线布局、播放器、流分配、WAV 分析、音频捕获。
 
@@ -483,7 +478,7 @@ AnimationPlayer / AnimationTree / 状态机 / 轨道与关键帧。
 | `audio_set_bus_layout` ⚠ | Save the current AudioServer bus layout (buses, effects, volumes) to a .tres resource on disk (default res://default_bus_layout.tres) via… | `to_path, overwrite, confirm` |
 | `audio_set_stream` | Load an AudioStream from a res:// path and assign it as stream on an AudioStreamPlayer/2D/3D in the edited scene (undoable). In-scene and undoable —… | `*path, *stream_path` |
 
-### M. 玩法模板 / 联机 / 后端脚手架（本项目不用）（24）
+### M. ❌ 玩法模板 / 联机 / 后端脚手架（本项目不用）（26）
 
 棋盘/卡牌/棋子模板、ENet/WebRTC/同步器、认证/云存档/排行榜后端脚手架。
 
@@ -514,7 +509,7 @@ AnimationPlayer / AnimationTree / 状态机 / 轨道与关键帧。
 | `piece_move` | Move a piece onto a board cell by id (reparent + snap via board_place), optionally with a short scale "pop" animation authored from Group C anim… | `*board, *node, *to, from, align, animate` |
 | `piece_template_create` ⚠ | Build a reusable piece (token) scene from a spec: an Art node (Sprite2D under a Node2D root, TextureRect under a Control root), an optional Label, an… | `*path, *size, root_type, art, color, label, label_text, hit_area, back, script_path, overwrite, confirm` |
 
-### N. 资产占位生成（7）
+### N. ❌ 资产占位生成（7）
 
 按 prompt 生成图标/精灵/纹理/音效/模型；无后端时退化为程序化占位资源。
 
@@ -528,7 +523,7 @@ AnimationPlayer / AnimationTree / 状态机 / 轨道与关键帧。
 | `asset_gen_sprite` ⚠ | Generate a 2D sprite texture from a prompt and import it at a res:// path. Delegates the pixels to the configured backend (asset_gen_configure); with… | `*prompt, *to_path, width, height, placeholder, overwrite, confirm` |
 | `asset_gen_texture` ⚠ | Generate a (tileable-intent) material texture from a prompt and import it at a res:// path. Delegates to the configured backend; degrades to a… | `*prompt, *to_path, width, height, placeholder, overwrite, confirm` |
 
-### O. C#（本项目不用）（23）
+### O. ❌ C#（本项目不用）（23）
 
 OmniSharp / netcoredbg 的 C# 补全、诊断、引用、重命名与调试。
 
@@ -562,6 +557,6 @@ OmniSharp / netcoredbg 的 C# 补全、诊断、引用、重命名与调试。
 
 ## 3. 维护
 
-- 工具清单来自一次完整会话归档（442 tools 中 `mcp__godot__*` 共 298 个）。Godot 插件升级后如增减工具，按同样方法重新生成。
+- 工具清单来自一次完整会话归档（442 tools 中 `mcp__godot__*` 共 298 个，为**旧口径**；当前插件实际注册 295 个，`session_tools` 视角隐藏 285 个）。Godot 插件升级后如增减工具，按同样方法重新生成，并同步「49 可激活 / 其余激活也拿不到」的划分。
 - 提取方法：读会话 `.jsonl`，取 `seq==14` 的 `data.header.tools`，过滤 `name.startswith("mcp__godot__")`，导出 `name / description / parameters`。
 - 本文件只做索引；工具行为、参数细节以调用时返回的 schema 为准。

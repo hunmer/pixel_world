@@ -1,6 +1,6 @@
 ---
 name: godot-debug
-description: "pixel_world（Godot 4.7 / 2D）里凡是「把游戏跑起来看」「查报错/黑屏/没反应」「验证改完对不对」「看画面/像素」「进战斗 / 技能测试」「下断点」「截图」的任务，一律先读本 skill，走 godot MCP 桥接（dbg_launch → runtime_assert_*）。mcp__godot__* 里的 49 个工具已常驻工具表、不用激活；不要改用 bash 跑 godot，也不要 print 后肉眼判断。"
+description: "pixel_world（Godot 4.7 / 2D）里凡是「把游戏跑起来看」「查报错/黑屏/没反应」「验证改完对不对」「看画面/像素」「进战斗 / 技能测试」「下断点」「截图」的任务，一律先读本 skill，走 godot MCP 桥接（dbg_launch → runtime_assert_*）。注意 `mcp__godot__*` 是**按会话启用**、默认不在工具表里，先按 §1 用 `mcp_connector_session_tools` 激活；`tool not found` ≠ 没装 godot MCP，不要改用 bash 跑 godot，也不要 print 后肉眼判断。"
 ---
 
 # Godot 调试说明（pixel_world）
@@ -19,9 +19,23 @@ description: "pixel_world（Godot 4.7 / 2D）里凡是「把游戏跑起来看�
 
 判断标准：**要看运行态就走 MCP；只看静态数据就走 headless。** 两者都不要"print 后肉眼确认"。
 
-## 1. 工具已经常驻，不需要激活
+## 1. 工具不在工具表里：先按会话激活
 
-连接 `json-godot` 的注入模式是 **always**，且用 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 收缩过，所以工具表里**常驻这 49 个**（每轮都在，直接调）：
+连接 `json-godot` **已配置且已连接**（stdio/npx，scope=project `pixel_world`），但注入模式是 **「按会话启用」**：工具**默认不在工具表里**。2026-11-14 实测 `mcp_connector_session_tools({action:"status"})` = 已激活 **0** / 会话层隐藏 **285**。**`mcp__godot__*` 看不见 ≠ 没装 godot MCP**（也不代表连接坏了）——先激活再下结论。
+
+激活配方（`connectionKey` 固定 `json-godot`）：
+
+```text
+mcp_connector_session_tools({action:"preview-activate", connectionKey:"json-godot", publicNames:["mcp__godot__dbg_launch", "mcp__godot__runtime_get_log", ...]})
+# ↑ 返回精确清单 + revision；把它交给用户确认
+mcp_connector_session_tools({action:"activate", connectionKey:"json-godot", publicNames:[...], expectedRevision:<preview 返回>, ttlMinutes:30, confirmed:true})
+```
+
+`confirmed:true` **只能由用户在明确点名这些精确工具后授权**，agent 不得自行设置。激活在**下一次推理边界**生效，ttl 1–30 分钟，**不跨会话继承**：新会话、team 成员、subagent 都要在各自会话里重新激活一次。
+
+### 激活也只覆盖这三组
+
+`BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 决定哪 49 个能被激活：
 
 | 组 | 个数 | 干什么 |
 | --- | --- | --- |
@@ -29,18 +43,19 @@ description: "pixel_world（Godot 4.7 / 2D）里凡是「把游戏跑起来看�
 | `dbg_*` | 15 | 启动 / 重启 / 断点 / 单步 / 栈 / 变量（DAP） |
 | `find_symbol` / `find_usages` / `project_search` / `example_snippet` | 4 | 项目索引与代码检索（不需要编辑器也不需要游戏） |
 
-**没被注入的（别去调，会 tool not found）**：`editor_*` 149 个（含 `editor_ping`、`editor_get_state`、`scene_*`、`node_*`、`resource_*`、`ui_*`、`project_*`、`inputmap_*`、`theme_*`、`tileset_*` 等）、`lsp`/`cslsp`、`cli`、`tabletop`、`csdap`、`vcs`、`assetgen`、`netcode`、`backend`、`processes`、`hearing`。这是刻意的取舍：149 个 `editor_*` 常驻会让 schema 体积翻三倍，而调试根本不需要它们。
+**不在这三组里的（激活也拿不到，别试名字）**：`editor_*` 149 个（含 `editor_ping`、`editor_get_state`、`scene_*`、`node_*`、`resource_*`、`ui_*`、`project_*`、`inputmap_*`、`theme_*`、`tileset_*` 等）、`lsp`/`cslsp`、`cli`、`tabletop`、`csdap`、`vcs`、`assetgen`、`netcode`、`backend`、`processes`、`hearing`。这是刻意的取舍：把 149 个 `editor_*` 塞进 `BREAKPOINT_TOOLSETS` 会让 schema 体积翻三倍，且调试不需要它们。
 
 卡住的两种情况：
 
-- **工具表里没有 `mcp__godot__*`** → 连接被停用或注入模式被改回去了。处理顺序：`mcp_connector_status` 看 `[json-godot]` 是否"已连接 / 始终注入" → `mcp_connector_set_enabled({key:"json-godot", enabled:true})` → 仍不对就用面板（MCP 连接器 → godot → 注入模式 → 始终注入）重新落一次。**不要**因为看不见工具就改用 bash 跑 godot。
+- **`session_tools status` 显示激活 0 个** → 这是**默认态**，按上面配方激活；不要据此判断「没有 godot MCP 工具」。工具缓存里能搜到名字（`mcp_connector_tool_search({query:"godot"})`）也说明连接是好的。
+- **`mcp_connector_status` 看不到 `json-godot` / 显示未连接** → 这才是配置问题：`mcp_connector_set_enabled({key:"json-godot", enabled:true})`，仍不对就在面板（MCP 连接器 → godot）重新落一次配置。**不要**因为看不见工具就改用 bash 跑 godot。
 - **报 `Host 尚未注册该 stdio Server 的工具`** → 是启动中的瞬时态，等几秒 `mcp_connector_health_check` 或 `mcp_connector_status` 复查；stdio 连接（codegraph / fff / godot）同时出现这条一般是 Host 在重连，不是配置坏了。
 
-找工具名：**不要用 `mcp_connector_session_tools` 的 `search` 逐个试**（它是单关键词子串匹配，`"editor_ping runtime_get_log"` 这种多词查询必然 0 结果——上一个 agent 为此连查了 8 次）。49 个常驻工具的完整签名 + 「意图 → 工具」表在 `.dsh/skills/godot-debug/tool-names.md`，要用未注入的 `editor_*` 说明你走错路了。
+找工具名：**不要用 `mcp_connector_session_tools` 的 `search` 逐个试**（它是单关键词子串匹配，`"editor_ping runtime_get_log"` 这种多词查询必然 0 结果——上一个 agent 为此连查了 8 次）。49 个可激活工具的完整签名 + 「意图 → 工具」表在 `.dsh/skills/godot-debug/tool-names.md`，要用的工具不在这三组里说明你走错路了。
 
 **破坏性工具要带 `confirm:true`**：`runtime_set_property`、`runtime_call_method`、`runtime_inject_input`、`runtime_step_frames`、`runtime_time_scale`、`runtime_seed_rng`、`runtime_anim_play/stop`、`runtime_node_add/remove`、`dbg_evaluate`、`dbg_set_variable` 等。不带会触发客户端确认弹窗，在 DSH 上直接失败（返回 re-run with confirm:true）。只读的不带。
 
-## 2. 连通自检（会话第一条，两秒）
+## 2. 连通自检（激活之后立刻做，两秒）
 
 ```text
 find_symbol({"name":"_battle_active","max_results":1})   # 项目索引通道，不依赖编辑器/游戏
@@ -53,7 +68,7 @@ runtime_get_monitors()                                   # 运行通道，需要
 | `runtime_get_monitors` 有帧率 | 已有游戏实例在跑（可能是用户手动开的旧实例） | 注意别把它的状态当成你这次的改动结果 |
 | `Cannot reach the runtime bridge at 127.0.0.1:9081` | 没有游戏在跑 | 正常，直接第 3 步 `dbg_launch` |
 | `Cannot reach the Godot editor bridge at 127.0.0.1:9080` | 编辑器没开，或 `项目设置 → 插件 → Breakpoint MCP` 未启用 | 让用户打开编辑器并启用插件；`dbg_launch` 走这条通道 |
-| 工具不存在 | 回第 1 步 | — |
+| 工具不存在（`tool not found`） | 本会话还没激活（默认态），**不是没装** | 回 §1 走 `preview-activate → activate`；激活后仍不存在才是配置问题 |
 
 自检失败就不要"改用 bash 跑一下试试"——bash 通道拿不到运行态、断点和断言。
 
@@ -119,18 +134,18 @@ dbg_continue()                                                               # �
 
 ## 6. 已知坑（按踩到频率）
 
-1. 工具名是 `mcp__godot__*`（**双下划线**）；写成点号 = tool not found。
+1. 工具名是 `mcp__godot__*`（**双下划线**）；写成点号 = tool not found。**先看本会话有没有激活**（`mcp_connector_session_tools({action:"status"})`）——激活 0 个是默认态，别当成「没有 godot MCP 工具」。
 2. 改了脚本但行为没变：删 `.godot/editor` 再重启编辑器；`dbg_restart` **不会**重新编译脚本。
-3. `GODOT_BIN` 的 CLI 通道不可用（`godot_run_project` / `godot_version` 未注入），调试一律走 `dbg_launch` + `runtime_*`。
+3. `GODOT_BIN` 的 CLI 通道不可用（`godot_run_project` / `godot_version` 不在 `BREAKPOINT_TOOLSETS` 三组内，激活也拿不到），调试一律走 `dbg_launch` + `runtime_*`。
 4. 多次 `dbg_launch` 会留下多个 `pixel_world` 窗口；截图/断言前先 `runtime_get_tree` 认准实例。
 5. 日志洪水：`!std::isfinite(p_size.x)`（`scene/gui/control.cpp:1527`）是项目里的 Control 尺寸 NaN 问题，会刷满 ring buffer；看日志先按 `levels:["error"]` + `since_seq` 过滤，别把它当成你刚改出来的。
 6. `game_hud_contract.gd` 在 HEAD 上本来就坏，别把它当回归。
 7. `editor_*`（含 `editor_ping`、`editor_screenshot`）没被注入；需要编辑器侧操作时让用户动手，不要反复试工具名。
 
-## 7. 深入索引（本文件不展开 49 个常驻工具，全在 tool-names.md）
+## 7. 深入索引（本文件不展开 49 个可激活工具，全在 tool-names.md）
 
-- `.dsh/skills/godot-debug/tool-names.md` — 常驻工具签名 + 「意图 → 工具」表 + 295 个全量名字（标注了哪些没注入）+ 不存在的名字清单
-- `rules/godot-tools-map.md` — 298 工具的分类地图（旧口径，实际注册 295）；其中 editor/lsp 部分对应本会话未注入的组
+- `.dsh/skills/godot-debug/tool-names.md` — 可激活工具签名 + 「意图 → 工具」表 + 295 个全量名字（标注了哪些不在 `BREAKPOINT_TOOLSETS` 内）+ 不存在的名字清单
+- `rules/godot-tools-map.md` — 295 工具的分类地图（旧口径 298）+ 按会话激活配方；其中 editor/lsp 部分属于不在 `BREAKPOINT_TOOLSETS` 内、激活也拿不到的组
 - `rules/mcp-debugging.md` 完整调试流程、断点位置表、截图方案对比
 - `AGENTS.md`「场景（改哪跑哪）」与「验证」硬约束
 - `addons/breakpoint_mcp/CLAUDE.md` 桥接插件本身（端口 / 版本 / 配置 / `BREAKPOINT_TOOLSETS`）

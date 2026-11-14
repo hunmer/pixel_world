@@ -1,12 +1,12 @@
-# godot MCP 工具名总表（295 个，其中 49 个常驻）
+# godot MCP 工具名总表（295 个，其中 49 个可激活）
 
-> `breakpoint-mcp` 源码里的全集名单。**49 个常驻工具表、直接可调**；其余 246 个**没有注入**，调了只会 `tool not found`。
+> `breakpoint-mcp` 源码里的全集名单。连接 `json-godot` 的注入模式是**按会话启用**：**49 个属于 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 的工具必须先在会话里激活才能调**（`mcp_connector_session_tools` preview-activate → activate，见 SKILL.md §1），**不是常驻**；其余 246 个不在 `BREAKPOINT_TOOLSETS` 内，**激活也拿不到**，调了只会 `tool not found`。看不到 `mcp__godot__*` 时先查本会话激活数，别断言「没有 godot MCP」。
 > 用途：**替代 `mcp_connector_session_tools({action:"search"})`**。search 只做单关键词子串匹配，**多词查询必然返回 0**（`"editor_ping runtime_get_log"` → 空），往往搜三四轮才定位一个名字。要什么就看本文件。
 
 - publicName = `mcp__godot__` + 下表名字（**双下划线**）。
-- 分组标题已标：**✅ = 已注入，能直接调**（`runtime_*` 30 + `dbg_*` 15 + 知识检索 4）；**❌ = 未注入**（`editor_*` 149、lsp/cslsp、cli、vcs、tabletop、assetgen、netcode、backend、csdap、录制等），看到 ❌ 组别再试名字——那条能力这一轮就是没有，改用 ✅ 组的等价手段。
+- 分组标题已标：**✅ = 在 `BREAKPOINT_TOOLSETS` 内、激活后可用**（`runtime_*` 30 + `dbg_*` 15 + 知识检索 4）；**❌ = 不在该集合内**（`editor_*` 149、lsp/cslsp、cli、vcs、tabletop、assetgen、netcode、backend、csdap、录制等），看到 ❌ 组别再试名字——那条能力这一轮就是没有，改用 ✅ 组的等价手段。
 - 带 ⚠ 的是破坏性操作：调用时**必须在参数里加 `"confirm": true`**，否则触发客户端确认弹窗（DSH 上通常直接被拒，返回 "re-run with confirm: true"）。不带 ⚠ 的都是只读，直接调。
-- 想让更多工具常驻：改连接环境变量 `BREAKPOINT_TOOLSETS`（合法组：`cli`/`editor`/`lsp`/`cslsp`/`dap`/`csdap`/`runtime`/`processes`/`knowledge`/`hearing`/`vcs`/`assetgen`/`netcode`/`backend`/`tabletop`/`resources`），代价是每轮常驻 schema 变大。当前值 `runtime,dap,knowledge`。
+- 想扩大可激活范围：改连接环境变量 `BREAKPOINT_TOOLSETS`（合法组：`cli`/`editor`/`lsp`/`cslsp`/`dap`/`csdap`/`runtime`/`processes`/`knowledge`/`hearing`/`vcs`/`assetgen`/`netcode`/`backend`/`tabletop`/`resources`），代价是激活后的 schema 与每轮上下文变大。当前值 `runtime,dap,knowledge`。
 
 ## 意图 → 工具（先查这张表，别搜）
 
@@ -36,7 +36,7 @@
 | 停下后看栈 / 变量 / 单步 | `dbg_stack_trace`、`dbg_scopes`、`dbg_variables`、`dbg_step`、`dbg_continue` | — |
 | 找符号 / 定义 / 引用（比 grep 准） | `find_symbol`、`find_usages`、`project_search` | 全项目索引，不需要编辑器/LSP |
 | 多实例确定性对拍 | `runtime_spawn_peers` → `runtime_peers_digest` | 见对应 description |
-| 编辑器里改节点 / 场景 / 资源 | ❌ 未注入 | 让用户在编辑器里做，或改 `.tscn`/`.tres` 文本后重跑 |
+| 编辑器里改节点 / 场景 / 资源 | ❌ 不在可激活组 | 让用户在编辑器里做，或改 `.tscn`/`.tres` 文本后重跑 |
 
 ## 这些名字**不存在**，别浪费时间搜
 

@@ -2,7 +2,7 @@
 
 > 本规则是 `AGENTS.md`「关键约束」的展开。MCP 命名空间、scene 必传、CLI 不可用等硬约束见 AGENTS.md；本文讲**完整操作流程**。
 
-> **2026-11 更新：godot 连接已改为「按会话启用」**。298 个工具默认不注入上下文，必须先 `mcp_connector_session_tools` 激活本次要用的精确工具（connectionKey `json-godot`），再按本文调用；未激活直接调用会 tool not found。完整分类与激活配方见 `@rules/godot-tools-map.md`。下文为可读性省略 `mcp__godot__` 前缀，实际调用一律带全名。
+> **2026-11 更新：godot 连接是「按会话启用」**。工具**默认不在工具表里**（2026-11-14 实测 `session_tools status` = 已激活 0 / 会话层隐藏 285），必须先 `mcp_connector_session_tools` 激活本次要用的精确工具（connectionKey `json-godot`，preview → 用户确认 → activate `confirmed:true`），再按本文调用；未激活直接调用会 tool not found。**这 ≠ 没装 godot MCP**，别改用 bash 跑 godot。全集 295，只有 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 的 49 个能激活。完整分类与激活配方见 `@rules/godot-tools-map.md`。下文为可读性省略 `mcp__godot__` 前缀，实际调用一律带全名。
 
 ## Godot MCP 工具集（Breakpoint MCP）
 
@@ -10,21 +10,23 @@
 
 | 通道 | 依赖 | 典型工具 |
 | --- | --- | --- |
-| **编辑器桥接**（127.0.0.1:9080） | Godot 编辑器打开 + 启用 "Breakpoint MCP" 插件 | `editor_*`、`scene_*`、`node_*`、`runtime_*`、`dbg_*`（launch 模式）、`gd_*`、`vcs_*` |
-| **CLI 直调** | `GODOT_BIN` 环境变量指向 Godot 可执行文件 | `godot_run_project`、`godot_export`、`godot_import`、`godot_version` |
+| **编辑器桥接**（127.0.0.1:9080） | Godot 编辑器打开 + 启用 "Breakpoint MCP" 插件 | 可激活的只有 `runtime_*`、`dbg_*`、`find_symbol` 等四件；`editor_*` / `scene_*` / `node_*` / `gd_*` / `vcs_*` 属 ❌ 组，激活也拿不到 |
+| **CLI 直调** | `GODOT_BIN` 环境变量指向 Godot 可执行文件 | ❌ `godot_run_project`、`godot_export`、`godot_import`、`godot_version`（均不可激活） |
 
-> 当前环境 **CLI 通道未配置**（`godot_version` 返回空），**所有调试都走编辑器桥接通道**——这也是功能更全的通道（断点、运行时变量、日志、截图都有）。
+> 当前环境 **CLI 通道未配置**（`GODOT_BIN` 未设置），且以上 `godot_*` 工具**本身也不在激活组内**（激活也调不到）；**所有调试都走编辑器桥接通道的 `dbg_launch` + `runtime_*`**——这也是功能更全的通道（断点、运行时变量、日志、截图都有）。
 
-### 前置检查（每次会话开头跑一次）
+### 前置检查（激活之后，每次会话开头跑一次）
 
-先按 @rules/godot-tools-map.md §0 激活 `editor_ping` + `editor_get_state`，再调用：
+先按 @rules/godot-tools-map.md §0 激活（例：`find_symbol` + `runtime_get_monitors` + `dbg_launch` + `runtime_get_log`），再调用：
 
 ```text
-mcp__godot__editor_ping()         # 应返回 pong:true, addon_version, godot 版本
-mcp__godot__editor_get_state()    # 看当前编辑的场景 / 选中的节点
+mcp__godot__find_symbol({"name": "_battle_active", "max_results": 1})   # 索引通道，不依赖编辑器/游戏
+mcp__godot__runtime_get_monitors()                                       # 运行通道，需要游戏已在跑
 ```
 
-如果 `editor_ping` 报 `Cannot reach the Godot editor bridge at 127.0.0.1:9080`：编辑器没开，或 `项目设置 → 插件 → Breakpoint MCP` 没启用。
+> ⚠️ 不要再用 `editor_ping` 做自检：它**不在** `runtime,dap,knowledge` 三组内，激活也拿不到（`tool not found` 只会让你误判「没装/坏了」）。编辑器侧状态（9080）只能由用户确认，或看 `mcp_connector_status` 里 `json-godot` 的连通诊断。
+
+如果 `dbg_launch` 报 `Cannot reach the Godot editor bridge at 127.0.0.1:9080`：编辑器没开，或 `项目设置 → 插件 → Breakpoint MCP` 没启用。
 
 ## 调试流程
 
@@ -72,7 +74,7 @@ mcp__godot__runtime_get_log({ "since_seq": <上次的 latest_seq> })
 
    > 还可以读**性能监控**（FPS / Draw Call / 节点数）：`mcp__godot__runtime_get_monitors()`
 
-4. `dbg_launch` 报 `No active Godot process` 或桥接连不上：先 `editor_ping` 确认编辑器还在、插件还启用，再重新 launch。
+4. `dbg_launch` 报 `No active Godot process` 或桥接连不上：先 `mcp_connector_status` 看 `json-godot` 是否仍 connected（断了就 reconnect），仍不通则让用户确认编辑器开着且 `项目设置 → 插件 → Breakpoint MCP` 已启用，再重新 launch。**不要用 `editor_ping` 确认**——它不可激活，`tool not found` 会误导。
 
 5. 结束调试会话：`mcp__godot__dbg_restart`（重启用同一参数）或直接关游戏窗口（会话自动结束）。
 
@@ -184,7 +186,7 @@ mcp__godot__screenshot_editor({ "viewport": "2d" })
 - MCP 工具名是 `mcp__godot__*`（**双下划线**）；点号写法会报 "tool not found"。
 - 工具**按会话激活**：未激活时调用会 tool not found，先走 `mcp_connector_session_tools`；激活在**下一轮推理**生效。
 - **CLI 通道不可用**（`GODOT_BIN` 未配置），`godot_run_project` / `godot_version` 返回空。所有调试走编辑器桥接的 `dbg_launch` / `runtime_*` / `dbg_*`。
-- `editor_ping` 报 9080 不通：编辑器没开，或 `项目设置 → 插件 → Breakpoint MCP` 没启用。
+- 9080 端口不通（`dbg_launch` 报 `Cannot reach the Godot editor bridge at 127.0.0.1:9080`）：编辑器没开，或 `项目设置 → 插件 → Breakpoint MCP` 没启用。（`editor_ping` 不属于可激活组，拿它当探针只会得到 tool not found。）
 - 多次 `dbg_launch` 后可能留下多个 `pixel_world` 窗口；截图前确认要截的窗口。
 - 系统级窗口截图在 Godot 窗口上可能得到空白或极小 PNG；优先用 `runtime_screenshot`。
 - `dbg_set_variable` 会改活游戏状态，破坏性操作，改前跟用户确认。
@@ -217,7 +219,7 @@ mcp__godot__screenshot_editor({ "viewport": "2d" })
 
 ## 最短验收
 
-1. `editor_ping` 返回 `pong: true`（桥接连通，插件启用）。
+1. 激活链路通：`find_symbol` 能返回结果（索引通道），说明 `mcp_connector_session_tools` 激活生效、工具已在工具表里。
 2. `dbg_launch({ "scene": "res://main.tscn" })` 返回 `state: "running"`；调试战斗则再注入 P 键进入 B1。
 3. `runtime_get_log({ "levels": ["error", "warning"] })` 返回空列表。
 4. **用代码断言验证改动效果**（见上表），而非截图；改的是渲染/布局且用户已同意时才截图。
