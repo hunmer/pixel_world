@@ -24,7 +24,7 @@
 
 | # | 元素 | 状态 | 证据与说明 | 规模 | roadmap |
 | --- | --- | --- | --- | --- | --- |
-| A1 | **多样化胜利条件** | ❌ | `turn_manager.gd:84 check_victory()` **仅歼灭制**（敌全灭=win/我全灭=lose）。缺：防守 N 回合、据点夺取(seize)、护送/撤离(escape)、指定单位击破、回合限制失败。自动化 CLI 有步数僵持保护但那是防挂死，不是玩法 | M（框架）/S（每种条件） | 未列，建议补 |
+| A1 | **多样化胜利条件** | 🟡 | **部分完成**（2ec8acb）：chapter JSON 可选 `victory` 字段（`{"type":"rout"}` 默认 / `{"type":"defend_turns","turns":N}` / `{"type":"seize","cell":[x,y]}`）；`turn_manager.gd` `check_victory(enemies, ctx)` 注入式判定 + 歼灭兜底；battle.gd/turn_director 回合结束接线；CLI/runner 同步；契约 `tests/victory_conditions_contract.gd`（40 断言）；演示战场 `data/battlefields/last_stand.json`。仍缺：护送/撤离(escape)、指定单位击破、回合限制失败、E1 目标型 AI 配套 | M（框架）/S（每种条件） | 框架已落地（rout/defend_turns/seize） |
 | A2 | **战役/章节结构** | 🟡 | 4 战场平铺（O 键选单），无章节链/解锁/胜负流转；story 目标态 15 章。演出层已有 `play_chapter_result` 接口等着接 | L | ✅ P2-10 |
 | A3 | **增援系统** | ❌ | `reinforce` 零命中。无按回合/事件刷援军——战旗关卡节奏的灵魂机制 | M | 未列，建议补 |
 | A4 | **地图事件脚本** | ❌ | 无"第 N 回合发生 X"的脚本层（增援/对话插播/地形变化/失败条件追加）。chapter JSON 只有静态单位表 | M–L | 未列（A1/A3 的载体） |
