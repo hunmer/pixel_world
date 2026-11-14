@@ -7,8 +7,9 @@
 ##   - 纯静态函数，无副作用
 ##   - 战场坐标 (bx,by) ↔ 世界坐标 (origin.x + bx, origin.y + by)
 ##   - chapter 不含 blockTitles；B2 地形渲染走 BattlefieldRenderer（等距方块柱）
-##   - cell_context_to_terrain 映射优先级：water > mountain > plain（forest/fort/village/wall
-##     世界层无对应数据源，先退化到 plain/mountain，留给 B1 阶段扩展）
+##   - cell_context_to_terrain 映射（确定性、无 RNG）覆盖 11 种战棋地形中的 7 种：
+##     water/mountain/snow/sand/rocky/grass/plain（village/fort/wall/forest 世界层
+##     无对应数据源，不映射，详见函数头注释与 docs/roadmap.md P1-4）
 ##   - 战场中心自动找陆地（玩家可能站在水面，搜索附近最近的非水 cell）
 ##   - 玩家/敌兵只放在 walkable 且 move_cost 可达的格子上（避免卡在水里）
 ##
@@ -25,22 +26,42 @@ const _WATER_MAX := 5
 const _ROCK_LEVEL := 12
 
 
-## 单个 CellContext → 战棋 terrain type。
-## 优先级：water（含岸）→ mountain（高山/裸岩）→ plain（默认）。
+## 单个 CellContext → 战棋 terrain type（确定性纯函数，无 RNG）。
+## 优先级（先命中先返回）：
+##   1. water     — is_water / height <= water_max（含岸线水面）
+##   2. mountain  — landform mountain 或 height >= rock_level（高山/裸岩峰）
+##   3. snow      — biome snow（含 desert_transition 冻结例外外的雪原）/ surface snow
+##   4. sand      — biome desert/desert_transition / surface sand（沙漠与岸滩）
+##   5. rocky     — surface rock/mossy_rock/rock_grass（岩地）
+##   6. grass     — surface grass/sparse_grass（草地，含沙漠过渡带稀草）
+##   7. plain     — 兜底（soil/moist_soil/parched_soil 等土壤平地）
+## 未映射（世界层无对应数据源，见 docs/roadmap.md P1-4）：
+##   forest / village / fort / wall —— CellContext 不携带群落/建筑信息。
 static func cell_context_to_terrain(ctx) -> StringName:
 	if ctx == null:
 		return &"plain"
 	# 1) 水：is_water 标志或高度低于水面
 	if bool(ctx.is_water) or int(ctx.height) <= _WATER_MAX:
 		return &"water"
-	# 2) 山：landform_id 为 mountain，或高度超过 rock_level，或 surface 是裸岩
 	var landform: StringName = ctx.landform_id
 	var surface: StringName = ctx.surface_id
-	if landform == &"mountain" \
-			or int(ctx.height) >= _ROCK_LEVEL \
-			or surface == &"rock" or surface == &"rock_with_moss" or surface == &"snow":
+	var biome: StringName = ctx.biome_id
+	# 2) 山：landform 为 mountain，或高度超过 rock_level（雪线以上仍算山）
+	if landform == &"mountain" or int(ctx.height) >= _ROCK_LEVEL:
 		return &"mountain"
-	# 3) 兜底：平地（含草地/沙地/土壤/岸线）
+	# 3) 雪原：雪 biome 或雪面
+	if biome == &"snow" or surface == &"snow":
+		return &"snow"
+	# 4) 沙地：沙漠 biome（含过渡带）或沙面
+	if biome == &"desert" or biome == &"desert_transition" or surface == &"sand":
+		return &"sand"
+	# 5) 岩地：裸岩/苔岩/岩草面（高度未过 rock_level 的碎石坡）
+	if surface == &"rock" or surface == &"mossy_rock" or surface == &"rock_grass":
+		return &"rocky"
+	# 6) 草地：草面/稀草面
+	if surface == &"grass" or surface == &"sparse_grass":
+		return &"grass"
+	# 7) 兜底：平地（土壤/湿土/干裂土/岸线等）
 	return &"plain"
 
 

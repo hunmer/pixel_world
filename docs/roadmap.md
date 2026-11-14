@@ -59,12 +59,19 @@ graph LR
 - **为什么**：项目从 Windows 迁到 macOS 后**没有任何一份完整通过记录**；后面所有 P1–P3 改动都需要"改之前是绿的"这一前提。
 - **前置**：P0-1（否则永远 1 红）。**验收**：testing-and-quality.md 有 2026-11-xx 的全量结果表。**规模**：中（一次跑批 + 修环境问题）。
 
-### 4. 世界就地战场地形覆盖 3→11 ⭐⭐（玩法收益最大）
+### 4. 世界就地战场地形覆盖 3→11 ⭐⭐（玩法收益最大）✅ 2026-11-15（`feat(world-battle): expand cell_context_to_terrain mapping beyond 3 terrains`，见 git log hash）
 
-- **做什么**：`scripts/core/world_to_chapter.gd` 的 `cell_context_to_terrain()` 目前**只产出 3 种地形**：`water / mountain / plain`（已核实源码：is_water→water，landform mountain/裸岩/雪面→mountain，其余全 plain）。其余 8 种（`grass, sand, snow, rocky, forest, village, fort, wall`）只存在于 JSON 战场。应按 biome/surface/landform 建映射：snow biome→snow、desert→sand、grass surface→grass、树木密格→forest 等。
-- **为什么**：世界就地战斗（B1/B2-P）地形单调，防御/回避/移动成本维度全浪费；这是战棋与世界融合度的最大短板。
-- **注意**：映射必须是**确定性纯函数**（CellContext→terrain），不得引入 RNG；改动会影响 `world:` 存档恢复的地图一致性——需要评估是否触发 world version 迁移或存档内容签名已兜底（`GameSession` 有 initial 内容签名，大概率自动识别"内容变更"提示）。
-- **前置**：P1-3（基线绿了才敢动）+ 设计映射表。**验收**：新契约测试覆盖每种新映射 + 手动进 B1 看地形多样性 + 存档恢复路径不崩。**规模**：中（映射设计 + 契约 + 验证，1–2 天）。
+- **已完成**：`cell_context_to_terrain()` 从 3 种扩到 **7 种**，映射（确定性纯函数，无 RNG，优先级自上而下）：
+  1. `water` ← `is_water` 或 `height <= water_max(5)`
+  2. `mountain` ← `landform == mountain` 或 `height >= rock_level(12)`
+  3. `snow` ← `biome == snow` 或 `surface == snow`
+  4. `sand` ← `biome == desert/desert_transition` 或 `surface == sand`
+  5. `rocky` ← `surface == rock/mossy_rock/rock_grass`（顺带修掉旧代码引用不存在的 `rock_with_moss` 死分支）
+  6. `grass` ← `surface == grass/sparse_grass`
+  7. `plain` ← 兜底（soil/moist_soil/parched_soil 等）
+- **不映射**（CellContext 无对应世界数据源）：`forest`（群落/flora 不在 CellContext 里）、`village/fort/wall`（世界层无建筑概念）。
+- **验证**：新契约 `tests/world_terrain_mapping_contract.gd`（22 断言全过，seed=42 大范围采样出现 6 种地形）；防回归跑过 `terrain_generation`（SHA-256 快照）/ `terrain_sampler` / `terrain_material_registry` / `streaming_input_latency` / `biome_modules` / `cell_state_integration` / `dynamic_landform` 及消费方 `world_camera_navigation` / `battlefields` / `battle_3d`，全部通过——世界生成本身零漂移。
+- 存档影响：该函数只影响战斗转换（chapter 合成），不触碰内容 ID/`stream_key`/`placement_seed`，无需 world version 迁移。
 
 ### 5. B2 世界地形路径深度验证
 
