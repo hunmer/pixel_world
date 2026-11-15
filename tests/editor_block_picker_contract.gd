@@ -62,9 +62,16 @@ func _run() -> void:
 	_expect(dialog.visible and dialog.block_list.item_count() == 3
 		and dialog.block_list.selected_id == "asset:shared",
 		"dialog open 弹出并复用列表/回填选中")
+	var picker_box: VBoxContainer = dialog.get_node_or_null("PickerShade/PickerBox") as VBoxContainer
+	var picker_scroll: ScrollContainer = dialog.get_node_or_null(
+		"PickerShade/PickerBox/PickerScroll") as ScrollContainer
 	_expect(dialog.exclusive and dialog.size == Vector2i(640, 480)
-		and dialog.get_node_or_null("PickerShade/PickerCenter/PickerPanel") != null,
-		"dialog 居中独占遮罩结构完整")
+		and picker_box != null and picker_scroll != null
+		and dialog.get_node_or_null("PickerShade/PickerCenter") == null
+		and dialog.get_node_or_null("PickerShade/PickerPanel") == null
+		and picker_box.get_global_rect().is_equal_approx(dialog._shade.get_global_rect())
+		and (picker_scroll.size_flags_vertical & Control.SIZE_EXPAND_FILL) != 0,
+		"dialog 无内嵌居中窗口，标题/画廊/取消按钮直接填满")
 	_expect(dialog.block_list.gallery and dialog.block_list.columns == 4
 		and dialog.block_list.get_button(0).custom_minimum_size == Vector2(88, 88)
 		and dialog.block_list.get_button(0).text.is_empty()

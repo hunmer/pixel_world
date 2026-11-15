@@ -1,4 +1,4 @@
-## editor_block_picker_dialog.gd — 居中遮罩方块选择弹窗，确认回填，取消零信号。
+## editor_block_picker_dialog.gd — 内容直接填满的方块选择弹窗，确认回填，取消零信号。
 class_name EditorBlockPickerDialog
 extends Window
 
@@ -57,24 +57,13 @@ func _build() -> void:
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			cancel())
 
-	var center := CenterContainer.new()
-	center.name = "PickerCenter"
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_shade.add_child(center)
-	var panel := PanelContainer.new()
-	panel.name = "PickerPanel"
-	panel.custom_minimum_size = Vector2(480, 360)
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	center.add_child(panel)
-	var margin := MarginContainer.new()
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 12)
-	panel.add_child(margin)
+	# 弹窗内部不再嵌一套居中窗口：标题、画廊与取消按钮直接铺满整个 Window。
 	var box := VBoxContainer.new()
 	box.name = "PickerBox"
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 8)
-	margin.add_child(box)
+	_shade.add_child(box)
 	var title_label := Label.new()
 	title_label.name = "PickerTitle"
 	title_label.text = "选择方块"
