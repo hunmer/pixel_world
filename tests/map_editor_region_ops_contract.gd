@@ -999,12 +999,12 @@ func _run() -> void:
 		"R 重复吸取按 (kind,id) 去重并把已有项移到顶部")
 	var r_order_before: Array[Dictionary] = editor._recent_picks_info()
 	(r_list.get_child(2) as Button).pressed.emit()  # recent_asset → 前景
-	editor._on_recent_pick_pressed(1, true)  # Alt 的确定性入口：grass → 背景
+	editor._on_recent_pick_pressed(1, true)  # Shift 的确定性入口：grass → 背景
 	_expect(editor._block_fg == {"kind": "asset", "id": "recent_asset", "z": 2}
 		and editor._block_bg == {"kind": "terrain", "id": "grass", "z": 3}
 		and editor._recent_picks_info() == r_order_before
 		and editor.model == r_model0 and editor._history.size() == r_h0,
-		"R 点条目写前景、Alt+点击写背景，取用不重排且零模型/历史变化")
+		"R 点条目写前景、Shift+点击写背景，取用不重排且零模型/历史变化")
 	var r_mutable_snapshot: Array[Dictionary] = editor._recent_picks_info()
 	r_mutable_snapshot[0]["id"] = "external_mutation"
 	_expect(String(editor._recent_picks_info()[0].id) == "water",
@@ -1019,18 +1019,103 @@ func _run() -> void:
 		"R 再吸 10 种不同方块后封顶 8 条，丢弃最旧 cap00/cap01，仍零历史")
 	_expect(r_list.get_child_count() == 8
 		and String((r_list.get_child(0) as Button).tooltip_text).contains("recent_cap_09")
-		and (r_list.get_child(0) as Button).custom_minimum_size.y == 34,
-		"R RecentPickList 同步为 8 个 34px 窄条按钮，首项 tooltip 保留全名")
+		and (r_list.get_child(0) as Button).custom_minimum_size.y == 40
+		and (r_list.get_child(0) as Button).get_node_or_null("RecentPickThumb") == null
+		and (r_list.get_child(0) as Button).text == "recent_c…",
+		"R RecentPickList 同步 8 个 40px 按钮；贴图缺失回退短标签，tooltip 保留全名")
+
+	# ---- S. Alt 临时吸管 / 普通 Alt 背景 / Shift 最近吸取 / 真实贴图缩略图 ----
+	editor.apply_generate("alt_pick_thumbnails", 6, 4)
+	await process_frame
+	editor._selection_range.clear()
+	editor._region_pos2_set = false
+	editor._recent_picks.clear()
+	editor._refresh_recent_picks()
+	editor._tool_buttons[editor.Tool.PAINT].button_pressed = true
+	editor._set_glyph(Vector2i(0, 0), "w")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(0, 0), 1)
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(1, 0), "thumb_asset")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(1, 0), 2)
+	editor._set_glyph(Vector2i(2, 0), "g")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 0), 3)
+	editor._push_undo("布景S")
+	editor._seal_pending()
+	var s_model0: Dictionary = editor.model.duplicate(true)
+	var s_h0: int = editor._history.size()
+	var s_c0: int = editor._history_cursor
+	# 文本框有焦点时 Alt 不劫持输入，也不改变工具。
+	var s_focus_edit := LineEdit.new()
+	editor.add_child(s_focus_edit)
+	s_focus_edit.grab_focus()
+	_send_key(editor, KEY_ALT, false, false, true)
+	_expect(not editor._alt_pick_active and not editor._alt_key_down
+		and editor.current_tool == editor.Tool.PAINT,
+		"S 文本框焦点下 Alt 不触发临时吸管")
+	_send_key(editor, KEY_ALT, false, false, false)
+	s_focus_edit.release_focus()
+	s_focus_edit.queue_free()
+	# 任意工具按住 Alt：立即进入 PICK，并记住原工具。
+	_send_key(editor, KEY_ALT, false, false, true)
+	_expect(editor._alt_pick_active and editor._alt_pick_return_tool == editor.Tool.PAINT
+		and editor.current_tool == editor.Tool.PICK
+		and editor._tool_buttons[editor.Tool.PICK].button_pressed,
+		"S 画笔下按住 Alt 立即切到吸管并记录原工具")
+	editor._on_cell_pressed(Vector2i(0, 0))
+	var s_terrain_button := r_list.get_child(0) as Button
+	var s_terrain_thumb := s_terrain_button.get_node_or_null("RecentPickThumb") as TextureRect
+	_expect(editor._block_fg == {"kind": "terrain", "id": "water", "z": 1}
+		and s_terrain_thumb != null and s_terrain_thumb.texture != null
+		and s_terrain_button.text.is_empty()
+		and s_terrain_thumb.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		and editor.model == s_model0 and editor._history.size() == s_h0
+		and editor._history_cursor == s_c0,
+		"S 临时吸管左键取前景；最近吸取显示真实地形 TextureRect，零模型/历史变化")
+	# 用工程内真实 PNG 构造适配器视觉缓存，覆盖素材来源而不写用户素材库。
+	var s_asset_texture := load("res://meowa_tiles/trees/apple_tree.png") as Texture2D
+	editor._asset_adapter._cache["v:thumb_asset"] = {"texture": s_asset_texture, "missing": false}
+	editor._on_cell_pressed(Vector2i(1, 0), false, true)
+	var s_asset_button := r_list.get_child(0) as Button
+	var s_asset_thumb := s_asset_button.get_node_or_null("RecentPickThumb") as TextureRect
+	_expect(editor._block_bg == {"kind": "asset", "id": "thumb_asset", "z": 2}
+		and editor._block_fg == {"kind": "terrain", "id": "water", "z": 1}
+		and s_asset_texture != null and s_asset_thumb != null and s_asset_thumb.texture != null
+		and s_asset_button.text.is_empty()
+		and editor.model == s_model0 and editor._history.size() == s_h0
+		and editor._history_cursor == s_c0,
+		"S 临时吸管 Shift+左键取背景；素材也显示真实 TextureRect，零历史")
+	_send_key(editor, KEY_ALT, false, false, false)
+	_expect(not editor._alt_pick_active and not editor._alt_key_down
+		and editor._alt_pick_return_tool == -1 and editor.current_tool == editor.Tool.PAINT
+		and editor._tool_buttons[editor.Tool.PAINT].button_pressed
+		and editor.model == s_model0 and editor._history_cursor == s_c0,
+		"S 松开 Alt 精确恢复原画笔工具")
+	_send_key(editor, KEY_ALT, true, false, true)
+	_expect(not editor._alt_pick_active and not editor._alt_key_down
+		and editor.current_tool == editor.Tool.PAINT,
+		"S Ctrl/AltGr 组合不劫持为临时吸管")
+	_send_key(editor, KEY_ALT, false, false, false)
+	# 原工具本来就是吸管：Alt 只切到背景语义，不进入/退出临时态。
+	editor._tool_buttons[editor.Tool.PICK].button_pressed = true
+	_send_key(editor, KEY_ALT, false, false, true)
+	editor._on_cell_pressed(Vector2i(2, 0))
+	_expect(not editor._alt_pick_active and editor.current_tool == editor.Tool.PICK
+		and editor._block_bg == {"kind": "terrain", "id": "grass", "z": 3}
+		and editor.model == s_model0 and editor._history.size() == s_h0
+		and editor._history_cursor == s_c0,
+		"S 普通吸管 Alt+点击仍写背景且不改模型/历史")
+	_send_key(editor, KEY_ALT, false, false, false)
+	_expect(not editor._alt_key_down and not editor._alt_pick_active,
+		"S 普通吸管松开 Alt 后清理按键状态")
 
 	_finish(editor)
 
 
 ## 直接向 editor._unhandled_input 发合成按键（ctrl/shift 模拟组合键）
-func _send_key(editor: Node, key: Key, ctrl := false, shift := false) -> void:
+func _send_key(editor: Node, key: Key, ctrl := false, shift := false, pressed := true) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = key
 	ev.physical_keycode = key
-	ev.pressed = true
+	ev.pressed = pressed
 	ev.ctrl_pressed = ctrl
 	ev.shift_pressed = shift
 	editor._unhandled_input(ev)

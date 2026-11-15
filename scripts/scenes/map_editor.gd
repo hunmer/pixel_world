@@ -45,6 +45,7 @@ const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.g
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const EditorCanvasScript = preload("res://scripts/editor/editor_canvas.gd")
 const TilePreviewScript = preload("res://scripts/editor/tile_preview.gd")
+const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const ProfessionDataScript = preload("res://scripts/core/professions.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const HintBarScript = preload("res://scripts/hint_bar.gd")
@@ -101,6 +102,10 @@ var _bg_swatch: Button = null
 var _recent_picks: Array[Dictionary] = []
 var _recent_picks_bar: PanelContainer = null
 var _recent_pick_list: VBoxContainer = null
+## Alt 按住时的临时吸管：仅由 InputEventKey 的 KEY_ALT 按下/松开驱动，不轮询。
+var _alt_key_down := false
+var _alt_pick_active := false
+var _alt_pick_return_tool := -1
 ## 当前选中的具体植物贴图（非空=地形 Tab 画笔改为放置植物，写模型 props 层）
 var current_prop := ""
 ## 植物素材枚举 { 组名: [res://路径] }（_ready 里扫描，_build_terrain_tab 用）
@@ -221,7 +226,48 @@ func _init_asset_service() -> void:
 	_asset_service.asset_ready.connect(_on_block_asset_ready)
 
 
+func _text_input_has_focus() -> bool:
+	if get_viewport() == null:
+		return false
+	var focus := get_viewport().gui_get_focus_owner()
+	return focus is LineEdit or focus is TextEdit
+
+
+func _begin_alt_pick() -> void:
+	if _alt_pick_active or current_tool == Tool.PICK or not _tool_buttons.has(Tool.PICK):
+		return
+	_alt_pick_return_tool = current_tool
+	_alt_pick_active = true
+	_tool_buttons[Tool.PICK].button_pressed = true
+	print("MapEditor: Alt 临时吸管 -> 松开恢复工具 %d" % _alt_pick_return_tool)
+
+
+func _end_alt_pick() -> void:
+	if not _alt_pick_active:
+		return
+	var return_tool := _alt_pick_return_tool
+	_alt_pick_active = false
+	_alt_pick_return_tool = -1
+	if return_tool >= 0 and _tool_buttons.has(return_tool):
+		_tool_buttons[return_tool].button_pressed = true
+		print("MapEditor: Alt 松开 -> 恢复工具 %d" % return_tool)
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and not event.echo:
+		var alt_key := event as InputEventKey
+		if alt_key.keycode == KEY_ALT or alt_key.physical_keycode == KEY_ALT:
+			if alt_key.pressed:
+				if alt_key.ctrl_pressed or alt_key.meta_pressed or _text_input_has_focus():
+					return
+				_alt_key_down = true
+				_begin_alt_pick()
+			else:
+				_alt_key_down = false
+				_end_alt_pick()
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var key := event as InputEventKey
 		var ctrl := key.ctrl_pressed or key.meta_pressed
@@ -601,7 +647,7 @@ func _build_tool_bar() -> Control:
 	var pick_btn := _tool_buttons[Tool.PICK] as Button
 	pick_btn.name = "PickToolBtn"
 	pick_btn.custom_minimum_size = Vector2(34, 34)
-	pick_btn.tooltip_text = "吸管：点击吸取前景，Alt+点击吸取背景"
+	pick_btn.tooltip_text = "吸管：点击吸取前景，Alt+点击吸取背景；其它工具按住 Alt 临时吸取，Shift+点击取背景"
 	if pick_btn.icon == null:
 		pick_btn.text = "吸"
 	return bar
@@ -830,6 +876,8 @@ func _build_hint_bar() -> Control:
 	bar.add_hint("CTRL+Z / Y", "撤销 / 重做")
 	bar.add_hint("CTRL+C / X / V", "复制 / 剪切 / 粘贴区域")
 	bar.add_hint("SHIFT+X", "交换前景 / 背景方块")
+	bar.add_hint("ALT（按住）", "临时吸管；SHIFT+左键取背景")
+	bar.add_hint("最近吸取", "点击取前景；SHIFT+点击取背景")
 	bar.add_hint("区域内拖动", "移动区域")
 	bar.add_hint("移动工具", "左栏第 8 钮，拖拽/方向键移动选区")
 	bar.add_hint("ESC", "返回世界")
@@ -1017,6 +1065,26 @@ func _recent_pick_short_label(block: Dictionary) -> String:
 	return id.left(8) + ("…" if id.length() > 8 else "")
 
 
+## 最近吸取使用与真实地图一致的地形顶面/素材视觉贴图；加载失败才回退短标签。
+func _recent_pick_texture(block: Dictionary) -> Texture2D:
+	var id := String(block.get("id", "plain"))
+	var previews: Array = []
+	if String(block.get("kind", "terrain")) == "terrain":
+		previews = BattlefieldRendererScript.preview_blocks(StringName(id), false, true)
+	else:
+		if _asset_adapter == null:
+			return null
+		var visual: Dictionary = _asset_adapter.resolve(id)
+		if visual.is_empty() or bool(visual.get("missing", false)):
+			return null
+		previews = [BattlefieldRendererScript.preview_visual_block(visual)]
+	for part in previews:
+		var texture := part.get("texture", null) as Texture2D
+		if texture != null:
+			return texture
+	return null
+
+
 func _refresh_recent_picks() -> void:
 	if _recent_pick_list == null:
 		return
@@ -1029,19 +1097,35 @@ func _refresh_recent_picks() -> void:
 		button.name = "RecentPick%d" % i
 		button.text = _recent_pick_short_label(block)
 		button.tooltip_text = _block_label(block)
-		button.custom_minimum_size = Vector2(0, 34)
+		button.custom_minimum_size = Vector2(0, 40)
 		button.clip_text = true
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(_on_recent_pick_pressed.bind(i))
 		_recent_pick_list.add_child(button)
+		var texture := _recent_pick_texture(block)
+		if texture != null:
+			button.text = ""
+			var thumb := TextureRect.new()
+			thumb.name = "RecentPickThumb"
+			thumb.texture = texture
+			thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			thumb.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			button.add_child(thumb)
+			thumb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			thumb.offset_left = 4.0
+			thumb.offset_top = 2.0
+			thumb.offset_right = -4.0
+			thumb.offset_bottom = -2.0
 
 
-## 点击取为前景，Alt+点击取为背景；取用本身不改变最近列表顺序。
-func _on_recent_pick_pressed(index: int, alt_pressed: bool = false) -> void:
+## 点击取为前景，Shift+点击取为背景；取用本身不改变最近列表顺序。
+func _on_recent_pick_pressed(index: int, shift_pressed: bool = false) -> void:
 	if index < 0 or index >= _recent_picks.size():
 		return
 	var block := _recent_picks[index].duplicate(true)
-	var to_background := alt_pressed or Input.is_key_pressed(KEY_ALT)
+	var to_background := shift_pressed or Input.is_key_pressed(KEY_SHIFT)
 	_set_block_slot("bg" if to_background else "fg", block)
 	_status("已取用最近吸取：%s（%s）" % [_block_label(block), "背景" if to_background else "前景"])
 	print("[editor] 最近吸取取用 index=%d slot=%s kind=%s id=%s z=%d"
@@ -1564,7 +1648,11 @@ func _active_tool() -> int:
 	return current_tool
 
 
-func _on_cell_pressed(cell: Vector2i, alt_pressed: bool = false) -> void:
+func _on_cell_pressed(cell: Vector2i, alt_pressed: bool = false, shift_pressed: bool = false) -> void:
+	# 临时吸管优先于放置/粘贴/移动：按住 Alt 时始终只吸取，绝不改模型。
+	if _alt_pick_active:
+		_pick_block(cell, shift_pressed or Input.is_key_pressed(KEY_SHIFT))
+		return
 	if _place_mode:
 		_commit_place_preset(cell)  # 放置模式：点击=以该格为左上角放置
 		return
@@ -1584,7 +1672,7 @@ func _on_cell_pressed(cell: Vector2i, alt_pressed: bool = false) -> void:
 		return
 	var tool := _active_tool()
 	if tool == Tool.PICK:
-		_pick_block(cell, alt_pressed or Input.is_key_pressed(KEY_ALT))
+		_pick_block(cell, alt_pressed or _alt_key_down)
 		return  # 吸管只改前景/背景槽，不进入文档历史。
 	if tool == Tool.REPLACE:
 		_set_replace_source_from_cell(cell)
