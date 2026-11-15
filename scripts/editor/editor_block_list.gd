@@ -7,6 +7,8 @@ signal block_activated(kind: String, id: String)
 var items: Array[Dictionary] = []
 var selected_id: String = ""
 var compact: bool = false
+## 弹窗画廊：多列、大尺寸纯缩略图；不影响方块 Tab 的 compact 外观。
+var gallery: bool = false
 var _buttons: Array[Button] = []
 
 
@@ -14,10 +16,14 @@ func _ready() -> void:
 	_rebuild()
 
 
-## 普通模式为 40px 图标文字行；compact 保留方块 Tab 的 46×96 纯图标格子。
-func configure(p_items: Array, p_selected_id: String = "", p_compact: bool = false) -> void:
+## 普通模式为 40px 图标文字行；compact 保留方块 Tab 的 46×96 纯图标格子；
+## gallery 为选择弹窗提供 4 列 88×88 大缩略图，不显示文本列表。
+func configure(
+	p_items: Array, p_selected_id: String = "", p_compact: bool = false, p_gallery: bool = false
+) -> void:
 	compact = p_compact
-	columns = 4 if compact else 1
+	gallery = p_gallery
+	columns = 4 if compact or gallery else 1
 	items.clear()
 	for raw in p_items:
 		if raw is Dictionary:
@@ -28,7 +34,7 @@ func configure(p_items: Array, p_selected_id: String = "", p_compact: bool = fal
 
 
 func set_items(p_items: Array) -> void:
-	configure(p_items, selected_id, compact)
+	configure(p_items, selected_id, compact, gallery)
 
 
 func set_selected(p_selected_id: String) -> void:
@@ -57,8 +63,8 @@ func _rebuild() -> void:
 		var btn := Button.new()
 		btn.name = "BlockButton%d" % i
 		btn.toggle_mode = true
-		btn.custom_minimum_size = Vector2(46, 96) if compact else Vector2(0, 40)
-		btn.text = "" if compact else label
+		btn.custom_minimum_size = Vector2(88, 88) if gallery else (Vector2(46, 96) if compact else Vector2(0, 40))
+		btn.text = "" if compact or gallery else label
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.tooltip_text = "%s（%s）" % [label, id]
 		btn.set_meta("block_kind", kind)
@@ -68,7 +74,8 @@ func _rebuild() -> void:
 		if texture is Texture2D:
 			btn.icon = texture
 			btn.expand_icon = true
-			btn.add_theme_constant_override("icon_max_width", 40 if compact else 32)
+			btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			btn.add_theme_constant_override("icon_max_width", 72 if gallery else (40 if compact else 32))
 		add_child(btn)
 		_buttons.append(btn)
 		btn.pressed.connect(_on_item_pressed.bind(i))

@@ -65,6 +65,12 @@ func _run() -> void:
 	_expect(dialog.exclusive and dialog.size == Vector2i(640, 480)
 		and dialog.get_node_or_null("PickerShade/PickerCenter/PickerPanel") != null,
 		"dialog 居中独占遮罩结构完整")
+	_expect(dialog.block_list.gallery and dialog.block_list.columns == 4
+		and dialog.block_list.get_button(0).custom_minimum_size == Vector2(88, 88)
+		and dialog.block_list.get_button(0).text.is_empty()
+		and dialog.block_list.get_button(0).icon is Texture2D
+		and dialog.block_list.get_button(0).get_theme_constant("icon_max_width") == 72,
+		"dialog 使用 4 列 88px 纯图片缩略图，不显示文本选择列表")
 	var esc := InputEventKey.new()
 	esc.keycode = KEY_ESCAPE
 	esc.pressed = true

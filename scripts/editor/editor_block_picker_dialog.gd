@@ -18,7 +18,8 @@ func _ready() -> void:
 
 func open(p_items: Array, selected_id: String = "") -> void:
 	_build()
-	block_list.configure(p_items, selected_id, false)
+	# 选择弹窗固定为 4 列大缩略图画廊，不回退成单行文本列表。
+	block_list.configure(p_items, selected_id, false, true)
 	popup_centered()
 	size = Vector2i(640, 480)
 	move_to_center()
@@ -86,7 +87,7 @@ func _build() -> void:
 	box.add_child(scroll)
 	block_list = EditorBlockListScript.new()
 	block_list.name = "BlockPickerList"
-	block_list.columns = 1
+	block_list.columns = 4
 	block_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(block_list)
 	block_list.block_activated.connect(_on_block_activated)
