@@ -2150,7 +2150,7 @@ func _on_region_paste_pressed() -> void:
 	print("[editor] 进入粘贴模式 %s" % RegionClipboardScript.describe(_clipboard))  # L1 埋点
 
 
-## 粘贴预览随悬停格刷新：落点矩形合法=绿框，越界=红框
+## 粘贴预览随悬停格刷新：展开真实方块幽灵；只画地图内格，整体越界标红。
 func _update_paste_preview(hover: Vector2i) -> void:
 	if _canvas == null or not _paste_mode or _clipboard.is_empty():
 		return
@@ -2158,10 +2158,37 @@ func _update_paste_preview(hover: Vector2i) -> void:
 	if hover.x < 0:
 		_canvas.clear_paste_preview()
 		return
-	var size := RegionClipboardScript.payload_size(_clipboard)
-	var lo := hover
-	var hi := hover + size - Vector2i(1, 1)
-	_canvas.set_paste_preview(lo, hi, RegionClipboardScript.bounds_error(model, lo, hi).is_empty())
+	var ghost := _ghost_payload_at(_clipboard, hover)
+	_canvas.set_block_ghost(ghost.cells, ghost.valid)
+
+
+## 将五层 payload 的 rows/block_z/tile_overrides 展开为 Canvas 幽灵数据。
+## 左上角=anchor；越界格只影响 valid，不进入 cells，也不触碰模型。
+func _ghost_payload_at(payload: Dictionary, anchor: Vector2i) -> Dictionary:
+	var size := RegionClipboardScript.payload_size(payload)
+	var valid := size.x > 0 and size.y > 0 and RegionClipboardScript.bounds_error(
+		model, anchor, anchor + size - Vector2i(1, 1)).is_empty()
+	var cells: Array[Dictionary] = []
+	var rows: Array = payload.get("rows", [])
+	var heights: Array = payload.get("block_z", [])
+	var overrides: Dictionary = payload.get("tile_overrides", {})
+	var width := int(model.get("width", 0))
+	var height := int(model.get("height", 0))
+	for dy in size.y:
+		var row := String(rows[dy])
+		for dx in size.x:
+			var cell := anchor + Vector2i(dx, dy)
+			if cell.x < 0 or cell.y < 0 or cell.x >= width or cell.y >= height:
+				continue
+			var override: Dictionary = overrides.get("%d,%d" % [dx, dy], {})
+			cells.append({
+				"x": cell.x,
+				"y": cell.y,
+				"terrain": row.substr(dx, 1),
+				"asset_id": String(override.get("asset_id", "")),
+				"z": int(heights[dy * size.x + dx]) if dy * size.x + dx < heights.size() else 0,
+			})
+	return {"cells": cells, "valid": valid}
 
 
 ## 提交粘贴：越界/非法仅 _status 报错（不改模型不入历史）；成功一步历史
@@ -2341,7 +2368,7 @@ func _preset_name_for_id(id: String) -> String:
 	return id
 
 
-## 放置预览随悬停格刷新：总开关关闭时保持无预览；合法=绿框，越界=红框
+## 放置预览随悬停格刷新：总开关关闭时保持无预览；合法=绿色半透明块，越界=红色。
 func _update_place_preview(hover: Vector2i) -> void:
 	if _canvas == null or not _place_mode:
 		return
@@ -2351,9 +2378,8 @@ func _update_place_preview(hover: Vector2i) -> void:
 	var payload: Dictionary = _preset_store.load(_place_preset_id)
 	if payload.is_empty():
 		return
-	var size := Vector2i(int(payload.w), int(payload.h))
-	var hi := hover + size - Vector2i(1, 1)
-	_canvas.set_paste_preview(hover, hi, RegionClipboardScript.bounds_error(model, hover, hi).is_empty())
+	var ghost := _ghost_payload_at(payload, hover)
+	_canvas.set_block_ghost(ghost.cells, ghost.valid)
 
 
 ## 放置提交：以点击格为左上角写五层，一步历史；越界仅报错保持模式可重试；

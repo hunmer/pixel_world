@@ -793,6 +793,87 @@ func _run() -> void:
 	editor._undo()
 	_expect(editor.model == o_paint_before, "O 前景素材画笔一次 undo 回滚")
 
+	# ---- P. 真实方块幽灵：五层展开、平移/越界、预览开关与放置撤销 ----
+	editor.apply_generate("ghost_ops", 6, 5)
+	await process_frame
+	editor._preset_store = load("res://scripts/editor/region_preset_store.gd").new(
+		"user://test_editor_presets_ghost")
+	editor._on_selection_mode_item(1)
+	editor._selection_range.begin(Vector3i(1, 1, 0))
+	editor._selection_range.update_focus(Vector3i(2, 2, 0))
+	editor._region_pos2_set = true
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(1, 1), "ghost_asset")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(1, 1), 3)
+	editor._set_glyph(Vector2i(2, 2), "w")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 1)
+	editor._push_undo("布景P")
+	editor._seal_pending()
+	editor._preset_name_edit.text = "幽灵契约"
+	editor._on_save_preset_pressed()
+	_expect(editor._preset_store.count() == 1 and editor._preset_list.item_count == 1,
+		"P 准备 2×2 预设成功")
+	var p_before: Dictionary = editor.model.duplicate(true)
+	editor._place_preset_btn.button_pressed = true
+	_expect(editor._place_mode and editor._place_preview_enabled,
+		"P 放置模式开启且实时预览默认开启")
+	editor._on_hover_changed(Vector2i(0, 0))
+	var p_cells: Array = editor._canvas._block_ghost_cells
+	_expect(editor._canvas.ghost_cell_count() == 4 and editor._canvas.has_paste_preview()
+		and editor._canvas._block_ghost_valid and editor.model == p_before,
+		"P 合法悬停生成 w×h=4 个真实幽灵块，模型不变")
+	_expect(editor._canvas._block_ghost_marks.size() == 4
+		and is_equal_approx(editor._canvas._block_ghost_marks[0].self_modulate.a, 0.45)
+		and editor._canvas._block_ghost_marks[0].self_modulate == editor._canvas.GHOST_OK_COLOR,
+		"P 幽灵层实际创建 4 个 ColumnBatch，合法态绿色半透明 alpha=0.45")
+	_expect(p_cells.size() == 4 and p_cells[0] == {
+		"x": 0, "y": 0, "terrain": "f", "asset_id": "ghost_asset", "z": 3,
+	} and p_cells[3] == {"x": 1, "y": 1, "terrain": "w", "asset_id": "", "z": 1},
+		"P rows/block_z/tile_overrides 按相对坐标正确展开；实际=%s" % str(p_cells))
+	editor._on_hover_changed(Vector2i(1, 0))
+	p_cells = editor._canvas._block_ghost_cells
+	_expect(editor._canvas.ghost_cell_count() == 4 and p_cells[0].x == 1 and p_cells[0].y == 0
+		and p_cells[3].x == 2 and p_cells[3].y == 1 and editor.model == p_before,
+		"P 幽灵格坐标随悬停整体平移且仍不改模型")
+	editor._on_hover_changed(Vector2i(5, 4))
+	_expect(not editor._canvas._block_ghost_valid and editor._canvas.ghost_cell_count() == 1
+		and editor._canvas._block_ghost_cells[0].x == 5
+		and editor._canvas._block_ghost_cells[0].y == 4 and editor.model == p_before,
+		"P 越界落点 valid=false，只画地图内的一格")
+	_expect(editor._canvas._block_ghost_marks.size() == 1
+		and editor._canvas._block_ghost_marks[0].self_modulate == editor._canvas.GHOST_BAD_COLOR,
+		"P 越界幽灵块切换为红色半透明")
+	editor._place_preview_toggle.button_pressed = false
+	_expect(editor._canvas.ghost_cell_count() == 0 and not editor._canvas.has_paste_preview()
+		and editor.model == p_before, "P 关闭实时预览立即清空幽灵层")
+	var p_place_c0: int = editor._history_cursor
+	editor._on_cell_pressed(Vector2i(0, 3))
+	editor._seal_pending()
+	_expect(editor._history_cursor == p_place_c0 + 1
+		and editor._history.size() == editor._history_cursor + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "放置预设",
+		"P 无预览点击仍放置且恰好一步「放置预设」历史")
+	editor._undo()
+	_expect(editor.model == p_before, "P 无预览放置一次 undo 原子回滚")
+	editor._place_preview_toggle.button_pressed = true
+	editor._on_hover_changed(Vector2i(0, 0))
+	_expect(editor._canvas.ghost_cell_count() == 4 and editor._canvas._block_ghost_valid
+		and editor.model == p_before, "P 重新开启预览后悬停恢复 4 个幽灵块")
+	editor._on_region_copy_pressed()
+	editor._on_region_paste_pressed()
+	editor._on_hover_changed(Vector2i(0, 0))
+	_expect(editor._paste_mode and not editor._place_mode
+		and editor._canvas.ghost_cell_count() == 4 and editor._canvas.has_paste_preview()
+		and editor._canvas._block_ghost_valid and editor.model == p_before,
+		"P 粘贴模式同样展开 4 个幽灵块并与放置模式互斥")
+	editor._cancel_paste()
+	_expect(editor._canvas.ghost_cell_count() == 0 and not editor._canvas.has_paste_preview(),
+		"P 取消粘贴清空幽灵层但保留剪贴板")
+	editor._on_delete_preset_pressed()
+	var p_dir := DirAccess.open("user://")
+	if p_dir != null and p_dir.dir_exists("test_editor_presets_ghost"):
+		p_dir.remove("test_editor_presets_ghost/presets.json")
+		p_dir.remove("test_editor_presets_ghost")
+
 	_finish(editor)
 
 
