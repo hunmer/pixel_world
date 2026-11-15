@@ -14,6 +14,8 @@
 ##       左侧工具栏移动工具（MoveToolToggle，ToolBox 第 8 钮）：无完整选区中文拒绝；开启后拖拽平移选区
 ##       （选区跟随、恰好一步历史、可回滚）；原地松开=纯点击不触发区域选择；
 ##       关闭后回到区域内拖动/两次点击语义（第三次点击重置 pos1 不回退）。
+##       方向键（上/下/左/右 = y-/y+/x-/x+）逐格平移选区：仅移动工具开启时生效，
+##       每键恰好一步历史、选区跟随；顶边越界仅报错零变化；工具关闭时零动作。
 
 extends SceneTree
 
@@ -444,6 +446,60 @@ func _run() -> void:
 	_expect(not editor._region_pos2_set
 		and editor._selection_range.min_corner() == editor._selection_range.max_corner(),
 		"J 关闭后原地松开仍走第三次点击重置 pos1（旧契约）")
+
+	# ---- K. 方向键逐格移动区域（仅移动工具开启时生效） ----
+	editor.apply_generate("region_ops_k", 8, 8)
+	await process_frame
+	# 直接构造完整选区 (2,2)-(4,4) + 一格地形锚点
+	editor._selection_range.begin(Vector3i(2, 2, 0))
+	editor._selection_range.update_focus(Vector3i(4, 4, 0))
+	editor._region_pos2_set = true
+	editor._set_glyph(Vector2i(2, 2), "g")
+	editor._seal_pending()
+	editor._push_undo("布景K")
+	editor._seal_pending()
+	var k_cursor0: int = editor._history_cursor
+	var k_model0: Dictionary = editor.model.duplicate(true)
+	# K-① 工具关闭（生成后自动收起）：方向键零动作
+	_expect(not bool(editor.region_clipboard_info()["move_tool"]),
+		"K 生成后移动工具默认关闭")
+	_send_key(editor, KEY_UP)
+	_expect(editor._history_cursor == k_cursor0 and editor.model == k_model0
+		and editor._selection_range.min_corner() == Vector3i(2, 2, 0),
+		"K 工具关闭时方向键零动作（历史/模型/选区全不变）")
+	# K-② 开启后 KEY_UP：上= y-1，内容+选区同移，恰好一步历史
+	var k_toggle := editor.find_child("MoveToolToggle", true, false) as BaseButton
+	k_toggle.button_pressed = true
+	_send_key(editor, KEY_UP)
+	editor._seal_pending()
+	_expect(editor._history_cursor == k_cursor0 + 1
+		and editor._history.size() == editor._history_cursor + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "移动区域"
+		and (editor.model.rows[1] as String).substr(2, 1) == "g"
+		and editor._selection_range.min_corner() == Vector3i(2, 1, 0),
+		"K KEY_UP=上移一格（y-1）：地形+选区同移、恰好一步「移动区域」")
+	# K-③ 左/下/右往返：净位移 0，每键各一步历史
+	_send_key(editor, KEY_LEFT)
+	_send_key(editor, KEY_DOWN)
+	_send_key(editor, KEY_RIGHT)
+	editor._seal_pending()
+	_expect(editor._history_cursor == k_cursor0 + 4
+		and (editor.model.rows[2] as String).substr(2, 1) == "g"
+		and editor._selection_range.min_corner() == Vector3i(2, 2, 0),
+		"K 左/下/右往返后地形+选区复位，累计 4 步历史")
+	# K-④ 顶边越界：再按两次 UP 到 y=0，第三次 UP 仅报错、零变化
+	_send_key(editor, KEY_UP)
+	_send_key(editor, KEY_UP)
+	editor._seal_pending()
+	_expect(editor._selection_range.min_corner() == Vector3i(2, 0, 0),
+		"K 连按两次 UP 选区到顶 y=0")
+	var k_h4: int = editor._history.size()
+	var k_model4: Dictionary = editor.model.duplicate(true)
+	_send_key(editor, KEY_UP)
+	_expect(editor._history.size() == k_h4 and editor.model == k_model4
+		and editor._selection_range.min_corner() == Vector3i(2, 0, 0),
+		"K 顶边越界：方向键仅报错（历史/模型/选区零变化）")
+	k_toggle.button_pressed = false
 
 	_finish(editor)
 

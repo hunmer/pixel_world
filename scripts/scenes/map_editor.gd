@@ -31,6 +31,7 @@
 ## 移动工具（左侧工具栏 MoveToolToggle，ToolBox 第 8 钮，独立开关）：
 ## 与 current_tool/_selection_mode 解耦，
 ## 任意工具下开启后画布拖拽=平移当前选区（选区跟随、全程不重置端点），
+## 方向键（上/下/左/右=y-/y+/x-/x+）逐格平移，每键一步历史，越界仅报错；
 ## 原地松开=纯点击；关闭后回到区域内拖动/两次点击语义。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
 ## 按钮一律由 ui/components 像素组件创建（UIFactory / PixelButton 预加载），
@@ -220,6 +221,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			if get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			_on_region_paste_pressed()
+		elif _move_tool_active and (key.keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]
+				or key.physical_keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]):
+			# 移动工具开启：方向键逐格平移选区（上/下/左/右 = y-/y+/x-/x+），
+			# 每键恰好一步历史、选区跟随；无完整选区仅中文提示
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			var kc: Key = key.keycode
+			if not (kc in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]):
+				kc = key.physical_keycode
+			match kc:
+				KEY_UP: _nudge_region(Vector2i(0, -1))
+				KEY_DOWN: _nudge_region(Vector2i(0, 1))
+				KEY_LEFT: _nudge_region(Vector2i(-1, 0))
+				KEY_RIGHT: _nudge_region(Vector2i(1, 0))
 		elif key.physical_keycode == KEY_ESCAPE or key.keycode == KEY_ESCAPE:
 			# 粘贴/移动预览激活时：Esc 先取消预览，不关菜单也不返回世界
 			if _paste_mode or _move_armed:
@@ -566,7 +581,7 @@ func _build_hint_bar() -> Control:
 	bar.add_hint("CTRL+Z / Y", "撤销 / 重做")
 	bar.add_hint("CTRL+C / X / V", "复制 / 剪切 / 粘贴区域")
 	bar.add_hint("区域内拖动", "移动区域")
-	bar.add_hint("移动工具", "左栏第 8 钮，拖拽移动选区")
+	bar.add_hint("移动工具", "左栏第 8 钮，拖拽/方向键移动选区")
 	bar.add_hint("ESC", "返回世界")
 	return bar
 
@@ -1179,6 +1194,15 @@ func _commit_region_move(bounds: Array, delta: Vector2i, translate_selection: bo
 	var suffix := "（%d 个单位因地形不可站立被丢弃）" % dropped if dropped > 0 else ""
 	_status("已移动区域 → (%d,%d)%s" % [lo.x + delta.x, lo.y + delta.y, suffix])
 	print("[editor] 移动区域 min=%s delta=%s dropped_units=%d" % [str(lo), str(delta), dropped])  # L1 埋点
+
+
+## 方向键逐格平移：复用移动提交（一步历史+选区跟随）；无完整选区仅中文提示
+func _nudge_region(delta: Vector2i) -> void:
+	var bounds := _move_tool_bounds()
+	if bounds.is_empty():
+		_status("移动工具：请先框选一个区域", true)
+		return
+	_commit_region_move(bounds, delta, true)
 
 
 ## 移动工具模式 _move_grab=抓取偏移（delta=悬停格-偏移-选区 min）；
