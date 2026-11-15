@@ -20,7 +20,8 @@
 ## 保存即回读校验），战场列表（O 键）立即可见可开战。
 ## 选择模式（点「选择」/「填充」图标弹出菜单）：单格选择沿用原行为；区域选择=
 ## 两次独立点击设 pos1/pos2（z 取所在格高度，可在菜单内 SpinBox 精修），画布
-## 同步 GLM 虚线边框（同高度=固定平面，异高度=跟随地形周界）；区域填充与无区域
+## 同步 GLM 虚线边框（同高度=固定平面，异高度=立体选择体：z_min 底面 + z_max
+## 顶面 + 四角立边）；区域填充与无区域
 ## 洪水填充均支持内置地形与已保存素材方块——地形写 rows 并清 override，素材写
 ## tile_overrides 不动 rows，整个区域一步历史（原子）。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
@@ -1386,9 +1387,13 @@ func _sync_region_marker() -> void:
 	if _selection_range.is_active():
 		var mn := _selection_range.min_corner()
 		var mx := _selection_range.max_corner()
-		# 两端点同高度 → 固定高度平面四边形；异高度 → 跟随地形逐格周界
-		var z := mn.z if mn.z == mx.z else -1
-		_canvas.set_selection_region(Vector2i(mn.x, mn.y), Vector2i(mx.x, mx.y), z)
+		# 两端点同高度 → 固定高度平面四边形（旧行为）；异高度 → 立体选择体
+		# （z_min 底面 + z_max 顶面 + 四角立边），不再退化为单平面/跟随地形
+		if mn.z == mx.z:
+			_canvas.set_selection_region(Vector2i(mn.x, mn.y), Vector2i(mx.x, mx.y), mn.z)
+		else:
+			_canvas.set_selection_region(Vector2i(mn.x, mn.y), Vector2i(mx.x, mx.y),
+				mini(mn.z, mx.z), maxi(mn.z, mx.z))
 	else:
 		_canvas.clear_selection_region()
 	_sync_region_boxes()
@@ -1459,7 +1464,10 @@ func _apply_fill(cell: Vector2i) -> void:
 
 ## 区域填充：区域内每格应用选择器内容——内置地形写 rows 并清素材覆盖；
 ## 已保存素材方块写 tile_overrides 不动 rows（两层正确区分）。
-## 调用方负责 _push_undo：整个区域一步历史（原子）。
+## 立体选择（pos1/pos2 异高）= 体积填充语义：矩形内每列都填充，且每列顶面统一
+## 找平至带顶 z_hi（单块列模型每列只有一块立方体——选择 0..4 填充即整片抬成 z4
+## 平台，「填充整个选择范围」而不是只刷表层）；同高选择保持平面行为（全 footprint
+## 写材质、不动块高）。调用方负责 _push_undo：填充与高度变化同一步历史（原子）。
 func _fill_region() -> void:
 	var sel := _fill_selector.selected() if _fill_selector != null else {}
 	var kind := StringName(sel.get("kind", ""))
@@ -1467,13 +1475,23 @@ func _fill_region() -> void:
 	if kind == &"" or id.is_empty():
 		kind = &"terrain"
 		id = String(current_terrain)
+	var mn := _selection_range.min_corner()
+	var mx := _selection_range.max_corner()
+	var z_hi := maxi(mn.z, mx.z)
+	var volume := mn.z != mx.z  # 异高 → 全 footprint 填充 + 顶面找平均 z_hi
 	var cells := _selection_range.cells_2d()
 	var rows: Array = model.rows
 	var glyph := String(BattlefieldDocScript.TERRAIN_GLYPH.get(StringName(id), "."))
 	var count := 0
+	var leveled := 0
 	for c in cells:
 		if c.x < 0 or c.y < 0 or c.x >= int(model.width) or c.y >= int(model.height):
 			continue
+		if volume:
+			var cz := BattlefieldDocScript.cell_z(model, c)
+			if cz != z_hi:
+				BattlefieldDocScript.set_cell_z(model, c, z_hi)
+				leveled += 1
 		if kind == &"asset":
 			BattlefieldDocScript.set_tile_override(model, c, id)
 		else:
@@ -1484,8 +1502,12 @@ func _fill_region() -> void:
 		count += 1
 	_refresh_canvas()
 	var label := id if kind == &"asset" else String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id))
-	_status("区域填充 %s ×%d 格" % [label, count])
-	print("[editor] 区域填充 kind=%s id=%s cells=%d" % [String(kind), id, count])  # L1 埋点
+	if volume:
+		_status("区域填充 %s ×%d 格（体积填充至 z%d，调整高度 %d 列）" % [label, count, z_hi, leveled])
+	else:
+		_status("区域填充 %s ×%d 格" % [label, count])
+	print("[editor] 区域填充 kind=%s id=%s cells=%d volume=%s z_hi=%d leveled=%d"
+		% [String(kind), id, count, str(volume), z_hi, leveled])  # L1 埋点
 
 
 ## 素材洪水填充（无区域、选择器=素材）：同「地形字符 + 现有覆盖」连通的区域

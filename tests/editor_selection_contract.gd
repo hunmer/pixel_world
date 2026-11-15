@@ -322,4 +322,35 @@ func _test_canvas_region() -> void:
 	_expect(canvas.has_selection_region(), "C7 resize 后仍有效（交集）")
 	_expect(int(canvas.model.get("width")) == 4 and int(canvas.model.get("height")) == 4, "C7 MIN_SIZE=4 生效")
 	_expect(canvas.selection_region.get("min") == Vector2i(1, 1) and canvas.selection_region.get("max") == Vector2i(3, 3), "C7 端点收敛到新边界")
+
+	# ---- C8 立体选择体（z_min/z_max，异高体积显示） ----
+	canvas.model = BattlefieldDocScript.create_empty(6, 4)
+	canvas.set_selection_region(Vector2i(1, 1), Vector2i(3, 2), 0, 2)
+	_expect(canvas.has_selection_region(), "C8 立体区域有效")
+	_expect(int(canvas.selection_region.get("z", -1)) == 0
+		and int(canvas.selection_region.get("z_max", -1)) == 2, "C8 字典含 z/z_max")
+	_expect(canvas._region_marker.polylines.size() == 6, "C8 标记=底面+顶面+4 立边")
+	var box: Array = canvas.region_outline_polylines(Vector2i(1, 1), Vector2i(3, 2), 0, 2)
+	_expect(box.size() == 6, "C8 立体模式六条折线")
+	if box.size() == 6:
+		_expect((box[0] as PackedVector2Array).size() == 5, "C8 底面四角+闭合=5")
+		_expect((box[1] as PackedVector2Array).size() == 5, "C8 顶面四角+闭合=5")
+		for i in range(2, 6):
+			_expect((box[i] as PackedVector2Array).size() == 2, "C8 立边=2 点")
+		var apart := false
+		for i in 4:
+			if (box[0][i] as Vector2).distance_to(box[1][i]) > 1.0:
+				apart = true
+		_expect(apart, "C8 顶底面不共面（真实立体投影）")
+	# z_max<=z 退化为平面（旧行为，字典无 z_max 键）
+	var flat2: Array = canvas.region_outline_polylines(Vector2i(1, 1), Vector2i(3, 2), 2, 2)
+	_expect(flat2.size() == 1, "C8 z_max==z 保持平面单折线")
+	canvas.set_selection_region(Vector2i(1, 1), Vector2i(3, 2), 2, 2)
+	_expect(not canvas.selection_region.has("z_max"), "C8 同高字典无 z_max 键")
+	_expect(canvas._region_marker.polylines.size() == 1, "C8 同高标记单折线")
+	# z<0（跟随地形）忽略 z_max
+	canvas.set_selection_region(Vector2i(1, 1), Vector2i(3, 2), -1, 2)
+	_expect(not canvas.selection_region.has("z_max"), "C8 跟随地形忽略 z_max")
+	_expect(canvas._region_marker.polylines.size() == 4, "C8 跟随地形仍四条周界")
+	canvas.clear_selection_region()
 	host.queue_free()

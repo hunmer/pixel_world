@@ -402,8 +402,10 @@ func _poly_to_local(poly: PackedVector2Array) -> PackedVector2Array:
 
 ## 设置区域虚线投影：闭区间 [min_cell, max_cell]（两轴顺序任意，自动归一）。
 ## z>=0 = 该方块高度层的平面四边形；z<0（默认）= 跟随地形逐格高度。
+## z_max>z（仅 z>=0 有意义）= 立体选择体：z 底面 + z_max 顶面 + 四角立边；
+## z_max<=z 时按平面处理（字典不含 z_max 键，保持旧形状）。
 ## 坐标校验：与模型无交集（完全在边界外）→ 清空；部分越界 → 夹回边界内。
-func set_selection_region(min_cell: Vector2i, max_cell: Vector2i, z := -1) -> void:
+func set_selection_region(min_cell: Vector2i, max_cell: Vector2i, z := -1, z_max := -1) -> void:
 	var lo := Vector2i(mini(min_cell.x, max_cell.x), mini(min_cell.y, max_cell.y))
 	var hi := Vector2i(maxi(min_cell.x, max_cell.x), maxi(min_cell.y, max_cell.y))
 	var w := int(model.get("width", 0))
@@ -413,7 +415,10 @@ func set_selection_region(min_cell: Vector2i, max_cell: Vector2i, z := -1) -> vo
 		return
 	lo = Vector2i(clampi(lo.x, 0, w - 1), clampi(lo.y, 0, h - 1))
 	hi = Vector2i(clampi(hi.x, 0, w - 1), clampi(hi.y, 0, h - 1))
-	selection_region = {"min": lo, "max": hi, "z": z}
+	if z >= 0 and z_max > z:
+		selection_region = {"min": lo, "max": hi, "z": z, "z_max": z_max}
+	else:
+		selection_region = {"min": lo, "max": hi, "z": z}
 
 
 ## 清空区域虚线投影。
@@ -427,9 +432,11 @@ func has_selection_region() -> bool:
 
 ## 计算区域虚线边框折线（画布局部坐标；每边一条 PackedVector2Array，屏幕
 ## 空间覆盖层直接可用）。z>=0 = 固定高度平面四边形（一条闭合折线）；
-## z<0 = 跟随地形周界（北/东/南/西各一条，逐格用 visual_top_level）。
+## z<0 = 跟随地形周界（北/东/南/西各一条，逐格用 visual_top_level）；
+## z_max>z（仅 z>=0）= 立体选择体六条线：z 底面闭合四边形 + z_max 顶面闭合
+## 四边形 + 四角立边（各 2 点，底面角 i 连顶面角 i）。
 ## 纯几何无副作用，headless 契约直接调用（tests/editor_selection_contract.gd）。
-func region_outline_polylines(min_cell: Vector2i, max_cell: Vector2i, z := -1) -> Array:
+func region_outline_polylines(min_cell: Vector2i, max_cell: Vector2i, z := -1, z_max := -1) -> Array:
 	var out: Array = []
 	if _renderer == null or _renderer.grid == null:
 		return out
@@ -448,15 +455,26 @@ func region_outline_polylines(min_cell: Vector2i, max_cell: Vector2i, z := -1) -
 		if camera == null:
 			return out
 		var half := IsoProjection.GRID_STEP * 0.5
-		var nw := IsoProjection.world_to_screen(
-			camera, IsoProjection.grid_to_world(Vector2i(lo.x, lo.y), z) + Vector3(-half, 0, -half))
-		var ne := IsoProjection.world_to_screen(
-			camera, IsoProjection.grid_to_world(Vector2i(hi.x, lo.y), z) + Vector3(half, 0, -half))
-		var se := IsoProjection.world_to_screen(
-			camera, IsoProjection.grid_to_world(Vector2i(hi.x, hi.y), z) + Vector3(half, 0, half))
-		var sw := IsoProjection.world_to_screen(
-			camera, IsoProjection.grid_to_world(Vector2i(lo.x, hi.y), z) + Vector3(-half, 0, half))
-		out.append(PackedVector2Array([nw - offset, ne - offset, se - offset, sw - offset, nw - offset]))
+		var quad_at := func(zz: int) -> PackedVector2Array:
+			var nw := IsoProjection.world_to_screen(
+				camera, IsoProjection.grid_to_world(Vector2i(lo.x, lo.y), zz) + Vector3(-half, 0, -half))
+			var ne := IsoProjection.world_to_screen(
+				camera, IsoProjection.grid_to_world(Vector2i(hi.x, lo.y), zz) + Vector3(half, 0, -half))
+			var se := IsoProjection.world_to_screen(
+				camera, IsoProjection.grid_to_world(Vector2i(hi.x, hi.y), zz) + Vector3(half, 0, half))
+			var sw := IsoProjection.world_to_screen(
+				camera, IsoProjection.grid_to_world(Vector2i(lo.x, hi.y), zz) + Vector3(-half, 0, half))
+			return PackedVector2Array([nw - offset, ne - offset, se - offset, sw - offset, nw - offset])
+		if z_max > z:
+			# 立体选择体：底面 + 顶面 + 四角立边（角序 NW/NE/SE/SW 一一对应）
+			var bottom: PackedVector2Array = quad_at.call(z)
+			var top: PackedVector2Array = quad_at.call(z_max)
+			out.append(bottom)
+			out.append(top)
+			for i in 4:
+				out.append(PackedVector2Array([bottom[i], top[i]]))
+			return out
+		out.append(quad_at.call(z))
 		return out
 	# 跟随地形：周界格顶面外缘边（renderer.top_polygon_for 已含逐格 visual_top_level
 	# 与相机投影；顶点序 [0]=NW [1]=NE [2]=SE [3]=SW，相邻格共享顶点天然连续）
@@ -495,7 +513,8 @@ func region_outline_polylines(min_cell: Vector2i, max_cell: Vector2i, z := -1) -
 func _clamp_selection_region() -> void:
 	if selection_region.is_empty():
 		return
-	set_selection_region(selection_region["min"], selection_region["max"], int(selection_region.get("z", -1)))
+	set_selection_region(selection_region["min"], selection_region["max"],
+		int(selection_region.get("z", -1)), int(selection_region.get("z_max", -1)))
 
 
 ## 把当前 selection_region 折线刷进覆盖层标记（相机视图变化/模型变化时由
@@ -507,7 +526,8 @@ func _update_region_marker() -> void:
 		_region_marker.visible = false
 		return
 	var lines := region_outline_polylines(
-		selection_region["min"], selection_region["max"], int(selection_region.get("z", -1)))
+		selection_region["min"], selection_region["max"],
+		int(selection_region.get("z", -1)), int(selection_region.get("z_max", -1)))
 	_region_marker.polylines = lines
 	_region_marker.visible = not lines.is_empty()
 

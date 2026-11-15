@@ -281,8 +281,8 @@ func top_polygon_for(x: int, y: int) -> PackedVector2Array:
 
 
 ## 单位/描边/菜单锚定的可视顶面层（各格最上块顶面）。
-## 显式 block_layout 单层块顶面=cell_z；旧柱体模式陆地=stand_level-1（柱只建
-## 0..height-1 块）、水面=stand_level。
+## 显式 block_layout 块顶面=cell_z（其下 0..z-1 为实心柱，顶面不变）；旧柱体模式
+## 陆地=stand_level-1（柱只建 0..height-1 块）、水面=stand_level。
 func visual_top_level(x: int, y: int) -> int:
 	if has_explicit_block_layout():
 		return stand_level(x, y)
@@ -428,7 +428,8 @@ func _commit_column(cell: Vector2i, blocks: Array[Dictionary], height: int) -> v
 	_columns[cell] = column
 
 
-## 显式布局：只生成所在 z 的一个顶块，绝不补地下层；水也只有水面，无湖床/侧壁。
+## 显式布局：陆地画成 0..z 的实心柱（顶层用表层纹理、其余用柱体纹理，与旧柱体
+## 模式一致）；水仍只有水面，无湖床/侧壁。用户验收定稿：选 4x4x4 就要视觉上填满。
 func _append_explicit_block(
 	cell: Vector2i,
 	blocks: Array[Dictionary],
@@ -453,7 +454,11 @@ func _append_explicit_block(
 		blocks.append(surface)
 		return
 	var top_tex := _surface_texture(style["top"], &"top")
-	blocks.append(_block(top_tex, z, _terrain_tint(tile_type)))
+	var col_tex := _surface_texture(style["column"], &"column")
+	var tint := _terrain_tint(tile_type)
+	for lvl in range(z + 1):
+		var tex: Texture2D = top_tex if lvl == z else col_tex
+		blocks.append(_block(tex, lvl, tint))
 	var prop := _asset_prop_or_default(cell, asset_rec, tile_type)
 	if not prop.is_empty():
 		blocks.append(prop)

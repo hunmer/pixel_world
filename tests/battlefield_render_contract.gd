@@ -183,7 +183,8 @@ func _run() -> void:
 
 
 func _test_explicit_layout(root: Node2D, grid: GridSystem) -> void:
-	# 全地形在显式布局中都只画 z=0 的一个地形块；森林装饰仍允许作为独立 prop。
+	# 全地形在显式布局中都画 0..z 实心柱；z=0 时恰好一个地形块。森林装饰仍允许作为独立 prop。
+	# 用户验收定稿：选 4x4x4 就要视觉上填满，陆地不再只画悬浮顶块。
 	var plane: Node2D = RendererScript.new()
 	root.add_child(plane)
 	for terrain_id: StringName in TerrainData.TERRAIN.keys():
@@ -221,8 +222,15 @@ func _test_explicit_layout(root: Node2D, grid: GridSystem) -> void:
 	var low_blocks: Array = (explicit_renderer._columns[Vector2i(0, 0)] as Node)._blocks
 	var high_blocks: Array = (explicit_renderer._columns[Vector2i(4, 3)] as Node)._blocks
 	var water_blocks: Array = (explicit_renderer._columns[Vector2i(4, 4)] as Node)._blocks
-	_expect(low_blocks.size() == 1 and high_blocks.size() == 1,
-		"不同 z 的陆地均不向下填层")
+	var pillar_ok := low_blocks.size() == 1
+	if high_blocks.size() == 17:
+		for lvl in range(17):
+			if int(high_blocks[lvl].get("level", -1)) != lvl:
+				pillar_ok = false
+	else:
+		pillar_ok = false
+	_expect(pillar_ok,
+		"不同 z 的陆地画成 0..z 实心柱（z=0 → 1 块，z=16 → 17 块逐层 0..16）")
 	var water_surface: Array = water_blocks.filter(func(block: Dictionary) -> bool:
 		return block.get("water_part", &"") == &"surface")
 	var water_bed: Array = water_blocks.filter(func(block: Dictionary) -> bool:
@@ -254,8 +262,12 @@ func _test_explicit_layout(root: Node2D, grid: GridSystem) -> void:
 	renderer_3d.set_block_layout(layout)
 	renderer_3d.setup(grid)
 	var cell_3d: Dictionary = renderer_3d._terrain_3d._cells[Vector2i(4, 3)]
-	_expect(int(cell_3d.stand_level) == 16 and (cell_3d.blocks as Array).size() == 1
-		and int(cell_3d.blocks[0].level) == 16, "3D 显式高块同样不向下填层")
+	var pillar_3d_ok := int(cell_3d.stand_level) == 16 and (cell_3d.blocks as Array).size() == 17
+	if pillar_3d_ok:
+		for lvl in range(17):
+			if int((cell_3d.blocks as Array)[lvl].level) != lvl:
+				pillar_3d_ok = false
+	_expect(pillar_3d_ok, "3D 显式高块同样画 0..z 实心柱（17 层逐层 0..16）")
 	var water_3d: Dictionary = renderer_3d._terrain_3d._cells[Vector2i(4, 4)]
 	_expect((water_3d.blocks as Array).size() == 1
 		and water_3d.blocks[0].get("water_part", &"") == &"surface", "3D 显式水面同样无湖床")

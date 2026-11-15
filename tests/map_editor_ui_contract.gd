@@ -12,9 +12,11 @@
 ##       换页封存画笔动作，点击任意记录可一步跳转（前进=重做/后退=撤销）。
 ##   10. 选择模式菜单（点「选择」/「填充」图标弹出，Esc 关闭）：单格/区域两模式；
 ##       区域=两次独立点击设 pos1/pos2（拖动无效，z=所在格高度）+ SpinBox 精修，
-##       画布虚线框同步（同高=固定平面，异高=跟随地形）；区域填充与无区域洪水
-##       填充均支持内置地形（写 rows 清 override）/已保存素材方块（只写
-##       tile_overrides），整个区域一步历史、撤销原子回滚；回单格模式行为不回退。
+##       画布虚线框同步（同高=固定平面，异高=立体选择体 z/z_max 底顶面+立边）；
+##       区域填充与无区域洪水填充均支持内置地形（写 rows 清 override）/已保存素
+##       材方块（只写 tile_overrides）；异高体积填充把矩形内每列顶面统一找平整带
+##       顶 z_max 并整矩形写入（覆盖整个选择范围，不再只刷一层）；整个区域一步历
+##       史、撤销原子回滚；同高选择保持平面行为（不动块高）；回单格模式行为不回退。
 
 extends SceneTree
 
@@ -715,12 +717,14 @@ func _run() -> void:
 		and editor._canvas.selection_region.get("max") == Vector2i(6, 3),
 		"10 手改 pos2.x=6 → range 与虚线框同步")
 	editor._pos1_boxes[&"z"].value = 2
-	_expect(editor._selection_range.min_corner().z == 2
-		and int(editor._canvas.selection_region.get("z", -99)) == -1,
-		"10 手改 pos1.z 成异高度 → 虚线框转跟随地形周界（z=-1）")
+	_expect(editor._selection_range.anchor.z == 2
+		and int(editor._canvas.selection_region.get("z", -99)) == 0
+		and int(editor._canvas.selection_region.get("z_max", -99)) == 2,
+		"10 手改 pos1.z 成异高度 → 虚线框转立体选择体（底面 z=0 + 顶面 z_max=2）")
 	editor._pos1_boxes[&"z"].value = 0
-	_expect(int(editor._canvas.selection_region.get("z", -99)) == 0,
-		"10 恢复同高度 → 回到固定平面虚线框")
+	_expect(int(editor._canvas.selection_region.get("z", -99)) == 0
+		and not editor._canvas.selection_region.has("z_max"),
+		"10 恢复同高度 → 回到固定平面虚线框（无 z_max）")
 
 	# 区域填充（内置地形）：rows 全改 + 覆盖清空，恰好一步历史、撤销原子回滚
 	_expect(editor._fill_selector.select_terrain(&"water"), "10 选择器选中内置地形 water")
@@ -786,6 +790,45 @@ func _run() -> void:
 	_send_key(editor, KEY_Z, true)
 	_expect(BattlefieldDocScript.tile_override_at(editor.model, Vector2i(0, 0)) == "",
 		"10 撤销素材洪水填充：覆盖原子回滚")
+
+	# 立体区域（异高）三维体积填充：整矩形每格写入 + 每列顶面统一找平整带顶 z_hi
+	editor._select_cell(Vector2i(6, 5))
+	editor._on_block_z_changed(3.0)
+	_expect(BattlefieldDocScript.cell_z(editor.model, Vector2i(6, 5)) == 3,
+		"10 体积前置：抬高 (6,5) 到 z=3（高于带顶，待会应被压回 z_hi）")
+	editor._on_selection_mode_item(1)
+	editor._apply_region_click(Vector2i(5, 4))
+	editor._apply_region_click(Vector2i(7, 6))
+	editor._pos2_boxes[&"z"].value = 2
+	_expect(editor._region_pos2_set
+		and int(editor._canvas.selection_region.get("z", -99)) == 0
+		and int(editor._canvas.selection_region.get("z_max", -99)) == 2,
+		"10 立体区域：异高端点 → 画布 z/z_max 立体框")
+	_expect(editor._fill_selector.select_terrain(&"water"), "10 体积填充选择器选中 water")
+	var rows_before_vol: Array = (editor.model.rows as Array).duplicate()
+	var hist_before_vol: int = editor._history.size()
+	editor._push_undo("区域填充")
+	editor._fill_region()
+	var vol_ok := true
+	for y in range(4, 7):
+		for x in range(5, 8):
+			if (editor.model.rows[y] as String).substr(x, 1) != "w":
+				vol_ok = false
+			if BattlefieldDocScript.cell_z(editor.model, Vector2i(x, y)) != 2:
+				vol_ok = false
+	_expect(vol_ok, "10 体积填充：矩形 footprint 每格写入 rows 且每列顶面统一至 z_hi=2")
+	_expect(BattlefieldDocScript.tile_override_at(editor.model, Vector2i(5, 4)) == "",
+		"10 体积填充：terrain 语义清覆盖（洪水覆盖被清）")
+	_expect(editor._history.size() == hist_before_vol + 1, "10 体积填充恰好一步历史")
+	_send_key(editor, KEY_Z, true)
+	var vol_undo_ok := _diff_cells(editor.model.rows as Array, rows_before_vol) == 0
+	for y in range(4, 7):
+		for x in range(5, 8):
+			var expect_z := 3 if (x == 6 and y == 5) else 0
+			if BattlefieldDocScript.cell_z(editor.model, Vector2i(x, y)) != expect_z:
+				vol_undo_ok = false
+	_expect(vol_undo_ok, "10 撤销体积填充：高度与 rows 原子回滚（各列回到原高度）")
+	_send_key(editor, KEY_Y, true)
 
 	# 回单格模式：区域清空，单格选择 / 方块面板 / Esc 行为不回退
 	editor._on_selection_mode_item(0)
