@@ -3,13 +3,15 @@
 ## 只展示真实组件、短名称、必要操作标签与真实值；API、继承、资源路径与用法
 ## 说明全部放 ui/README.md，界面不写教学文字、帮助页、描述段落或说明 tooltip。
 ##
-## 页签：按钮 / 卡片 / 输入 / 数值 / 媒体 / 菜单。PixelButton、PixelTabs、PixelPanel、
+## 页签：按钮 / 卡片 / 输入 / 数值 / 媒体 / 菜单 / 布局。PixelButton、PixelTabs、PixelPanel、
 ## 六类输入数值组件与图片 / 图标 / 多行文本 / 动作菜单 / 弹层 / 音频 / 视频容器
-## 在同一画廊真实交互。F6 独立运行，不依赖战斗参数，不修改默认启动；ESC 退出。
+## 在同一画廊真实交互；布局页真实摆出六个 Pixel 布局容器（HBox/VBox/Grid/Margin/Center/Scroll）。
+## F6 独立运行，不依赖战斗参数，不修改默认启动；ESC 退出。
 extends Control
 
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
 const PixelButtonScript = preload("res://ui/components/pixel_button.gd")
 const PixelTabsScript = preload("res://ui/components/pixel_tabs.gd")
 const PixelPanelScene = preload("res://ui/components/pixel_panel.tscn")
@@ -26,13 +28,19 @@ const PixelDropdownScript = preload("res://ui/components/pixel_dropdown.gd")
 const PixelPopupScript = preload("res://ui/components/pixel_popup.gd")
 const PixelAudioPlayerScript = preload("res://ui/components/pixel_audio_player.gd")
 const PixelVideoPlayerScript = preload("res://ui/components/pixel_video_player.gd")
+const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
+const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
+const PixelGridScript = preload("res://ui/components/pixel_grid.gd")
+const PixelMarginScript = preload("res://ui/components/pixel_margin.gd")
+const PixelCenterScript = preload("res://ui/components/pixel_center.gd")
+const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
 
 ## 反馈面板最多保留的历史条数（超出丢弃最早一条，避免长时间点击后无限增长）。
 const FEEDBACK_MAX_LINES := 60
 ## 右侧反馈卡片的窄窗口最小宽度。
 const SIDE_MIN_WIDTH := 360
 ## 页签标题：只保留短组件类别。
-const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单"]
+const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单", "布局"]
 ## 数值页滑块 / 数值框 / 进度条的共用范围。
 const DEMO_VALUE_MAX: float = 100.0
 
@@ -116,6 +124,7 @@ func _build_ui() -> void:
 	_build_value_page()
 	_build_media_page()
 	_build_menu_page()
+	_build_layout_page()
 
 	var feedback_card := _make_card("反馈", "")
 	feedback_card.custom_minimum_size = Vector2(SIDE_MIN_WIDTH, 0)
@@ -130,7 +139,7 @@ func _build_header() -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 
-	var title := UIFactoryScript.outline_label("UI 组件库", 26, Color.WHITE, 6)
+	var title := UIFactoryScript.outline_label("UI 组件库", ComponentThemeScript.FONT_DISPLAY, Color.WHITE, 6)
 	row.add_child(title)
 
 	var spacer := Control.new()
@@ -404,6 +413,85 @@ func _build_menu_page() -> void:
 	add_child(_demo_popup)
 
 
+## 第 7 页：六个布局容器的真实摆位（HBox/VBox/Grid/Margin/Center/Scroll）。
+func _build_layout_page() -> void:
+	var page: VBoxContainer = _tabs.call("add_pixel_tab", DEMO_TAB_TITLES[6]) as VBoxContainer
+	page.add_theme_constant_override("separation", 12)
+
+	# PixelHBox：横向排布，子项间距走 gap（默认 16）。
+	var hbox_card := _make_card("横排", "")
+	var hbox := PixelHBoxScript.new() as HBoxContainer
+	hbox.name = "LayoutHBox"
+	hbox.add_child(_make_layout_chip("甲"))
+	hbox.add_child(_make_layout_chip("乙"))
+	hbox.add_child(_make_layout_chip("丙"))
+	_card_slot(hbox_card).add_child(hbox)
+	page.add_child(hbox_card)
+
+	# PixelVBox：纵向排布，子项间距走 gap（默认 16）。
+	var vbox_card := _make_card("竖排", "")
+	var vbox := PixelVBoxScript.new() as VBoxContainer
+	vbox.name = "LayoutVBox"
+	vbox.add_child(_make_layout_chip("丁"))
+	vbox.add_child(_make_layout_chip("戊"))
+	_card_slot(vbox_card).add_child(vbox)
+	page.add_child(vbox_card)
+
+	# PixelGrid：两列网格，横纵间距走 h_gap / v_gap（默认 16）。
+	var grid_card := _make_card("网格", "")
+	var grid := PixelGridScript.new() as GridContainer
+	grid.name = "LayoutGrid"
+	grid.columns = 2
+	for chip_name: String in ["己", "庚", "辛", "壬"]:
+		grid.add_child(_make_layout_chip(chip_name))
+	_card_slot(grid_card).add_child(grid)
+	page.add_child(grid_card)
+
+	# PixelMargin：内容边距走 margin（默认 24），子项整体内缩。
+	var margin_card := _make_card("边距", "")
+	var margin_box := PixelMarginScript.new() as MarginContainer
+	margin_box.name = "LayoutMargin"
+	var margin_label := UIFactoryScript.label("边距 24", 12, UIThemeScript.TEXT_MAIN)
+	margin_label.name = "LayoutMarginChild"
+	margin_box.add_child(margin_label)
+	_card_slot(margin_card).add_child(margin_box)
+	page.add_child(margin_card)
+
+	# PixelCenter：子项在剩余空间内水平垂直居中。
+	var center_card := _make_card("居中", "")
+	var center_box := PixelCenterScript.new() as CenterContainer
+	center_box.name = "LayoutCenter"
+	center_box.custom_minimum_size = Vector2(0, 64)
+	var center_child := _make_pixel_button("居中", 1, "")
+	center_child.name = "LayoutCenterChild"
+	center_box.add_child(center_child)
+	_card_slot(center_card).add_child(center_box)
+	page.add_child(center_card)
+
+	# PixelScroll：默认仅纵向滚动、双向 Expand Fill；内容高于可视区时出纵滚动条。
+	var scroll_card := _make_card("滚动", "")
+	var scroll := PixelScrollScript.new() as ScrollContainer
+	scroll.name = "LayoutScroll"
+	scroll.custom_minimum_size = Vector2(0, 140)
+	var scroll_content := PixelVBoxScript.new() as VBoxContainer
+	scroll_content.name = "LayoutScrollContent"
+	for i: int in range(6):
+		var row := UIFactoryScript.label("滚动内容 %d" % (i + 1), 12, UIThemeScript.TEXT_MAIN)
+		row.custom_minimum_size = Vector2(200, 40)
+		scroll_content.add_child(row)
+	scroll.add_child(scroll_content)
+	_card_slot(scroll_card).add_child(scroll)
+	page.add_child(scroll_card)
+
+
+## 布局页演示用小块：固定最小尺寸的短文本标签，保证间距断言可计算。
+func _make_layout_chip(chip_text: String) -> Label:
+	var chip := UIFactoryScript.label(chip_text, 12, UIThemeScript.TEXT_MAIN)
+	chip.custom_minimum_size = Vector2(40, 20)
+	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return chip
+
+
 ## 右侧反馈卡片内容：状态行 + 富文本历史。
 func _build_feedback_body(slot: Container) -> void:
 	_status_label = UIFactoryScript.label("就绪", 13, UIThemeScript.TEXT_MAIN)
@@ -420,7 +508,7 @@ func _build_feedback_body(slot: Container) -> void:
 	_feedback_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_feedback_log.custom_minimum_size = Vector2(0, 220)
 	_feedback_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_feedback_log.add_theme_font_size_override("normal_font_size", 12)
+	_feedback_log.add_theme_font_size_override("normal_font_size", ComponentThemeScript.FONT_CAPTION)
 	_feedback_log.add_theme_color_override("default_color", Color(0.85, 0.9, 0.9))
 	slot.add_child(_feedback_log)
 

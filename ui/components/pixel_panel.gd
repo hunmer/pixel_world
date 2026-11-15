@@ -71,11 +71,11 @@ func _refresh() -> void:
 		title_label.text = title
 		title_label.visible = has_title
 		title_label.add_theme_color_override("font_color", UIThemeScript.TEXT_MAIN)
-		title_label.add_theme_font_size_override("font_size", 16)
+		title_label.add_theme_font_size_override("font_size", ComponentThemeScript.FONT_TITLE)
 	if description_label != null:
 		description_label.text = description
 		description_label.visible = has_description
 		description_label.add_theme_color_override("font_color", UIThemeScript.TEXT_DIM)
-		description_label.add_theme_font_size_override("font_size", 12)
+		description_label.add_theme_font_size_override("font_size", ComponentThemeScript.FONT_CAPTION)
 	if header != null:
 		header.visible = has_icon or has_title or has_description

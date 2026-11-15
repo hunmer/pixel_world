@@ -1,22 +1,28 @@
 # Pixel World · UI 组件库（ui/）
 
-新增的共享 UI 组件层：集中 Theme + 十六个 `@tool` 自定义控件（按钮 / 页签 / 卡片 +
+新增的共享 UI 组件层：集中 Theme + 二十二个 `@tool` 自定义控件（按钮 / 页签 / 卡片 +
 输入框 / 下拉 / 开关 / 滑块 / 数值框 / 进度条 / 图片 / 图标 / 多行文本 / 动作菜单 /
-弹层 / 音频容器 / 视频容器），全部复用现有
+弹层 / 音频容器 / 视频容器 + 六个布局容器），全部复用现有
 `scripts/ui/ui_theme.gd`（配色 / StyleBox）与 `scripts/ui/ui_factory.gd`（工厂方法），
-不改它们的既有行为。
+不改它们的既有行为。设计取值（间距/圆角/字号/边距）以根目录 `DESIGN.md` 为单一事实来源。
 
-- 目录：`ui/theme/component_theme.gd`（ComponentTheme）、`ui/components/`（PixelButton / PixelTabs / PixelPanel
-  与六类输入/数值组件、七类媒体/菜单组件）。
+- 目录：`ui/theme/component_theme.gd`（ComponentTheme：设计 token + 主题工厂）、
+  `ui/components/`（PixelButton / PixelTabs / PixelPanel 与六类输入/数值组件、
+  七类媒体/菜单组件、六个布局容器 pixel_v_box / pixel_h_box / pixel_grid /
+  pixel_margin / pixel_center / pixel_scroll）。
 - 交互画廊：`scenes/UIComponentGallery.tscn`（脚本 `scripts/scenes/ui_component_gallery.gd`），
   只展示真实组件、短标签与真实值，不含用法/API/说明文字；在编辑器里 **F6** 独立运行，
-  不依赖战斗参数，不修改默认启动场景；ESC 退出。
+  不依赖战斗参数，不修改默认启动场景；ESC 退出。第 7 页「布局」展示六个布局容器。
 - 只新增文件：未改动 `main.gd`、默认启动、`config/startup.cfg`，也未迁移任何现有业务调用。
 
 > 验证状态（2026-11-14）：T3 已通过 headless 契约（`tests/ui_components_contract.gd`）
 > 与 MCP 画廊运行态验收；T4 为 PixelButton 补充 hover/click 音效并扩展契约；T5 新增
 > 六类组件、精简画廊文字并更新契约（headless 457 checks）；T6 新增七类媒体/菜单组件、
-> 六页画廊与真实 `.ogv` 视频样例（headless 735 checks）。
+> 六页画廊与真实 `.ogv` 视频样例（headless 735 checks）。T7（2026-11-15）集中设计
+> token、新增六个布局容器与画廊「布局」页（headless 1062 checks + MCP 运行态断言），
+> 规范详见 `DESIGN.md`。T8（2026-11-15）按验收调整字号层级（辅助 12 / 正文与页签 16 /
+> 标题 28 / 展示 36）与容器默认值（HBox/Grid gap 16、Margin 四向 24），契约与运行态
+> 复验通过（headless 1062 checks + 三档响应式无裁切）。
 
 ## 1. ComponentTheme — 集中主题
 
@@ -56,7 +62,8 @@ var variation: StringName = ComponentThemeScript.variation_for_semantic(
 | `POPUP_VARIATION` | `PixelPopup` | `PopupPanel` | 弹层 |
 
 同时定义了 `TabContainer`、`TabBar` 的 baseline 主题（选中下缘 ACCENT 2px）和
-按钮常量：`DEFAULT_ICON_SIZE = 18`、`DEFAULT_FONT_SIZE = 12`、`TAB_FONT_SIZE = 13`。
+按钮常量：`DEFAULT_ICON_SIZE = 18`；字号 token 见 `DESIGN.md` §2（`DEFAULT_FONT_SIZE`
+是 `FONT_BODY`(16) 的别名、`TAB_FONT_SIZE` 是 `FONT_TAB`(16) 的别名）。
 配色全部取自 `UITheme`，无新增硬编码色板。
 
 ## 2. PixelButton — 语义按钮
@@ -144,8 +151,8 @@ tabs.tab_changed.connect(_on_tab_changed)
 
 | 属性 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `title` | `String`（`@export`） | `""` | 标题；空则不显示，`TEXT_MAIN` 16px |
-| `description` | `String`（`@export`） | `""` | 说明；自动换行，`TEXT_DIM` 12px |
+| `title` | `String`（`@export`） | `""` | 标题；空则不显示，`TEXT_MAIN` 28px（`FONT_TITLE`） |
+| `description` | `String`（`@export`） | `""` | 说明；自动换行，`TEXT_DIM` 12px（`FONT_CAPTION`） |
 | `icon` | `Texture2D`（`@export`） | `null` | 头部图标（24×24 槽位） |
 
 | 方法 | 签名 | 说明 |
@@ -258,13 +265,49 @@ add_child(popup)
 popup.call("open_for", some_button)   # 关闭后焦点自动回 some_button
 ```
 
-## 7. 与 UIFactory 的关系
+## 7. 布局容器（六个）
+
+六个 `@tool` 薄容器（`ui/components/pixel_*.gd`）：只提供 8/16/24 间距体系的默认值与
+滚动行为约定，不隐式添加子节点、不遮蔽原生属性；间距/边距 setter 非负夹紧且幂等。
+取值全部来自 `ComponentTheme` 设计 token（`SPACE_*`），规范见根目录 `DESIGN.md`。
+
+| 组件 | 基类 | 默认值 | 导出/方法 | 典型用途 |
+| --- | --- | --- | --- | --- |
+| `PixelVBox` | `VBoxContainer` | `gap = SPACE_MD`(16) | `gap: int` | 纵向分组 |
+| `PixelHBox` | `HBoxContainer` | `gap = SPACE_MD`(16) | `gap: int` | 横向一行 |
+| `PixelGrid` | `GridContainer` | h/v 间距 = `SPACE_MD`(16) | `h_gap: int`、`v_gap: int`（列数用原生 `columns`） | 网格 |
+| `PixelMargin` | `MarginContainer` | 四向 = `SPACE_LG`(24) | `margin_left_v/top_v/right_v/bottom_v: int`、`set_margin_all(v)` | 页面外边距 |
+| `PixelCenter` | `CenterContainer` | — | 无导出 | 单子项居中 |
+| `PixelScroll` | `ScrollContainer` | 横向滚动禁用、纵向 `SCROLL_MODE_AUTO` | 无（构造时写死） | 超出即纵向滚动 |
+
+行为约定：
+
+- `_init` / `_ready` 双写默认值（编辑器 `@tool` 与运行态一致）；重复进树不叠加、
+  不新建节点、不连接信号。
+- `PixelScroll` 构造即设 `horizontal_scroll_mode = SCROLL_MODE_DISABLED`、
+  `vertical_scroll_mode = SCROLL_MODE_AUTO`、双向 `SIZE_EXPAND_FILL`、
+  `follow_focus = true`：项目 UI 只允许纵向滚动兜底溢出，焦点进屏外子项自动跟随。
+- `PixelMargin` 的导出名带 `_v` 后缀是为避开 `MarginContainer` 原生 `margin_*`
+  属性；`set_margin_all(v)` 一次写四向（同样夹紧到 ≥ 0）。
+
+```gdscript
+const PixelMarginScript = preload("res://ui/components/pixel_margin.gd")
+const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
+
+var page: Container = PixelMarginScript.new()      # 四向默认 24
+var body: Container = PixelVBoxScript.new()        # gap 默认 16
+page.add_child(body)
+body.add_child(my_row)                             # 行内用 PixelHBox（gap 16）
+add_child(page)
+```
+
+## 8. 与 UIFactory 的关系
 
 `PixelButton` 是「语义变体 + 图标尺寸」的封装；`UIFactory.button()` 是原生主题按钮工厂，
 两者可混用。`PixelTabs.add_pixel_tab` 直接复用 `UIFactory.add_tab`，节点命名/滚动容器
 与既有调用完全一致。
 
-画廊的按钮 / 卡片 / 输入 / 数值 / 媒体 / 菜单六页只展示真实组件与短标签，不显示 API 或用法说明；
+画廊的按钮 / 卡片 / 输入 / 数值 / 媒体 / 菜单 / 布局七页只展示真实组件与短标签，不显示 API 或用法说明；
 以下 `UIFactory` 方法仍可在业务界面直接使用：
 
 | 工厂方法 | 返回 | 说明 |
@@ -276,7 +319,7 @@ popup.call("open_for", some_button)   # 关闭后焦点自动回 some_button
 | `UIFactory.log_label()` | `RichTextLabel` | 名字固定 `LogLabel`，bbcode + 滚动跟随 |
 | `UIFactory.button(text, cb, icon_name)` | `Button` | 三态主题按钮 |
 
-## 8. 主题接入方式
+## 9. 主题接入方式
 
 组件默认在自身 `theme == null` 时创建一个 `ComponentTheme` 实例（实例隔离，互不影响）。
 如果希望整个界面共用一份主题：
@@ -289,7 +332,7 @@ $Root.theme = shared_theme   # 子控件继承；此时组件的 theme 非 null�
 注意：不要在多个界面之间共享同一个可变 `Theme` 并做 `set_*` 原地修改，否则会串样式；
 需要定制时新建一份。
 
-## 9. 已知限制
+## 10. 已知限制
 
 - 音效依赖音频设备；`--headless` 下 `AudioStreamPlayer` 不实际出声，契约用
   `hover_play_count` / `click_play_count` 与播放器配置断言，不等价于听感验收。
@@ -300,5 +343,6 @@ $Root.theme = shared_theme   # 子控件继承；此时组件的 theme 非 null�
   滑杆时由业务侧新建 bus layout 并设置 `sfx_bus`，组件本身不接管全局音量。
 - 组件不接入 `project.godot` 全局主题，也不改 `main.gd` / 默认启动；需要业务界面使用时
   自行 `add_child` 或挂到现有容器里。
-- 运行期契约（实例化、主题解析、信号、焦点、音效触发、六类控件与画廊交互）见
+- 运行期契约（实例化、主题解析、信号、焦点、音效触发、六类控件与画廊交互、设计
+  token、按钮六态几何、布局容器与画廊布局页、多尺寸响应式）见
   `tests/ui_components_contract.gd`；改动组件后只跑该契约即可。

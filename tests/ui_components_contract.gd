@@ -3,15 +3,20 @@
 ##
 ## 覆盖：
 ## - ComponentTheme：按钮语义/页签/面板/输入类六变体基类与样式键、实例隔离；
+## - 设计 token：间距 4/8/16/24、圆角 4/6/8/8、字体层级 11/12/13/16/26、
+##   按钮内容边距 20/12、卡片/控件边距 12/8（按钮六态 StyleBox 几何断言）；
 ## - PixelButton：默认语义、semantic/icon_size 刷新、原生 toggle/disabled、重复进树、焦点；
 ##   音效：默认资源/开关/音量/总线、悬停与点击各只播一次、关闭与 disabled 静默、
 ##   资源/音量可替换、无效总线回退、重复进树不重复节点/连接、源码级 @tool 静默；
 ## - PixelLineEdit / PixelOptionButton / PixelCheckButton / PixelSlider / PixelSpinBox /
 ##   PixelProgressBar：变体主题、原生信号/范围/禁用、实例隔离、重复进树；
+## - 六个布局容器：PixelVBox/PixelHBox/PixelGrid/PixelMargin/PixelCenter/PixelScroll
+##   的 token 默认值、非负夹紧幂等、无隐式子节点、滚动方向/Expand Fill/间距数学；
 ## - PixelTabs：与 UIFactory.add_tab 结构兼容、页签信号、重复进树；
 ## - PixelPanel：头部可见性、标题/说明/图标刷新、内容槽、实例隔离；
-## - 画廊：4 个短页签、按钮/页签/输入/下拉/开关/滑块/数值联动/重置、演示页无说明文本、
-##   1024x640 / 1280x800 / 1920x1080 铺满与有效布局、焦点回归。
+## - 画廊：7 个短页签、按钮/页签/输入/下拉/开关/滑块/数值联动/重置、布局页六容器
+##   真实摆位、演示页无说明文本、1024x640 / 1280x800 / 1920x1080 铺满与有效布局、
+##   焦点回归。
 ##
 ## 只做组件级断言，不启动游戏主场景、不依赖世界/战斗状态。
 extends SceneTree
@@ -35,9 +40,15 @@ const PixelDropdownScript = preload("res://ui/components/pixel_dropdown.gd")
 const PixelPopupScript = preload("res://ui/components/pixel_popup.gd")
 const PixelAudioPlayerScript = preload("res://ui/components/pixel_audio_player.gd")
 const PixelVideoPlayerScript = preload("res://ui/components/pixel_video_player.gd")
+const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
+const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
+const PixelGridScript = preload("res://ui/components/pixel_grid.gd")
+const PixelMarginScript = preload("res://ui/components/pixel_margin.gd")
+const PixelCenterScript = preload("res://ui/components/pixel_center.gd")
+const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
 
 ## 画廊页签标题的期望值（与脚本内 DEMO_TAB_TITLES 保持一致，改名时必须同步）。
-const EXPECTED_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单"]
+const EXPECTED_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单", "布局"]
 
 var _failures: Array[String] = []
 var _checks: int = 0
@@ -53,6 +64,7 @@ func _run() -> void:
 	_test_pixel_button_sfx()
 	_test_pixel_tabs()
 	_test_pixel_panel()
+	_test_layout_containers()
 	_test_pixel_controls()
 	await _test_pixel_media_controls()
 	await _test_gallery()
@@ -85,6 +97,37 @@ func _test_component_theme() -> void:
 	_expect(theme_a != null and theme_b != null, "ComponentTheme.create() 返回 Theme")
 	_expect(theme_a != theme_b, "ComponentTheme.create() 每次返回独立实例")
 
+	# 设计 token：间距 / 圆角 / 字体层级 / 内容边距全部集中在 ComponentTheme。
+	_expect(
+		ComponentThemeScript.SPACE_XS == 4 and ComponentThemeScript.SPACE_SM == 8
+		and ComponentThemeScript.SPACE_MD == 16 and ComponentThemeScript.SPACE_LG == 24,
+		"间距 token 为 4/8/16/24"
+	)
+	_expect(
+		ComponentThemeScript.CORNER_TAB == 4 and ComponentThemeScript.CORNER_CONTROL == 6
+		and ComponentThemeScript.CORNER_BUTTON == 8 and ComponentThemeScript.CORNER_CARD == 8,
+		"圆角 token 为 4/6/8/8"
+	)
+	_expect(
+		ComponentThemeScript.FONT_CAPTION == 12 and ComponentThemeScript.FONT_BODY == 16
+		and ComponentThemeScript.FONT_TAB == 16 and ComponentThemeScript.FONT_TITLE == 28
+		and ComponentThemeScript.FONT_DISPLAY == 36,
+		"字体层级 token 为 12/16/16/28/36（辅助 12-14 / 正文 16-18 / 标题 28-36）"
+	)
+	_expect(
+		ComponentThemeScript.BUTTON_MARGIN_X == 20 and ComponentThemeScript.BUTTON_MARGIN_Y == 12,
+		"按钮内容边距 token 为 20/12"
+	)
+	_expect(
+		ComponentThemeScript.CARD_MARGIN == 12 and ComponentThemeScript.CONTROL_MARGIN == 8,
+		"卡片/控件内容边距 token 为 12/8"
+	)
+	_expect(
+		ComponentThemeScript.DEFAULT_FONT_SIZE == ComponentThemeScript.FONT_BODY
+		and ComponentThemeScript.TAB_FONT_SIZE == ComponentThemeScript.FONT_TAB,
+		"旧字号常量与 token 同源"
+	)
+
 	_expect(theme_a.get_type_variation_base(ComponentThemeScript.BUTTON_PRIMARY) == &"Button", "主操作变体基类为 Button")
 	_expect(theme_a.get_type_variation_base(ComponentThemeScript.BUTTON_SECONDARY) == &"Button", "次操作变体基类为 Button")
 	_expect(theme_a.get_type_variation_base(ComponentThemeScript.BUTTON_DANGER) == &"Button", "危险变体基类为 Button")
@@ -103,11 +146,38 @@ func _test_component_theme() -> void:
 		_expect(theme_a.has_stylebox("focus", variation), label + " 有 focus 样式")
 		_expect(theme_a.has_stylebox("disabled", variation), label + " 有 disabled 样式")
 		_expect(theme_a.get_constant("icon_max_width", variation) == 18, label + " 图标最大宽度默认 18")
-		_expect(theme_a.get_font_size("font_size", variation) == 12, label + " 字号 12")
+		_expect(theme_a.get_font_size("font_size", variation) == ComponentThemeScript.FONT_BODY, label + " 正文字号随 token")
+
+	# 按钮六态几何契约：圆角 token 8、内容边距 token 左右 20 / 上下 12。
+	for variation: StringName in [
+		ComponentThemeScript.BUTTON_PRIMARY,
+		ComponentThemeScript.BUTTON_SECONDARY,
+		ComponentThemeScript.BUTTON_DANGER,
+	]:
+		var state_label := String(variation)
+		for state: String in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+			var sb: StyleBoxFlat = theme_a.get_stylebox(state, variation) as StyleBoxFlat
+			_expect(sb != null, state_label + " 有 " + state + " StyleBoxFlat")
+			if sb == null:
+				continue
+			_expect(
+				sb.corner_radius_top_left == ComponentThemeScript.CORNER_BUTTON
+				and sb.corner_radius_top_right == ComponentThemeScript.CORNER_BUTTON
+				and sb.corner_radius_bottom_left == ComponentThemeScript.CORNER_BUTTON
+				and sb.corner_radius_bottom_right == ComponentThemeScript.CORNER_BUTTON,
+				state_label + " " + state + " 圆角 = 8"
+			)
+			_expect(
+				is_equal_approx(sb.content_margin_left, float(ComponentThemeScript.BUTTON_MARGIN_X))
+				and is_equal_approx(sb.content_margin_right, float(ComponentThemeScript.BUTTON_MARGIN_X))
+				and is_equal_approx(sb.content_margin_top, float(ComponentThemeScript.BUTTON_MARGIN_Y))
+				and is_equal_approx(sb.content_margin_bottom, float(ComponentThemeScript.BUTTON_MARGIN_Y)),
+				state_label + " " + state + " 内容边距 = 20/12"
+			)
 
 	_expect(theme_a.has_stylebox("panel", ComponentThemeScript.TABS_VARIATION), "页签变体有 panel 样式")
 	_expect(theme_a.has_stylebox("panel", ComponentThemeScript.PANEL_VARIATION), "面板变体有 panel 样式")
-	_expect(theme_a.get_font_size("font_size", ComponentThemeScript.TABS_VARIATION) == 13, "页签字号 13")
+	_expect(theme_a.get_font_size("font_size", ComponentThemeScript.TABS_VARIATION) == ComponentThemeScript.FONT_TAB, "页签字号随 token")
 
 	# 语义必须真的不同：主操作 vs 危险按钮边框/字体色不同。
 	_expect(
@@ -594,6 +664,196 @@ func _test_pixel_media_controls() -> void:
 	_check_source("res://ui/components/pixel_video_player.gd", ["Engine.is_editor_hint()"], [])
 
 
+# ---------------------------------------------------------------- 六个布局容器
+
+## 生成固定最小尺寸的演示子项，让间距数学可计算。
+## FONT_BODY（16）的 Label 行高约 23px 会抬高最小高度，
+## chip 最小高度取 24 保证实际尺寸与 custom_minimum_size 一致。
+func _make_layout_chip(min_size: Vector2) -> Label:
+	var chip := Label.new()
+	chip.custom_minimum_size = min_size
+	chip.add_theme_font_size_override("font_size", ComponentThemeScript.FONT_BODY)
+	return chip
+
+
+func _test_layout_containers() -> void:
+	var v_box: VBoxContainer = PixelVBoxScript.new() as VBoxContainer
+	var h_box: HBoxContainer = PixelHBoxScript.new() as HBoxContainer
+	var grid: GridContainer = PixelGridScript.new() as GridContainer
+	var margin_box: MarginContainer = PixelMarginScript.new() as MarginContainer
+	var center_box: CenterContainer = PixelCenterScript.new() as CenterContainer
+	var scroll: ScrollContainer = PixelScrollScript.new() as ScrollContainer
+	_expect(v_box is VBoxContainer, "PixelVBox 继承 VBoxContainer")
+	_expect(h_box is HBoxContainer, "PixelHBox 继承 HBoxContainer")
+	_expect(grid is GridContainer, "PixelGrid 继承 GridContainer")
+	_expect(margin_box is MarginContainer, "PixelMargin 继承 MarginContainer")
+	_expect(center_box is CenterContainer, "PixelCenter 继承 CenterContainer")
+	_expect(scroll is ScrollContainer, "PixelScroll 继承 ScrollContainer")
+	if v_box == null or h_box == null or grid == null or margin_box == null or center_box == null or scroll == null:
+		return
+
+	# 默认值来自 token：VBox/HBox/Grid 全 16、Margin 24、无导出、仅纵向 + 双向 Expand Fill。
+	_expect(v_box.gap == ComponentThemeScript.SPACE_MD, "PixelVBox 默认 gap = 16")
+	_expect(h_box.gap == ComponentThemeScript.SPACE_MD, "PixelHBox 默认 gap = 16")
+	_expect(
+		grid.h_gap == ComponentThemeScript.SPACE_MD and grid.v_gap == ComponentThemeScript.SPACE_MD,
+		"PixelGrid 默认 h_gap/v_gap = 16"
+	)
+	_expect(
+		margin_box.margin_left_v == ComponentThemeScript.SPACE_LG
+		and margin_box.margin_top_v == ComponentThemeScript.SPACE_LG
+		and margin_box.margin_right_v == ComponentThemeScript.SPACE_LG
+		and margin_box.margin_bottom_v == ComponentThemeScript.SPACE_LG,
+		"PixelMargin 默认四向边距 = 24"
+	)
+	_expect(scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "PixelScroll 默认禁用横向滚动")
+	_expect(scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "PixelScroll 默认纵向自动滚动")
+	_expect(
+		scroll.size_flags_horizontal == Control.SIZE_EXPAND_FILL
+		and scroll.size_flags_vertical == Control.SIZE_EXPAND_FILL,
+		"PixelScroll 默认双向 Expand Fill"
+	)
+	_expect(scroll.follow_focus, "PixelScroll 默认焦点跟随滚动")
+	_expect(
+		v_box.get_child_count() == 0 and h_box.get_child_count() == 0 and grid.get_child_count() == 0
+		and margin_box.get_child_count() == 0 and center_box.get_child_count() == 0
+		and scroll.get_child_count() == 0,
+		"六个容器实例化时不添加隐式子节点"
+	)
+
+	# 非负夹紧与幂等：负值夹 0、重复写同值结果一致。
+	v_box.gap = -5
+	_expect(v_box.gap == 0, "PixelVBox 负 gap 夹紧为 0")
+	v_box.gap = 12
+	v_box.gap = 12
+	_expect(
+		v_box.gap == 12 and v_box.get_theme_constant("separation") == 12,
+		"PixelVBox 重复写同值幂等"
+	)
+	h_box.gap = -1
+	h_box.gap = 16
+	_expect(h_box.gap == 16, "PixelHBox 夹紧后可回默认值")
+	grid.h_gap = -3
+	grid.v_gap = -3
+	_expect(grid.h_gap == 0 and grid.v_gap == 0, "PixelGrid 负间距夹紧为 0")
+	margin_box.set_margin_all(-7)
+	_expect(
+		margin_box.margin_left_v == 0 and margin_box.margin_top_v == 0
+		and margin_box.margin_right_v == 0 and margin_box.margin_bottom_v == 0,
+		"set_margin_all 负值夹紧为 0"
+	)
+	margin_box.set_margin_all(24)
+	margin_box.set_margin_all(24)
+	_expect(
+		margin_box.margin_left_v == 24 and margin_box.margin_bottom_v == 24,
+		"set_margin_all 重复写幂等"
+	)
+
+	# 间距数学：真实子项 + 布局一帧后断言位置。
+	root.add_child(v_box)
+	root.add_child(h_box)
+	root.add_child(grid)
+	root.add_child(margin_box)
+	root.add_child(center_box)
+	root.add_child(scroll)
+	v_box.position = Vector2(0, 0)
+	v_box.size = Vector2(120, 80)
+	v_box.gap = ComponentThemeScript.SPACE_MD
+	h_box.position = Vector2(140, 0)
+	h_box.size = Vector2(120, 80)
+	h_box.gap = ComponentThemeScript.SPACE_MD
+	grid.position = Vector2(280, 0)
+	grid.size = Vector2(140, 80)
+	grid.columns = 2
+	grid.h_gap = ComponentThemeScript.SPACE_MD
+	grid.v_gap = ComponentThemeScript.SPACE_MD
+	margin_box.position = Vector2(0, 120)
+	margin_box.size = Vector2(120, 60)
+	margin_box.set_margin_all(ComponentThemeScript.SPACE_LG)
+	center_box.position = Vector2(140, 120)
+	center_box.size = Vector2(100, 60)
+	scroll.position = Vector2(280, 120)
+	scroll.size = Vector2(200, 150)
+
+	var v_chip_a := _make_layout_chip(Vector2(40, 24))
+	var v_chip_b := _make_layout_chip(Vector2(40, 24))
+	v_box.add_child(v_chip_a)
+	v_box.add_child(v_chip_b)
+	var h_chip_a := _make_layout_chip(Vector2(40, 24))
+	var h_chip_b := _make_layout_chip(Vector2(40, 24))
+	h_box.add_child(h_chip_a)
+	h_box.add_child(h_chip_b)
+	for chip_index: int in range(4):
+		grid.add_child(_make_layout_chip(Vector2(40, 24)))
+	var margin_child := _make_layout_chip(Vector2(0, 24))
+	margin_child.size_flags_vertical = Control.SIZE_FILL
+	margin_box.add_child(margin_child)
+	var center_child := _make_layout_chip(Vector2(30, 10))
+	center_box.add_child(center_child)
+	var scroll_content := PixelVBoxScript.new() as VBoxContainer
+	scroll_content.add_child(_make_layout_chip(Vector2(180, 400)))
+	scroll.add_child(scroll_content)
+	await process_frame
+	await process_frame
+
+	_expect(is_equal_approx(v_chip_b.position.y, 40.0), "PixelVBox 第二子项 y = 24 + 16")
+	_expect(is_equal_approx(h_chip_b.position.x, 56.0), "PixelHBox 第二子项 x = 40 + 16")
+	_expect(
+		grid.get_child(1).position.is_equal_approx(Vector2(56, 0)),
+		"PixelGrid 第一行第二列 x = 40 + 16"
+	)
+	_expect(
+		grid.get_child(2).position.is_equal_approx(Vector2(0, 40)),
+		"PixelGrid 第二行首列 y = 24 + 16"
+	)
+	_expect(margin_child.position.is_equal_approx(Vector2(24, 24)), "PixelMargin 子项位置 = 边距 (24, 24)")
+	_expect(
+		absf(center_child.position.x - (center_box.size.x - center_child.size.x) / 2.0) <= 1.0
+		and absf(center_child.position.y - (center_box.size.y - center_child.size.y) / 2.0) <= 1.0,
+		"PixelCenter 子项水平垂直居中（1px 容差容纳容器取整）"
+	)
+	_expect(
+		scroll.get_v_scroll_bar().max_value >= 400.0,
+		"PixelScroll 内容超出可视区时纵滚动范围生效"
+	)
+	_expect(
+		scroll.get_h_scroll_bar().max_value - scroll.get_h_scroll_bar().page <= 1.0,
+		"PixelScroll 横向无可滚动范围"
+	)
+
+	# 重复进树：容器不重建、不增删子节点，属性保持。
+	root.remove_child(v_box)
+	root.add_child(v_box)
+	_expect(v_box.gap == ComponentThemeScript.SPACE_MD, "PixelVBox 重复进树保持默认 gap")
+	_expect(v_box.get_child_count() == 2, "PixelVBox 重复进树不增删子节点")
+	root.remove_child(scroll)
+	root.add_child(scroll)
+	_expect(
+		scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED
+		and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO,
+		"PixelScroll 重复进树滚动模式不变"
+	)
+	_expect(scroll.get_child_count() == 1, "PixelScroll 重复进树不增删子节点")
+
+	v_box.free()
+	h_box.free()
+	grid.free()
+	margin_box.free()
+	center_box.free()
+	scroll.free()
+
+	# 容器只管摆放：六个脚本都不允许 add_child（防止隐式子节点回潮）。
+	for layout_path: String in [
+		"res://ui/components/pixel_v_box.gd",
+		"res://ui/components/pixel_h_box.gd",
+		"res://ui/components/pixel_grid.gd",
+		"res://ui/components/pixel_margin.gd",
+		"res://ui/components/pixel_center.gd",
+		"res://ui/components/pixel_scroll.gd",
+	]:
+		_check_source(layout_path, ["@tool"], ["add_child("])
+
+
 # ---------------------------------------------------------------- PixelTabs
 
 func _test_pixel_tabs() -> void:
@@ -863,6 +1123,73 @@ func _test_gallery() -> void:
 	_expect(not demo_popup.visible, "关闭按钮收起弹层")
 	_expect(root.gui_get_focus_owner() == open_popup, "弹层关闭后焦点回到打开按钮")
 
+	# 布局页：六个容器真实摆位、间距数学与滚动方向。
+	tabs.current_tab = 6
+	await process_frame
+	await process_frame
+	var layout_hbox: HBoxContainer = gallery.find_child("LayoutHBox", true, false) as HBoxContainer
+	var layout_vbox: VBoxContainer = gallery.find_child("LayoutVBox", true, false) as VBoxContainer
+	var layout_grid: GridContainer = gallery.find_child("LayoutGrid", true, false) as GridContainer
+	var layout_margin: MarginContainer = gallery.find_child("LayoutMargin", true, false) as MarginContainer
+	var layout_center: CenterContainer = gallery.find_child("LayoutCenter", true, false) as CenterContainer
+	var layout_scroll: ScrollContainer = gallery.find_child("LayoutScroll", true, false) as ScrollContainer
+	var layout_margin_child: Control = gallery.find_child("LayoutMarginChild", true, false) as Control
+	var layout_center_child: Control = gallery.find_child("LayoutCenterChild", true, false) as Control
+	var layout_scroll_content: VBoxContainer = gallery.find_child("LayoutScrollContent", true, false) as VBoxContainer
+	_expect(
+		layout_hbox != null and layout_vbox != null and layout_grid != null
+		and layout_margin != null and layout_center != null and layout_scroll != null
+		and layout_margin_child != null and layout_center_child != null
+		and layout_scroll_content != null,
+		"布局页包含六个容器与可断言子节点"
+	)
+	if (
+		layout_hbox == null or layout_vbox == null or layout_grid == null or layout_margin == null
+		or layout_center == null or layout_scroll == null or layout_margin_child == null
+		or layout_center_child == null or layout_scroll_content == null
+	):
+		return
+	_expect(layout_hbox.get_script() == PixelHBoxScript, "横排为 PixelHBox")
+	_expect(layout_vbox.get_script() == PixelVBoxScript, "竖排为 PixelVBox")
+	_expect(layout_grid.get_script() == PixelGridScript, "网格为 PixelGrid")
+	_expect(layout_margin.get_script() == PixelMarginScript, "边距为 PixelMargin")
+	_expect(layout_center.get_script() == PixelCenterScript, "居中为 PixelCenter")
+	_expect(layout_scroll.get_script() == PixelScrollScript, "滚动为 PixelScroll")
+	_expect(layout_hbox.get_child_count() == 3, "横排三个演示子项")
+	_expect(
+		is_equal_approx((layout_hbox.get_child(1) as Control).position.x, 56.0),
+		"横排第二子项间距 = 40 + gap 16"
+	)
+	_expect(
+		is_equal_approx((layout_vbox.get_child(1) as Control).position.y, 36.0),
+		"竖排第二子项间距 = 20 + gap 16"
+	)
+	_expect(
+		layout_grid.columns == 2 and layout_grid.get_child_count() == 4,
+		"网格两列四个演示子项"
+	)
+	_expect(
+		layout_margin_child.position.is_equal_approx(Vector2(24, 24)),
+		"边距容器子项位置 = (24, 24)"
+	)
+	_expect(
+		absf(
+			layout_center_child.position.x - (layout_center.size.x - layout_center_child.size.x) / 2.0
+		) <= 1.0
+		and absf(
+			layout_center_child.position.y - (layout_center.size.y - layout_center_child.size.y) / 2.0
+		) <= 1.0,
+		"居中容器子项真实居中（1px 容差容纳容器取整）"
+	)
+	_expect(
+		layout_scroll.get_v_scroll_bar().max_value > layout_scroll.get_v_scroll_bar().page,
+		"滚动容器纵向可滚动"
+	)
+	_expect(
+		layout_scroll.get_h_scroll_bar().max_value - layout_scroll.get_h_scroll_bar().page <= 1.0,
+		"滚动容器横向无可滚动范围"
+	)
+
 	# 演示页无教学/说明性文本：标题、短标签与真实值之外不应出现说明文案或路径。
 	var forbidden: Array[String] = ["说明", "用法", "API", "继承", "res://", "点击可", "示例"]
 	for control: Node in gallery.find_children("*", "Label", true, false):
@@ -921,6 +1248,16 @@ func _test_gallery() -> void:
 		_expect(
 			demo_text_area.size.x > 0.0 and demo_text_area.size.y > 0.0,
 			"多行文本在 %dx%d 有有效尺寸" % [target.x, target.y]
+		)
+		tabs.current_tab = 6
+		await process_frame
+		_expect(
+			layout_scroll.size.x > 0.0 and layout_scroll.size.y >= 140.0,
+			"滚动容器在 %dx%d 保持最小尺寸" % [target.x, target.y]
+		)
+		_expect(
+			layout_center.size.y >= 64.0 and layout_center_child.size.x > 0.0,
+			"居中容器在 %dx%d 有有效尺寸" % [target.x, target.y]
 		)
 		tabs.current_tab = 0
 		await process_frame

@@ -121,7 +121,7 @@ func _ensure_ui() -> void:
 	_position_label = Label.new()
 	_position_label.name = POSITION_NAME
 	_position_label.text = "0.0 / 0.0"
-	_position_label.add_theme_font_size_override("font_size", 12)
+	_position_label.add_theme_font_size_override("font_size", ComponentThemeScript.FONT_CAPTION)
 	_position_label.add_theme_color_override("font_color", UIThemeScript.TEXT_DIM)
 	layout.add_child(_position_label)
 

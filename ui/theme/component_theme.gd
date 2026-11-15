@@ -1,6 +1,8 @@
-## component_theme.gd — 组件库集中 Theme 工厂：按钮语义变体 / TabContainer / 卡片面
+## component_theme.gd — 组件库集中 Theme 工厂：设计 token / 按钮语义变体 / TabContainer / 卡片面
 ##
-## 复用 scripts/ui/ui_theme.gd 的配色常量与 flat_style 口径，不修改旧主题与旧工厂：
+## 设计 token（SPACE_*/CORNER_*/FONT_*/…_MARGIN_*）是 ui/ 组件库与容器组件的
+## 唯一取值来源，详见根目录 DESIGN.md；复用 scripts/ui/ui_theme.gd 的配色常量
+## 与 flat_style 口径，不修改旧主题与旧工厂：
 ##   - PixelButtonPrimary / PixelButtonSecondary / PixelButtonDanger：Button 三种语义变体
 ##   - PixelTabs：TabContainer 变体，并给内部 TabBar 提供同口径主题项
 ##   - PixelPanel：PanelContainer 卡片面（深底 + 细边 + 圆角 + 阴影）
@@ -35,8 +37,33 @@ const POPUP_VARIATION: StringName = &"PixelPopup"
 
 ## 按钮图标默认最大宽度（像素）；PixelButton 可用 icon_size 覆盖。
 const DEFAULT_ICON_SIZE: int = 18
-const DEFAULT_FONT_SIZE: int = 12
-const TAB_FONT_SIZE: int = 13
+
+## ---- 设计 token（DESIGN.md 的唯一实现来源；组件与容器统一从这里取值）----
+## 间距体系（8/16/24）：XS 4 紧凑半步 / SM 8 行内控件 / MD 16 分组纵向节奏 / LG 24 页面外边距。
+const SPACE_XS: int = 4
+const SPACE_SM: int = 8
+const SPACE_MD: int = 16
+const SPACE_LG: int = 24
+## 圆角体系：Tab 4 / 输入类控件 6 / 按钮 8 / 卡片 8。
+const CORNER_TAB: int = 4
+const CORNER_CONTROL: int = 6
+const CORNER_BUTTON: int = 8
+const CORNER_CARD: int = 8
+## 字体层级：辅助 12 / 正文 16 / 页签 16 / 标题 28 / 展示 36
+## （标题层级 28–36、正文 16–18、辅助 12–14；正文/控件文字用 FONT_BODY，辅助文字用 FONT_CAPTION）。
+const FONT_CAPTION: int = 12
+const FONT_BODY: int = 16
+const FONT_TAB: int = 16
+const FONT_TITLE: int = 28
+const FONT_DISPLAY: int = 36
+## 内容边距：按钮左右 20 / 上下 12；卡片 12；输入类 8。
+const BUTTON_MARGIN_X: int = 20
+const BUTTON_MARGIN_Y: int = 12
+const CARD_MARGIN: int = 12
+const CONTROL_MARGIN: int = 8
+## 旧字号常量改为 token 别名（既有调用零改动）。
+const DEFAULT_FONT_SIZE: int = FONT_BODY
+const TAB_FONT_SIZE: int = FONT_TAB
 
 
 ## 每次调用返回独立 Theme 实例（主题实例隔离；组装逻辑只读不共享可变状态）。
@@ -101,7 +128,18 @@ static func _define_button_variations(theme: Theme) -> void:
 	)
 
 
+## 按钮状态 StyleBox：统一圆角 token（8）与内容边距 token（左右 20 / 上下 12）。
+static func _button_stylebox(bg: Color, border: Color) -> StyleBoxFlat:
+	var sb := UIThemeScript.flat_style(bg, border, 1, CORNER_BUTTON, -1.0)
+	sb.content_margin_left = BUTTON_MARGIN_X
+	sb.content_margin_right = BUTTON_MARGIN_X
+	sb.content_margin_top = BUTTON_MARGIN_Y
+	sb.content_margin_bottom = BUTTON_MARGIN_Y
+	return sb
+
+
 ## 单个按钮变体：normal/hover/pressed/hover_pressed/focus/disabled 与图标尺寸。
+## 内容边距全部走 token：文字与图标在四个主要状态间不跳动；focus 为覆盖描边不占布局。
 static func _define_button(
 	theme: Theme,
 	variation: StringName,
@@ -115,28 +153,17 @@ static func _define_button(
 	icon_color: Color
 ) -> void:
 	theme.set_type_variation(variation, &"Button")
-	theme.set_stylebox(
-		"normal", variation, UIThemeScript.flat_style(normal_bg, border, 1, 6, 6.0)
-	)
-	theme.set_stylebox(
-		"hover", variation, UIThemeScript.flat_style(hover_bg, border, 1, 6, 6.0)
-	)
-	theme.set_stylebox(
-		"pressed", variation, UIThemeScript.flat_style(pressed_bg, pressed_border, 1, 6, 6.0)
-	)
-	theme.set_stylebox(
-		"hover_pressed", variation,
-		UIThemeScript.flat_style(pressed_bg, pressed_border, 1, 6, 6.0)
-	)
+	theme.set_stylebox("normal", variation, _button_stylebox(normal_bg, border))
+	theme.set_stylebox("hover", variation, _button_stylebox(hover_bg, border))
+	theme.set_stylebox("pressed", variation, _button_stylebox(pressed_bg, pressed_border))
+	theme.set_stylebox("hover_pressed", variation, _button_stylebox(pressed_bg, pressed_border))
 	theme.set_stylebox(
 		"focus", variation,
-		UIThemeScript.flat_style(Color(0, 0, 0, 0), UIThemeScript.ACCENT, 1, 6, 6.0)
+		UIThemeScript.flat_style(Color(0, 0, 0, 0), UIThemeScript.ACCENT, 1, CORNER_BUTTON, -1.0)
 	)
 	theme.set_stylebox(
 		"disabled", variation,
-		UIThemeScript.flat_style(
-			Color(0.07, 0.09, 0.11, 0.8), Color(0.2, 0.25, 0.28, 0.5), 1, 6, 6.0
-		)
+		_button_stylebox(Color(0.07, 0.09, 0.11, 0.8), Color(0.2, 0.25, 0.28, 0.5))
 	)
 	theme.set_color("font_color", variation, font_color)
 	theme.set_color("font_hover_color", variation, font_color)
@@ -168,7 +195,7 @@ static func _define_tabs(theme: Theme) -> void:
 	)
 	var focus := _tab_stylebox(Color(0, 0, 0, 0), UIThemeScript.ACCENT, 1)
 	var tabbar_bg := UIThemeScript.flat_style(
-		Color(0.02, 0.03, 0.045, 0.55), Color(0, 0, 0, 0), 0, 4, -1.0
+		Color(0.02, 0.03, 0.045, 0.55), Color(0, 0, 0, 0), 0, CORNER_TAB, -1.0
 	)
 
 	theme.set_type_variation(TABS_VARIATION, &"TabContainer")
@@ -215,7 +242,7 @@ static func _apply_tabs_type(
 
 ## Tab 三态 StyleBox：选中下缘加宽，未选中透明但保留 1px 占位避免跳变。
 static func _tab_stylebox(bg: Color, border: Color, bottom_width: int) -> StyleBoxFlat:
-	var sb := UIThemeScript.flat_style(bg, border, 1, 4, -1.0)
+	var sb := UIThemeScript.flat_style(bg, border, 1, CORNER_TAB, -1.0)
 	sb.set_border_width(SIDE_BOTTOM, bottom_width)
 	sb.content_margin_left = 10
 	sb.content_margin_right = 10
@@ -224,11 +251,11 @@ static func _tab_stylebox(bg: Color, border: Color, bottom_width: int) -> StyleB
 	return sb
 
 
-## 卡片面：深底细边 + 圆角 + 阴影；内容边距由 StyleBox 统一给。
+## 卡片面：深底细边 + 圆角 + 阴影；内容边距由 StyleBox 统一给（token：卡片 12）。
 static func _define_panel(theme: Theme) -> void:
 	theme.set_type_variation(PANEL_VARIATION, &"PanelContainer")
 	var sb := UIThemeScript.flat_style(
-		UIThemeScript.HELP_BG, UIThemeScript.BORDER, 1, 8, 12.0
+		UIThemeScript.HELP_BG, UIThemeScript.BORDER, 1, CORNER_CARD, float(CARD_MARGIN)
 	)
 	sb.shadow_color = Color(0, 0, 0, 0.35)
 	sb.shadow_size = 8
@@ -251,16 +278,20 @@ static func _define_line_edit(theme: Theme) -> void:
 	theme.set_type_variation(LINE_EDIT_VARIATION, &"LineEdit")
 	theme.set_stylebox(
 		"normal", LINE_EDIT_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, 6, 8.0)
+		UIThemeScript.flat_style(
+			UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, CORNER_CONTROL, float(CONTROL_MARGIN)
+		)
 	)
 	theme.set_stylebox(
 		"focus", LINE_EDIT_VARIATION,
-		UIThemeScript.flat_style(Color(0.07, 0.10, 0.12, 1.0), UIThemeScript.ACCENT, 1, 6, 8.0)
+		UIThemeScript.flat_style(
+			Color(0.07, 0.10, 0.12, 1.0), UIThemeScript.ACCENT, 1, CORNER_CONTROL, float(CONTROL_MARGIN)
+		)
 	)
 	theme.set_stylebox(
 		"read_only", LINE_EDIT_VARIATION,
 		UIThemeScript.flat_style(
-			Color(0.06, 0.08, 0.10, 0.9), Color(0.2, 0.25, 0.28, 0.5), 1, 6, 8.0
+			Color(0.06, 0.08, 0.10, 0.9), Color(0.2, 0.25, 0.28, 0.5), 1, CORNER_CONTROL, float(CONTROL_MARGIN)
 		)
 	)
 	theme.set_color("font_color", LINE_EDIT_VARIATION, UIThemeScript.TEXT_MAIN)
@@ -276,28 +307,28 @@ static func _define_option_button(theme: Theme) -> void:
 	theme.set_type_variation(OPTION_BUTTON_VARIATION, &"OptionButton")
 	theme.set_stylebox(
 		"normal", OPTION_BUTTON_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, 6, 6.0)
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"hover", OPTION_BUTTON_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG_HOVER, UIThemeScript.PANEL_BORDER, 1, 6, 6.0)
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_HOVER, UIThemeScript.PANEL_BORDER, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"pressed", OPTION_BUTTON_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, 6, 6.0)
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"hover_pressed", OPTION_BUTTON_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, 6, 6.0)
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"focus", OPTION_BUTTON_VARIATION,
-		UIThemeScript.flat_style(Color(0, 0, 0, 0), UIThemeScript.ACCENT, 1, 6, 6.0)
+		UIThemeScript.flat_style(Color(0, 0, 0, 0), UIThemeScript.ACCENT, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"disabled", OPTION_BUTTON_VARIATION,
 		UIThemeScript.flat_style(
-			Color(0.07, 0.09, 0.11, 0.8), Color(0.2, 0.25, 0.28, 0.5), 1, 6, 6.0
+			Color(0.07, 0.09, 0.11, 0.8), Color(0.2, 0.25, 0.28, 0.5), 1, CORNER_CONTROL, 6.0
 		)
 	)
 	theme.set_color("font_color", OPTION_BUTTON_VARIATION, UIThemeScript.TEXT_MAIN)
@@ -391,7 +422,7 @@ static func _define_image(theme: Theme) -> void:
 	theme.set_type_variation(IMAGE_VARIATION, &"PanelContainer")
 	theme.set_stylebox(
 		"panel", IMAGE_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.HELP_BG, UIThemeScript.BORDER, 1, 8, 0.0)
+		UIThemeScript.flat_style(UIThemeScript.HELP_BG, UIThemeScript.BORDER, 1, CORNER_CARD, 0.0)
 	)
 
 
@@ -400,16 +431,20 @@ static func _define_text_area(theme: Theme) -> void:
 	theme.set_type_variation(TEXT_AREA_VARIATION, &"TextEdit")
 	theme.set_stylebox(
 		"normal", TEXT_AREA_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, 6, 8.0)
+		UIThemeScript.flat_style(
+			UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, CORNER_CONTROL, float(CONTROL_MARGIN)
+		)
 	)
 	theme.set_stylebox(
 		"focus", TEXT_AREA_VARIATION,
-		UIThemeScript.flat_style(Color(0.07, 0.10, 0.12, 1.0), UIThemeScript.ACCENT, 1, 6, 8.0)
+		UIThemeScript.flat_style(
+			Color(0.07, 0.10, 0.12, 1.0), UIThemeScript.ACCENT, 1, CORNER_CONTROL, float(CONTROL_MARGIN)
+		)
 	)
 	theme.set_stylebox(
 		"read_only", TEXT_AREA_VARIATION,
 		UIThemeScript.flat_style(
-			Color(0.06, 0.08, 0.10, 0.9), Color(0.2, 0.25, 0.28, 0.5), 1, 6, 8.0
+			Color(0.06, 0.08, 0.10, 0.9), Color(0.2, 0.25, 0.28, 0.5), 1, CORNER_CONTROL, float(CONTROL_MARGIN)
 		)
 	)
 	theme.set_color("font_color", TEXT_AREA_VARIATION, UIThemeScript.TEXT_MAIN)
@@ -425,28 +460,28 @@ static func _define_dropdown(theme: Theme) -> void:
 	theme.set_type_variation(DROPDOWN_VARIATION, &"MenuButton")
 	theme.set_stylebox(
 		"normal", DROPDOWN_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, 6, 6.0)
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG, UIThemeScript.BORDER, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"hover", DROPDOWN_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG_HOVER, UIThemeScript.PANEL_BORDER, 1, 6, 6.0)
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_HOVER, UIThemeScript.PANEL_BORDER, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"pressed", DROPDOWN_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, 6, 6.0)
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"hover_pressed", DROPDOWN_VARIATION,
-		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, 6, 6.0)
+		UIThemeScript.flat_style(UIThemeScript.BTN_BG_PRESSED, UIThemeScript.ACCENT, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"focus", DROPDOWN_VARIATION,
-		UIThemeScript.flat_style(Color(0, 0, 0, 0), UIThemeScript.ACCENT, 1, 6, 6.0)
+		UIThemeScript.flat_style(Color(0, 0, 0, 0), UIThemeScript.ACCENT, 1, CORNER_CONTROL, 6.0)
 	)
 	theme.set_stylebox(
 		"disabled", DROPDOWN_VARIATION,
 		UIThemeScript.flat_style(
-			Color(0.07, 0.09, 0.11, 0.8), Color(0.2, 0.25, 0.28, 0.5), 1, 6, 6.0
+			Color(0.07, 0.09, 0.11, 0.8), Color(0.2, 0.25, 0.28, 0.5), 1, CORNER_CONTROL, 6.0
 		)
 	)
 	theme.set_color("font_color", DROPDOWN_VARIATION, UIThemeScript.TEXT_MAIN)
@@ -462,7 +497,7 @@ static func _define_dropdown(theme: Theme) -> void:
 static func _define_popup(theme: Theme) -> void:
 	theme.set_type_variation(POPUP_VARIATION, &"PopupPanel")
 	var sb := UIThemeScript.flat_style(
-		UIThemeScript.HELP_BG, UIThemeScript.BORDER, 1, 8, 12.0
+		UIThemeScript.HELP_BG, UIThemeScript.BORDER, 1, CORNER_CARD, float(CARD_MARGIN)
 	)
 	sb.shadow_color = Color(0, 0, 0, 0.35)
 	sb.shadow_size = 8
