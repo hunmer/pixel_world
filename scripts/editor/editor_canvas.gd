@@ -20,6 +20,7 @@ const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 
 signal cell_pressed(cell: Vector2i)
 signal cell_dragged(cell: Vector2i)
+signal cell_released(cell: Vector2i)
 signal hover_changed(cell: Vector2i)
 
 const PLAYER_COLOR := Color(0.376, 0.647, 0.980)
@@ -31,6 +32,9 @@ const REGION_COLOR := Color(0.3, 0.98, 0.75, 0.95)
 const REGION_DASH := 8.0
 const REGION_GAP := 6.0
 const REGION_LINE_WIDTH := 2.0
+## 粘贴预览描边色（与区域虚线同一套几何）：绿=合法落点，红=越界/非法
+const PASTE_OK_COLOR := Color(0.45, 1.0, 0.5, 0.95)
+const PASTE_BAD_COLOR := Color(1.0, 0.35, 0.3, 0.95)
 ## 滚轮/手势每步缩放因子（与 B2 battle.gd 一致：factor<1 = 放大一步）
 const WHEEL_ZOOM_IN := 0.9
 const WHEEL_ZOOM_OUT := 1.1
@@ -69,9 +73,15 @@ var _asset_preview_marker: Node2D = null
 var _hover_marker: Polygon2D = null
 var _selection_marker: Polygon2D = null
 var _region_marker: Node2D = null
+## 粘贴预览标记（绿/红虚线框；与区域虚线同一套几何与 dash 参数）
+var _paste_marker: Node2D = null
+## 粘贴预览区域：{"min": Vector2i, "max": Vector2i, "valid": bool}
+var _paste_region: Dictionary = {}
 var _unit_markers: Array[Node2D] = []
 var _dragging := false
 var _panning := false
+## 本次左键笔画的落格 cell（press 时记下；release 无移动时 hover 可能为空）
+var _press_cell := Vector2i(-1, -1)
 ## 视图状态缓存（相机 yaw/elevation/zoom/focus + 画布全局矩形）：
 ## 任一变化时重算悬停/选中多边形与单位标记位置（相机旋转是平滑动画）。
 var _view_cache := {}
@@ -127,6 +137,16 @@ func _ready() -> void:
 	_region_marker.line_width = REGION_LINE_WIDTH
 	_region_marker.visible = false
 	_world.add_child(_region_marker)
+	# 粘贴预览框（绿=合法/红=非法落点；置于区域虚线之下，粘贴目标与框选可并存）
+	_paste_marker = _RegionOutlineMark.new()
+	_paste_marker.name = "PastePreviewMark"
+	_paste_marker.z_index = 16
+	_paste_marker.line_color = PASTE_OK_COLOR
+	_paste_marker.dash_len = REGION_DASH
+	_paste_marker.gap_len = REGION_GAP
+	_paste_marker.line_width = REGION_LINE_WIDTH
+	_paste_marker.visible = false
+	_world.add_child(_paste_marker)
 	# 素材预览块（选中素材时跟随悬停格顶面中心，z 介于选中与悬停标记之间）
 	_asset_preview_marker = _AssetPreviewMark.new()
 	_asset_preview_marker.name = "AssetPreviewMark"
@@ -147,6 +167,8 @@ func _rebuild() -> void:
 		_selection_marker.visible = false
 		if _region_marker != null:
 			_region_marker.visible = false
+		if _paste_marker != null:
+			_paste_marker.visible = false
 		return
 	_renderer.set_custom_props(model.get("props", []))  # 植物层（setup 前注入）
 	_renderer.set_custom_assets(
@@ -159,6 +181,7 @@ func _rebuild() -> void:
 	_update_selection_marker()
 	_clamp_selection_region()
 	_update_region_marker()
+	_update_paste_marker()
 	_center_map()
 
 
@@ -270,11 +293,18 @@ func _gui_input(event: InputEvent) -> void:
 				var c := _pick(mb.position)
 				if c.x >= 0:
 					_dragging = true
+					_press_cell = c
 					cell_pressed.emit(c)
 					accept_event()
 			else:
+				if _dragging:
+					# 本次笔画以 cell press 开始 → 释放即提交（拖拽终点优先，无移动回落到落格）
+					var rc := hover_cell if hover_cell.x >= 0 else _press_cell
+					if rc.x >= 0:
+						cell_released.emit(rc)
 				_dragging = false
 				_panning = false
+				_press_cell = Vector2i(-1, -1)
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
 			_panning = mb.pressed
 			accept_event()
@@ -346,6 +376,7 @@ func _process(_delta: float) -> void:
 		_update_selection_marker()
 		_layout_unit_markers()
 		_update_region_marker()
+		_update_paste_marker()
 
 
 func _update_hover_marker() -> void:
@@ -530,6 +561,50 @@ func _update_region_marker() -> void:
 		int(selection_region.get("z", -1)), int(selection_region.get("z_max", -1)))
 	_region_marker.polylines = lines
 	_region_marker.visible = not lines.is_empty()
+
+
+# ============================================================
+# 粘贴预览（复制/剪切区域落点指示）
+# ============================================================
+
+## 设置粘贴预览框：闭区间 [min_cell, max_cell]（自动归一），valid 决定描边色
+## （绿=合法落点 / 红=越界或非法）。与区域虚线共用几何（跟随地形高度），
+## 坐标校验规则同 set_selection_region：完全出界 → 清空；部分越界 → 夹回。
+func set_paste_preview(min_cell: Vector2i, max_cell: Vector2i, valid: bool) -> void:
+	var lo := Vector2i(mini(min_cell.x, max_cell.x), mini(min_cell.y, max_cell.y))
+	var hi := Vector2i(maxi(min_cell.x, max_cell.x), maxi(min_cell.y, max_cell.y))
+	var w := int(model.get("width", 0))
+	var h := int(model.get("height", 0))
+	if w <= 0 or h <= 0 or hi.x < 0 or hi.y < 0 or lo.x >= w or lo.y >= h:
+		_paste_region = {}
+		_update_paste_marker()
+		return
+	lo = Vector2i(clampi(lo.x, 0, w - 1), clampi(lo.y, 0, h - 1))
+	hi = Vector2i(clampi(hi.x, 0, w - 1), clampi(hi.y, 0, h - 1))
+	_paste_region = {"min": lo, "max": hi, "valid": valid}
+	_update_paste_marker()
+
+
+## 清空粘贴预览框。
+func clear_paste_preview() -> void:
+	_paste_region = {}
+	_update_paste_marker()
+
+
+func has_paste_preview() -> bool:
+	return not _paste_region.is_empty()
+
+
+func _update_paste_marker() -> void:
+	if _paste_marker == null:
+		return
+	if _paste_region.is_empty() or _renderer == null or _renderer.grid == null:
+		_paste_marker.visible = false
+		return
+	_paste_marker.line_color = PASTE_OK_COLOR if bool(_paste_region.get("valid", false)) else PASTE_BAD_COLOR
+	var lines := region_outline_polylines(_paste_region["min"], _paste_region["max"])
+	_paste_marker.polylines = lines
+	_paste_marker.visible = not lines.is_empty()
 
 
 # ============================================================

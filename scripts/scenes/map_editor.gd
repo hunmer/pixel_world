@@ -24,6 +24,12 @@
 ## 顶面 + 四角立边）；区域填充与无区域
 ## 洪水填充均支持内置地形与已保存素材方块——地形写 rows 并清 override，素材写
 ## tile_overrides 不动 rows，整个区域一步历史（原子）。
+## 区域剪贴板（Ctrl+C/X/V 或弹窗按钮）：复制/剪切当前完整区域，粘贴模式预览
+## 跟随悬停格（绿=合法/红=越界），点击提交；区域内按下拖动=移动区域。
+## 内核全部走 scripts/editor/region_clipboard.gd 纯函数；每次提交恰好一步历史，
+## 越界拒绝且不改模型；生成/读取/调尺寸清空剪贴板并取消预览。
+## 移动工具（侧栏 MoveToolToggle）：开启后画布拖拽=平移当前选区（选区跟随），
+## 原地松开=纯点击；关闭后回到区域内拖动/两次点击语义。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
 ## 按钮一律由 ui/components 像素组件创建（UIFactory / PixelButton 预加载），
 ## 本文件不再自带样式 helper 与裸 Button.new；领域按钮工厂（_add_tool_btn 等）保留。
@@ -45,6 +51,7 @@ const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_vi
 const UserAssetCatalogScript = preload("res://scripts/assets/user_asset_catalog.gd")
 const SelectionRangeScript = preload("res://scripts/editor/selection_range.gd")
 const BlockSelectorScript = preload("res://scripts/editor/block_selector.gd")
+const RegionClipboardScript = preload("res://scripts/editor/region_clipboard.gd")
 
 const Tool = {
 	PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5,
@@ -146,6 +153,21 @@ var _pos2_boxes: Dictionary = {}
 var _fill_selector: BlockSelectorScript = null
 ## 程序化回写 SpinBox 时挂起 _on_region_box_changed（防回环）
 var _syncing_region_boxes := false
+## 区域剪贴板（region_clipboard.gd payload）：复制/剪切写入，粘贴/移动消费；
+## 生成/读取/调尺寸清空（跨模型粘贴语义不成立）
+var _clipboard: Dictionary = {}
+## 粘贴模式：预览框跟随悬停格，下一次画布点击=提交粘贴
+var _paste_mode := false
+## 粘贴落点（payload 左上角 = 悬停格；提交时转正）
+var _paste_origin := Vector2i(-1, -1)
+## 区域内按下待移动（SELECT+区域模式+完整区域，按下格在区域内；
+## 或移动工具开启，任意格按下）
+var _move_armed := false
+var _move_grab := Vector2i(-1, -1)
+var _move_preview := Vector2i(-1, -1)
+## 移动工具（侧栏开关）：开启后画布拖拽=平移当前选区（选区跟随平移）
+var _move_tool_active := false
+var _move_tool_toggle: CheckButton = null
 
 
 func _ready() -> void:
@@ -184,7 +206,31 @@ func _unhandled_input(event: InputEvent) -> void:
 			if get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			_redo()
+		elif ctrl and (key.keycode == KEY_C or key.physical_keycode == KEY_C):
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			_on_region_copy_pressed()
+		elif ctrl and (key.keycode == KEY_X or key.physical_keycode == KEY_X):
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			_on_region_cut_pressed()
+		elif ctrl and (key.keycode == KEY_V or key.physical_keycode == KEY_V):
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			_on_region_paste_pressed()
 		elif key.physical_keycode == KEY_ESCAPE or key.keycode == KEY_ESCAPE:
+			# 粘贴/移动预览激活时：Esc 先取消预览，不关菜单也不返回世界
+			if _paste_mode or _move_armed:
+				_cancel_paste()
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+			# 移动工具开启时：Esc 先关掉移动工具（同步侧栏开关），不关菜单也不返回世界
+			if _move_tool_active:
+				_set_move_tool(false)
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
 			# 选择模式菜单打开时：Esc 先关菜单，不碰素材弹窗也不返回世界
 			if _selection_popup != null and _selection_popup.visible:
 				_close_selection_popup()
@@ -246,6 +292,7 @@ func _build_ui() -> void:
 	_canvas.name = "EditorCanvas"
 	_canvas.cell_pressed.connect(_on_cell_pressed)
 	_canvas.cell_dragged.connect(_on_cell_dragged)
+	_canvas.cell_released.connect(_on_cell_released)
 	_canvas.hover_changed.connect(_on_hover_changed)
 	_canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# 3D 取景让出右侧栏宽度（同世界 reserved_right_px），画布内容对齐舞台中心
@@ -290,6 +337,20 @@ func _build_ui() -> void:
 		title_row.add_child(tw)
 	title_row.add_child(UIFactoryScript.label("战场编辑器", 16, ACCENT))
 	sv.add_child(title_row)
+
+	# 移动工具行：侧栏开关（不占左上工具条 7 钮契约，不动 ModeOption 2 项契约）
+	var move_row := HBoxContainer.new()
+	move_row.name = "MoveToolRow"
+	move_row.add_theme_constant_override("separation", 6)
+	var move_toggle := CheckButton.new()
+	move_toggle.name = "MoveToolToggle"
+	move_toggle.text = "移动工具"
+	move_toggle.focus_mode = Control.FOCUS_NONE
+	move_toggle.toggled.connect(_on_move_tool_toggled)
+	move_row.add_child(move_toggle)
+	sv.add_child(move_row)
+	_move_tool_toggle = move_toggle
+	sv.add_child(UIFactoryScript.label("开启后拖拽鼠标移动选中区域", 11, TEXT_DIM))
 
 	# ---- 7 个 Tab：文件 / 生成 / 地形 / 方块 / 角色 / 历史 / 素材 ----
 	# Tab 样式统一走 ui_factory.tab_container（含页签三态与面板底）
@@ -495,6 +556,9 @@ func _build_hint_bar() -> Control:
 	bar.add_hint("Q E / Z X", "转向 90°")
 	bar.add_hint("R", "视角复位")
 	bar.add_hint("CTRL+Z / Y", "撤销 / 重做")
+	bar.add_hint("CTRL+C / X / V", "复制 / 剪切 / 粘贴区域")
+	bar.add_hint("区域内拖动", "移动区域")
+	bar.add_hint("移动工具", "侧栏开关，拖拽移动选区")
 	bar.add_hint("ESC", "返回世界")
 	return bar
 
@@ -996,13 +1060,45 @@ func _active_tool() -> int:
 
 
 func _on_cell_pressed(cell: Vector2i) -> void:
+	if _paste_mode:
+		_commit_paste(cell)  # 粘贴模式：点击=提交落点
+		return
+	# 移动工具开启：任意格按下=抓取选区（不落点、不设端点、绝不触发区域选择，
+	# 否则第三次点击会重置 pos1）
+	if _move_tool_active:
+		var mt_bounds := _region_2d_bounds()
+		if mt_bounds.is_empty():
+			_status("移动工具：请先框选一个区域", true)
+			return
+		_move_armed = true
+		_move_grab = cell - mt_bounds[0]  # 记录抓取偏移（按下格-选区 min）
+		_move_preview = cell
+		return
 	var tool := _active_tool()
+	# 区域内按下（完整区域+SELECT+区域模式）→ 待移动：不落点、不设端点；
+	# 原地松开=纯点击，由 _on_cell_released 补走原 _apply_region_click 逻辑
+	if tool == Tool.SELECT and _selection_mode == &"region" and _region_pos2_set \
+			and _selection_range.is_active() and _selection_range.contains_2i(cell):
+		_move_armed = true
+		_move_grab = cell
+		_move_preview = cell
+		return
 	if tool == Tool.HEIGHT_UP or tool == Tool.HEIGHT_DOWN:
 		_height_stroke_cells.clear()
 	_apply_tool(cell)
 
 
 func _on_cell_dragged(cell: Vector2i) -> void:
+	# 区域内按下后拖动 → 移动预览（绿=合法落点/红=越界）；仍不设区域端点（既有契约）
+	if _move_armed and _move_tool_active:
+		if cell != _move_preview:  # 移动工具：跨格才预览（跟随抓取偏移）
+			_move_preview = cell
+			_update_move_preview(cell)
+		return
+	if _move_armed and cell != _move_grab:
+		_move_preview = cell
+		_update_move_preview(cell)
+		return
 	# 拖动仅对画笔/植物/橡皮/高度升降有意义（填充/角色不响应拖动）
 	var tool := _active_tool()
 	if tool == Tool.SELECT:
@@ -1022,6 +1118,82 @@ func _on_cell_dragged(cell: Vector2i) -> void:
 		_set_prop_asset(cell, "")
 	elif tool == Tool.HEIGHT_UP or tool == Tool.HEIGHT_DOWN:
 		_apply_height_brush(cell, tool)
+
+
+## 画布左键释放（本次笔画以 cell press 开始）：移动工具/区域内拖动 → 跨格=移动
+## 区域（一步历史）；原地松开：移动工具=纯点击不改任何状态，区域内拖动=按原
+## 逻辑补 _apply_region_click（第三次点击仍重置 pos1）
+func _on_cell_released(cell: Vector2i) -> void:
+	if not _move_armed:
+		return
+	var grab := _move_grab
+	var via_tool := _move_tool_active
+	_move_armed = false
+	_move_grab = Vector2i(-1, -1)
+	_move_preview = Vector2i(-1, -1)
+	if _canvas != null:
+		_canvas.clear_paste_preview()
+	var bounds := _region_2d_bounds()
+	if via_tool:
+		if bounds.is_empty():
+			return
+		var delta: Vector2i = cell - grab - (bounds[0] as Vector2i)  # grab=抓取偏移（按下格-选区 min）
+		if delta == Vector2i.ZERO:
+			return  # 原地松开：不改模型、不入历史、不触发区域选择
+		_commit_region_move(bounds, delta, true)
+		return
+	if cell == grab:
+		_apply_region_click(cell)
+		return
+	if bounds.is_empty():
+		return
+	_commit_region_move(bounds, cell - grab, false)
+
+
+## 提交区域移动（越界仅报错：不改模型不入历史；成功恰好一步历史）；
+## translate=移动工具提交：选区随内容平移到目标（区域内拖动不平移）
+func _commit_region_move(bounds: Array, delta: Vector2i, translate_selection: bool) -> void:
+	var lo: Vector2i = bounds[0]
+	var hi: Vector2i = bounds[1]
+	var err := RegionClipboardScript.bounds_error(model, lo + delta, hi + delta)
+	if not err.is_empty():
+		_status("移动失败：%s" % err, true)
+		return
+	_push_undo("移动区域")
+	var result: Dictionary = RegionClipboardScript.move(model, lo, hi, delta)
+	if translate_selection and _selection_range.is_active():
+		_selection_range.anchor += Vector3i(delta.x, delta.y, 0)
+		_selection_range.focus += Vector3i(delta.x, delta.y, 0)
+	_refresh_canvas()
+	_sync_region_marker()
+	var dropped := int(result.get("dropped_units", 0))
+	var suffix := "（%d 个单位因地形不可站立被丢弃）" % dropped if dropped > 0 else ""
+	_status("已移动区域 → (%d,%d)%s" % [lo.x + delta.x, lo.y + delta.y, suffix])
+	print("[editor] 移动区域 min=%s delta=%s dropped_units=%d" % [str(lo), str(delta), dropped])  # L1 埋点
+
+
+## 移动工具模式 _move_grab=抓取偏移（delta=悬停格-偏移-选区 min）；
+## 区域内拖动 _move_grab=按下格（delta=悬停格-按下格）
+func _move_delta_for(cell: Vector2i) -> Vector2i:
+	if _move_tool_active:
+		var bounds := _region_2d_bounds()
+		if bounds.is_empty():
+			return Vector2i.ZERO
+		return cell - _move_grab - bounds[0]
+	return cell - _move_grab
+
+
+## 移动预览：原区域矩形平移 delta（=悬停格-按下格），合法=绿框/越界=红框
+func _update_move_preview(hover: Vector2i) -> void:
+	if _canvas == null or not _move_armed:
+		return
+	var bounds := _region_2d_bounds()
+	if bounds.is_empty():
+		return
+	var delta := _move_delta_for(hover)
+	var lo: Vector2i = bounds[0] + delta
+	var hi: Vector2i = bounds[1] + delta
+	_canvas.set_paste_preview(lo, hi, RegionClipboardScript.bounds_error(model, lo, hi).is_empty())
 
 
 func _apply_tool(cell: Vector2i) -> void:
@@ -1094,6 +1266,8 @@ func _select_cell(cell: Vector2i, activate_block: bool = true) -> void:
 
 
 func _on_hover_changed(cell: Vector2i) -> void:
+	if _paste_mode:
+		_update_paste_preview(cell)  # 粘贴预览跟随悬停格
 	if cell.x >= 0:
 		_update_cell_info(cell)
 	elif _canvas.selected_cell.x >= 0:
@@ -1259,7 +1433,7 @@ func _build_selection_popup() -> void:
 	popup.offset_left = 52
 	popup.offset_top = 8
 	popup.offset_right = 332
-	popup.offset_bottom = 400
+	popup.offset_bottom = 460
 	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
 	_selection_popup = popup
 	add_child(popup)
@@ -1311,6 +1485,34 @@ func _build_selection_popup() -> void:
 	UIThemeScript.style_button(close_btn)
 	btns.add_child(close_btn)
 	box.add_child(btns)
+
+	# ---- 区域操作：复制/剪切/粘贴（Ctrl+C/X/V 同款；区域内按下拖动=移动）----
+	var ops := HBoxContainer.new()
+	ops.name = "RegionOpRow"
+	ops.add_theme_constant_override("separation", 4)
+	var copy_btn := _pixel_btn()
+	copy_btn.name = "CopyRegionBtn"
+	copy_btn.text = "复制区域"
+	copy_btn.pressed.connect(_on_region_copy_pressed)
+	UIThemeScript.style_button(copy_btn)
+	ops.add_child(copy_btn)
+	var cut_btn := _pixel_btn()
+	cut_btn.name = "CutRegionBtn"
+	cut_btn.text = "剪切区域"
+	cut_btn.pressed.connect(_on_region_cut_pressed)
+	UIThemeScript.style_button(cut_btn)
+	ops.add_child(cut_btn)
+	var paste_btn := _pixel_btn()
+	paste_btn.name = "PasteRegionBtn"
+	paste_btn.text = "粘贴区域"
+	paste_btn.pressed.connect(_on_region_paste_pressed)
+	UIThemeScript.style_button(paste_btn)
+	ops.add_child(paste_btn)
+	box.add_child(ops)
+	var op_hint := UIFactoryScript.label("CTRL+C/X/V 复制/剪切/粘贴 · 区域内拖动=移动 · ESC 取消", 9, TEXT_DIM)
+	op_hint.name = "RegionOpHint"
+	op_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(op_hint)
 
 
 ## pos1/pos2 行：标签 + x/y/z 三个 SpinBox（名称 Pos1X 等，坐标 UI 契约用）
@@ -1557,6 +1759,155 @@ func _on_region_clear_pressed() -> void:
 	_status("已清除区域选择")
 
 
+# ============================================================
+# 区域剪贴板：复制 / 剪切 / 粘贴 / 区域内拖动移动
+# （内核全部走 region_clipboard.gd 纯函数；本文件只做门禁、历史与状态栏）
+# ============================================================
+
+## 当前完整区域的 2D 角点 [min, max]；区域不完整（未两次点击/未激活）返回 []
+func _region_2d_bounds() -> Array:
+	if _selection_mode != &"region" or not _region_pos2_set or not _selection_range.is_active():
+		return []
+	var mn := _selection_range.min_corner()
+	var mx := _selection_range.max_corner()
+	return [Vector2i(mini(mn.x, mx.x), mini(mn.y, mx.y)),
+		Vector2i(maxi(mn.x, mx.x), maxi(mn.y, mx.y))]
+
+
+## 复制区域：extract 入剪贴板，不入历史（模型不变）
+func _on_region_copy_pressed() -> void:
+	var bounds := _region_2d_bounds()
+	if bounds.is_empty():
+		_status("区域未完整（需两次点击画布设置 pos1/pos2）", true)
+		return
+	var payload := RegionClipboardScript.extract(model, bounds[0], bounds[1])
+	if payload.is_empty():
+		_status("复制失败：区域越界", true)
+		return
+	_clipboard = payload
+	_status("已复制 %s（CTRL+V 粘贴）" % RegionClipboardScript.describe(payload))
+	print("[editor] 复制区域 %s" % RegionClipboardScript.describe(payload))  # L1 埋点
+
+
+## 剪切区域：extract + clear_rect，一步历史（成功才入栈）
+func _on_region_cut_pressed() -> void:
+	var bounds := _region_2d_bounds()
+	if bounds.is_empty():
+		_status("区域未完整（需两次点击画布设置 pos1/pos2）", true)
+		return
+	var payload := RegionClipboardScript.extract(model, bounds[0], bounds[1])
+	if payload.is_empty():
+		_status("剪切失败：区域越界", true)
+		return
+	var err := RegionClipboardScript.bounds_error(model, bounds[0], bounds[1])
+	if not err.is_empty():
+		_status("剪切失败：%s" % err, true)
+		return
+	_push_undo("剪切区域")
+	RegionClipboardScript.clear_rect(model, bounds[0], bounds[1])
+	_clipboard = payload
+	_refresh_canvas()
+	_sync_region_marker()
+	_status("已剪切 %s（CTRL+V 粘贴）" % RegionClipboardScript.describe(payload))
+	print("[editor] 剪切区域 %s" % RegionClipboardScript.describe(payload))  # L1 埋点
+
+
+## 粘贴区域：空剪贴板报错；否则进入粘贴模式，预览框跟随悬停格
+func _on_region_paste_pressed() -> void:
+	if _clipboard.is_empty():
+		_status("剪贴板为空（先复制或剪切一个区域）", true)
+		return
+	_paste_mode = true
+	_paste_origin = Vector2i(-1, -1)
+	_update_paste_preview(_canvas.hover_cell if _canvas != null else Vector2i(-1, -1))
+	_status("粘贴模式：移动鼠标选择落点，点击画布提交，ESC 取消")
+	print("[editor] 进入粘贴模式 %s" % RegionClipboardScript.describe(_clipboard))  # L1 埋点
+
+
+## 粘贴预览随悬停格刷新：落点矩形合法=绿框，越界=红框
+func _update_paste_preview(hover: Vector2i) -> void:
+	if _canvas == null or not _paste_mode or _clipboard.is_empty():
+		return
+	_paste_origin = hover
+	if hover.x < 0:
+		_canvas.clear_paste_preview()
+		return
+	var size := RegionClipboardScript.payload_size(_clipboard)
+	var lo := hover
+	var hi := hover + size - Vector2i(1, 1)
+	_canvas.set_paste_preview(lo, hi, RegionClipboardScript.bounds_error(model, lo, hi).is_empty())
+
+
+## 提交粘贴：越界/非法仅 _status 报错（不改模型不入历史）；成功一步历史
+func _commit_paste(origin: Vector2i) -> void:
+	var size := RegionClipboardScript.payload_size(_clipboard)
+	var lo := origin
+	var hi := origin + size - Vector2i(1, 1)
+	var err := RegionClipboardScript.bounds_error(model, lo, hi)
+	if not err.is_empty():
+		_status("粘贴失败：%s" % err, true)
+		return
+	_push_undo("粘贴区域")
+	var result: Dictionary = RegionClipboardScript.paste(model, _clipboard, lo)
+	_cancel_paste()
+	_refresh_canvas()
+	_sync_region_marker()
+	var dropped := int(result.get("dropped_units", 0))
+	var suffix := "（%d 个单位因地形不可站立被丢弃）" % dropped if dropped > 0 else ""
+	_status("已粘贴 %s%s" % [RegionClipboardScript.describe(_clipboard), suffix])
+	print("[editor] 粘贴区域 origin=%s dropped_units=%d" % [str(lo), dropped])  # L1 埋点
+
+
+## 取消粘贴/移动预览（ESC 或提交后调用；剪贴板内容保留，可再次粘贴）
+func _cancel_paste() -> void:
+	_paste_mode = false
+	_paste_origin = Vector2i(-1, -1)
+	_move_armed = false
+	_move_grab = Vector2i(-1, -1)
+	_move_preview = Vector2i(-1, -1)
+	if _canvas != null:
+		_canvas.clear_paste_preview()
+
+
+## 移动工具开关（侧栏 CheckButton toggled）：写回状态并提示
+func _on_move_tool_toggled(pressed: bool) -> void:
+	_set_move_tool(pressed)
+	_status("移动工具：%s" % ("开" if pressed else "关"))
+
+
+## 同步移动工具状态（含 CheckButton 无信号回写）；关闭时清待移动/预览
+func _set_move_tool(active: bool) -> void:
+	_move_tool_active = active
+	if _move_tool_toggle != null and _move_tool_toggle.button_pressed != active:
+		_move_tool_toggle.set_pressed_no_signal(active)
+	if not active:
+		_move_armed = false
+		_move_grab = Vector2i(-1, -1)
+		_move_preview = Vector2i(-1, -1)
+		if _canvas != null:
+			_canvas.clear_paste_preview()
+
+
+## 剪贴板/粘贴/移动状态只读快照（MCP 断言与契约测试用）
+func region_clipboard_info() -> Dictionary:
+	var info := {
+		"has_clipboard": not _clipboard.is_empty(),
+		"paste_mode": _paste_mode,
+		"move_armed": _move_armed,
+		"move_tool": _move_tool_active,
+		"history_len": _history.size(),
+		"w": 0, "h": 0, "units": 0, "props": 0, "overrides": 0,
+	}
+	if not _clipboard.is_empty():
+		var size := RegionClipboardScript.payload_size(_clipboard)
+		info["w"] = size.x
+		info["h"] = size.y
+		info["units"] = (_clipboard.get("units", []) as Array).size()
+		info["props"] = (_clipboard.get("props", []) as Array).size()
+		info["overrides"] = (_clipboard.get("tile_overrides", {}) as Dictionary).size()
+	return info
+
+
 ## 放置阵营角色：站不住的地形拒绝；同格已有单位则先移除
 func place_unit(cell: Vector2i, faction: String, class_id: String, level: int, uname: String = "") -> bool:
 	if cell.x < 0 or cell.y < 0 or cell.x >= model.width or cell.y >= model.height:
@@ -1615,6 +1966,10 @@ func apply_generate(seed: String, w: int, h: int) -> void:
 	_height_box.value = h
 	_syncing_boxes = false
 	_refresh_canvas()
+	_clipboard.clear()  # 跨模型粘贴语义不成立：生成即清剪贴板/取消预览
+	_cancel_paste()
+	if _move_tool_active:
+		_set_move_tool(false)  # 新模型旧选区不成立：收起移动工具
 	_status("已生成 %d×%d · 种子「%s」（单位已清空）" % [w, h, seed])
 	print("[editor] 生成地形 seed=%s size=%dx%d" % [seed, w, h])  # L1 埋点
 
@@ -1633,6 +1988,10 @@ func _on_resize() -> void:
 	_push_undo("调整尺寸")
 	model = BattlefieldDocScript.resize(model, w, h)
 	_refresh_canvas()
+	_clipboard.clear()  # 尺寸变化后旧区域可能越界：清剪贴板/取消预览
+	_cancel_paste()
+	if _move_tool_active:
+		_set_move_tool(false)  # 尺寸变化后旧选区可能越界：收起移动工具
 
 
 func _refresh_canvas() -> void:
@@ -1645,6 +2004,8 @@ func _refresh_canvas() -> void:
 
 
 func _on_tool_changed() -> void:
+	if _move_tool_active:
+		_set_move_tool(false)  # 切换画布工具时收起移动工具
 	var names := {
 		Tool.SELECT: "选择", Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮",
 		Tool.UNIT: "角色", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
@@ -1850,6 +2211,10 @@ func load_path(path: String) -> Dictionary:
 	_height_box.value = model.height
 	_syncing_boxes = false
 	_refresh_canvas()
+	_clipboard.clear()  # 跨模型粘贴语义不成立：读取即清剪贴板/取消预览
+	_cancel_paste()
+	if _move_tool_active:
+		_set_move_tool(false)  # 新模型旧选区不成立：收起移动工具
 	_status("已读取 %s（%d×%d · 我方%d/敌方%d）" % [
 		path.get_file(), model.width, model.height,
 		(model.units as Array).filter(func(u): return u.faction != "enemy").size(),
