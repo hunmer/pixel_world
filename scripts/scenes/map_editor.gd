@@ -59,7 +59,7 @@ const RegionPresetStoreScript = preload("res://scripts/editor/region_preset_stor
 
 const Tool = {
 	PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5,
-	HEIGHT_UP = 6, HEIGHT_DOWN = 7, ASSET = 8, REPLACE = 9,
+	HEIGHT_UP = 6, HEIGHT_DOWN = 7, ASSET = 8, REPLACE = 9, PICK = 10,
 }
 const TAB_BLOCK := 3
 
@@ -92,6 +92,11 @@ var current_tool: int = Tool.PAINT
 ## 高度画笔单笔内已处理的格子：避免原地 motion 重复升降，也防止 A→B→A 重复。
 var _height_stroke_cells: Dictionary = {}
 var current_terrain: StringName = &"mountain"
+## PS 风格前景/背景方块：{kind:"terrain"|"asset", id:String, z:int}；只存编辑器状态。
+var _block_fg: Dictionary = {"kind": "terrain", "id": "plain", "z": 0}
+var _block_bg: Dictionary = {"kind": "terrain", "id": "plain", "z": 0}
+var _fg_swatch: Button = null
+var _bg_swatch: Button = null
 ## 当前选中的具体植物贴图（非空=地形 Tab 画笔改为放置植物，写模型 props 层）
 var current_prop := ""
 ## 植物素材枚举 { 组名: [res://路径] }（_ready 里扫描，_build_terrain_tab 用）
@@ -233,6 +238,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			if get_viewport() != null:
 				get_viewport().set_input_as_handled()
 			_on_region_paste_pressed()
+		elif not ctrl and key.shift_pressed and (key.keycode == KEY_X or key.physical_keycode == KEY_X):
+			# Shift+X 交换前景/背景；必须先于下方 X 右转分支拦截。
+			if get_viewport() != null:
+				get_viewport().set_input_as_handled()
+			_swap_block_slots()
 		elif _move_tool_active and (key.keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]
 				or key.physical_keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]):
 			# 移动工具开启：方向键逐格平移选区（上/下/左/右 = y-/y+/x-/x+），
@@ -565,6 +575,14 @@ func _build_tool_bar() -> Control:
 	if replace_btn.icon == null:
 		replace_btn.text = "替"
 		replace_btn.tooltip_text = "替换方块工具"
+	# 吸管：ToolBox 第 10 钮；点击写前景，Alt+点击写背景，不产生文档历史。
+	_add_tool_btn(box, tool_group, Tool.PICK, "吸管", "pipette")
+	var pick_btn := _tool_buttons[Tool.PICK] as Button
+	pick_btn.name = "PickToolBtn"
+	pick_btn.custom_minimum_size = Vector2(34, 34)
+	pick_btn.tooltip_text = "吸管：点击吸取前景，Alt+点击吸取背景"
+	if pick_btn.icon == null:
+		pick_btn.text = "吸"
 	return bar
 
 
@@ -607,6 +625,7 @@ func _build_hint_bar() -> Control:
 	bar.add_hint("R", "视角复位")
 	bar.add_hint("CTRL+Z / Y", "撤销 / 重做")
 	bar.add_hint("CTRL+C / X / V", "复制 / 剪切 / 粘贴区域")
+	bar.add_hint("SHIFT+X", "交换前景 / 背景方块")
 	bar.add_hint("区域内拖动", "移动区域")
 	bar.add_hint("移动工具", "左栏第 8 钮，拖拽/方向键移动选区")
 	bar.add_hint("ESC", "返回世界")
@@ -624,6 +643,7 @@ func _build_terrain_tab(tabs: TabContainer) -> void:
 	terrain_group.pressed.connect(func(btn: Button):
 		if btn.has_meta("terrain"):
 			current_terrain = btn.get_meta("terrain")
+			_set_block_slot("fg", {"kind": "terrain", "id": String(current_terrain), "z": int(_block_fg.z)})
 			current_prop = ""
 			_clear_asset_selection()
 			_clear_block_asset_selection()
@@ -656,6 +676,9 @@ func _build_terrain_tab(tabs: TabContainer) -> void:
 			var pb := _plant_btn(path, terrain_group)
 			pgrid.add_child(pb)
 	_terrain_buttons[current_terrain].button_pressed = true
+	# 初始地形按钮只负责既有默认选中态；前景/背景仍按新契约从 plain z0 起步。
+	_block_fg = {"kind": "terrain", "id": "plain", "z": 0}
+	_refresh_block_slot_ui()
 
 
 ## Tab【方块】：编辑当前选格的独立高度（不修改同列/其他格）；
@@ -680,6 +703,28 @@ func _build_block_tab(tabs: TabContainer) -> void:
 	row.add_child(_block_z_box)
 	tab.add_child(row)
 	UIFactoryScript.center_row(row)
+	var slot_row := HBoxContainer.new()
+	slot_row.name = "BlockSlotRow"
+	slot_row.add_theme_constant_override("separation", 4)
+	_fg_swatch = _pixel_btn()
+	_fg_swatch.name = "FgSwatch"
+	_fg_swatch.disabled = true  # 色块只展示，点击交换统一走 SwapBlocksBtn / Shift+X
+	_fg_swatch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slot_row.add_child(_fg_swatch)
+	_bg_swatch = _pixel_btn()
+	_bg_swatch.name = "BgSwatch"
+	_bg_swatch.disabled = true
+	_bg_swatch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slot_row.add_child(_bg_swatch)
+	var swap_btn := _pixel_btn()
+	swap_btn.name = "SwapBlocksBtn"
+	swap_btn.text = "⇄ 交换"
+	swap_btn.tooltip_text = "交换前景/背景方块（Shift+X）"
+	swap_btn.pressed.connect(_swap_block_slots)
+	slot_row.add_child(swap_btn)
+	tab.add_child(slot_row)
+	UIFactoryScript.center_row(slot_row)
+	_refresh_block_slot_ui()
 	tab.add_child(UIFactoryScript.label("每格只有一个独立方块；z=0 为统一平面。", 10, TEXT_DIM))
 	tab.add_child(UIFactoryScript.label("素材方块（已保存 ✓，点选后用画笔放置；再点取消选中）", 11, TEXT_DIM))
 	_block_asset_group = ButtonGroup.new()
@@ -696,6 +741,77 @@ func _build_block_tab(tabs: TabContainer) -> void:
 	_block_asset_empty.visible = false
 	tab.add_child(_block_asset_empty)
 	_rebuild_block_asset_grid()
+
+
+## 写入前景/背景槽；地形前景同步旧 current_terrain，保持既有调色板与测试入口兼容。
+func _set_block_slot(which: String, block: Dictionary) -> void:
+	var normalized := {
+		"kind": String(block.get("kind", "terrain")),
+		"id": String(block.get("id", "plain")),
+		"z": int(block.get("z", 0)),
+	}
+	if which == "bg":
+		_block_bg = normalized
+	else:
+		_block_fg = normalized
+		if String(normalized.kind) == "terrain":
+			current_terrain = StringName(normalized.id)
+	_refresh_block_slot_ui()
+
+
+func _swap_block_slots() -> void:
+	var old_fg := _block_fg.duplicate(true)
+	_set_block_slot("fg", _block_bg)
+	_set_block_slot("bg", old_fg)
+	_status("已交换前景/背景：%s" % _block_label(_block_fg))
+
+
+func _block_label(block: Dictionary) -> String:
+	var id := String(block.get("id", "plain"))
+	var name := id
+	if String(block.get("kind", "terrain")) == "terrain":
+		name = String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id))
+	return "%s · z%d" % [name, int(block.get("z", 0))]
+
+
+func _refresh_block_slot_ui() -> void:
+	if _fg_swatch != null:
+		_fg_swatch.text = "前 %s" % _block_label(_block_fg)
+		_fg_swatch.tooltip_text = "前景：%s" % _block_label(_block_fg)
+	if _bg_swatch != null:
+		_bg_swatch.text = "后 %s" % _block_label(_block_bg)
+		_bg_swatch.tooltip_text = "背景：%s" % _block_label(_block_bg)
+
+
+## 画笔统一消费前景槽：素材写覆盖层，内置地形写 rows 并清覆盖。
+func _apply_paint_block(cell: Vector2i) -> void:
+	if String(_block_fg.get("kind", "terrain")) == "asset":
+		var asset_id := String(_block_fg.get("id", ""))
+		if not asset_id.is_empty():
+			_set_tile_override(cell, asset_id)
+		return
+	var terrain := StringName(_block_fg.get("id", "plain"))
+	_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH.get(terrain, "."))
+	_set_tile_override(cell, "")
+
+
+## 吸管只读取模型：素材覆盖优先，否则取 rows 图例；Alt/背景参数决定写入哪个槽。
+func _pick_block(cell: Vector2i, to_background: bool = false) -> void:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		_status("吸取失败：坐标越界", true)
+		return
+	var asset_id := BattlefieldDocScript.tile_override_at(model, cell)
+	var block: Dictionary
+	if not asset_id.is_empty():
+		block = {"kind": "asset", "id": asset_id, "z": BattlefieldDocScript.cell_z(model, cell)}
+	else:
+		var row: String = model.rows[cell.y]
+		var terrain := BattlefieldDocScript.glyph_to_terrain(row.substr(cell.x, 1))
+		block = {"kind": "terrain", "id": String(terrain), "z": BattlefieldDocScript.cell_z(model, cell)}
+	_set_block_slot("bg" if to_background else "fg", block)
+	_status("已吸取：%s（%s）" % [_block_label(block), "背景" if to_background else "前景"])
+	print("[editor] 吸取方块 cell=%s slot=%s kind=%s id=%s z=%d"
+		% [str(cell), "bg" if to_background else "fg", String(block.kind), String(block.id), int(block.z)])  # L1 埋点
 
 
 ## 扫描植物素材目录（BattlefieldDoc.PLANT_DIRS）→ { 组名: [res://路径] }（排序）
@@ -874,6 +990,8 @@ func _build_preset_tab(tabs: TabContainer) -> void:
 ## 素材面板选中变化：写入选中态并同步画布预览格
 func _on_asset_selected(descriptor: Dictionary) -> void:
 	_selected_asset = descriptor
+	if String(descriptor.get("kind", "")) == UserAssetCatalogScript.KIND_TERRAIN:
+		_set_block_slot("fg", {"kind": "asset", "id": String(descriptor.get("id", "")), "z": int(_block_fg.z)})
 	_clear_block_asset_selection()  # 与方块页选中互斥
 	_update_asset_preview()
 
@@ -949,6 +1067,7 @@ func _on_block_asset_btn_pressed(asset_id: String) -> void:
 		_selected_block_asset = ""
 	else:
 		_selected_block_asset = asset_id
+		_set_block_slot("fg", {"kind": "asset", "id": asset_id, "z": int(_block_fg.z)})
 		_clear_asset_selection()  # 与素材 Tab 选中互斥
 	_update_asset_preview()
 	if _selected_block_asset.is_empty():
@@ -1157,23 +1276,28 @@ func _class_btn(cid: String, group: ButtonGroup) -> Button:
 ## 当前生效工具：高度升降/替换始终遵循工具条；地形 Tab = 画笔/植物；角色 Tab = 放置单位。
 ## 避免在角色页选好职业点画布，却沿用工具条遗留的填充/橡皮。
 func _active_tool() -> int:
-	if current_tool == Tool.HEIGHT_UP or current_tool == Tool.HEIGHT_DOWN or current_tool == Tool.REPLACE:
+	if current_tool == Tool.HEIGHT_UP or current_tool == Tool.HEIGHT_DOWN \
+			or current_tool == Tool.REPLACE or current_tool == Tool.PICK:
 		return current_tool
 	if _tabs == null:
 		return current_tool
 	var title := _tabs.get_tab_title(_tabs.current_tab)
 	if title == "地形":
+		if current_tool == Tool.PAINT:
+			return Tool.PLANT if not current_prop.is_empty() else Tool.PAINT
 		if not _selected_asset.is_empty():
 			return Tool.ASSET
 		return Tool.PLANT if not current_prop.is_empty() else Tool.PAINT
 	if title == "方块":
+		if current_tool == Tool.PAINT:
+			return Tool.PAINT
 		return Tool.ASSET if not _selected_block_asset.is_empty() else Tool.SELECT
 	if title == "角色":
 		return Tool.UNIT
 	return current_tool
 
 
-func _on_cell_pressed(cell: Vector2i) -> void:
+func _on_cell_pressed(cell: Vector2i, alt_pressed: bool = false) -> void:
 	if _place_mode:
 		_commit_place_preset(cell)  # 放置模式：点击=以该格为左上角放置
 		return
@@ -1192,6 +1316,9 @@ func _on_cell_pressed(cell: Vector2i) -> void:
 		_move_preview = cell
 		return
 	var tool := _active_tool()
+	if tool == Tool.PICK:
+		_pick_block(cell, alt_pressed or Input.is_key_pressed(KEY_ALT))
+		return  # 吸管只改前景/背景槽，不进入文档历史。
 	# 区域内按下（完整区域+SELECT+区域模式）→ 待移动：不落点、不设端点；
 	# 原地松开=纯点击，由 _on_cell_released 补走原 _apply_region_click 逻辑
 	if tool == Tool.SELECT and _selection_mode == &"region" and _region_pos2_set \
@@ -1222,8 +1349,7 @@ func _on_cell_dragged(cell: Vector2i) -> void:
 		if _selection_mode != &"region":
 			_select_cell(cell)  # 区域模式：拖动不设端点，须两次独立点击
 	elif tool == Tool.PAINT:
-		_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH[current_terrain])
-		_set_tile_override(cell, "")  # 内置画笔覆盖素材地块：清 override 恢复常规柱
+		_apply_paint_block(cell)
 	elif tool == Tool.PLANT:
 		_set_prop(cell, current_prop)
 	elif tool == Tool.ASSET:
@@ -1331,10 +1457,13 @@ func _apply_tool(cell: Vector2i) -> void:
 		else:
 			_select_cell(cell)
 		return  # 选择不是文档编辑，不进入历史。
+	if tool == Tool.PICK:
+		_pick_block(cell)
+		return  # 吸管不是文档编辑，不进入历史。
 	var names := {
 		Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮", Tool.UNIT: "角色",
 		Tool.PLANT: "植物", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
-		Tool.ASSET: "素材", Tool.REPLACE: "替换方块",
+		Tool.ASSET: "素材", Tool.REPLACE: "替换方块", Tool.PICK: "吸管",
 	}
 	var undo_label: String = names[tool]
 	if tool == Tool.REPLACE and _selection_mode == &"region" and _region_pos2_set \
@@ -1343,8 +1472,7 @@ func _apply_tool(cell: Vector2i) -> void:
 	_push_undo(undo_label)  # 按下一次=一步；后续拖动不再入栈（整笔一笔撤销）
 	match tool:
 		Tool.PAINT:
-			_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH[current_terrain])
-			_set_tile_override(cell, "")  # 内置画笔覆盖素材地块：清 override 恢复常规柱
+			_apply_paint_block(cell)
 		Tool.FILL:
 			_apply_fill(cell)
 		Tool.ERASE:
@@ -1441,6 +1569,7 @@ func _on_block_z_changed(value: float) -> void:
 	_push_undo("方块高度")
 	if not BattlefieldDocScript.set_cell_z(model, cell, int(value)):
 		return
+	_set_block_slot("fg", {"kind": String(_block_fg.kind), "id": String(_block_fg.id), "z": int(value)})
 	_canvas._refresh_cell(cell)
 	_sync_block_panel()
 	_update_cell_info(cell)
@@ -1596,6 +1725,10 @@ func _build_selection_popup() -> void:
 	_fill_selector.custom_minimum_size = Vector2(0, 140)
 	_fill_selector.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_fill_selector.setup(_asset_service, _asset_adapter)
+	_fill_selector.selection_changed.connect(func(kind: StringName, id: String):
+		if id.is_empty():
+			return
+		_set_block_slot("fg", {"kind": String(kind), "id": id, "z": int(_block_fg.z)}))
 	box.add_child(_fill_selector)
 
 	var btns := HBoxContainer.new()
@@ -1783,20 +1916,16 @@ func _on_region_box_changed(value: float, which: String, axis: StringName) -> vo
 	_sync_region_marker()
 
 
-## 填充路由：完整区域 → 区域填充；否则按弹窗选择器——素材=同质地块洪水填充，
-## 地形=内置地形同图例洪水填充；未选=沿用画笔当前地形（原行为）。
+## 填充路由：完整区域 → 区域填充；否则按前景槽做素材/地形洪水填充。
 func _apply_fill(cell: Vector2i) -> void:
 	if _selection_mode == &"region" and _region_pos2_set and _selection_range.is_active():
 		_fill_region()
 		return
-	var sel := _fill_selector.selected() if _fill_selector != null else {}
-	match StringName(sel.get("kind", "")):
+	match StringName(_block_fg.get("kind", "terrain")):
 		&"asset":
-			_flood_fill_asset(cell, String(sel.get("id", "")))
-		&"terrain":
-			fill_cell(cell, StringName(sel.get("id", "")))
+			_flood_fill_asset(cell, String(_block_fg.get("id", "")))
 		_:
-			fill_cell(cell, current_terrain)
+			fill_cell(cell, StringName(_block_fg.get("id", "plain")))
 
 
 ## 覆盖替换：完整区域优先于点击格；素材只写 tile_overrides，内置地形写 rows 并清覆盖。
@@ -1825,12 +1954,11 @@ func _apply_replace(cell: Vector2i) -> void:
 	if cells.is_empty():
 		_status("替换失败：选区为空", true)
 		return
-	var sel := _fill_selector.selected() if _fill_selector != null else {}
-	var kind := StringName(sel.get("kind", ""))
-	var id := String(sel.get("id", ""))
-	if kind == &"" or id.is_empty():
+	var kind := StringName(_block_fg.get("kind", "terrain"))
+	var id := String(_block_fg.get("id", "plain"))
+	if id.is_empty():
 		kind = &"terrain"
-		id = String(current_terrain)
+		id = "plain"
 	var rows: Array = model.rows
 	var glyph := String(BattlefieldDocScript.TERRAIN_GLYPH.get(StringName(id), "."))
 	for c in cells:
@@ -1858,12 +1986,11 @@ func _apply_replace(cell: Vector2i) -> void:
 ## 平台，「填充整个选择范围」而不是只刷表层）；同高选择保持平面行为（全 footprint
 ## 写材质、不动块高）。调用方负责 _push_undo：填充与高度变化同一步历史（原子）。
 func _fill_region() -> void:
-	var sel := _fill_selector.selected() if _fill_selector != null else {}
-	var kind := StringName(sel.get("kind", ""))
-	var id := String(sel.get("id", ""))
-	if kind == &"" or id.is_empty():
+	var kind := StringName(_block_fg.get("kind", "terrain"))
+	var id := String(_block_fg.get("id", "plain"))
+	if id.is_empty():
 		kind = &"terrain"
-		id = String(current_terrain)
+		id = "plain"
 	var mn := _selection_range.min_corner()
 	var mx := _selection_range.max_corner()
 	var z_hi := maxi(mn.z, mx.z)
@@ -2422,7 +2549,7 @@ func _on_tool_changed() -> void:
 	var names := {
 		Tool.SELECT: "选择", Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮",
 		Tool.UNIT: "角色", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
-		Tool.REPLACE: "替换方块",
+		Tool.REPLACE: "替换方块", Tool.PICK: "吸管",
 	}
 	_status("工具：%s" % names[current_tool])
 

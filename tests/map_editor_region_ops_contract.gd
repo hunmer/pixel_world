@@ -10,7 +10,7 @@
 ##       拖动不设区域端点（既有契约）；原地松开仍走第三次点击重置 pos1（既有契约）；
 ##       越界粘贴拒绝（模型 / 历史不动）；ESC 取消粘贴预览；
 ##       Ctrl+C/X/V 快捷键派发；剪切一步历史；生成清空剪贴板；
-##       region_clipboard_info() 只读快照；工具条 9 钮（8 工具+移动开关）、ModeOption 仍 2 项。
+##       region_clipboard_info() 只读快照；工具条 10 钮（9 工具+移动开关）、ModeOption 仍 2 项。
 ##       左侧工具栏移动工具（MoveToolToggle，ToolBox 第 8 钮）：无完整选区中文拒绝；开启后拖拽平移选区
 ##       （选区跟随、恰好一步历史、可回滚）；原地松开=纯点击不触发区域选择；
 ##       关闭后回到区域内拖动/两次点击语义（第三次点击重置 pos1 不回退）。
@@ -43,8 +43,11 @@ func _run() -> void:
 
 	# ---- A. 既有契约不回退 + 区域操作按钮存在 ----
 	var toolbar: Node = editor.get_node_or_null("EditorRoot/CanvasHolder/ToolBar/ToolBox")
-	_expect(toolbar != null and toolbar.get_child_count() == 9,
-		"A 工具条为 9 个按钮（8 工具 + 移动开关）")
+	_expect(toolbar != null and toolbar.get_child_count() == 10,
+		"A 工具条为 10 个按钮（9 工具 + 移动开关）")
+	_expect(editor._block_fg == {"kind": "terrain", "id": "plain", "z": 0}
+		and editor._block_bg == {"kind": "terrain", "id": "plain", "z": 0},
+		"A 前景/背景方块槽默认均为 plain z0")
 	var popup: Control = editor.get_node_or_null("SelectionPopup")
 	_expect(popup != null and not popup.visible, "A 选择菜单存在且默认隐藏")
 	if popup == null:
@@ -729,16 +732,78 @@ func _run() -> void:
 		and String(editor._status_label.text).contains("越界"),
 		"N 越界替换中文拒绝：模型/历史游标/历史条数零变化")
 
+	# ---- O. 吸管 + 前景/背景交换：只读模型、不写历史，画笔消费交换后的前景 ----
+	editor.apply_generate("pick_ops", 6, 5)
+	await process_frame
+	editor._on_selection_mode_item(0)
+	editor._selection_range.clear()
+	editor._region_pos2_set = false
+	var o_asset_cell := Vector2i(2, 2)
+	var o_terrain_cell := Vector2i(3, 2)
+	BattlefieldDocScript.set_tile_override(editor.model, o_asset_cell, "pick_asset")
+	BattlefieldDocScript.set_cell_z(editor.model, o_asset_cell, 3)
+	editor._set_glyph(o_terrain_cell, "w")
+	BattlefieldDocScript.set_cell_z(editor.model, o_terrain_cell, 1)
+	editor._push_undo("布景O")
+	editor._seal_pending()
+	var o_pick_btn := editor._tool_buttons.get(editor.Tool.PICK) as BaseButton
+	_expect(editor.Tool.PICK == 10 and o_pick_btn != null
+		and o_pick_btn.name == "PickToolBtn" and o_pick_btn.get_index() == 9
+		and int(o_pick_btn.get_meta("tool", -1)) == editor.Tool.PICK,
+		"O Tool.PICK=10，PickToolBtn 是 ToolBox 第 10 钮")
+	o_pick_btn.button_pressed = true
+	_expect(editor.current_tool == editor.Tool.PICK and editor._active_tool() == editor.Tool.PICK,
+		"O 吸管工具可激活且不被当前 Tab 覆盖")
+	var o_before: Dictionary = editor.model.duplicate(true)
+	var o_h0: int = editor._history.size()
+	var o_c0: int = editor._history_cursor
+	editor._on_cell_pressed(o_asset_cell)
+	_expect(editor._block_fg == {"kind": "asset", "id": "pick_asset", "z": 3}
+		and editor.model == o_before and editor._history.size() == o_h0
+		and editor._history_cursor == o_c0 and String(editor._status_label.text).contains("已吸取"),
+		"O 吸取素材格写前景 kind/asset/id/z，模型与历史不变")
+	editor._on_cell_pressed(o_terrain_cell, true)  # Alt+点击的确定性测试入口
+	_expect(editor._block_bg == {"kind": "terrain", "id": "water", "z": 1}
+		and editor.model == o_before and editor._history.size() == o_h0
+		and editor._history_cursor == o_c0,
+		"O Alt+点击地形格写背景 kind/terrain/id/z，模型与历史不变")
+	_send_key(editor, KEY_X, false, true)
+	_expect(editor._block_fg == {"kind": "terrain", "id": "water", "z": 1}
+		and editor._block_bg == {"kind": "asset", "id": "pick_asset", "z": 3}
+		and editor.model == o_before and editor._history.size() == o_h0,
+		"O Shift+X 交换前景/背景且不触发文档编辑")
+	var o_swap_btn := editor.find_child("SwapBlocksBtn", true, false) as Button
+	_expect(o_swap_btn != null and o_swap_btn.text == "⇄ 交换", "O 方块 Tab 存在 SwapBlocksBtn")
+	if o_swap_btn != null:
+		o_swap_btn.pressed.emit()
+	_expect(editor._block_fg == {"kind": "asset", "id": "pick_asset", "z": 3}
+		and editor._block_bg == {"kind": "terrain", "id": "water", "z": 1},
+		"O SwapBlocksBtn 再次交换，前景恢复所吸素材")
+	var o_paint_target := Vector2i(0, 0)
+	var o_paint_before: Dictionary = editor.model.duplicate(true)
+	var o_paint_c0: int = editor._history_cursor
+	editor._tool_buttons[editor.Tool.PAINT].button_pressed = true
+	editor._on_cell_pressed(o_paint_target)
+	editor._seal_pending()
+	_expect(BattlefieldDocScript.tile_override_at(editor.model, o_paint_target) == "pick_asset"
+		and editor._history_cursor == o_paint_c0 + 1
+		and editor._history.size() == editor._history_cursor + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "画笔",
+		"O 交换后画笔写入新前景素材，恰好一步历史")
+	editor._undo()
+	_expect(editor.model == o_paint_before, "O 前景素材画笔一次 undo 回滚")
+
 	_finish(editor)
 
 
-## 直接向 editor._unhandled_input 发合成按键（ctrl=true 模拟 Ctrl+<key>）
-func _send_key(editor: Node, key: Key, ctrl := false) -> void:
+## 直接向 editor._unhandled_input 发合成按键（ctrl/shift 模拟组合键）
+func _send_key(editor: Node, key: Key, ctrl := false, shift := false) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = key
 	ev.physical_keycode = key
 	ev.pressed = true
 	ev.ctrl_pressed = ctrl
+	ev.shift_pressed = shift
 	editor._unhandled_input(ev)
 
 

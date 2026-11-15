@@ -104,10 +104,10 @@ func _run() -> void:
 		_expect(_count_type(gen_tab, SpinBox) == 2, "生成 Tab：宽+高 SpinBox")
 		_expect(_count_type(gen_tab, LineEdit, SpinBox) == 1,
 			"生成 Tab：种子输入框（排除 SpinBox 内部 LineEdit）")
-	# 工具条：左上角悬浮（CanvasHolder/ToolBar/ToolBox），9 个垂直图标按钮（8 工具 + 移动开关）
+	# 工具条：左上角悬浮（CanvasHolder/ToolBar/ToolBox），10 个垂直图标按钮（9 工具 + 移动开关）
 	var toolbar: Node = editor.get_node_or_null("EditorRoot/CanvasHolder/ToolBar/ToolBox")
-	_expect(toolbar != null and toolbar.get_child_count() == 9,
-		"左上角工具条存在且含 9 个按钮（8 工具 + 移动开关）")
+	_expect(toolbar != null and toolbar.get_child_count() == 10,
+		"左上角工具条存在且含 10 个按钮（9 工具 + 移动开关）")
 	_expect(editor._tool_buttons.has(editor.Tool.HEIGHT_UP)
 		and editor._tool_buttons[editor.Tool.HEIGHT_UP].tooltip_text == "地形上升工具"
 		and editor._tool_buttons.has(editor.Tool.HEIGHT_DOWN)
@@ -119,6 +119,12 @@ func _run() -> void:
 		and editor._tool_buttons[editor.Tool.REPLACE].custom_minimum_size == Vector2(34, 34)
 		and editor._tool_buttons[editor.Tool.REPLACE].tooltip_text == "替换方块工具",
 		"工具条含第 9 钮替换方块（34×34 toggle 及可访问名称）")
+	_expect(editor._tool_buttons.has(editor.Tool.PICK)
+		and editor._tool_buttons[editor.Tool.PICK].name == "PickToolBtn"
+		and editor._tool_buttons[editor.Tool.PICK].get_index() == 9
+		and editor._tool_buttons[editor.Tool.PICK].toggle_mode
+		and editor._tool_buttons[editor.Tool.PICK].custom_minimum_size == Vector2(34, 34),
+		"工具条含第 10 钮吸管（34×34 toggle）")
 	if toolbar != null:
 		var bar: Control = toolbar.get_parent()
 		_expect(bar.get_index() == 1 and editor._canvas.get_index() == 0,
@@ -264,6 +270,14 @@ func _run() -> void:
 
 	# ---- 4b. 独立选择 / 方块属性 / 高度历史 / 缩放平移后的真实顶面命中 ----
 	_expect(block_tab != null and editor._block_z_box != null, "方块 Tab：BlockZSpin 存在")
+	var slot_row := block_tab.find_child("BlockSlotRow", true, false) if block_tab != null else null
+	var fg_swatch := block_tab.find_child("FgSwatch", true, false) if block_tab != null else null
+	var bg_swatch := block_tab.find_child("BgSwatch", true, false) if block_tab != null else null
+	var swap_blocks := block_tab.find_child("SwapBlocksBtn", true, false) if block_tab != null else null
+	_expect(slot_row is HBoxContainer and fg_swatch is Button and bg_swatch is Button
+		and fg_swatch.disabled and bg_swatch.disabled and swap_blocks is Button
+		and swap_blocks.text == "⇄ 交换" and swap_blocks.tooltip_text.contains("Shift+X"),
+		"方块 Tab：BlockSlotRow 含禁用色块 FgSwatch/BgSwatch 与 Shift+X 交换按钮")
 	_expect(block_tab.find_child("BlockAssetGrid", true, false) is GridContainer,
 		"方块 Tab：BlockAssetGrid（素材方块列表）存在")
 	_expect(not editor._block_z_box.editable and editor._canvas.selected_cell == Vector2i(-1, -1),
@@ -931,6 +945,7 @@ func _pick_diff_terrain(editor: Node, cell: Vector2i) -> void:
 	for t: StringName in BattlefieldDocScript.TERRAIN_GLYPH:
 		if String(BattlefieldDocScript.TERRAIN_GLYPH[t]) != src:
 			editor.current_terrain = t
+			editor._set_block_slot("fg", {"kind": "terrain", "id": String(t), "z": int(editor._block_fg.z)})
 			return
 
 
