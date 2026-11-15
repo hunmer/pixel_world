@@ -127,12 +127,12 @@ func _run() -> void:
 		"工具条含第 10 钮吸管（34×34 toggle）")
 	var replace_popup: PanelContainer = editor.get_node_or_null("ReplacePopup")
 	_expect(replace_popup != null and not replace_popup.visible
-		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceSourceOpt") is OptionButton
-		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceDestOpt") is OptionButton
+		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceSourceOpt") is Button
+		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceDestOpt") is Button
 		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceScopeLabel") is Label
 		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceApplyBtn") is Button
 		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceHint") is Label,
-		"替换弹窗默认隐藏，源/目标下拉、范围、执行按钮与提示齐全")
+		"替换弹窗默认隐藏，源/目标选择按钮、范围、执行按钮与提示齐全")
 	var recent_bar := editor.get_node_or_null("EditorRoot/CanvasHolder/RecentPicksBar") as PanelContainer
 	var recent_list := editor.get_node_or_null(
 		"EditorRoot/CanvasHolder/RecentPicksBar/RecentPicksVBox/RecentPickScroll/RecentPickList") as VBoxContainer
@@ -297,8 +297,10 @@ func _run() -> void:
 		and fg_swatch.disabled and bg_swatch.disabled and swap_blocks is Button
 		and swap_blocks.text == "⇄ 交换" and swap_blocks.tooltip_text.contains("Shift+X"),
 		"方块 Tab：BlockSlotRow 含禁用色块 FgSwatch/BgSwatch 与 Shift+X 交换按钮")
-	_expect(block_tab.find_child("BlockAssetGrid", true, false) is GridContainer,
-		"方块 Tab：BlockAssetGrid（素材方块列表）存在")
+	var block_grid := block_tab.find_child("BlockAssetGrid", true, false) if block_tab != null else null
+	_expect(block_grid is GridContainer
+		and block_grid.get_script() == preload("res://scripts/editor/editor_block_list.gd"),
+		"方块 Tab：BlockAssetGrid 复用 EditorBlockList（兼容 GridContainer）")
 	_expect(not editor._block_z_box.editable and editor._canvas.selected_cell == Vector2i(-1, -1),
 		"初始无选择：高度输入禁用")
 	editor._seal_pending()

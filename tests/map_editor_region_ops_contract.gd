@@ -685,7 +685,7 @@ func _run() -> void:
 	var n_c0: int = editor._history_cursor
 	editor._on_cell_pressed(Vector2i(1, 1))
 	editor._seal_pending()
-	_expect(String(editor._replace_source_opt.get_selected_metadata()) == "asset:old_asset"
+	_expect(editor._replace_source_code() == "asset:old_asset"
 		and editor.model == n_before and editor._history.size() == n_h0
 		and editor._history_cursor == n_c0,
 		"N 替换工具点格只设置 ReplaceSourceOpt，模型与历史零变化")
@@ -836,7 +836,7 @@ func _run() -> void:
 		p_dir.remove("test_editor_presets_ghost/presets.json")
 		p_dir.remove("test_editor_presets_ghost")
 
-	# ---- Q. 条件替换弹窗：双下拉、全图/选区命中、零写入与原子撤销 ----
+	# ---- Q. 条件替换弹窗：双按钮+公共选择弹窗、全图/选区命中、零写入与原子撤销 ----
 	editor.apply_generate("replace_popup", 6, 5)
 	await process_frame
 	editor._tool_buttons[editor.Tool.PAINT].button_pressed = true
@@ -844,15 +844,15 @@ func _run() -> void:
 	editor._selection_range.clear()
 	editor._region_pos2_set = false
 	var q_popup := editor.get_node_or_null("ReplacePopup") as PanelContainer
-	var q_source := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceSourceOpt") as OptionButton
-	var q_dest := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceDestOpt") as OptionButton
+	var q_source := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceSourceOpt") as Button
+	var q_dest := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceDestOpt") as Button
 	var q_scope := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceScopeLabel") as Label
 	var q_apply := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceApplyBtn") as Button
 	var q_hint := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceHint") as Label
 	_expect(q_popup != null and not q_popup.visible and q_source != null and q_dest != null
 		and q_scope != null and q_apply != null and q_hint != null
 		and q_apply.text == "执行替换" and q_hint.text == "点地图格子可快速设为被替换方块",
-		"Q ReplacePopup 默认隐藏，双下拉/范围/执行/提示节点齐全")
+		"Q ReplacePopup 默认隐藏，双选择按钮/范围/执行/提示节点齐全")
 	editor._set_glyph(Vector2i(1, 1), "g")
 	editor._set_glyph(Vector2i(2, 1), "g")
 	editor._set_glyph(Vector2i(3, 1), "w")
@@ -870,18 +870,34 @@ func _run() -> void:
 	editor._canvas.hover_cell = Vector2i(3, 1)
 	editor._set_block_slot("fg", {"kind": &"asset", "id": "target_asset", "z": 0})
 	editor._tool_buttons[editor.Tool.REPLACE].button_pressed = true
-	_expect(q_popup.visible and String(q_source.get_selected_metadata()) == "terrain:w"
-		and String(q_dest.get_selected_metadata()) == "asset:target_asset"
+	_expect(q_popup.visible and editor._replace_source_code() == "terrain:w"
+		and editor._replace_dest_code() == "asset:target_asset"
 		and q_scope.text == "当前范围：全图 30 格",
 		"Q 选替换工具显示弹窗：源取悬停格、目标取前景、无选区计全图")
 	editor._on_cell_pressed(Vector2i(1, 1))
 	var q_has_asset := false
-	for i in range(q_source.item_count):
-		if String(q_source.get_item_metadata(i)) == "asset:old_asset":
+	for item in editor._replace_items:
+		if "%s:%s" % [String(item.get("kind", "")), String(item.get("id", ""))] == "asset:old_asset":
 			q_has_asset = true
-	_expect(q_has_asset and String(q_source.get_selected_metadata()) == "asset:old_asset",
-		"Q 下拉编码含 terrain:/asset:，点格可把素材设为源")
-	editor._select_replace_option(q_dest, "terrain:w")
+	_expect(q_has_asset and editor._replace_source_code() == "asset:old_asset",
+		"Q 候选编码含 terrain:/asset:，点格可把素材设为源")
+	q_source.pressed.emit()
+	var q_picker = editor._replace_picker_dialog
+	_expect(q_picker != null and q_picker.visible and q_picker.block_list.selected_id == "asset:old_asset",
+		"Q 点击源按钮打开公共 dialog 并回填当前源")
+	_send_key(editor, KEY_ESCAPE)
+	_expect(not q_picker.visible and q_popup.visible and editor._replace_source_code() == "asset:old_asset",
+		"Q Esc 优先关公共选择器，零回填且 ReplacePopup 仍开着")
+	q_dest.pressed.emit()
+	var q_pick_index := -1
+	for i in range(q_picker.block_list.item_count()):
+		if String(q_picker.block_list.get_button(i).get_meta("block_id", "")) == "terrain:w":
+			q_pick_index = i
+			break
+	if q_pick_index >= 0:
+		q_picker.block_list.get_button(q_pick_index).pressed.emit()
+	_expect(not q_picker.visible and editor._replace_dest_code() == "terrain:w",
+		"Q dialog 选择地形后关闭并正确回填目标编码")
 	var q_full_before: Dictionary = editor.model.duplicate(true)
 	var q_full_c0: int = editor._history_cursor
 	q_apply.emit_signal("pressed")

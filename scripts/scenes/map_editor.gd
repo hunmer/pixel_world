@@ -55,6 +55,8 @@ const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_vi
 const UserAssetCatalogScript = preload("res://scripts/assets/user_asset_catalog.gd")
 const SelectionRangeScript = preload("res://scripts/editor/selection_range.gd")
 const BlockSelectorScript = preload("res://scripts/editor/block_selector.gd")
+const EditorBlockListScript = preload("res://scripts/editor/editor_block_list.gd")
+const EditorBlockPickerDialogScript = preload("res://scripts/editor/editor_block_picker_dialog.gd")
 const RegionClipboardScript = preload("res://scripts/editor/region_clipboard.gd")
 const RegionPresetStoreScript = preload("res://scripts/editor/region_preset_store.gd")
 
@@ -148,7 +150,7 @@ var _block_asset_buttons: Dictionary = {}  # asset_id -> Button
 ## 下载完成待刷缩略图的素材集合 + 0.3s 合批定时器（见 _on_block_asset_ready）
 var _pending_asset_thumbs: Dictionary = {}
 var _asset_thumb_timer: Timer = null
-var _block_asset_grid: GridContainer = null
+var _block_asset_grid: EditorBlockListScript = null
 var _block_asset_empty: Label = null
 var _block_asset_group: ButtonGroup = null
 var _tool_buttons: Dictionary = {}   # Tool -> Button
@@ -166,11 +168,14 @@ var _selection_popup: PanelContainer = null
 var _mode_option: OptionButton = null
 ## 条件替换弹窗：源/目标均为 terrain:<glyph> / asset:<id>；点格只选源，不改模型。
 var _replace_popup: PanelContainer = null
-var _replace_source_opt: OptionButton = null
-var _replace_dest_opt: OptionButton = null
+var _replace_source_opt: Button = null
+var _replace_dest_opt: Button = null
 var _replace_scope_label: Label = null
 var _replace_apply_btn: Button = null
 var _replace_hint: Label = null
+var _replace_items: Array[Dictionary] = []
+var _replace_picker_dialog: EditorBlockPickerDialogScript = null
+var _replace_picker_target := "source"
 ## pos1/pos2 坐标编辑：{ &"x"/&"y"/&"z": SpinBox }（名称 Pos1X 等，UI 契约用）
 var _pos1_boxes: Dictionary = {}
 var _pos2_boxes: Dictionary = {}
@@ -315,6 +320,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				KEY_LEFT: _nudge_region(Vector2i(-1, 0))
 				KEY_RIGHT: _nudge_region(Vector2i(1, 0))
 		elif key.physical_keycode == KEY_ESCAPE or key.keycode == KEY_ESCAPE:
+			# 方块选择器优先于 ReplacePopup/地图模式：取消只关选择器且不回填。
+			if _replace_picker_dialog != null and _replace_picker_dialog.visible:
+				_replace_picker_dialog.cancel()
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
 			# 放置模式激活时：Esc 先退出放置（清预览），不碰菜单也不返回世界
 			if _place_mode:
 				_cancel_place_mode()
@@ -672,13 +683,15 @@ func _build_replace_popup() -> void:
 	popup.add_child(box)
 	box.add_child(UIFactoryScript.label("替换方块", 13, ACCENT))
 	box.add_child(UIFactoryScript.label("被替换方块", 10, TEXT_DIM))
-	_replace_source_opt = UIFactoryScript.option_button()
+	_replace_source_opt = UIFactoryScript.button("选择被替换方块", _open_replace_picker.bind("source"))
 	_replace_source_opt.name = "ReplaceSourceOpt"
+	_replace_source_opt.custom_minimum_size = Vector2(0, 40)
 	_replace_source_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(_replace_source_opt)
 	box.add_child(UIFactoryScript.label("替换为", 10, TEXT_DIM))
-	_replace_dest_opt = UIFactoryScript.option_button()
+	_replace_dest_opt = UIFactoryScript.button("选择替换目标", _open_replace_picker.bind("dest"))
 	_replace_dest_opt.name = "ReplaceDestOpt"
+	_replace_dest_opt.custom_minimum_size = Vector2(0, 40)
 	_replace_dest_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(_replace_dest_opt)
 	_replace_scope_label = UIFactoryScript.label("当前范围：全图 0 格", 11, TEXT_MAIN)
@@ -692,6 +705,11 @@ func _build_replace_popup() -> void:
 	_replace_hint.name = "ReplaceHint"
 	_replace_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_replace_hint)
+	_replace_picker_dialog = EditorBlockPickerDialogScript.new()
+	_replace_picker_dialog.name = "ReplaceBlockPicker"
+	_replace_picker_dialog.visible = false
+	add_child(_replace_picker_dialog)
+	_replace_picker_dialog.block_chosen.connect(_on_replace_picker_chosen)
 	_populate_replace_options()
 	_select_replace_option(_replace_source_opt, "terrain:.")
 	_select_replace_option(_replace_dest_opt, _replace_code_for_block(_block_fg))
@@ -740,19 +758,13 @@ func _build_recent_picks_bar(holder: Control) -> void:
 func _populate_replace_options() -> void:
 	if _replace_source_opt == null or _replace_dest_opt == null:
 		return
-	var source_code := String(_replace_source_opt.get_selected_metadata()) \
-		if _replace_source_opt.selected >= 0 else "terrain:."
-	var dest_code := String(_replace_dest_opt.get_selected_metadata()) \
-		if _replace_dest_opt.selected >= 0 else _replace_code_for_block(_block_fg)
-	_replace_source_opt.clear()
-	_replace_dest_opt.clear()
+	var source_code := _replace_source_code()
+	var dest_code := _replace_dest_code()
+	_replace_items.clear()
 	for terrain: StringName in BattlefieldDocScript.TERRAIN_GLYPH:
 		var label := "地形 · %s" % String(BattlefieldDocScript.TERRAIN_CN.get(terrain, String(terrain)))
 		var code := "terrain:%s" % String(BattlefieldDocScript.TERRAIN_GLYPH[terrain])
-		_replace_source_opt.add_item(label)
-		_replace_source_opt.set_item_metadata(_replace_source_opt.item_count - 1, code)
-		_replace_dest_opt.add_item(label)
-		_replace_dest_opt.set_item_metadata(_replace_dest_opt.item_count - 1, code)
+		_replace_items.append(_replace_item_for_code(code, label))
 	if _asset_service != null:
 		var assets: Array = _asset_service.list_assets()
 		assets.sort_custom(func(a, b):
@@ -763,14 +775,36 @@ func _populate_replace_options() -> void:
 					or not bool(d.get("saved", false)):
 				continue
 			var aid := String(d.get("id", ""))
-			var label := "素材 · %s" % String(d.get("name", aid))
-			var code := "asset:%s" % aid
-			_replace_source_opt.add_item(label)
-			_replace_source_opt.set_item_metadata(_replace_source_opt.item_count - 1, code)
-			_replace_dest_opt.add_item(label)
-			_replace_dest_opt.set_item_metadata(_replace_dest_opt.item_count - 1, code)
+			_replace_items.append(_replace_item_for_code("asset:%s" % aid,
+				"素材 · %s" % String(d.get("name", aid))))
 	_select_replace_option(_replace_source_opt, source_code)
 	_select_replace_option(_replace_dest_opt, dest_code)
+
+
+func _replace_item_for_code(code: String, label: String = "") -> Dictionary:
+	var kind := "asset" if code.begins_with("asset:") else "terrain"
+	var id := code.substr(6) if kind == "asset" else code.substr(8)
+	if label.is_empty():
+		label = ("素材 · %s" % id) if kind == "asset" else "地形 · %s" % id
+	var texture: Texture2D = null
+	if kind == "asset":
+		texture = _recent_pick_texture({"kind": "asset", "id": id, "z": 0})
+	else:
+		var terrain := BattlefieldDocScript.glyph_to_terrain(id)
+		texture = _recent_pick_texture({"kind": "terrain", "id": String(terrain), "z": 0})
+	return {"kind": kind, "id": id, "label": label, "texture": texture}
+
+
+func _replace_source_code() -> String:
+	if _replace_source_opt == null:
+		return "terrain:."
+	return String(_replace_source_opt.get_meta("code", "terrain:."))
+
+
+func _replace_dest_code() -> String:
+	if _replace_dest_opt == null:
+		return _replace_code_for_block(_block_fg)
+	return String(_replace_dest_opt.get_meta("code", _replace_code_for_block(_block_fg)))
 
 
 func _replace_code_for_block(block: Dictionary) -> String:
@@ -790,19 +824,45 @@ func _replace_code_at(cell: Vector2i) -> String:
 
 
 ## 选中编码项；地图里吸到但不在已保存素材库的 id 也允许作为源/目标。
-func _select_replace_option(opt: OptionButton, code: String) -> bool:
+func _select_replace_option(opt: Button, code: String) -> bool:
 	if opt == null or code.is_empty():
 		return false
-	for i in range(opt.item_count):
-		if String(opt.get_item_metadata(i)) == code:
-			opt.select(i)
-			return true
-	if code.begins_with("asset:") and code.length() > 6:
-		opt.add_item("素材 · %s" % code.substr(6))
-		opt.set_item_metadata(opt.item_count - 1, code)
-		opt.select(opt.item_count - 1)
-		return true
-	return false
+	var item: Dictionary = {}
+	for candidate in _replace_items:
+		if "%s:%s" % [String(candidate.get("kind", "")), String(candidate.get("id", ""))] == code:
+			item = candidate
+			break
+	if item.is_empty() and code.begins_with("asset:") and code.length() > 6:
+		item = _replace_item_for_code(code)
+		_replace_items.append(item)
+	if item.is_empty():
+		return false
+	opt.set_meta("code", code)
+	opt.text = String(item.get("label", code))
+	opt.tooltip_text = opt.text
+	var texture: Variant = item.get("texture")
+	opt.icon = texture if texture is Texture2D else null
+	opt.expand_icon = true
+	opt.add_theme_constant_override("icon_max_width", 32)
+	return true
+
+
+func _open_replace_picker(target: String) -> void:
+	if _replace_picker_dialog == null:
+		return
+	_populate_replace_options()
+	_replace_picker_target = target
+	var selected := _replace_dest_code() if target == "dest" else _replace_source_code()
+	_replace_picker_dialog.open(_replace_items, selected)
+
+
+func _on_replace_picker_chosen(kind: String, id: String) -> void:
+	var code := "%s:%s" % [kind, id]
+	if _replace_picker_target == "dest":
+		_select_replace_option(_replace_dest_opt, code)
+	else:
+		_select_replace_option(_replace_source_opt, code)
+		_refresh_replace_scope()
 
 
 func _reset_replace_popup() -> void:
@@ -824,7 +884,7 @@ func _set_replace_source_from_cell(cell: Vector2i) -> void:
 		return
 	_select_replace_option(_replace_source_opt, code)
 	_refresh_replace_scope()
-	_status("被替换方块：%s" % _replace_source_opt.get_item_text(_replace_source_opt.selected))
+	_status("被替换方块：%s" % _replace_source_opt.text)
 	print("[editor] 替换源 cell=%s code=%s" % [str(cell), code])  # L1 埋点
 
 
@@ -981,11 +1041,14 @@ func _build_block_tab(tabs: TabContainer) -> void:
 	tab.add_child(UIFactoryScript.label("素材方块（已保存 ✓，点选后用画笔放置；再点取消选中）", 11, TEXT_DIM))
 	_block_asset_group = ButtonGroup.new()
 	_block_asset_group.allow_unpress = true  # 再点已选中按钮 = 取消选中
-	_block_asset_grid = GridContainer.new()
+	_block_asset_grid = EditorBlockListScript.new()
 	_block_asset_grid.name = "BlockAssetGrid"
 	_block_asset_grid.columns = 4
 	_block_asset_grid.add_theme_constant_override("h_separation", 2)
 	_block_asset_grid.add_theme_constant_override("v_separation", 2)
+	_block_asset_grid.block_activated.connect(func(kind: String, id: String):
+		if kind == "asset":
+			_on_block_asset_btn_pressed(id))
 	tab.add_child(_block_asset_grid)
 	_block_asset_empty = UIFactoryScript.label(
 		"暂无已保存的素材方块\n在「素材」Tab 选中方块后点「保存标记」，保存后会出现在这里", 11, UIThemeScript.TEXT_DIM)
@@ -1353,14 +1416,11 @@ func _on_asset_selected(descriptor: Dictionary) -> void:
 func _rebuild_block_asset_grid() -> void:
 	if _block_asset_grid == null or _asset_service == null or _asset_adapter == null:
 		return
-	for child in _block_asset_grid.get_children():
-		_block_asset_grid.remove_child(child)
-		child.queue_free()
 	_block_asset_buttons.clear()
 	var assets: Array = _asset_service.list_assets()
 	assets.sort_custom(func(a, b): return String((a as Dictionary).get("id", "")) < String((b as Dictionary).get("id", "")))
 	var ids: Array = []
-	var descs := {}
+	var items: Array[Dictionary] = []
 	for raw in assets:
 		var d := raw as Dictionary
 		if String(d.get("kind", "")) != UserAssetCatalogScript.KIND_TERRAIN:
@@ -1371,45 +1431,26 @@ func _rebuild_block_asset_grid() -> void:
 		if not bool(d.get("saved", false)):
 			continue
 		ids.append(aid)
-		descs[aid] = d
 		if String(_asset_service.get_asset_state(aid).get("status", "")) != "ready":
 			_asset_service.request_asset_image(aid)
 	# p_cache=false：不灌 LRU（防挤穿热缓存）；列表规模=已下载数，resolve_many 单次库加载可承受
 	var visuals: Dictionary = _asset_adapter.resolve_many(ids, false)
 	for aid in ids:
-		var tb := _block_asset_btn(aid, descs[aid], visuals.get(aid, {}))
-		_block_asset_grid.add_child(tb)
-		_block_asset_buttons[aid] = tb
+		var d: Dictionary = _asset_service.find_by_id(aid)
+		var visual: Dictionary = visuals.get(aid, {})
+		items.append({"kind": "asset", "id": aid,
+			"label": String(d.get("name", aid)), "texture": visual.get("texture")})
+	var selected := "" if _selected_block_asset.is_empty() else "asset:%s" % _selected_block_asset
+	_block_asset_grid.configure(items, selected, true)
+	for i in range(ids.size()):
+		var tb := _block_asset_grid.get_button(i)
+		UIThemeScript.style_button(tb)
+		_block_asset_buttons[ids[i]] = tb
 	if _block_asset_empty != null:
 		_block_asset_empty.visible = ids.is_empty()
-	if not _selected_block_asset.is_empty():
-		if _block_asset_buttons.has(_selected_block_asset):
-			(_block_asset_buttons[_selected_block_asset] as Button).set_pressed_no_signal(true)
-		else:
-			_selected_block_asset = ""
-			_update_asset_preview()
-
-
-## 素材方块按钮：与地形调色板同风格的 tile 缩略图（无文字，悬停提示名称与 id）
-## visual 由调用方批量解析传入（resolve_many），缺省才回退单条 resolve。
-func _block_asset_btn(asset_id: String, d: Dictionary, visual: Dictionary = {}) -> Button:
-	var tb := _pixel_btn()
-	tb.toggle_mode = true
-	tb.button_group = _block_asset_group
-	tb.custom_minimum_size = Vector2(46, 96)
-	tb.tooltip_text = "%s（%s）" % [String(d.get("name", asset_id)), asset_id]
-	tb.set_meta("block_asset", asset_id)
-	UIThemeScript.style_button(tb)
-	var prev := TilePreviewScript.new(&"plain", false)
-	if not visual.is_empty():
-		prev.asset_visual = visual
-	elif _asset_adapter != null:
-		prev.asset_visual = _asset_adapter.resolve(asset_id)
-	tb.add_child(prev)
-	prev.position = (tb.custom_minimum_size - prev.size) * 0.5
-	tb.set_pressed_no_signal(asset_id == _selected_block_asset)
-	tb.pressed.connect(_on_block_asset_btn_pressed.bind(asset_id))
-	return tb
+	if not _selected_block_asset.is_empty() and not _block_asset_buttons.has(_selected_block_asset):
+		_selected_block_asset = ""
+		_update_asset_preview()
 
 
 func _on_block_asset_btn_pressed(asset_id: String) -> void:
@@ -1431,10 +1472,8 @@ func _clear_block_asset_selection() -> void:
 	if _selected_block_asset.is_empty():
 		return
 	_selected_block_asset = ""
-	if _block_asset_group != null:
-		var pb := _block_asset_group.get_pressed_button()
-		if pb != null:
-			pb.set_pressed_no_signal(false)
+	if _block_asset_grid != null:
+		_block_asset_grid.set_selected("")
 
 
 ## 当前生效的素材描述符：素材 Tab 选中优先，其次方块页选中
@@ -2288,12 +2327,11 @@ func _apply_fill(cell: Vector2i) -> void:
 ## 条件替换：完整选区优先，否则全图；仅命中源类型的格子写目标，高度一律不动。
 ## terrain 源只匹配无 tile_override 且 rows 图例相同的格；asset 源只匹配覆盖 id。
 func _apply_replace() -> void:
-	if _replace_source_opt == null or _replace_dest_opt == null \
-			or _replace_source_opt.selected < 0 or _replace_dest_opt.selected < 0:
+	if _replace_source_opt == null or _replace_dest_opt == null:
 		_status("替换失败：请选择源方块与目标方块", true)
 		return
-	var source_code := String(_replace_source_opt.get_selected_metadata())
-	var dest_code := String(_replace_dest_opt.get_selected_metadata())
+	var source_code := _replace_source_code()
+	var dest_code := _replace_dest_code()
 	if source_code.is_empty() or dest_code.is_empty():
 		_status("替换失败：源方块或目标方块无效", true)
 		return
@@ -2943,6 +2981,8 @@ func _refresh_canvas() -> void:
 func _on_tool_changed() -> void:
 	if _place_mode:
 		_cancel_place_mode()  # 切工具退出放置模式
+	if current_tool != Tool.REPLACE and _replace_picker_dialog != null:
+		_replace_picker_dialog.cancel()
 	if _replace_popup != null:
 		_replace_popup.visible = current_tool == Tool.REPLACE
 		if _replace_popup.visible:
