@@ -37,6 +37,28 @@ button.ghost:hover{color:var(--text);border-color:var(--accent-dim)}
 /* ===== layout ===== */
 #main{display:flex;height:calc(100% - 52px)}
 #sidebar{width:302px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--line);overflow-y:auto}
+.vrs{width:6px;flex-shrink:0;cursor:col-resize;background:transparent;transition:background .15s;z-index:5}
+.vrs:hover,.vrs.drag{background:rgba(232,176,75,.35)}
+#drawer{width:560px;max-width:60vw;flex-shrink:0;background:var(--bg2);border-left:1px solid var(--line);overflow-y:auto;overflow-x:hidden;padding:14px 16px 40px;display:none}
+#drawer.open{display:block}
+/* 第三列窄容器自适应：长文件名/路径/徽章截断，不横向溢出 */
+#drawer .ftree{max-width:none;overflow-x:auto}
+#drawer .ftree .ftdir,#drawer .ftree .ftfile{width:max-content;min-width:100%;box-sizing:border-box}
+#drawer td.path{white-space:normal;word-break:break-all}
+#drawer .cpfeat .cpname{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#drawer .cpfeat .fc{flex-shrink:0}
+#drawer .tag{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#drawer .cphead{display:flex;align-items:center;gap:8px}
+#drawer .cphead h2{font-size:16px;margin:0;flex:1}
+#drawer .cpx{cursor:pointer;color:var(--faint);padding:2px 6px;border-radius:4px;flex-shrink:0}
+#drawer .cpx:hover{color:var(--accent)}
+#drawer .cpstat{color:var(--dim);font-size:12.5px;margin:8px 0 4px;line-height:1.7}
+#drawer .dpsec{font-size:11px;color:var(--faint);letter-spacing:.08em;margin:18px 0 6px}
+#drawer .dpact{margin:10px 0 2px}
+#drawer .cpfeat{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12.5px}
+#drawer .cpfeat:hover{background:rgba(232,176,75,.07)}
+#drawer .cpfeat .fc{margin-left:auto}
+#drawer .fdesc{font-size:13px;color:var(--dim);line-height:1.7}
 #content{flex:1;overflow-y:auto;padding:22px 28px 80px}
 
 /* ===== sidebar tabs ===== */
@@ -154,7 +176,10 @@ td.badges{white-space:normal;min-width:140px;max-width:260px}
 
 <div id="main">
 	<nav id="sidebar"></nav>
+	<div class="vrs" id="rzSide" title="拖动调整侧栏宽度（自动记住）"></div>
 	<div id="content"></div>
+	<div class="vrs" id="rzDrawer" title="拖动调整第三列宽度（自动记住）"></div>
+	<aside id="drawer"></aside>
 </div>
 
 <script type="application/json" id="seed">
@@ -303,7 +328,7 @@ function renderSidebarFeat(sb) {
 		const div = document.createElement('div');
 		div.className = 'cat' + (cat.id === 'quality' ? '' : ' open');
 		const nFiles = cat.children.reduce((a,f) => a + (f.files||[]).length, 0);
-		div.innerHTML = `<div class="cat-head"><span class="caret">▶</span><span class="ci">${cat.icon}</span><span class="cn">${cat.name}</span><span class="cc">${cat.children.length}·${nFiles}</span></div>`;
+		div.innerHTML = `<div class="cat-head"><span class="caret">▶</span><span class="ci">${cat.icon}</span><span class="cn">${cat.name}</span><span class="catgo" data-catgo="${cat.id}" title="打开分类整页信息">↗</span><span class="cc">${cat.children.length}·${nFiles}</span></div>`;
 		const list = document.createElement('div');
 		list.className = 'feats';
 		cat.children.forEach(f => {
@@ -314,6 +339,8 @@ function renderSidebarFeat(sb) {
 			list.appendChild(el);
 		});
 		div.firstChild.onclick = () => div.classList.toggle('open');
+		const goBtn = div.firstChild.children[3];
+		if (goBtn) goBtn.onclick = ev => { ev.stopPropagation(); renderCategory(cat.id); };
 		div.appendChild(list);
 		sb.appendChild(div);
 	});
@@ -575,18 +602,110 @@ function renderCoverage() {
 }
 
 /* ---------- router ---------- */
-const state = { sel:null, view:'home', sideView:'feat', folder:'', file:'', filter:'', openDirs:new Set(), featClosed:new Set() };
-function select(id) { state.sel = id; state.view = 'feat'; renderSidebar(); renderFeature(id); document.getElementById('content').scrollTop = 0; }
+const state = { sel:null, view:'home', sideView:'feat', folder:'', file:'', filter:'', openDirs:new Set(), featClosed:new Set(), drawer:null };
+function select(id) { state.sel = id; state.view = 'feat'; closeDrawer(); renderSidebar(); renderFeature(id); document.getElementById('content').scrollTop = 0; }
 function go(target) {
+	closeDrawer();
 	if (!target) { state.view='home'; renderSidebar(); renderHome(); return; }
 	const cat = DATA.tree.find(c=>c.id===target);
-	if (cat && !featById(target)) {
-		document.querySelectorAll('.cat').forEach((d,i)=>d.classList.toggle('open', DATA.tree[i].id===target));
-		select(cat.children[0].id); return;
-	}
+	if (cat && !featById(target)) { renderCategory(target); return; }
 	select(target);
 }
-/* ---------- knowledge graph (vis-network, CDN with offline fallback) ---------- */
+/* ---------- category full page & third column ---------- */
+function catStats(cat) {
+	const feats = cat.children;
+	const nFiles = feats.reduce((a,f)=>a+(f.files||[]).length, 0);
+	const lines = feats.reduce((a,f)=>a+(f.files||[]).reduce((b,x)=>b+(x.lines||0), 0), 0);
+	const nTests = feats.reduce((a,f)=>a+((f.tests)||[]).length, 0);
+	return { feats, nFiles, lines, nTests };
+}
+function renderCategory(catId) {
+	const cat = DATA.tree.find(c=>c.id===catId); if (!cat) return;
+	destroyNet();
+	closeDrawer();
+	state.view = 'cat'; state.sel = null; state.folder = '';
+	const { feats, nFiles, lines, nTests } = catStats(cat);
+	document.getElementById('content').innerHTML = `
+		<div class="crumb"><a data-go="">图谱</a> / ${cat.icon} ${cat.name}</div>
+		<div class="h2row"><span class="ci">${cat.icon}</span><h2>${cat.name}</h2><span class="tag">${feats.length} 个功能</span></div>
+		<p class="fdesc">文件 ${nFiles} · 代码 ${lines.toLocaleString()} 行 · 契约 ${nTests}</p>
+		<h3>功能清单</h3>
+		<table><thead><tr><th style="width:26%">功能</th><th>职责</th><th style="width:64px">文件</th><th style="width:88px">行数</th><th style="width:64px">契约</th></tr></thead><tbody>
+		${feats.map(f => {
+			const fl = f.files||[], tl = fl.reduce((a,x)=>a+(x.lines||0),0);
+			return `<tr><td><span class="chip" data-go="${f.id}">${featDot(f.id)}${f.name}</span></td><td class="role">${(f.desc||'').slice(0,90)}</td><td class="lines">${fl.length}</td><td class="lines">${tl.toLocaleString()}</td><td class="lines">${(f.tests||[]).length}</td></tr>`;
+		}).join('')}
+		</tbody></table>`;
+	renderSidebar();
+	document.getElementById('content').scrollTop = 0;
+}
+function drawerHead(icon, name, tag, goId) {
+	return `<div class="cphead"><span class="ci">${icon}</span><h2>${name}</h2>${tag ? `<span class="tag">${tag}</span>` : ''}<span class="cpx" id="cpx" title="关闭">✕</span></div>
+	<div class="dpact"><button class="ghost sidebtn" data-go="${goId}" title="在页面中打开">↗ 整页打开</button></div>`;
+}
+function buildCatDrawer(pn, catId) {
+	const cat = DATA.tree.find(c=>c.id===catId); if (!cat) return false;
+	const { feats, nFiles, lines, nTests } = catStats(cat);
+	const files = feats.flatMap(f => (f.files||[]).slice()).sort((a,b) => (TYPE_ORDER[a.type]??9)-(TYPE_ORDER[b.type]??9) || (b.lines||0)-(a.lines||0));
+	const tests = feats.flatMap(f => (f.tests||[]).map(t => ({ feat: f, t })));
+	const others = DATA.tree.filter(c => c.id !== catId);
+	pn.innerHTML = `
+		${drawerHead(cat.icon, cat.name, feats.length + ' 个功能', catId)}
+		<div class="cpstat">文件 ${nFiles} · 代码 ${lines.toLocaleString()} 行 · 契约 ${nTests}</div>
+		<div class="dpsec">功能清单（点击切换抽屉）</div>
+		${feats.map(f => `<div class="cpfeat" data-dr="feat:${f.id}">${featDot(f.id)}<span class="cpname">${f.name}</span><span class="fc">${(f.files||[]).length} 文件${(f.tests||[]).length ? ' · ✅'+f.tests.length : ''}</span></div>`).join('')}
+		<div class="dpsec">文件目录树 · ${files.length}</div>
+		${featTreeHtml(files, null)}
+		${tests.length ? `<div class="dpsec">契约测试 · ${tests.length}</div>
+		<table><thead><tr><th style="width:30%">功能</th><th>测试</th></tr></thead><tbody>
+		${tests.map(x => `<tr><td><span class="chip" data-dr="feat:${x.feat.id}">${featDot(x.feat.id)}${x.feat.name}</span></td><td class="path" title="${x.t.note||''}">${extBadge(x.t.type||'gd')}${x.t.path}</td></tr>`).join('')}
+		</tbody></table>` : ''}
+		${others.length ? `<div class="dpsec">其他分类</div><div class="childchips">${others.map(c => `<span class="chip" data-dr="cat:${c.id}">${c.icon} ${c.name}</span>`).join('')}</div>` : ''}
+	`;
+	return true;
+}
+function buildFeatDrawer(pn, fid) {
+	const f = featById(fid); if (!f) return false;
+	const files = (f.node.files||[]).slice().sort((a,b) => (TYPE_ORDER[a.type]??9)-(TYPE_ORDER[b.type]??9) || (b.lines||0)-(a.lines||0));
+	const tests = f.node.tests || [];
+	const totalLines = files.reduce((a,x) => a + (x.lines||0), 0);
+	const siblings = DATA.tree.find(c => c.id === f.catId).children.filter(x => x.id !== fid);
+	pn.innerHTML = `
+		${drawerHead(f.icon, f.name, f.id, fid)}
+		<p class="fdesc">${f.desc}</p>
+		<div class="cpstat">文件 ${files.length} · 代码 ${totalLines.toLocaleString()} 行 · 契约 ${tests.length}</div>
+		${files.length ? `<div class="dpsec">文件目录树 · ${files.length}</div>${featTreeHtml(files, fid)}` : ''}
+		${tests.length ? `<div class="dpsec">契约测试 · ${tests.length}</div>
+		<table><thead><tr><th style="width:44%">测试</th><th>覆盖点</th></tr></thead><tbody>
+		${tests.map(t => `<tr><td class="path">${extBadge(t.type||'gd')}${t.path}</td><td class="tnote">${t.note||''}</td></tr>`).join('')}
+		</tbody></table>` : ''}
+		${siblings.length ? `<div class="dpsec">同级功能</div><div class="childchips">${siblings.map(s => `<span class="chip" data-dr="feat:${s.id}">${featDot(s.id)}${s.name}</span>`).join('')}</div>` : ''}
+	`;
+	return true;
+}
+function openDrawer(kind, id) {	const pn = document.getElementById('drawer');
+	const ok = kind === 'cat' ? buildCatDrawer(pn, id) : buildFeatDrawer(pn, id);
+	if (!ok) return;
+	state.drawer = kind + ':' + id;
+	pn.className = 'open';
+	pn.scrollTop = 0;
+	const x = document.getElementById('cpx');
+	if (x) x.onclick = () => closeDrawer();
+}
+function closeDrawer() {
+	state.drawer = null;
+	const pn = document.getElementById('drawer');
+	pn.className = ''; pn.innerHTML = '';
+}
+function highlightDrawerFile(path) {
+	const esc = String(path).replace(/["\\]/g, '\\$&');
+	const row = document.querySelector('#drawer .ftfile[data-file="' + esc + '"]');
+	if (!row) return;
+	row.classList.add('active');
+	if (row.scrollIntoView) row.scrollIntoView({ behavior:'smooth', block:'nearest' });
+	setTimeout(() => row.classList.remove('active'), 2600);
+}
+/* ---------- knowledge graph (vis-network, embedded standalone build) ---------- */
 let NET = null, VIS_DS = null, VIS_EDGES = null, VIS_PROMISE = null;
 function destroyNet(){ if (NET) { try { NET.destroy(); } catch (e) {} NET = null; } }
 function tryLoadVis() {
@@ -622,14 +741,14 @@ function buildGraph() {
 	}; });
 	const nodes = FEATURES.map(f => ({ id: f.id, label: f.name, group: f.catId, catId: f.catId,
 		value: Math.max(1, (f.node.files || []).length),
-		title: f.cat + ' › ' + f.name + '\n' + f.desc + '\n文件 ' + (f.node.files || []).length + (f.node.tests ? ' · 契约 ' + f.node.tests.length : ''),
+		title: f.cat + ' › ' + f.name + '\n' + f.desc + '\n文件 ' + (f.node.files || []).length + (f.node.tests ? ' · 契约 ' + f.node.tests.length : '') + '（点击在第三列展示）',
 		font: { color: '#dfe3ec', size: 12 } }));
 	const catNodes = [], catEdges = [];
 	DATA.tree.forEach(c => {
 		catNodes.push({ id: 'cat:' + c.id, label: c.icon + ' ' + c.name, catId: c.id,
 			shape: 'diamond', size: 16,
 			color: { background: catHsl(c.name, 50, 30), border: catHsl(c.name, 70, 65), highlight: { background: catHsl(c.name, 55, 42), border: catHsl(c.name, 80, 75) } },
-			title: c.name + ' · ' + c.children.length + ' 个功能（点击进入）',
+			title: c.name + ' · ' + c.children.length + ' 个功能（点击在第三列展示）',
 			font: { color: '#f0d9a8', size: 13 } });
 		c.children.forEach(f => catEdges.push({ from: 'cat:' + c.id, to: f.id,
 			color: { color: 'rgba(130,140,170,.22)', highlight: 'rgba(232,176,75,.7)' }, dashes: true }));
@@ -647,14 +766,14 @@ function buildGraph() {
 	NET.on('click', params => {
 		if (!params.nodes.length || NET.isCluster(params.nodes[0])) return;
 		const id = params.nodes[0];
-		if (featById(id)) select(id);
-		else if (id.slice(0, 4) === 'cat:') go(id.slice(4));
+		if (featById(id)) openDrawer('feat', id);
+		else if (id.slice(0, 4) === 'cat:') openDrawer('cat', id.slice(4));
 	});
 	NET.on('doubleClick', params => {
 		if (params.nodes.length && NET.isCluster(params.nodes[0])) NET.openCluster(params.nodes[0]);
 	});
 	const st = document.getElementById('gstat');
-	if (st) st.textContent = `功能 ${nodes.length} · 分类枢纽 ${catNodes.length} · 层级边 ${catEdges.length} · 共享边 ${shared.length} · 点节点进入 · 双击集群展开`;
+	if (st) st.textContent = `功能 ${nodes.length} · 分类枢纽 ${catNodes.length} · 层级边 ${catEdges.length} · 共享边 ${shared.length} · 点节点开第三列 · 双击集群展开`;
 	return true;
 }
 function openAllClusters() {
@@ -728,11 +847,14 @@ function renderHome() {
 
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
+	const inDrawer = !!(state.drawer && e.target.closest && e.target.closest('#drawer'));
+	const dr = e.target.closest('[data-dr]'); if (dr) { const sep = dr.dataset.dr.indexOf(':'); openDrawer(dr.dataset.dr.slice(0, sep), dr.dataset.dr.slice(sep + 1)); return; }
 	const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
 	const ft = e.target.closest('[data-ftdir]'); if (ft) {
 		const p = ft.dataset.ftdir;
 		state.featClosed.has(p) ? state.featClosed.delete(p) : state.featClosed.add(p);
-		if (state.view === 'feat' && state.sel) renderFeature(state.sel);
+		if (inDrawer) { const sep = state.drawer.indexOf(':'); openDrawer(state.drawer.slice(0, sep), state.drawer.slice(sep + 1)); }
+		else if (state.view === 'feat' && state.sel) renderFeature(state.sel);
 		return;
 	}
 	const cp = e.target.closest('#copyFeat'); if (cp) { copyFeatureJson(state.sel); return; }
@@ -744,7 +866,10 @@ document.addEventListener('click', e => {
 	}
 	const opx = e.target.closest('[data-openpath]'); if (opx) { window.open('../' + opx.dataset.openpath, '_blank'); return; }
 	const d = e.target.closest('[data-dir]'); if (d) { renderFolder(d.dataset.dir); document.getElementById('content').scrollTop = 0; return; }
-	const f = e.target.closest('[data-file]'); if (f) { openFileInFeature(f.dataset.file); return; }
+	const f = e.target.closest('[data-file]'); if (f) {
+		if (inDrawer) { highlightDrawerFile(f.dataset.file); return; }
+		openFileInFeature(f.dataset.file); return;
+	}
 });
 document.getElementById('covBtn').onclick = () => renderCoverage();
 document.addEventListener('keydown', e => {
@@ -754,6 +879,7 @@ document.addEventListener('keydown', e => {
 		const inp = document.getElementById('ffilter'); if (inp) inp.focus();
 	}
 	if (e.key==='Escape') {
+		if (state.drawer) { closeDrawer(); return; }
 		const inp = document.getElementById('ffilter');
 		state.filter = '';
 		if (inp) { inp.value = ''; inp.blur(); if (state.sideView === 'folder') renderSidebar(); }
@@ -761,6 +887,47 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- boot ---------- */
+/* ---------- column resizers (persisted per project) ---------- */
+const COLS_KEY = 'fmCols:' + (DATA.project || 'default');
+function applyCols(c) {
+	const sb = document.getElementById('sidebar'), dr = document.getElementById('drawer');
+	if (c.side) sb.style.width = c.side + 'px';
+	if (c.drawer) { dr.style.width = c.drawer + 'px'; dr.style.maxWidth = 'none'; }
+}
+function savedCols() {
+	try { const v = JSON.parse(localStorage.getItem(COLS_KEY)); if (v && v.side && v.drawer) return v; } catch (e) {}
+	return null;
+}
+function initResizers() {
+	applyCols(savedCols() || {});
+	const rzS = document.getElementById('rzSide'), rzD = document.getElementById('rzDrawer');
+	let drag = null;
+	function down(e, which, el) {
+		const sb = document.getElementById('sidebar'), dr = document.getElementById('drawer');
+		drag = { which, x: e.clientX, side: parseInt(sb.style.width) || 302, dw: parseInt(dr.style.width) || 560, el };
+		el.className = 'vrs drag';
+		if (document.body && document.body.style) document.body.style.userSelect = 'none';
+		if (e.preventDefault) e.preventDefault();
+	}
+	rzS.onmousedown = e => down(e, 'side', rzS);
+	rzD.onmousedown = e => down(e, 'drawer', rzD);
+	document.addEventListener('mousemove', e => {
+		if (!drag) return;
+		const dx = e.clientX - drag.x;
+		if (drag.which === 'side') applyCols({ side: Math.min(560, Math.max(220, drag.side + dx)) });
+		else applyCols({ drawer: Math.min(860, Math.max(300, drag.dw - dx)) });
+	});
+	document.addEventListener('mouseup', () => {
+		if (!drag) return;
+		drag.el.className = 'vrs';
+		if (document.body && document.body.style) document.body.style.userSelect = '';
+		const sb = document.getElementById('sidebar'), dr = document.getElementById('drawer');
+		const c = { side: parseInt(sb.style.width) || 302, drawer: parseInt(dr.style.width) || 560 };
+		applyCols(c);
+		try { localStorage.setItem(COLS_KEY, JSON.stringify(c)); } catch (e) {}
+		drag = null;
+	});
+}
 function boot() {
 	indexData();
 	buildFolders();
@@ -783,6 +950,7 @@ function boot() {
 		 <span class="stat acc">覆盖 <b>100%</b></span>`;
 	renderSidebar();
 	renderHome();
+	initResizers();
 }
 if (DATA) boot();
 </script>
