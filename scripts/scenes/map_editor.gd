@@ -55,6 +55,7 @@ const UserAssetCatalogScript = preload("res://scripts/assets/user_asset_catalog.
 const SelectionRangeScript = preload("res://scripts/editor/selection_range.gd")
 const BlockSelectorScript = preload("res://scripts/editor/block_selector.gd")
 const RegionClipboardScript = preload("res://scripts/editor/region_clipboard.gd")
+const RegionPresetStoreScript = preload("res://scripts/editor/region_preset_store.gd")
 
 const Tool = {
 	PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5,
@@ -171,6 +172,13 @@ var _move_preview := Vector2i(-1, -1)
 ## 移动工具（左侧工具栏开关）：开启后画布拖拽=平移当前选区（选区跟随平移）
 var _move_tool_active := false
 var _move_tool_toggle: BaseButton = null
+## 区域预设（预设 Tab）：命名保存选区 payload，可填入选区/放置模式连续落子
+var _preset_store: RefCounted = null  # RegionPresetStoreScript（preload，避免 class_name 缓存依赖）
+var _preset_name_edit: LineEdit = null
+var _preset_list: ItemList = null
+var _place_preset_btn: BaseButton = null
+var _place_mode := false
+var _place_preset_id := ""
 
 
 func _ready() -> void:
@@ -179,6 +187,7 @@ func _ready() -> void:
 	_selection_range.changed.connect(_on_selection_range_changed)
 	_prop_paths = _scan_prop_paths()  # 植物素材枚举（_build_terrain_tab 用）
 	_init_asset_service()  # 素材服务必须先于 UI（画布/面板注入共享 adapter）
+	_preset_store = RegionPresetStoreScript.new()  # 预设存储先于 UI（列表初始刷新）
 	_build_ui()
 	_init_history()  # 初始空板定格为历史第 0 条「初始地图」
 
@@ -236,6 +245,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				KEY_LEFT: _nudge_region(Vector2i(-1, 0))
 				KEY_RIGHT: _nudge_region(Vector2i(1, 0))
 		elif key.physical_keycode == KEY_ESCAPE or key.keycode == KEY_ESCAPE:
+			# 放置模式激活时：Esc 先退出放置（清预览），不碰菜单也不返回世界
+			if _place_mode:
+				_cancel_place_mode()
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
 			# 粘贴/移动预览激活时：Esc 先取消预览，不关菜单也不返回世界
 			if _paste_mode or _move_armed:
 				_cancel_paste()
@@ -355,7 +370,7 @@ func _build_ui() -> void:
 	title_row.add_child(UIFactoryScript.label("战场编辑器", 16, ACCENT))
 	sv.add_child(title_row)
 
-	# ---- 7 个 Tab：文件 / 生成 / 地形 / 方块 / 角色 / 历史 / 素材 ----
+	# ---- 8 个 Tab：文件 / 生成 / 地形 / 方块 / 角色 / 历史 / 素材 / 预设 ----
 	# Tab 样式统一走 ui_factory.tab_container（含页签三态与面板底）
 	var tabs := UIFactoryScript.tab_container("ToolTabs")
 	_tabs = tabs
@@ -370,6 +385,7 @@ func _build_ui() -> void:
 	_build_units_tab(tabs)
 	_build_history_tab(tabs)
 	_build_asset_tab(tabs)
+	_build_preset_tab(tabs)  # 预设页追加在最后：TAB_BLOCK=3 等既有索引不变
 
 	# ---- 选择模式菜单（点「选择」/「填充」图标弹出的悬浮窗，默认隐藏） ----
 	_build_selection_popup()
@@ -780,6 +796,63 @@ func _build_asset_tab(tabs: TabContainer) -> void:
 	_asset_panel.setup(_asset_service, _asset_adapter)
 
 
+## Tab【预设】：区域预设库（保存当前选区为命名预设；填入选区=选区左上角一步
+## 历史回写，放置模式=点击画布以该格为左上角连续放置；均走 region_clipboard
+## 五层 payload，预设本体持久化在 region_preset_store）。
+func _build_preset_tab(tabs: TabContainer) -> void:
+	var tab := UIFactoryScript.add_tab(tabs, "预设", "bookmark")
+	_preset_name_edit = UIFactoryScript.line_edit("预设名称")
+	_preset_name_edit.name = "PresetNameEdit"
+	_preset_name_edit.text = "预设 %d" % (_preset_store.count() + 1)
+	tab.add_child(_preset_name_edit)
+
+	var save_row := HBoxContainer.new()
+	save_row.add_theme_constant_override("separation", 4)
+	var save_btn := UIFactoryScript.button("保存当前选区", _on_save_preset_pressed)
+	save_btn.name = "SavePresetBtn"
+	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_row.add_child(save_btn)
+	tab.add_child(save_row)
+	UIFactoryScript.center_row(save_row)
+
+	_preset_list = ItemList.new()
+	_preset_list.name = "PresetList"
+	_preset_list.custom_minimum_size = Vector2(0, 140)
+	_preset_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tab.add_child(_preset_list)
+
+	var op_row := HBoxContainer.new()
+	op_row.add_theme_constant_override("separation", 4)
+	var fill_btn := UIFactoryScript.button("填入选区", _on_fill_preset_pressed)
+	fill_btn.name = "FillPresetBtn"
+	fill_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	op_row.add_child(fill_btn)
+	var place_btn := UIFactoryScript.button("放置模式")
+	place_btn.name = "PlacePresetBtn"
+	place_btn.toggle_mode = true
+	place_btn.toggled.connect(_on_place_preset_toggled)
+	place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	op_row.add_child(place_btn)
+	_place_preset_btn = place_btn
+	var rename_btn := UIFactoryScript.button("重命名", _on_rename_preset_pressed)
+	rename_btn.name = "RenamePresetBtn"
+	rename_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	op_row.add_child(rename_btn)
+	var delete_btn := UIFactoryScript.button("删除", _on_delete_preset_pressed)
+	delete_btn.name = "DeletePresetBtn"
+	delete_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	op_row.add_child(delete_btn)
+	var refresh_btn := UIFactoryScript.button("刷新", _on_refresh_preset_pressed)
+	refresh_btn.name = "RefreshPresetBtn"
+	refresh_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	op_row.add_child(refresh_btn)
+	tab.add_child(op_row)
+	UIFactoryScript.center_row(op_row)
+
+	tab.add_child(UIFactoryScript.label("选中区域后可保存为预设；填入选区与放置模式均一步撤销", 10, TEXT_DIM))
+	_refresh_preset_list()
+
+
 ## 素材面板选中变化：写入选中态并同步画布预览格
 func _on_asset_selected(descriptor: Dictionary) -> void:
 	_selected_asset = descriptor
@@ -1083,6 +1156,9 @@ func _active_tool() -> int:
 
 
 func _on_cell_pressed(cell: Vector2i) -> void:
+	if _place_mode:
+		_commit_place_preset(cell)  # 放置模式：点击=以该格为左上角放置
+		return
 	if _paste_mode:
 		_commit_paste(cell)  # 粘贴模式：点击=提交落点
 		return
@@ -1301,6 +1377,8 @@ func _select_cell(cell: Vector2i, activate_block: bool = true) -> void:
 func _on_hover_changed(cell: Vector2i) -> void:
 	if _paste_mode:
 		_update_paste_preview(cell)  # 粘贴预览跟随悬停格
+	if _place_mode:
+		_update_place_preview(cell)  # 放置预览跟随悬停格
 	if cell.x >= 0:
 		_update_cell_info(cell)
 	elif _canvas.selected_cell.x >= 0:
@@ -1861,6 +1939,7 @@ func _on_region_paste_pressed() -> void:
 	if _clipboard.is_empty():
 		_status("剪贴板为空（先复制或剪切一个区域）", true)
 		return
+	_cancel_place_mode()  # 与放置模式互斥
 	_paste_mode = true
 	_paste_origin = Vector2i(-1, -1)
 	_update_paste_preview(_canvas.hover_cell if _canvas != null else Vector2i(-1, -1))
@@ -1932,7 +2011,207 @@ func _set_move_tool(active: bool) -> void:
 			_canvas.clear_paste_preview()
 
 
-## 剪贴板/粘贴/移动状态只读快照（MCP 断言与契约测试用）
+# ============================================================
+# 区域预设（预设 Tab）：保存=选区→payload→store（不动模型不入历史）；
+# 填入选区=以选区左上角为原点按预设尺寸一步历史回写；放置模式=点击画布
+# 以该格为左上角连续放置，每次一步历史；与粘贴模式互斥，ESC/切工具/
+# 生成/读取/调尺寸均退出并清预览。
+# ============================================================
+
+## 刷新预设列表；select_id 非空则选中该项（保存后选中新项）
+func _refresh_preset_list(select_id := "") -> void:
+	if _preset_list == null or _preset_store == null:
+		return
+	_preset_list.clear()
+	var selected_idx := -1
+	for meta in _preset_store.list():
+		var idx := _preset_list.add_item("%s — %d×%d — %d单位/%d植物" % [
+			meta.name, int(meta.w), int(meta.h), int(meta.units), int(meta.props),
+		])
+		_preset_list.set_item_metadata(idx, String(meta.id))
+		if String(meta.id) == select_id:
+			selected_idx = idx
+	if selected_idx >= 0:
+		_preset_list.select(selected_idx)
+
+
+## 当前列表选中项的预设 id（未选中返回空串）
+func _selected_preset_id() -> String:
+	if _preset_list == null:
+		return ""
+	var selected := _preset_list.get_selected_items()
+	if selected.is_empty():
+		return ""
+	return String(_preset_list.get_item_metadata(selected[0]))
+
+
+## 保存当前完整选区为预设：无完整选区仅中文提示（不写盘）；成功列表刷新并选中新项
+func _on_save_preset_pressed() -> void:
+	var bounds := _move_tool_bounds()
+	if bounds.is_empty():
+		_status("预设保存：请先框选一个完整区域（两次点击画布）", true)
+		return
+	var payload := RegionClipboardScript.extract(model, bounds[0], bounds[1])
+	if payload.is_empty():
+		_status("预设保存：区域数据提取失败", true)
+		return
+	var preset_name := _preset_name_edit.text if _preset_name_edit != null else ""
+	var result: Dictionary = _preset_store.save(preset_name, payload)
+	if not bool(result.ok):
+		_status("预设保存失败：%s" % result.error, true)
+		return
+	_refresh_preset_list(String(result.id))
+	if _preset_name_edit != null:
+		_preset_name_edit.text = "预设 %d" % (_preset_store.count() + 1)
+	_status("已保存预设「%s」（%d×%d）" % [preset_name.strip_edges(), int(payload.w), int(payload.h)])
+	print("[editor] 保存预设 id=%s name=%s %d×%d" % [String(result.id), preset_name.strip_edges(), int(payload.w), int(payload.h)])  # L1 埋点
+
+
+## 填入选区：以选区 2D 左上角为原点按预设尺寸回写五层；越界仅报错，成功一步历史
+func _on_fill_preset_pressed() -> void:
+	var id := _selected_preset_id()
+	if id.is_empty():
+		_status("填入预设：请先在列表选中一个预设", true)
+		return
+	var bounds := _move_tool_bounds()
+	if bounds.is_empty():
+		_status("填入预设：请先框选一个完整区域", true)
+		return
+	var payload: Dictionary = _preset_store.load(id)
+	if payload.is_empty():
+		_status("填入预设：预设不存在或已损坏", true)
+		return
+	var origin: Vector2i = bounds[0]
+	var size := Vector2i(int(payload.w), int(payload.h))
+	var hi := origin + size - Vector2i(1, 1)
+	var err := RegionClipboardScript.bounds_error(model, origin, hi)
+	if not err.is_empty():
+		_status("填入失败：%s" % err, true)
+		return
+	_push_undo("填入预设")
+	var result: Dictionary = RegionClipboardScript.write(model, payload, origin)
+	_refresh_canvas()
+	_sync_region_marker()
+	var dropped := int(result.get("dropped_units", 0))
+	var suffix := "（%d 个单位因地形不可站立被丢弃）" % dropped if dropped > 0 else ""
+	_status("已填入预设 → (%d,%d)%s" % [origin.x, origin.y, suffix])
+	print("[editor] 填入预设 id=%s origin=%s dropped_units=%d" % [id, str(origin), dropped])  # L1 埋点
+
+
+## 放置模式开关：开启需已选预设（否则回弹）；与粘贴模式互斥
+func _on_place_preset_toggled(on: bool) -> void:
+	if on:
+		var id := _selected_preset_id()
+		if id.is_empty():
+			_status("放置模式：请先在列表选中一个预设", true)
+			if _place_preset_btn != null:
+				_place_preset_btn.set_pressed_no_signal(false)
+			return
+		_cancel_paste()  # 与粘贴模式互斥
+		_place_mode = true
+		_place_preset_id = id
+		_update_place_preview(_canvas.hover_cell if _canvas != null else Vector2i(-1, -1))
+		_status("放置模式：点击画布放置「%s」，ESC 退出" % _preset_name_for_id(id))
+		print("[editor] 进入放置模式 id=%s" % id)  # L1 埋点
+	else:
+		_cancel_place_mode()
+
+
+## 预设显示名（状态栏提示用；找不到返回 id）
+func _preset_name_for_id(id: String) -> String:
+	if _preset_store == null:
+		return id
+	for meta in _preset_store.list():
+		if String(meta.id) == id:
+			return String(meta.name)
+	return id
+
+
+## 放置预览随悬停格刷新：以悬停格为左上角，合法=绿框，越界=红框
+func _update_place_preview(hover: Vector2i) -> void:
+	if _canvas == null or not _place_mode:
+		return
+	if hover.x < 0:
+		_canvas.clear_paste_preview()
+		return
+	var payload: Dictionary = _preset_store.load(_place_preset_id)
+	if payload.is_empty():
+		return
+	var size := Vector2i(int(payload.w), int(payload.h))
+	var hi := hover + size - Vector2i(1, 1)
+	_canvas.set_paste_preview(hover, hi, RegionClipboardScript.bounds_error(model, hover, hi).is_empty())
+
+
+## 放置提交：以点击格为左上角写五层，一步历史；越界仅报错保持模式可重试；
+## 成功后模式保持（可连续放置）
+func _commit_place_preset(cell: Vector2i) -> void:
+	var payload: Dictionary = _preset_store.load(_place_preset_id)
+	if payload.is_empty():
+		_status("预设不存在或已损坏，已退出放置模式", true)
+		_cancel_place_mode()
+		return
+	var size := Vector2i(int(payload.w), int(payload.h))
+	var hi := cell + size - Vector2i(1, 1)
+	var err := RegionClipboardScript.bounds_error(model, cell, hi)
+	if not err.is_empty():
+		_status("放置失败：%s" % err, true)
+		_update_place_preview(_canvas.hover_cell if _canvas != null else Vector2i(-1, -1))
+		return
+	_push_undo("放置预设")
+	var result: Dictionary = RegionClipboardScript.write(model, payload, cell)
+	_refresh_canvas()
+	_sync_region_marker()
+	var dropped := int(result.get("dropped_units", 0))
+	var suffix := "（%d 个单位因地形不可站立被丢弃）" % dropped if dropped > 0 else ""
+	_status("已放置预设 → (%d,%d)%s" % [cell.x, cell.y, suffix])
+	print("[editor] 放置预设 id=%s at=%s dropped_units=%d" % [_place_preset_id, str(cell), dropped])  # L1 埋点
+
+
+## 退出放置模式并清预览（ESC/关开关/生成/读取/调尺寸/切工具/进粘贴模式）
+func _cancel_place_mode() -> void:
+	_place_mode = false
+	_place_preset_id = ""
+	if _place_preset_btn != null and _place_preset_btn.button_pressed:
+		_place_preset_btn.set_pressed_no_signal(false)
+	if _canvas != null:
+		_canvas.clear_paste_preview()
+
+
+## 重命名选中预设：新名取名称输入框，失败中文提示
+func _on_rename_preset_pressed() -> void:
+	var id := _selected_preset_id()
+	if id.is_empty():
+		_status("重命名：请先在列表选中一个预设", true)
+		return
+	var new_name := _preset_name_edit.text if _preset_name_edit != null else ""
+	if not _preset_store.rename(id, new_name):
+		_status("重命名失败：名称不能为空或预设已不存在", true)
+		return
+	_refresh_preset_list(id)
+	_status("已重命名为「%s」" % new_name.strip_edges())
+
+
+## 删除选中预设：列表与存储同步；正在放置该预设则先退出
+func _on_delete_preset_pressed() -> void:
+	var id := _selected_preset_id()
+	if id.is_empty():
+		_status("删除：请先在列表选中一个预设", true)
+		return
+	if _place_mode and _place_preset_id == id:
+		_cancel_place_mode()
+	if not _preset_store.delete(id):
+		_status("删除失败：预设已不存在", true)
+		return
+	_refresh_preset_list()
+	_status("已删除预设")
+
+
+## 刷新按钮：重读存储（外部改动/多实例并发时手动同步）
+func _on_refresh_preset_pressed() -> void:
+	_refresh_preset_list()
+	_status("预设列表已刷新（共 %d 个）" % _preset_store.count())
+
+
 func region_clipboard_info() -> Dictionary:
 	var info := {
 		"has_clipboard": not _clipboard.is_empty(),
@@ -2012,6 +2291,7 @@ func apply_generate(seed: String, w: int, h: int) -> void:
 	_refresh_canvas()
 	_clipboard.clear()  # 跨模型粘贴语义不成立：生成即清剪贴板/取消预览
 	_cancel_paste()
+	_cancel_place_mode()  # 旧预设引用同样作废：退出放置
 	if _move_tool_active:
 		_set_move_tool(false)  # 新模型旧选区不成立：收起移动工具
 	_status("已生成 %d×%d · 种子「%s」（单位已清空）" % [w, h, seed])
@@ -2034,6 +2314,7 @@ func _on_resize() -> void:
 	_refresh_canvas()
 	_clipboard.clear()  # 尺寸变化后旧区域可能越界：清剪贴板/取消预览
 	_cancel_paste()
+	_cancel_place_mode()  # 尺寸变化后放置同样作废：退出
 	if _move_tool_active:
 		_set_move_tool(false)  # 尺寸变化后旧选区可能越界：收起移动工具
 
@@ -2048,6 +2329,8 @@ func _refresh_canvas() -> void:
 
 
 func _on_tool_changed() -> void:
+	if _place_mode:
+		_cancel_place_mode()  # 切工具退出放置模式
 	var names := {
 		Tool.SELECT: "选择", Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮",
 		Tool.UNIT: "角色", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
@@ -2255,6 +2538,7 @@ func load_path(path: String) -> Dictionary:
 	_refresh_canvas()
 	_clipboard.clear()  # 跨模型粘贴语义不成立：读取即清剪贴板/取消预览
 	_cancel_paste()
+	_cancel_place_mode()  # 跨模型粘贴语义不成立：读取退出放置
 	if _move_tool_active:
 		_set_move_tool(false)  # 新模型旧选区不成立：收起移动工具
 	_status("已读取 %s（%d×%d · 我方%d/敌方%d）" % [

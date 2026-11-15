@@ -501,6 +501,128 @@ func _run() -> void:
 		"K 顶边越界：方向键仅报错（历史/模型/选区零变化）")
 	k_toggle.button_pressed = false
 
+	# ---- L. 预设 Tab：保存/列表/填入/放置模式/删除（隔离 user://test_editor_presets_ui） ----
+	editor._preset_store = load("res://scripts/editor/region_preset_store.gd").new(
+		"user://test_editor_presets_ui")
+	editor._refresh_preset_list()
+	# L-① 预设页 UI：第 8 个 Tab + 关键控件
+	var l_tabs := editor.find_child("ToolTabs", true, false) as TabContainer
+	_expect(l_tabs != null and l_tabs.get_tab_count() == 8
+		and String(l_tabs.get_tab_title(7)) == "预设",
+		"L 预设页是第 8 个 Tab（文件/生成/地形/方块/角色/历史/素材/预设）")
+	_expect(editor.find_child("PresetList", true, false) != null
+		and editor.find_child("SavePresetBtn", true, false) != null
+		and editor.find_child("PlacePresetBtn", true, false) != null,
+		"L 预设页含 PresetList/SavePresetBtn/PlacePresetBtn")
+	# L-② 无完整区域保存：仅中文提示，不写盘、不动模型与历史
+	editor._region_pos2_set = false
+	var l_h0: int = editor._history.size()
+	var l_m0: Dictionary = editor.model.duplicate(true)
+	editor._on_save_preset_pressed()
+	_expect(String(editor._status_label.text).contains("预设保存")
+		and editor._preset_store.count() == 0
+		and editor.model == l_m0 and editor._history.size() == l_h0,
+		"L 无完整选区保存：中文提示且零写入（存储/模型/历史不变）")
+	# L-③ 完整选区 (1,1)-(3,3) 铺五层 → 保存 → 列表 1 项，元数据 3×3
+	editor._selection_range.begin(Vector3i(1, 1, 0))
+	editor._selection_range.update_focus(Vector3i(3, 3, 0))
+	editor._region_pos2_set = true
+	editor._set_glyph(Vector2i(1, 1), "g")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 3)
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(3, 2), "asset_grass_block")
+	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "tree")
+	(editor.model.units as Array).append({
+		"class": "warrior", "name": "预设探员", "level": 2,
+		"x": 1, "y": 1, "faction": "player",
+	})
+	editor._seal_pending()
+	editor._push_undo("布景L")
+	editor._seal_pending()
+	editor._preset_name_edit.text = "契约预设"
+	var l_save_h0: int = editor._history.size()
+	var l_save_m0: Dictionary = editor.model.duplicate(true)
+	editor._on_save_preset_pressed()
+	var l_metas: Array = editor._preset_store.list()
+	_expect(editor._preset_store.count() == 1 and editor._preset_list.item_count == 1
+		and l_metas.size() == 1 and int(l_metas[0].w) == 3 and int(l_metas[0].h) == 3
+		and String(l_metas[0].name) == "契约预设"
+		and editor._history.size() == l_save_h0 and editor.model == l_save_m0,
+		"L 保存当前选区为预设：列表 1 项且保存本身零历史/模型增量，元数据 3×3 名「契约预设」")
+	# L-④ 清空画布后填入选区：五层按预设回写到选区左上角，恰好一步历史，一步撤销回滚
+	for y in range(8):
+		editor.model.rows[y] = "........"
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 0)
+	(editor.model.units as Array).clear()
+	(editor.model.get("props", []) as Array).clear()
+	(editor.model.get("tile_overrides", {}) as Dictionary).clear()
+	editor._push_undo("清空画布L")  # 清空入史：撤销「填入预设」才有可比对的清空回滚点
+	editor._seal_pending()
+	var l_wiped: Dictionary = editor.model.duplicate(true)
+	var l_fill_h0: int = editor._history.size()
+	editor._on_fill_preset_pressed()
+	editor._seal_pending()
+	_expect(editor._history.size() == l_fill_h0 + 1
+		and editor._history_cursor >= 0
+		and String(editor._history[editor._history_cursor]["label"]) == "填入预设"
+		and (editor.model.rows[1] as String).substr(1, 1) == "g"
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(2, 2)) == 3
+		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(3, 2)) == "asset_grass_block"
+		and BattlefieldDocScript.prop_at(editor.model, Vector2i(2, 1)) == "tree",
+		"L 填入选区：地形/高度/覆盖/植物四层回写到 (1,1)-(3,3)，标签「填入预设」")
+	var l_unit: Dictionary = {}
+	for u in editor.model.units:
+		if int(u.x) == 1 and int(u.y) == 1:
+			l_unit = u
+	_expect(not l_unit.is_empty() and String(l_unit.get("name", "")) == "预设探员",
+		"L 填入选区：单位层回写到 (1,1)")
+	editor._undo()
+	_expect(editor.model == l_wiped,
+		"L 一步撤销填入 → 画布回到清空态")
+	# L-⑤ 放置模式：预览跟随悬停；点击连续放置各一步历史；ESC 退出清预览
+	var l_place_btn := editor.find_child("PlacePresetBtn", true, false) as BaseButton
+	l_place_btn.button_pressed = true
+	_expect(bool(editor._place_mode), "L 放置模式开启（列表已有选中预设）")
+	editor._on_hover_changed(Vector2i(2, 2))
+	_expect(editor._canvas.has_paste_preview(), "L 放置预览跟随悬停格出现")
+	var l_place_h0: int = editor._history.size()
+	var l_place_c0: int = editor._history_cursor
+	var l_place_before0: Dictionary = editor.model.duplicate(true)
+	editor._on_cell_pressed(Vector2i(0, 0))
+	editor._seal_pending()
+	# 上一次断言撤销了「填入预设」；首次放置会截断这条 redo 再追加，故 size 不变、cursor +1。
+	_expect(editor._history.size() == l_place_h0
+		and editor._history_cursor == l_place_c0 + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "放置预设"
+		and (editor.model.rows[0] as String).substr(0, 1) == "g",
+		"L 放置预设 at (0,0)：历史恰好 +1，标签「放置预设」且地形落位")
+	var l_place_h1: int = editor._history.size()
+	var l_place_c1: int = editor._history_cursor
+	var l_place_before1: Dictionary = editor.model.duplicate(true)
+	editor._on_cell_pressed(Vector2i(4, 4))
+	editor._seal_pending()
+	_expect(editor._history.size() == l_place_h1 + 1
+		and editor._history_cursor == l_place_c1 + 1 and editor._place_mode
+		and (editor.model.rows[4] as String).substr(4, 1) == "g",
+		"L 连续放置 at (4,4)：模式保持，历史再次恰好 +1")
+	editor._undo()
+	_expect(editor.model == l_place_before1,
+		"L 一步撤销连续放置 → 仅回滚 at (4,4)，保留首次放置")
+	editor._undo()
+	_expect(editor.model == l_place_before0,
+		"L 再一步撤销首次放置 → 画布回到放置前")
+	_send_key(editor, KEY_ESCAPE)
+	_expect(not editor._place_mode and not editor._canvas.has_paste_preview(),
+		"L ESC 退出放置模式并清预览")
+	# L-⑥ 删除预设：存储与列表同步清零
+	editor._on_delete_preset_pressed()
+	_expect(editor._preset_store.count() == 0 and editor._preset_list.item_count == 0,
+		"L 删除后存储与列表均空")
+	var l_dir := DirAccess.open("user://")
+	if l_dir != null and l_dir.dir_exists("test_editor_presets_ui"):
+		l_dir.remove("test_editor_presets_ui/presets.json")
+		l_dir.remove("test_editor_presets_ui")
+
+
 	_finish(editor)
 
 

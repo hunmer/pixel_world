@@ -80,8 +80,8 @@ func _run() -> void:
 	var titles := []
 	for i in range(tabs.get_tab_count()):
 		titles.append(tabs.get_tab_title(i))
-	_expect(titles == ["文件", "生成", "地形", "方块", "角色", "历史", "素材"],
-		"7 个 Tab 且顺序为 文件/生成/地形/方块/角色/历史/素材（实际 %s）" % str(titles))
+	_expect(titles == ["文件", "生成", "地形", "方块", "角色", "历史", "素材", "预设"],
+		"8 个 Tab 且顺序为 文件/生成/地形/方块/角色/历史/素材/预设（实际 %s）" % str(titles))
 	var status: Label = sv.get_node_or_null("StatusLabel")
 	_expect(status != null and status is Label, "状态栏贴面板底部（SideVBox 内）")
 	if status != null:
