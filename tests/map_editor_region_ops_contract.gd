@@ -10,8 +10,8 @@
 ##       拖动不设区域端点（既有契约）；原地松开仍走第三次点击重置 pos1（既有契约）；
 ##       越界粘贴拒绝（模型 / 历史不动）；ESC 取消粘贴预览；
 ##       Ctrl+C/X/V 快捷键派发；剪切一步历史；生成清空剪贴板；
-##       region_clipboard_info() 只读快照；工具条仍 7 钮、ModeOption 仍 2 项（不回退）。
-##       侧栏移动工具（MoveToolToggle）：无完整选区中文拒绝；开启后拖拽平移选区
+##       region_clipboard_info() 只读快照；工具条 8 钮（7 工具+移动开关）、ModeOption 仍 2 项。
+##       左侧工具栏移动工具（MoveToolToggle，ToolBox 第 8 钮）：无完整选区中文拒绝；开启后拖拽平移选区
 ##       （选区跟随、恰好一步历史、可回滚）；原地松开=纯点击不触发区域选择；
 ##       关闭后回到区域内拖动/两次点击语义（第三次点击重置 pos1 不回退）。
 
@@ -41,8 +41,8 @@ func _run() -> void:
 
 	# ---- A. 既有契约不回退 + 区域操作按钮存在 ----
 	var toolbar: Node = editor.get_node_or_null("EditorRoot/CanvasHolder/ToolBar/ToolBox")
-	_expect(toolbar != null and toolbar.get_child_count() == 7,
-		"A 工具条仍为 7 个按钮（区域操作不进工具条）")
+	_expect(toolbar != null and toolbar.get_child_count() == 8,
+		"A 工具条为 8 个按钮（7 工具 + 移动开关，用户已取消 7 钮契约）")
 	var popup: Control = editor.get_node_or_null("SelectionPopup")
 	_expect(popup != null and not popup.visible, "A 选择菜单存在且默认隐藏")
 	if popup == null:
@@ -237,14 +237,14 @@ func _run() -> void:
 		and not bool(info3["move_armed"]) and not editor._canvas.has_paste_preview(),
 		"H 生成新地形 → 剪贴板/粘贴模式/移动预览全部清空")
 
-	# ---- I. 侧栏移动工具：开关 + 拖拽平移选区 + 原地松开不触发区域选择 ----
-	var mt_row: Node = editor.find_child("MoveToolRow", true, false)
-	var mt_toggle := editor.find_child("MoveToolToggle", true, false) as CheckButton
+	# ---- I. 左侧工具栏移动工具：开关 + 拖拽平移选区 + 原地松开不触发区域选择 ----
+	var mt_toggle := editor.find_child("MoveToolToggle", true, false) as BaseButton
 	_expect(mt_toggle != null and mt_toggle.icon != null,
 		"移动工具开关是带图标的按钮（control/move 图标）")
-	_expect(mt_row is HBoxContainer and mt_toggle != null
+	var mt_box: Node = mt_toggle.get_parent() if mt_toggle != null else null
+	_expect(mt_box != null and mt_box.name == "ToolBox"
 		and not mt_toggle.button_pressed,
-		"I 侧栏存在移动工具行（MoveToolRow/MoveToolToggle），默认关闭")
+		"I 移动工具开关位于左侧 ToolBox（第 8 钮），默认关闭")
 	if mt_toggle == null:
 		_finish(editor)
 		return
@@ -343,7 +343,7 @@ func _run() -> void:
 	editor._on_tool_changed()  # 与工具条按下同一入口（不弹选择面板）
 	_expect(editor.current_tool == editor.Tool.PAINT,
 		"J 切到画笔工具（_on_tool_changed 同步）")
-	var j_toggle := editor.find_child("MoveToolToggle", true, false) as CheckButton
+	var j_toggle := editor.find_child("MoveToolToggle", true, false) as BaseButton
 	j_toggle.button_pressed = true
 	_expect(bool(editor.region_clipboard_info()["move_tool"]),
 		"J 画笔下仍可开启移动工具（不因工具切换被收起）")

@@ -28,7 +28,8 @@
 ## 跟随悬停格（绿=合法/红=越界），点击提交；区域内按下拖动=移动区域。
 ## 内核全部走 scripts/editor/region_clipboard.gd 纯函数；每次提交恰好一步历史，
 ## 越界拒绝且不改模型；生成/读取/调尺寸清空剪贴板并取消预览。
-## 移动工具（侧栏 MoveToolToggle，独立开关）：与 current_tool/_selection_mode 解耦，
+## 移动工具（左侧工具栏 MoveToolToggle，ToolBox 第 8 钮，独立开关）：
+## 与 current_tool/_selection_mode 解耦，
 ## 任意工具下开启后画布拖拽=平移当前选区（选区跟随、全程不重置端点），
 ## 原地松开=纯点击；关闭后回到区域内拖动/两次点击语义。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
@@ -166,9 +167,9 @@ var _paste_origin := Vector2i(-1, -1)
 var _move_armed := false
 var _move_grab := Vector2i(-1, -1)
 var _move_preview := Vector2i(-1, -1)
-## 移动工具（侧栏开关）：开启后画布拖拽=平移当前选区（选区跟随平移）
+## 移动工具（左侧工具栏开关）：开启后画布拖拽=平移当前选区（选区跟随平移）
 var _move_tool_active := false
-var _move_tool_toggle: CheckButton = null
+var _move_tool_toggle: BaseButton = null
 
 
 func _ready() -> void:
@@ -226,7 +227,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				if get_viewport() != null:
 					get_viewport().set_input_as_handled()
 				return
-			# 移动工具开启时：Esc 先关掉移动工具（同步侧栏开关），不关菜单也不返回世界
+			# 移动工具开启时：Esc 先关掉移动工具（同步工具栏开关），不关菜单也不返回世界
 			if _move_tool_active:
 				_set_move_tool(false)
 				if get_viewport() != null:
@@ -338,24 +339,6 @@ func _build_ui() -> void:
 		title_row.add_child(tw)
 	title_row.add_child(UIFactoryScript.label("战场编辑器", 16, ACCENT))
 	sv.add_child(title_row)
-
-	# 移动工具行：侧栏开关（不占左上工具条 7 钮契约，不动 ModeOption 2 项契约）
-	var move_row := HBoxContainer.new()
-	move_row.name = "MoveToolRow"
-	move_row.add_theme_constant_override("separation", 6)
-	var move_toggle := CheckButton.new()
-	move_toggle.name = "MoveToolToggle"
-	move_toggle.text = "移动工具"
-	# 与工具条一致走 at-icons control/ 色系（加载失败时退回纯文字，不报错）
-	var move_icon: Texture2D = UIThemeScript.icon("move")
-	if move_icon != null:
-		move_toggle.icon = move_icon
-	move_toggle.focus_mode = Control.FOCUS_NONE
-	move_toggle.toggled.connect(_on_move_tool_toggled)
-	move_row.add_child(move_toggle)
-	sv.add_child(move_row)
-	_move_tool_toggle = move_toggle
-	sv.add_child(UIFactoryScript.label("开启后拖拽鼠标移动选中区域", 11, TEXT_DIM))
 
 	# ---- 7 个 Tab：文件 / 生成 / 地形 / 方块 / 角色 / 历史 / 素材 ----
 	# Tab 样式统一走 ui_factory.tab_container（含页签三态与面板底）
@@ -520,6 +503,26 @@ func _build_tool_bar() -> Control:
 	_add_tool_btn(box, tool_group, Tool.HEIGHT_DOWN, "地形下降", "arrow_down_to_line")
 	_add_tool_btn(box, tool_group, Tool.UNIT, "角色", "person")
 	_tool_buttons[Tool.PAINT].button_pressed = true
+	# 移动工具开关：ToolBox 第 8 钮（用户已取消 7 钮契约）。独立开关，
+	# 不入 tool_group（不与 7 个画布工具互斥，可任意工具下叠加开启）
+	var move_toggle := _pixel_btn()
+	move_toggle.name = "MoveToolToggle"
+	move_toggle.toggle_mode = true
+	var move_icon: Texture2D = UIThemeScript.icon("move")
+	if move_icon != null:
+		# 与上方 7 钮同观感：方形图标按钮（tooltip 提示用途）
+		move_toggle.icon = move_icon
+		move_toggle.set("icon_size", 22)
+		move_toggle.text = ""
+		move_toggle.custom_minimum_size = Vector2(34, 34)
+		move_toggle.expand_icon = true
+	else:
+		move_toggle.text = "移动"
+	move_toggle.tooltip_text = "移动工具：拖拽移动选中区域"
+	move_toggle.focus_mode = Control.FOCUS_NONE
+	move_toggle.toggled.connect(_on_move_tool_toggled)
+	box.add_child(move_toggle)
+	_move_tool_toggle = move_toggle
 	return bar
 
 
@@ -563,7 +566,7 @@ func _build_hint_bar() -> Control:
 	bar.add_hint("CTRL+Z / Y", "撤销 / 重做")
 	bar.add_hint("CTRL+C / X / V", "复制 / 剪切 / 粘贴区域")
 	bar.add_hint("区域内拖动", "移动区域")
-	bar.add_hint("移动工具", "侧栏开关，拖拽移动选区")
+	bar.add_hint("移动工具", "左栏第 8 钮，拖拽移动选区")
 	bar.add_hint("ESC", "返回世界")
 	return bar
 
@@ -1886,13 +1889,13 @@ func _cancel_paste() -> void:
 		_canvas.clear_paste_preview()
 
 
-## 移动工具开关（侧栏 CheckButton toggled）：写回状态并提示
+## 移动工具开关（左侧工具栏 MoveToolToggle toggled）：写回状态并提示
 func _on_move_tool_toggled(pressed: bool) -> void:
 	_set_move_tool(pressed)
 	_status("移动工具：%s" % ("开" if pressed else "关"))
 
 
-## 同步移动工具状态（含 CheckButton 无信号回写）；关闭时清待移动/预览
+## 同步移动工具状态（含开关无信号回写）；关闭时清待移动/预览
 func _set_move_tool(active: bool) -> void:
 	_move_tool_active = active
 	if _move_tool_toggle != null and _move_tool_toggle.button_pressed != active:
