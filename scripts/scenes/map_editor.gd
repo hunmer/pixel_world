@@ -177,6 +177,9 @@ var _preset_store: RefCounted = null  # RegionPresetStoreScript（preload，避�
 var _preset_name_edit: LineEdit = null
 var _preset_list: ItemList = null
 var _place_preset_btn: BaseButton = null
+var _place_preview_toggle: CheckButton = null
+## 实时放置预览总开关：只影响预览标记，不影响点击提交与撤销
+var _place_preview_enabled := true
 var _place_mode := false
 var _place_preset_id := ""
 
@@ -848,6 +851,13 @@ func _build_preset_tab(tabs: TabContainer) -> void:
 	op_row.add_child(refresh_btn)
 	tab.add_child(op_row)
 	UIFactoryScript.center_row(op_row)
+
+	_place_preview_toggle = CheckButton.new()
+	_place_preview_toggle.name = "PlacePreviewToggle"
+	_place_preview_toggle.text = "实时放置预览"
+	_place_preview_toggle.button_pressed = _place_preview_enabled
+	_place_preview_toggle.toggled.connect(_on_place_preview_toggled)
+	tab.add_child(_place_preview_toggle)
 
 	tab.add_child(UIFactoryScript.label("选中区域后可保存为预设；填入选区与放置模式均一步撤销", 10, TEXT_DIM))
 	_refresh_preset_list()
@@ -2117,6 +2127,17 @@ func _on_place_preset_toggled(on: bool) -> void:
 		_cancel_place_mode()
 
 
+## 实时预览总开关：关闭立即清除当前放置预览；不影响粘贴模式或放置提交
+func _on_place_preview_toggled(on: bool) -> void:
+	_place_preview_enabled = on
+	if _canvas == null or not _place_mode:
+		return
+	if on:
+		_update_place_preview(_canvas.hover_cell)
+	else:
+		_canvas.clear_paste_preview()
+
+
 ## 预设显示名（状态栏提示用；找不到返回 id）
 func _preset_name_for_id(id: String) -> String:
 	if _preset_store == null:
@@ -2127,11 +2148,11 @@ func _preset_name_for_id(id: String) -> String:
 	return id
 
 
-## 放置预览随悬停格刷新：以悬停格为左上角，合法=绿框，越界=红框
+## 放置预览随悬停格刷新：总开关关闭时保持无预览；合法=绿框，越界=红框
 func _update_place_preview(hover: Vector2i) -> void:
 	if _canvas == null or not _place_mode:
 		return
-	if hover.x < 0:
+	if not _place_preview_enabled or hover.x < 0:
 		_canvas.clear_paste_preview()
 		return
 	var payload: Dictionary = _preset_store.load(_place_preset_id)
@@ -2216,6 +2237,7 @@ func region_clipboard_info() -> Dictionary:
 	var info := {
 		"has_clipboard": not _clipboard.is_empty(),
 		"paste_mode": _paste_mode,
+		"place_preview": _place_preview_enabled,
 		"move_armed": _move_armed,
 		"move_tool": _move_tool_active,
 		"history_len": _history.size(),

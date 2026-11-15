@@ -510,10 +510,15 @@ func _run() -> void:
 	_expect(l_tabs != null and l_tabs.get_tab_count() == 8
 		and String(l_tabs.get_tab_title(7)) == "预设",
 		"L 预设页是第 8 个 Tab（文件/生成/地形/方块/角色/历史/素材/预设）")
+	var l_preview_toggle := editor.find_child("PlacePreviewToggle", true, false) as CheckButton
 	_expect(editor.find_child("PresetList", true, false) != null
 		and editor.find_child("SavePresetBtn", true, false) != null
-		and editor.find_child("PlacePresetBtn", true, false) != null,
-		"L 预设页含 PresetList/SavePresetBtn/PlacePresetBtn")
+		and editor.find_child("PlacePresetBtn", true, false) != null
+		and l_preview_toggle != null and l_preview_toggle.button_pressed
+		and l_preview_toggle.text == "实时放置预览",
+		"L 预设页含列表/保存/放置控件，实时放置预览 CheckButton 默认开启")
+	_expect(bool(editor.region_clipboard_info().get("place_preview", false)),
+		"L region_clipboard_info().place_preview 暴露默认开启状态")
 	# L-② 无完整区域保存：仅中文提示，不写盘、不动模型与历史
 	editor._region_pos2_set = false
 	var l_h0: int = editor._history.size()
@@ -610,6 +615,35 @@ func _run() -> void:
 	editor._undo()
 	_expect(editor.model == l_place_before0,
 		"L 再一步撤销首次放置 → 画布回到放置前")
+	# L-⑤b 关闭实时预览：悬停无标记，但点击仍放置且恰好一步历史/撤销；再开启恢复预览
+	var l_preview_h0: int = editor._history.size()
+	var l_preview_c0: int = editor._history_cursor
+	var l_preview_before: Dictionary = editor.model.duplicate(true)
+	l_preview_toggle.button_pressed = false
+	_expect(not bool(editor.region_clipboard_info()["place_preview"])
+		and not editor._canvas.has_paste_preview()
+		and editor._history.size() == l_preview_h0 and editor.model == l_preview_before,
+		"L 关闭实时放置预览：状态快照=false、旧预览立即清除，模型/历史不变")
+	editor._on_hover_changed(Vector2i(5, 1))
+	_expect(not editor._canvas.has_paste_preview(),
+		"L 预览关闭后放置模式悬停不再显示标记")
+	editor._on_cell_pressed(Vector2i(5, 1))
+	editor._seal_pending()
+	_expect(editor._history_cursor == l_preview_c0 + 1
+		and editor._history.size() == editor._history_cursor + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "放置预设"
+		and (editor.model.rows[1] as String).substr(5, 1) == "g"
+		and not editor._canvas.has_paste_preview(),
+		"L 无预览点击仍放置 at (5,1)：恰好一步「放置预设」，预览保持关闭")
+	editor._undo()
+	_expect(editor.model == l_preview_before,
+		"L 无预览放置仍可一步撤销回滚")
+	l_preview_toggle.button_pressed = true
+	_expect(bool(editor.region_clipboard_info()["place_preview"]),
+		"L 重新开启实时放置预览：状态快照恢复 true")
+	editor._on_hover_changed(Vector2i(2, 2))
+	_expect(editor._canvas.has_paste_preview(),
+		"L 重新开启后悬停预览恢复")
 	_send_key(editor, KEY_ESCAPE)
 	_expect(not editor._place_mode and not editor._canvas.has_paste_preview(),
 		"L ESC 退出放置模式并清预览")
