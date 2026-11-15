@@ -2567,7 +2567,7 @@ func _update_paste_preview(hover: Vector2i) -> void:
 		_canvas.clear_paste_preview()
 		return
 	var ghost := _ghost_payload_at(_clipboard, hover)
-	_canvas.set_block_ghost(ghost.cells, ghost.valid)
+	_canvas.set_placement_preview(ghost.cells, ghost.valid)
 
 
 ## 将五层 payload 的 rows/block_z/tile_overrides 展开为 Canvas 幽灵数据。
@@ -2776,7 +2776,7 @@ func _preset_name_for_id(id: String) -> String:
 	return id
 
 
-## 放置预览随悬停格刷新：总开关关闭时保持无预览；合法=绿色半透明块，越界=红色。
+## 放置预览随悬停格刷新：总开关关闭时保持无预览；正常显示真实应用效果，越界红色提示。
 func _update_place_preview(hover: Vector2i) -> void:
 	if _canvas == null or not _place_mode:
 		return
@@ -2787,7 +2787,7 @@ func _update_place_preview(hover: Vector2i) -> void:
 	if payload.is_empty():
 		return
 	var ghost := _ghost_payload_at(payload, hover)
-	_canvas.set_block_ghost(ghost.cells, ghost.valid)
+	_canvas.set_placement_preview(ghost.cells, ghost.valid)
 
 
 ## 放置提交：以点击格为左上角写五层，一步历史；越界仅报错保持模式可重试；

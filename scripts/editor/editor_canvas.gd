@@ -36,8 +36,8 @@ const REGION_LINE_WIDTH := 2.0
 ## 粘贴预览描边色（与区域虚线同一套几何）：绿=合法落点，红=越界/非法
 const PASTE_OK_COLOR := Color(0.45, 1.0, 0.5, 0.95)
 const PASTE_BAD_COLOR := Color(1.0, 0.35, 0.3, 0.95)
-const GHOST_OK_COLOR := Color(0.65, 1.0, 0.70, 0.45)
-const GHOST_BAD_COLOR := Color(1.0, 0.45, 0.40, 0.45)
+const GHOST_OK_COLOR := Color.WHITE
+const GHOST_BAD_COLOR := Color(1.0, 0.25, 0.2, 1.0)
 ## 滚轮/手势每步缩放因子（与 B2 battle.gd 一致：factor<1 = 放大一步）
 const WHEEL_ZOOM_IN := 0.9
 const WHEEL_ZOOM_OUT := 1.1
@@ -594,9 +594,9 @@ func set_paste_preview(min_cell: Vector2i, max_cell: Vector2i, valid: bool) -> v
 	_update_paste_marker()
 
 
-## 设置真实方块幽灵。cells 每项 {x,y,terrain:String,asset_id:String,z:int}；
-## 坐标为地图格坐标，渲染复用正式 ColumnBatch 顶面/侧面几何；不读也不改 model。
-func set_block_ghost(cells: Array, valid: bool) -> void:
+## 设置放置后的真实效果预览。cells 每项 {x,y,terrain:String,asset_id:String,z:int}；
+## 复用正式渲染的地形/素材贴图与 ColumnBatch 柱体，不写 model，也不入历史。
+func set_placement_preview(cells: Array, valid: bool) -> void:
 	_block_ghost_cells.clear()
 	for value in cells:
 		if not (value is Dictionary):
@@ -615,14 +615,27 @@ func set_block_ghost(cells: Array, valid: bool) -> void:
 	_rebuild_block_ghost()
 
 
-func clear_block_ghost() -> void:
+## T12 兼容入口；新代码统一使用 placement_preview 命名。
+func set_block_ghost(cells: Array, valid: bool) -> void:
+	set_placement_preview(cells, valid)
+
+
+func clear_placement_preview() -> void:
 	_block_ghost_cells.clear()
 	_block_ghost_valid = true
 	_clear_block_ghost_marks()
 
 
-func ghost_cell_count() -> int:
+func clear_block_ghost() -> void:
+	clear_placement_preview()
+
+
+func placement_preview_cell_count() -> int:
 	return _block_ghost_cells.size()
+
+
+func ghost_cell_count() -> int:
+	return placement_preview_cell_count()
 
 
 ## 清空粘贴预览框与真实方块幽灵。
@@ -664,17 +677,17 @@ func _rebuild_block_ghost() -> void:
 		var view := _ghost_view_for(cell)
 		if view.is_empty():
 			continue
-		var block := _ghost_block_for(cell)
-		if block.is_empty():
+		var blocks := _ghost_blocks_for(cell)
+		if blocks.is_empty():
 			continue
 		var mark := ColumnBatchScript.new()
-		mark.name = "BlockGhost_%d_%d" % [int(cell.x), int(cell.y)]
+		mark.name = "PlacementPreview_%d_%d" % [int(cell.x), int(cell.y)]
 		mark.z_index = 15
 		_world.add_child(mark)
-		var blocks: Array[Dictionary] = [block]
 		mark.configure(
 			Vector2i(int(cell.x), int(cell.y)), blocks,
 			view.position, view.position.y, IsoCoords.LEVEL_H, view.basis_x, view.basis_y)
+		# 正常态保留每块自身材质与 modulate；越界仅加不透明红色 tint 作提示。
 		mark.self_modulate = GHOST_OK_COLOR if _block_ghost_valid else GHOST_BAD_COLOR
 		_block_ghost_marks.append(mark)
 
@@ -709,28 +722,40 @@ func _ghost_view_for(cell: Dictionary) -> Dictionary:
 	}
 
 
-func _ghost_block_for(cell: Dictionary) -> Dictionary:
+## 与 BattlefieldRenderer._append_explicit_block/_asset_block_for 保持同一应用效果：
+## 素材整格替代柱体，陆地填实 0..z，水只在 z 层放水面；payload 的 z 不受现地图格影响。
+func _ghost_blocks_for(cell: Dictionary) -> Array[Dictionary]:
+	var blocks: Array[Dictionary] = []
+	var z := int(cell.get("z", 0))
 	var asset_id := String(cell.get("asset_id", ""))
 	if not asset_id.is_empty():
 		var visual: Dictionary = asset_adapter.resolve(asset_id)
 		var asset_tex: Texture2D = visual.get("texture", null)
-		if asset_tex == null:
-			return {}
-		var top_half := (ColumnBatchScript.TOP_UV[2].y - ColumnBatchScript.TOP_UV[0].y) * 0.5
-		var offset: Vector2 = visual.get("render_offset", Vector2.ZERO)
-		offset = Vector2(offset.x,
-			offset.y + asset_tex.get_height() * 0.5 - top_half + ColumnBatchScript.TOP_CENTER_OFFSET.y)
-		var asset_block: Dictionary = _renderer._block(asset_tex, 0, Color.WHITE, 1, offset)
-		asset_block["occluder_class"] = &"prop"
-		asset_block["asset_id"] = asset_id
-		return asset_block
-	var terrain := StringName(String(cell.get("terrain", "plain")))
+		if asset_tex != null:
+			var top_half := (ColumnBatchScript.TOP_UV[2].y - ColumnBatchScript.TOP_UV[0].y) * 0.5
+			var offset: Vector2 = visual.get("render_offset", ColumnBatchScript.TOP_CENTER_OFFSET)
+			offset = Vector2(offset.x,
+				offset.y + asset_tex.get_height() * 0.5 - top_half + ColumnBatchScript.TOP_CENTER_OFFSET.y)
+			var asset_block: Dictionary = _renderer._block(asset_tex, z, Color.WHITE, 1, offset)
+			asset_block["occluder_class"] = &"prop"
+			asset_block["asset_id"] = asset_id
+			blocks.append(asset_block)
+			return blocks
+	var terrain := BattlefieldDocScript.glyph_to_terrain(String(cell.get("terrain", "plain")))
 	var style: Dictionary = BattlefieldRendererScript.TERRAIN_STYLES.get(
 		terrain, BattlefieldRendererScript.TERRAIN_STYLES[&"plain"])
-	var terrain_tex: Texture2D = _renderer._surface_texture(style["top"], &"top")
-	if terrain_tex == null:
-		return {}
-	return _renderer._block(terrain_tex, 0, _renderer._terrain_tint(terrain))
+	if terrain == &"water":
+		blocks.append(_renderer._water_block(
+			_renderer._water_tex(&"surface"), z, BattlefieldRendererScript.WATER_SURFACE_ALPHA, &"surface"))
+		return blocks
+	var top_tex: Texture2D = _renderer._surface_texture(style["top"], &"top")
+	var column_tex: Texture2D = _renderer._surface_texture(style["column"], &"column")
+	if top_tex == null or column_tex == null:
+		return blocks
+	var tint: Color = _renderer._terrain_tint(terrain)
+	for level in range(z + 1):
+		blocks.append(_renderer._block(top_tex if level == z else column_tex, level, tint))
+	return blocks
 
 
 # ============================================================
