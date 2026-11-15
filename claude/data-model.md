@@ -1,6 +1,6 @@
 # 数据模型
 
-> 更新：2026-11-15（新增战旗存档模型、用户素材 descriptor、对话 JSON、startup.cfg；持久化清单不再是"唯一 settings.cfg"）。
+> 更新：2026-11-15（第二轮增量：chapter +victory/+reinforcements、编辑器区域 payload 五层与命名预设；此前新增战旗存档模型、用户素材 descriptor、对话 JSON、startup.cfg）。
 
 本项目无数据库 / 无网络持久层。"数据模型"指**运行时领域对象**（多为 GDScript Dictionary，全 StringName key）、**流式生成的世界状态**与 **3D 正交渲染结构**。
 
@@ -101,9 +101,12 @@
 - Terrain：`{ type, def_bonus, avoid_bonus, move_cost:{foot,armor,cavalry,flying}, walkable }`，`move_cost=99` 不可通行。**11 种地形**：`plain, grass, sand, snow, rocky, forest, water, village, fort, wall, mountain`。
 
 ### `chapter`（战斗输入，见 `public-interfaces.md`）
-`{ id?, name?, width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin?, hosting? }`
+`{ id?, name?, width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin?, hosting?, victory?, reinforcements? }`
 
 两个来源产出同构 chapter：`world_to_chapter`（世界地形采样）与 `BattlefieldLoader.load_battlefield`（JSON 文件）。
+
+- `victory?: { type: "rout"|"defend_turns"|"seize", turns?: int }` — 胜利条件（缺省 rout）。运行时注入 `TurnManager.victory`，`check_victory` 按类型判定。
+- `reinforcements?: [ { turn:int, units:[{class,name,level}], positions:[{x,y}] } ]` — 按回合波次增援；已消费波次由 `ReinforcementSpawner.spawn_due` 从 chapter 中**移除**（防存档恢复局重刷），未到点单位经 `pending_units` 并入胜利判定敌集合。
 
 ### JSON 战场文档模型（`scripts/editor/battlefield_doc.gd`）
 
@@ -114,6 +117,11 @@
 ```
 - `generate(seed)`：确定性生成（水域/山脊/森林/村庄/要塞布局）。
 - `to_json_dict()` 输出与 `data/battlefields/*.json` 完全一致的 JSON；`save_model()` 保存即回读校验；`quick_validate()` 轻校验（完整校验在 BattlefieldLoader）。
+
+### 编辑器区域剪贴板 / 预设模型（`scripts/editor/`，2026-11-15 新增）
+
+- **区域 payload 五层**（`EditorRegionClipboard`，坐标一律相对选区左上角，`PAYLOAD_VERSION=1`）：`rows`（地形字符）/ `block_z`（每格方块高度）/ `tile_overrides`（用户素材覆盖）/ `props`（属性覆盖）/ `units`（单位 + 相对坐标）。
+- **命名预设**（`EditorRegionPresetStore`）：单文件 `user://editor_presets/presets.json`（tmp+bak 原子写），条目 `{ id, name, saved_at, payload }`；list/save/load/rename/delete/has/count。
 
 ### 战斗运行时状态（battle.gd）
 - `GridSystem`（实例）：地形矩阵 + 移动范围 / 可达性。
@@ -154,6 +162,7 @@
 | `user://settings.cfg` | `[battle] inline_mode` 等用户偏好 | `Settings` autoload |
 | `user://battle_saves/` | 战旗存档 + index.json | GameSession / battle_save_store |
 | `user://battlefields/` | 编辑器产出的自定义战场 JSON | map_editor |
+| `user://editor_presets/` | 编辑器区域命名预设（presets.json，tmp+bak 原子写） | EditorRegionPresetStore |
 | `user://custom_assets/` | 用户素材 blob + 清单 + 烘焙缓存 | UserAssetService |
 | `user://startup.cfg`（导出后）/ `res://config/startup.cfg`（调试） | `[startup] auto_open_last_scene / last_scene / excluded_scenes` | startup_config.gd（编辑器调试写 res://） |
 

@@ -2,6 +2,21 @@
 
 > 本文件记录 `CLAUDE.md` 索引本身的生成 / 更新，**不是产品 Changelog**。仅保留最近 5 条（倒序）。
 
+## 2026-11-15（二轮） — 增量更新（胜利/增援/交换 + 编辑器区域操作 + DESIGN.md/22 组件 + 全量基线）
+
+- **触发**：/init-project 增量更新；上次扫描提交 386508c 之后 ~25 commits（HEAD=3ba4cf5），外加补记 4 张上次未入账的前置卡（game_hud 修复 e8fda38、trade 2a501c7、victory 2ec8acb、素材源 3a08327）。
+- **重大变化**：
+  - **玩法框架三件套**：胜利条件 `victory{type:rout|defend_turns|seize}`（turn_manager.gd check_victory）+ 按回合波次增援 `reinforcements`（core/reinforcement_spawner.gd spawn_due/pending_units，敌方回合开始刷入、已消费波次移除防重刷）+ 相邻单位物品交换（systems/trade_system.gd）；JSON schema 均为可选字段、loader 静态严校验；样例战场 +ambush_reinforce/last_stand（共 6）。
+  - **世界→战场地形映射 3→7 种**：cell_context_to_terrain 现覆盖 water/mountain/snow/sand/rocky/grass/plain（契约 world_terrain_mapping 22 checks）；forest/village/fort/wall 仍不映射（roadmap）。
+  - **编辑器区域操作波**（scripts/editor/ 6→11 .gd）：区域复制/剪切/粘贴/拖动移动/方向键 nudge（region_clipboard 五层 payload）+ 命名预设库（region_preset_store，user://editor_presets/presets.json，tmp+bak 原子写）+ 取色器（Alt 临时+前后景色）+ replace 工具 + 真实材质预览 + 方块选择弹窗（4 列画廊）+ 快捷键提示弹窗；map_editor.gd 膨胀到 3285 行/150 函数。
+  - **DESIGN.md + UI 组件库成型**：根 DESIGN.md（201 行）成为 UI 设计规范单一事实来源（SPACE/CORNER/FONT/MARGIN token + 六薄容器 + 按钮六态 + 三档分辨率验收）；ui/ 16→22 组件（+6 布局容器），ui_components 契约 735→1062 checks；ui_contract 新增静态扫描：业务脚本禁直建 Button/CheckButton/OptionButton.new()。
+  - **全量测试基线落地**：docs/testing_baseline_2026-11-15.md（62/72 过：6 败 4 超时），tools/run_contract_baseline.sh 单测超时 900s；本轮新增 6 契约全过、复跑 6 受影响契约 4 过 2 红（ui/map_editor_ui 待修）。
+  - **素材源可配置**：user_asset_service 三档优先级（asset_source.cfg override > 库内 settings > DEFAULT 127.0.0.1:8076）+ 优雅降级。
+  - **规模**：scripts/ 113→122 .gd（core 14/systems 12/editor 11）、tests 71→80 .gd（78 契约+2 探针）、ui/ 23 .gd。
+- **更新文件**：`claude/` 全部 11 个文件（overview / module-responsibilities / public-interfaces / data-model / testing-and-quality / file-map / faq / conventions / entrypoints / changelog）+ 根 `CLAUDE.md` + `docs/roadmap.md` 状态标记。
+- **覆盖率**：main.gd 函数级复核（4319/176 不变）、map_editor.gd 3285/150、scripts/ 122 .gd 文件级、tests 78 契约归类 + 运行态实测（新 6 + 复跑 6）、config/data 逐文件。二进制素材仅统计。
+- **缺口 / 下一步建议**：① 契约回归红：`ui`（map_editor.gd 三处直建控件）、`map_editor_ui`（侧栏 320px/z 重建断言）→ 已进 roadmap 新 P0；② 基线余项：battle_action_chain/battle_presentation_hooks/isometric_view/sunlight_3d_gl 4 败未复跑 + 4 超时（3 个 autoload 依赖型 + user_asset_source_live）；③ map_editor.gd 单体膨胀（+~900 行）逼近 main.gd，拆分前兆；④ data/battlefields/contract_asset_map.json.bak 脏文件待清。
+
 ## 2026-11-15 — 增量更新（会话路由/存档 + 演出/自动化 + 用户素材 + UI 组件库 + macOS 迁移）
 
 - **触发**：/init-project 增量更新；距上次扫描（2026-11-12）三个密集日演进，且项目从 Windows（E:/）迁至 macOS（/Users/Zhuanz/Documents/pixel_world）。

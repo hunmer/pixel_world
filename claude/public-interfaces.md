@@ -145,14 +145,16 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 | `cell_context_to_terrain(ctx)` | CellContext | StringName | CellContext → 战棋地形 |
 | `_find_standable_near(...)` | — | 格 | 单位只放 walkable 格 |
 
-`chapter` Dictionary 结构：`{ id?, name?, width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin?, hosting? }`。
+`chapter` Dictionary 结构：`{ id?, name?, width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin?, hosting?, victory?, reinforcements? }`（后两个可选键见下）。
+
+`cell_context_to_terrain` 覆盖 11 种战棋地形中的 **7 种**（确定性映射，无 RNG）：water / mountain / snow / sand / rocky / grass / plain；forest / village / fort / wall 无世界数据源不映射。
 
 ## JSON 战场加载契约（`scripts/core/battlefield_loader.gd`）★ loader 是唯一权威校验点
 
 | 接口 | 说明 |
 | --- | --- |
 | `BattlefieldLoader.list_battlefields()` | 扫描 `res://data/battlefields/*.json` + `user://battlefields/*.json`（res 优先、同名跳过）；坏 JSON 条目带 error 返回（HUD 置灰显示） |
-| `BattlefieldLoader.load_battlefield(path)` | JSON → chapter（与 world_to_chapter 同构）；校验：地形名合法 / 行宽一致 / 职业合法 / 坐标界内 / standable / 单位不重叠 / 双阵营各≥1 |
+| `BattlefieldLoader.load_battlefield(path)` | JSON → chapter（与 world_to_chapter 同构）；校验：地形名合法 / 行宽一致 / 职业合法 / 坐标界内 / standable / 单位不重叠（**含跨增援波次**）/ 双阵营各≥1 |
 | `DEFAULT_LEGEND` | 图例字符 → 地形名默认映射（编辑器 `BattlefieldDoc` 与之一致） |
 
 **战场 JSON 顶层 schema**（`rows` 是**顶层字段，不嵌在 terrain 下**）：
@@ -164,9 +166,19 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
   "legend": { "@": "water", "#": "mountain", "T": "forest", "F": "fort", "V": "village", "W": "wall", "g": "grass", "s": "sand", "S": "snow", "r": "rocky" },
   "playerUnits": [{ "class": "swordsman", "name": "剑士", "level": 1, "x": 2, "y": 1 }],
   "enemyUnits":  [ ... ],
+  "victory": { "type": "defend_turns", "turns": 8 },
+  "reinforcements": [
+    { "turn": 3, "units": [{ "class": "archer", "name": "伏弩", "level": 2 }],
+      "positions": [{ "x": 5, "y": 0 }] }
+  ],
   "hosting": true
 }
 ```
+
+**可选玩法字段**（非法整卡拒绝加载，非法路径 `load_battlefield` 返回 null + push_error）：
+
+- `victory: { type: "rout" | "defend_turns" | "seize", turns?: int }` — 胜利条件注入 `TurnManager.victory`，`check_victory(enemies, ctx)` 按类型判定（defend_turns 坚持到 N 回合 / seize 敌全灭或占点）。缺省 = rout（歼灭）。
+- `reinforcements: [ { turn: int(≥1), units: [同 enemyUnits 条目但无 x/y], positions: [{x,y}]（与 units 等长） } ]` — 按回合波次增援：敌方回合开始由 `ReinforcementSpawner.spawn_due(chapter, grid, turn, turn_number)` 刷入（`search_radius=3` 曼哈顿环找空位，被占丢弃 + warning，已消费波次从 chapter 移除防恢复局重刷）；未到点单位经 `pending_units(chapter)` 并入敌存活集合，防提前判胜。
 
 地形共 **11 种**：`plain, grass, sand, snow, rocky, forest, water, village, fort, wall, mountain`（`core/terrain.gd`）。
 
@@ -176,9 +188,15 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 | --- | --- |
 | `BattlefieldDoc`（battlefield_doc.gd） | 模型 `{ id, name, description, hosting, width, height, rows, units:[{class,name,level,x,y,faction}] }`；`generate(seed)`（确定性：水域/山脊/森林/村庄/要塞）、`resize()`、`to_json_dict()`、`load_path()`、`save_model()`（保存即回读校验）、`quick_validate()` |
 | `EditorCanvas`（editor_canvas.gd） | 内嵌 `BattlefieldRenderer` 渲染；左键按下/拖动发 `cell` 信号（多高度拾取）；右键或 Space+左键平移、滚轮缩放；已放单位显示职业头像+阵营色环+等级徽标 |
-| `map_editor.gd`（场景） | 四工具：画笔/填充/橡皮/角色放置；种子输入+🎲随机+🌱生成；侧栏分组折叠 + at-icons 图标 |
+| `map_editor.gd`（场景） | 工具：画笔/填充/橡皮/角色放置/**replace 整体替换**；**区域选择→复制/剪切/粘贴/拖动移动/方向键 nudge**；取色器（Alt 临时吸取 + 前景色/背景色）；种子输入+🎲随机+🌱生成；侧栏分组折叠 + at-icons 图标；快捷键提示弹窗（?） |
 | `TilePreview`（tile_preview.gd) | 地形调色板缩略图（真实 ColumnBatch 等距方块柱渲染，4 列 GridContainer） |
-| `AssetLibraryPanel`（asset_library_panel.gd，2026-11-14 新增） | 用户素材库面板：浏览/选用 `user://custom_assets/` 导入的方块图（消费 UserAssetService + VisualAdapter） |
+| `AssetLibraryPanel`（asset_library_panel.gd） | 用户素材库面板：浏览/选用 `user://custom_assets/` 导入的方块图（消费 UserAssetService + VisualAdapter） |
+| `EditorRegionClipboard`（region_clipboard.gd，2026-11-15） | 区域剪贴板内核（全静态）：`extract(...)` 五层 payload（rows / block_z / tile_overrides / props / units，坐标相对选区左上角）；`validate / bounds_error / write / clear_rect / paste / move / payload_size / describe`；`PAYLOAD_VERSION=1` |
+| `EditorRegionPresetStore`（region_preset_store.gd） | 区域命名预设持久化：`list/save/load/rename/delete/has/count`；单文件 `user://editor_presets/presets.json`，tmp+bak 原子写 |
+| `EditorBlockList` / `EditorBlockPickerDialog` | 方块画廊列表（GridContainer，`block_activated(kind,id)` 信号，compact/gallery 三态）与 4 列 640×480 选择弹窗（`block_chosen(kind,id)`） |
+| `EditorShortcutHintsDialog` | 快捷键提示浮层（复用 hint_bar 键帽渲染） |
+
+**UI 组件库 / 设计 token 契约**（`ui/` + 根 `DESIGN.md`）：新增界面一律走 `ui/components/pixel_*` 22 控件 + `ComponentTheme`（token 唯一实现：SPACE 4/8/16/24、CORNER、FONT、MARGIN 常量）；**禁裸数字样式值 / 自建 StyleBox / 绝对定位 / 横向滚动**。`tests/ui_contract.gd` 会静态扫描业务脚本（含 map_editor.gd）里的 `Button.new()/CheckButton.new()/OptionButton.new()` 直建控件并置 FAIL。
 
 ## 战棋内部静态接口（被 battle.gd 调用）
 
@@ -191,7 +209,9 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 | `core/unit.gd` | 静态 | UnitData 构造 + 默认成长率 |
 | `systems/combat_system.gd` 等五个 | 全静态 | 战斗/技能/物品/buff 结算 |
 | `systems/grid_system.gd` | 实例 | `GridSystem.new(w,h,map)`；移动范围/可达性 |
-| `systems/turn_manager.gd` | 实例 | 回合调度 |
+| `systems/turn_manager.gd` | 实例 | 回合调度；`var victory: Dictionary = {type:rout}` 可被 chapter 注入，`check_victory(enemies, ctx)` 注入式判定 |
+| `systems/trade_system.gd` | 全静态 | `can_trade(from,to)` / `adjacent_trade_targets(unit,grid)` / `execute_trade(from,to,item_entry)` — 相邻友军物品传递 |
+| `core/reinforcement_spawner.gd` | 全静态 | `spawn_due(chapter,grid,turn,turn_number)->Array` / `pending_units(chapter)->Array`（见上文增援字段） |
 
 ## 信号（signal）
 

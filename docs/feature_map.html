@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<!-- init-project feature_map viewer 模板：生成时用 docs/feature_map.json（压缩后）替换 seed 标签内的唯一占位符，产物写到目标项目 docs/feature_map.html。勿在本文件内内嵌真实数据。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel World — 功能依赖图谱</title>
+<style>
+:root{
+	--bg:#15171e; --bg2:#1b1e27; --bg3:#222633; --panel:#1e222d; --line:#2e3342;
+	--text:#d8dce6; --dim:#8b92a5; --faint:#5d6475;
+	--accent:#e8b04b; --accent-dim:#a87f2f;
+	--green:#7bc96f; --red:#e06c6c; --blue:#6fa8d8; --purple:#b48edd; --teal:#5fbfb0;
+	--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,'PingFang SC','Microsoft YaHei',sans-serif;overflow:hidden}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ===== top bar ===== */
+#topbar{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--bg2);border-bottom:1px solid var(--line);flex-shrink:0}
+#topbar h1{font-size:15px;font-weight:700;letter-spacing:.5px;white-space:nowrap}
+#topbar h1 .px{color:var(--accent)}
+#searchwrap{flex:1;max-width:460px;position:relative}
+#search{width:100%;padding:7px 30px 7px 32px;background:var(--bg3);border:1px solid var(--line);border-radius:6px;color:var(--text);font-size:13px;outline:none}
+#search:focus{border-color:var(--accent-dim)}
+#searchwrap .icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:13px}
+#searchwrap .kbd{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 5px;font-family:var(--mono)}
+.stats{display:flex;gap:8px;margin-left:auto}
+.stat{background:var(--bg3);border:1px solid var(--line);border-radius:6px;padding:3px 10px;font-size:12px;color:var(--dim);white-space:nowrap}
+.stat b{color:var(--text);font-family:var(--mono);font-size:13px}
+.stat.acc b{color:var(--green)}
+button.ghost{background:var(--bg3);border:1px solid var(--line);border-radius:6px;color:var(--dim);padding:5px 10px;font-size:12px;cursor:pointer}
+button.ghost:hover{color:var(--text);border-color:var(--accent-dim)}
+
+/* ===== layout ===== */
+#main{display:flex;height:calc(100% - 52px)}
+#sidebar{width:302px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--line);overflow-y:auto}
+#content{flex:1;overflow-y:auto;padding:22px 28px 80px}
+
+/* ===== sidebar tabs ===== */
+#sideTabs{display:flex;gap:6px;padding:10px 12px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg2);z-index:3}
+.stab{flex:1;text-align:center;padding:6px 0;border-radius:6px;font-size:12.5px;color:var(--dim);cursor:pointer;border:1px solid var(--line);background:var(--bg3)}
+.stab:hover{color:var(--text)}
+.stab.on{color:var(--accent);border-color:var(--accent-dim);background:rgba(232,176,75,.08)}
+
+/* ===== feature tree ===== */
+.sidebody{padding:8px 0 40px}
+.cat{margin-bottom:2px}
+.cat-head{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;user-select:none;border-radius:6px}
+.cat-head:hover{background:var(--bg3)}
+.cat-head .caret{color:var(--faint);font-size:10px;width:10px;transition:transform .15s}
+.cat.open .caret{transform:rotate(90deg)}
+.cat-head .ci{font-size:15px}
+.cat-head .cn{font-weight:600;font-size:13px}
+.cat-head .cc{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint);background:var(--bg3);border-radius:8px;padding:0 7px}
+.feats{display:none}
+.cat.open .feats{display:block}
+.feat{display:flex;align-items:center;gap:7px;padding:5px 12px 5px 30px;cursor:pointer;user-select:none;border-radius:6px;font-size:12.5px;color:var(--dim)}
+.feat:hover{background:var(--bg3);color:var(--text)}
+.feat.sel{background:var(--bg3);color:var(--accent)}
+.feat .fc{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.feat.sel .fc{color:var(--accent-dim)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+
+/* ===== folder tree ===== */
+.dhead{font-weight:600;color:var(--text)}
+.dhead .fc{margin-left:auto}
+.fleaf .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fleaf .dots{display:inline-flex;gap:2px;margin-left:auto;align-items:center;flex-shrink:0}
+.rk{width:24px;text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--faint);flex-shrink:0}
+.rk.top{color:var(--accent);font-weight:700}
+
+/* ===== content ===== */
+.crumb{font-size:12px;color:var(--faint);margin-bottom:6px}
+.crumb a{color:var(--dim);cursor:pointer;text-decoration:none}
+.crumb a:hover{color:var(--accent)}
+.h2row{display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap}
+.h2row .ci{font-size:22px}
+h2{font-size:19px;font-weight:700}
+.tag{font-family:var(--mono);font-size:10.5px;color:var(--faint);background:var(--bg3);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+.fdesc{color:var(--dim);font-size:13.5px;max-width:820px;margin:8px 0 16px}
+.childchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px}
+.chip{background:var(--bg3);border:1px solid var(--line);border-radius:14px;padding:3px 12px;font-size:12px;color:var(--dim);cursor:pointer}
+.chip:hover{border-color:var(--accent-dim);color:var(--text)}
+
+h3{font-size:13px;color:var(--dim);font-weight:600;letter-spacing:.4px;margin:20px 0 8px;text-transform:uppercase}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--faint);font-weight:500;font-size:11.5px;padding:5px 10px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.4px}
+td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:hover td{background:rgba(232,176,75,.04)}
+td.path{font-family:var(--mono);font-size:12px;cursor:pointer;white-space:nowrap}
+td.path:hover{color:var(--accent)}
+td.role{color:var(--dim);font-size:12.5px}
+td.lines{text-align:right;font-family:var(--mono);color:var(--faint);font-size:12px;white-space:nowrap}
+td.tnote{color:var(--dim);font-size:12.5px}
+td.badges{white-space:normal;min-width:140px;max-width:260px}
+.fbadge{display:inline-block;font-size:10.5px;line-height:17px;padding:0 7px;border-radius:4px;border:1px solid;cursor:pointer;margin:1px 0 1px 4px;white-space:nowrap}
+.fbadge:hover{filter:brightness(1.25)}
+.shared{display:inline-block;margin-left:6px;font-size:10px;color:var(--purple);border:1px solid var(--purple);border-radius:3px;padding:0 4px;opacity:.8}
+.ext{display:inline-block;font-family:var(--mono);font-size:10px;border-radius:3px;padding:0 5px;margin-right:7px;vertical-align:1px}
+.ext.gd{color:var(--blue);background:rgba(111,168,216,.12)}
+.ext.tscn{color:var(--teal);background:rgba(95,191,176,.12)}
+.ext.shader{color:var(--purple);background:rgba(180,142,221,.12)}
+.ext.config,.ext.data{color:var(--accent);background:rgba(232,176,75,.12)}
+.ext.mjs,.ext.sh,.ext.py{color:var(--green);background:rgba(123,201,111,.12)}
+.ext.md{color:var(--dim);background:rgba(139,146,165,.12)}
+.ext.dir{color:var(--faint);background:rgba(93,100,117,.15)}
+
+/* search results */
+.sr-item{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer}
+.sr-item:hover{border-color:var(--accent-dim)}
+.sr-path{font-family:var(--mono);font-size:13px}
+.sr-meta{color:var(--dim);font-size:12px;margin-top:3px}
+.sr-feats{margin-top:5px;display:flex;flex-wrap:wrap;gap:2px}
+
+/* file detail */
+.fdetail{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 20px;max-width:760px}
+.fdetail .fp{font-family:var(--mono);font-size:15px;word-break:break-all}
+.fdetail .meta{color:var(--dim);font-size:12.5px;margin:8px 0}
+.fdetail ul{list-style:none;margin-top:6px}
+.fdetail li{padding:4px 0;font-size:13px;cursor:pointer;color:var(--dim);display:flex;align-items:center;gap:8px}
+.fdetail li:hover{color:var(--accent)}
+
+/* coverage view */
+.cov-note{color:var(--dim);font-size:13px;max-width:820px;margin-bottom:14px}
+.vend{display:flex;gap:10px;flex-wrap:wrap}
+.vcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;min-width:240px}
+.vcard .vn{font-weight:600;font-size:13.5px}
+.vcard .vm{color:var(--dim);font-size:12px;margin-top:3px}
+.empty{color:var(--faint);font-size:13px;padding:20px 0}
+#content code{font-family:var(--mono);font-size:12.5px;background:var(--bg3);border-radius:4px;padding:1px 5px}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+	<h1><span class="px">▪</span> Pixel World · 功能依赖图谱</h1>
+	<div id="searchwrap">
+		<span class="icon">⌕</span>
+		<input id="search" type="text" placeholder="搜索文件路径 / 功能名…" autocomplete="off">
+		<span class="kbd">/</span>
+	</div>
+	<div class="stats" id="stats"></div>
+	<button class="ghost" id="expandAll">展开全部</button>
+	<button class="ghost" id="covBtn">覆盖率 ⊕</button>
+</div>
+
+<div id="main">
+	<nav id="sidebar"></nav>
+	<div id="content"></div>
+</div>
+
+<script type="application/json" id="seed">
+{"project":"Pixel World","description":"功能 → 文件依赖图谱：哪些功能用到哪些代码/场景/着色器/配置文件，多层级分类。文件可归属多个功能（shared）。数据来自 2026-11-15 增量扫描 + 每个文件头部『## file.gd — 职责』注释。","generated":"2026-11-15","head_commit":"3ba4cf5","legend":{"types":{"gd":"GDScript 源码","tscn":"Godot 场景","shader":"GDShader","config":"配置 JSON","data":"数据 JSON","mjs":"Node 脚本","sh":"Shell 脚本","py":"Python 脚本","md":"文档","dir":"目录（多文件）"},"note":"lines = wc -l；tests 挂在对应功能下；vendored addons 只列模块级不展开单文件；引擎生成物（.import/.uid/.godot）与二进制素材不收录。"},"tree":[{"id":"boot","name":"启动与会话","icon":"🚀","desc":"引擎入口、场景路由、战旗会话（冷启动续玩/逐战场存档切换）与全局单例服务（8 autoload 中项目自有的 7 个）。","children":[{"id":"boot.entry","name":"入口与会话路由","desc":"Game.tscn 默认主场景：战旗会话路由（GameSession autoload）冷启动自动续玩最近战旗；SceneArgs 场景传参；startup.cfg 支持 F5 直跳；Title/HomeEntry 为入口页。","files":[{"path":"scripts/scenes/game_entry.gd","type":"gd","lines":217,"role":"Game.tscn 入口场景逻辑（新默认主场景）"},{"path":"scripts/scenes/game_session.gd","type":"gd","lines":314,"role":"战棋会话路由（autoload GameSession）"},{"path":"scripts/scenes/scene_args.gd","type":"gd","lines":33,"role":"场景间传参（autoload SceneArgs，battle_args 契约）"},{"path":"scripts/scenes/startup_config.gd","type":"gd","lines":72,"role":"可编辑调试启动配置与最近场景记录"},{"path":"scripts/core/cmd_args.gd","type":"gd","lines":117,"role":"启动命令行参数解析（--battlefield/--reset-battle）"},{"path":"scripts/scenes/title.gd","type":"gd","lines":46,"role":"标题界面"},{"path":"scripts/scenes/home_entry.gd","type":"gd","lines":145,"role":"游戏入场页（占位菜单）"},{"path":"scenes/Game.tscn","type":"tscn","role":"默认主场景（战旗会话入口）"},{"path":"scenes/Title.tscn","type":"tscn","role":"标题场景"},{"path":"scenes/HomeEntry.tscn","type":"tscn","role":"入场页场景"},{"path":"config/startup.cfg","type":"config","role":"调试启动配置（F5 直跳）"}],"tests":[{"path":"tests/game_session_contract.gd","note":"会话路由/续玩/切换"},{"path":"tests/startup_config_contract.gd","note":"启动配置读写"}]},{"id":"boot.singletons","name":"全局单例服务（autoload）","desc":"跨场景全局服务：Settings 偏好、GameCursor 指针、Sfx 全局音效池（按钮声自动挂接）、LoadingScreen 幂等加载遮罩。","files":[{"path":"scripts/settings.gd","type":"gd","lines":102,"role":"全局用户偏好（autoload Settings，含 battle_inline_mode）"},{"path":"scripts/game_cursor.gd","type":"gd","lines":53,"role":"全局游戏鼠标指针（autoload GameCursor）"},{"path":"scripts/audio/game_sfx.gd","type":"gd","lines":187,"role":"全局音效管理（autoload Sfx，按钮声自动挂接）"},{"path":"scripts/ui/loading_screen.gd","type":"gd","lines":53,"role":"全局加载遮罩（autoload LoadingScreen，幂等）"},{"path":"scenes/LoadingScreen.tscn","type":"tscn","role":"加载遮罩场景（autoload）"}],"tests":[{"path":"tests/game_sfx_contract.gd","note":"音效池/按钮挂接"},{"path":"tests/loading_screen_contract.gd","note":"幂等遮罩"}]}]},{"id":"world","name":"世界生态子系统","icon":"🌍","desc":"3D 正交（dimetric）视口下按固定种子确定性流式生成的『无限』像素生态世界：地形、生物群系、植物群落、动物、天气、昼夜、阳光、音频。","children":[{"id":"world.assembly","name":"世界引擎装配（main.gd）","desc":"单体世界引擎（4319 行/176 函数）：配置编译、流式生成、Voronoi 群落分区、HUD/侧栏、以及战斗与编辑器入口（P 就地战斗 / O JSON 战场 / E 编辑器）。规则：不往 main.gd 加内容分支，一律走 biome 模块 + config/ecology。","files":[{"path":"main.gd","type":"gd","lines":4319,"role":"世界引擎单体：流式生成/群落分区/HUD/B1 战斗与编辑器入口"},{"path":"main.tscn","type":"tscn","role":"世界主场景（装配 main.gd）"}],"tests":[{"path":"tests/streaming_input_latency_contract.gd","note":"流式生成与输入延迟（挂在引擎整体）"}]},{"id":"world.terrain","name":"地形与确定性采样","desc":"纯确定性世界采样内核：CellContext 不可变事实、CellState 占用标签、无状态 RNG、配置驱动 noise/材质目录。确定性契约：内容 ID / stream_key / placement_seed 是存档契约，文件路径绝不当种子。","files":[{"path":"scripts/world/terrain_sampler.gd","type":"gd","lines":726,"role":"纯确定性世界采样器（高度/地表/landform）"},{"path":"scripts/world/cell_context.gd","type":"gd","lines":102,"role":"单格不可变地形/生态事实（CellContext）"},{"path":"scripts/world/cell_state.gd","type":"gd","lines":75,"role":"逻辑占用标签（CellState，渲染可读、玩法为准）"},{"path":"scripts/world/deterministic_rng.gd","type":"gd","lines":107,"role":"稳定无状态随机采样（世界生成专用）"},{"path":"scripts/world/noise_registry.gd","type":"gd","lines":178,"role":"配置驱动的 FastNoiseLite 注册表"},{"path":"scripts/world/terrain_material_registry.gd","type":"gd","lines":1047,"role":"配置驱动的地形表面/材质目录"},{"path":"config/ecology/","type":"dir","role":"生态配置根：manifest.json + biomes/ communities/ species/ world/（新内容唯一入口）"},{"path":"config/ecosystems.json","type":"config","role":"旧轨生态配置（双轨迁移中，roadmap P3-14）"}],"tests":[{"path":"tests/terrain_generation_contract.gd","note":"固化 SHA-256 地形快照（确定性护栏）"},{"path":"tests/terrain_sampler_contract.gd","note":"采样器纯函数"},{"path":"tests/cell_state_contract.gd","note":"占用标签"},{"path":"tests/cell_state_integration_contract.gd","note":"CellContext→CellState 集成"},{"path":"tests/dynamic_landform_contract.gd","note":"动态 landform"},{"path":"tests/terrain_material_registry_contract.gd","note":"材质目录"},{"path":"tests/config_manifest_contract.gd","note":"config/ecology manifest 校验"}]},{"id":"world.biomes","name":"生物群系模块","desc":"配置加载的 biome 模块体系：registry 只从 definition script path 装载实现；temperate 是低优先级兜底。新 biome 走模块 + 配置，不改 main.gd。","files":[{"path":"scripts/world/biomes/biome_module.gd","type":"gd","lines":191,"role":"biome 模块基类契约"},{"path":"scripts/world/biomes/biome_registry.gd","type":"gd","lines":271,"role":"仅从配置脚本路径装载 biome 实现"},{"path":"scripts/world/biomes/temperate_biome.gd","type":"gd","lines":86,"role":"温带模块（低优先级兜底）"},{"path":"scripts/world/biomes/desert_biome.gd","type":"gd","lines":286,"role":"沙漠模块"},{"path":"scripts/world/biomes/snow_biome.gd","type":"gd","lines":87,"role":"雪地模块"}],"tests":[{"path":"tests/biome_modules_contract.gd","note":"模块装载/优先级"},{"path":"tests/module_extension_contract.gd","note":"外部模块扩展（火山 fixture）"}]},{"id":"world.ecology","name":"生态群落（植物/物种群落）","desc":"从不可变 CellContext 事实解析可叠加生态群落：registry 纯数据装载、resolver 叠加解析、spawner 确定性空间规划、state store 有界运行时状态、member composer 纯确定性成员组装。","files":[{"path":"scripts/ecology/ecology_registry.gd","type":"gd","lines":1150,"role":"模块化生态配置纯数据装载器"},{"path":"scripts/ecology/ecology_resolver.gd","type":"gd","lines":553,"role":"从 CellContext 叠加解析生态群落"},{"path":"scripts/ecology/community_runtime.gd","type":"gd","lines":943,"role":"一等 CommunityDefinition 数据迁移适配层"},{"path":"scripts/ecology/community_spawner.gd","type":"gd","lines":376,"role":"可复用生态群落确定性空间规划"},{"path":"scripts/ecology/community_state_store.gd","type":"gd","lines":235,"role":"确定性群落有界运行时状态"},{"path":"scripts/ecology/member_composer.gd","type":"gd","lines":231,"role":"群落成员纯确定性组装"}],"tests":[{"path":"tests/ecology_registry_contract.gd","note":"配置装载"},{"path":"tests/ecology_resolver_contract.gd","note":"叠加解析"},{"path":"tests/community_runtime_contract.gd","note":"运行时适配"},{"path":"tests/community_spawner_contract.gd","note":"空间规划"},{"path":"tests/community_state_store_contract.gd","note":"状态界"},{"path":"tests/flora_layers_contract.gd","note":"植物层"},{"path":"tests/animal_group_distribution_contract.gd","note":"动物群分布（生态侧）"}]},{"id":"world.ambient","name":"环境物种渲染（鸟/萤火虫）","desc":"插件式环境视觉物种宿主：AmbientRegistry 路由渲染器（鸟 renderer、FireflyField 适配器），夜间萤火虫场候选簇由 Main 按生态注册。","files":[{"path":"scripts/ecology/ambient_registry.gd","type":"gd","lines":454,"role":"环境视觉物种插件宿主与路由"},{"path":"scripts/ecology/ambient_renderers/bird_renderer.gd","type":"gd","lines":916,"role":"视口生命周期鸟群渲染器"},{"path":"scripts/ecology/ambient_renderers/firefly_renderer_adapter.gd","type":"gd","lines":72,"role":"FireflyField → AmbientRegistry 渲染契约适配器"},{"path":"scripts/firefly_field.gd","type":"gd","lines":764,"role":"夜间萤火虫场（候选簇由 Main 注册）"}],"tests":[{"path":"tests/ambient_registry_contract.gd","note":"插件宿主"},{"path":"tests/bird_renderer_contract.gd","note":"鸟群渲染"}]},{"id":"world.animals","name":"动物行为","desc":"13 种世界动物：数据驱动的行为栈（registry 不读场景树）+ 连续二维坐标行为、AnimatedSprite3D 真实深度落位；水下动物专用着色器。","files":[{"path":"scripts/wandering_animal.gd","type":"gd","lines":278,"role":"世界生态动物（连续坐标 + AnimatedSprite3D）"},{"path":"scripts/animals/animal_behavior_registry.gd","type":"gd","lines":642,"role":"数据驱动动物行为栈组合（不读场景树）"},{"path":"shaders/underwater_animal.gdshader","type":"shader","role":"水下动物着色"}],"tests":[{"path":"tests/animal_behavior_registry_contract.gd","note":"行为栈"},{"path":"tests/animal_animation_state_contract.gd","note":"动画状态"},{"path":"tests/aquatic_fauna_contract.gd","note":"水生动物"}]},{"id":"world.render","name":"3D 等距渲染与相机","desc":"chunk 化 3D 柱地形 + Camera3D：2:1 dimetric 投影共享、相机旋转只动相机不重建地形（4 正交角度，素材其余角度有拼缝）、抓取平移持久化、单格单 CanvasItem 批渲染 + 脚点深度排序。","files":[{"path":"scripts/iso/iso_projection_3d.gd","type":"gd","lines":124,"role":"主世界/战棋共享 2:1 dimetric 3D 坐标与射线投影"},{"path":"scripts/iso/isometric_camera_3d.gd","type":"gd","lines":183,"role":"正交 dimetric 相机（旋转只改相机）"},{"path":"scripts/iso/isometric_terrain_3d.gd","type":"gd","lines":747,"role":"消费 render_blocks 按 chunk/图集合批 3D 柱地形"},{"path":"scripts/iso/world_camera_navigation.gd","type":"gd","lines":56,"role":"主世界抓取平移与持久化网格偏移"},{"path":"scripts/isometric_column_batch.gd","type":"gd","lines":1323,"role":"一地图格一 CanvasItem 的柱批渲染"},{"path":"scripts/isometric_depth_sort.gd","type":"gd","lines":43,"role":"移动物体跨格深度排序键"},{"path":"scripts/isometric_view.gd","type":"gd","lines":120,"role":"可旋转等距投影/反投影/离散视角控制（4 角度）"},{"path":"shaders/isometric_terrain_rotate.gdshader","type":"shader","role":"柱地形旋转采样"},{"path":"scripts/scenes/isometric_3d_test.gd","type":"gd","lines":36,"role":"最小柱网格 + 90° 旋转验证场景"},{"path":"scenes/Isometric3DTest.tscn","type":"tscn","role":"3D 等距验证场景"}],"tests":[{"path":"tests/isometric_column_projection_contract.gd","note":"柱投影"},{"path":"tests/isometric_view_contract.gd","note":"4 角度投影"},{"path":"tests/isometric_3d_contract.gd","note":"3D 柱地形"},{"path":"tests/world_camera_navigation_contract.gd","note":"相机平移持久化"},{"path":"tests/flat_rotation_probe.gd","note":"平面旋转探针（2 探针之一）"},{"path":"tests/flat_rotation_probe.tscn","type":"tscn","note":"探针场景"},{"path":"tests/mesh_draw_probe.gd","note":"mesh 绘制探针"}]},{"id":"world.present","name":"表现层（天气/昼夜/阳光/DOF/音频/地图）","desc":"与地图生成完全解耦的表现系统：天气状态机、独立昼夜时钟、DirectionalLight3D 阳光与地形阴影、移轴景深、按昼夜交叉淡化的世界音频、已探索世界总览图。全部走 config/*.json 配置。","files":[{"path":"scripts/weather_system.gd","type":"gd","lines":543,"role":"天气状态机（与地图生成解耦）"},{"path":"scripts/day_night_system.gd","type":"gd","lines":250,"role":"独立昼夜时钟"},{"path":"scripts/sunlight_system.gd","type":"gd","lines":162,"role":"昼夜时钟 → DirectionalLight3D 与环境光"},{"path":"scripts/depth_of_field_system.gd","type":"gd","lines":145,"role":"纯 2D 移轴景深近似（layer 0）"},{"path":"scripts/world_audio_system.gd","type":"gd","lines":673,"role":"世界音频：音乐昼夜交叉淡化、雨声随天气"},{"path":"scripts/world_map_overlay.gd","type":"gd","lines":240,"role":"已探索世界总览（基础色位图，UI 不暂停世界）"},{"path":"scripts/world/map_snapshot_renderer.gd","type":"gd","lines":130,"role":"已探索颜色缓存压缩为有限位图（小地图源）"},{"path":"shaders/weather_overlay.gdshader","type":"shader","role":"雨雪覆盖"},{"path":"shaders/day_night_overlay.gdshader","type":"shader","role":"昼夜覆盖"},{"path":"shaders/tilt_shift_dof.gdshader","type":"shader","role":"移轴景深"},{"path":"config/weather.json","type":"config","role":"天气配置"},{"path":"config/day_night.json","type":"config","role":"昼夜配置"},{"path":"config/sunlight.json","type":"config","role":"阳光配置"},{"path":"config/depth_of_field.json","type":"config","role":"景深配置"},{"path":"config/audio.json","type":"config","role":"音频配置"}],"tests":[{"path":"tests/weather_performance_contract.gd","note":"天气性能"},{"path":"tests/sunlight_3d_contract.gd","note":"阳光 3D"},{"path":"tests/sunlight_3d_gl_contract.gd","note":"阳光 GL（headless 环境受限）"},{"path":"tests/depth_of_field_contract.gd","note":"景深"},{"path":"tests/audio_system_contract.gd","note":"世界音频"},{"path":"tests/world_map_overlay_contract.gd","note":"世界总览图"}]}]},{"id":"battle","name":"战棋战斗子系统","icon":"⚔️","desc":"从 phaserjs 迁移的回合制战旗（FE 式）：世界就地战斗（B1）/独立场景（B2）双模式、JSON 声明式战场、沉浸演出层、无头自动化 CLI。结算与表现分离，battle_action_resolver 是共享结算内核。","children":[{"id":"battle.data","name":"数据定义与规则内核（core 纯数据）","desc":"职业/技能/物品 JSON 懒加载 + 武器三角/成长率/经验公式 + 核心枚举与地形定义（对应 phaserjs 的 types.ts/staticData.ts）。运行时事实：8 职业/8 技能/8 物品（story 目标 13/27/25，差距见 gameplay_gap）。","files":[{"path":"scripts/core/enums.gd","type":"gd","lines":75,"role":"核心枚举"},{"path":"scripts/core/terrain.gd","type":"gd","lines":48,"role":"战棋地形定义（11 种）"},{"path":"scripts/core/unit.gd","type":"gd","lines":172,"role":"UnitData 构造与默认成长率"},{"path":"scripts/core/professions.gd","type":"gd","lines":173,"role":"职业系统（JSON + 懒加载）"},{"path":"scripts/core/skills.gd","type":"gd","lines":132,"role":"技能系统（JSON + 懒加载）"},{"path":"scripts/core/items.gd","type":"gd","lines":126,"role":"物品系统（JSON + 懒加载）"},{"path":"scripts/core/weapons.gd","type":"gd","lines":124,"role":"武器定义 + 武器三角 + 经验公式（内置数据）"},{"path":"data/professions.json","type":"data","role":"职业数据（8）"},{"path":"data/skills.json","type":"data","role":"技能数据（8）"},{"path":"data/items.json","type":"data","role":"物品数据（8）"},{"path":"scripts/tests/test_skills.gd","type":"gd","lines":276,"role":"技能/物品/MP/冷却 headless 自测（SkillTest 场景，44 项）"},{"path":"scenes/SkillTest.tscn","type":"tscn","role":"战棋自测场景（44/44）"}],"tests":[{"path":"scenes/SkillTest.tscn","note":"技能/物品自测（非 headless 契约）"}]},{"id":"battle.systems","name":"战斗结算系统（systems）","desc":"全静态结算内核：网格世界模型、战斗/技能/物品/buff 结算、回合调度（turn_manager 持胜利条件）、敌我 AI 与难度评分、只读演出事件快照（attack_event）、相邻友军交换（trade）。battle_action_resolver 是演出/自动化共享的单一结算事实源。","files":[{"path":"scripts/systems/grid_system.gd","type":"gd","lines":206,"role":"网格世界模型"},{"path":"scripts/systems/combat_system.gd","type":"gd","lines":179,"role":"战斗结算"},{"path":"scripts/systems/skill_system.gd","type":"gd","lines":222,"role":"技能结算（全静态）"},{"path":"scripts/systems/item_system.gd","type":"gd","lines":155,"role":"物品结算（全静态）"},{"path":"scripts/systems/buff_system.gd","type":"gd","lines":62,"role":"buff/属性修正工具（全静态）"},{"path":"scripts/systems/turn_manager.gd","type":"gd","lines":120,"role":"回合调度 + 胜利判定 check_victory（victory 字段）"},{"path":"scripts/systems/enemy_ai.gd","type":"gd","lines":285,"role":"敌方 AI 决策"},{"path":"scripts/systems/player_ai.gd","type":"gd","lines":187,"role":"玩家方托管决策器（autoplay）"},{"path":"scripts/systems/ai_difficulty.gd","type":"gd","lines":76,"role":"AI 难度档位与评分 profile 参数"},{"path":"scripts/systems/ai_difficulty_scoring.gd","type":"gd","lines":42,"role":"难度参数化候选评分（纯函数）"},{"path":"scripts/systems/attack_event.gd","type":"gd","lines":207,"role":"结算后的只读演出事件快照"},{"path":"scripts/systems/trade_system.gd","type":"gd","lines":81,"role":"相邻友军物品交换（FE 式，全静态）"},{"path":"scripts/battle/battle_action_resolver.gd","type":"gd","lines":117,"role":"战斗行动共享结算器（单一事实源，勿在演出层复写）"}],"tests":[{"path":"tests/battle_action_chain_contract.gd","note":"行动链（基线红，待修）"},{"path":"tests/battle_ai_difficulty_contract.gd","note":"难度评分"},{"path":"tests/battle_movement_contract.gd","note":"移动结算"},{"path":"tests/battle_trade_contract.gd","note":"物品交换"},{"path":"tests/attack_event_contract.gd","note":"演出事件快照"},{"path":"tests/battle_turn_visibility_contract.gd","note":"回合可见性"}]},{"id":"battle.victory","name":"胜利条件与增援","desc":"声明式玩法框架：victory{rout|defend_turns|seize} 由 turn_manager.check_victory 判定（pending_units 并入敌集合防提前判胜）；reinforcements 按回合波次在敌方回合开始刷入（SEARCH_RADIUS=3 找空位，已消费波次移除防读档重刷）。","files":[{"path":"scripts/core/reinforcement_spawner.gd","type":"gd","lines":86,"role":"按回合增援共享刷入（spawn_due/pending_units）"},{"path":"scripts/systems/turn_manager.gd","type":"gd","lines":120,"role":"胜利判定 check_victory（victory 字段，shared）"},{"path":"data/battlefields/ambush_reinforce.json","type":"data","role":"增援样例战场"},{"path":"data/battlefields/last_stand.json","type":"data","role":"坚守胜利样例战场"}],"tests":[{"path":"tests/victory_conditions_contract.gd","note":"三类型胜利判定"},{"path":"tests/reinforcement_contract.gd","note":"波次刷入/防重刷/防提前判胜"}]},{"id":"battle.load","name":"战场加载与世界转换","desc":"JSON 战场声明 → chapter 的唯一权威加载器（静态严校验：界内/可站立/不重叠/含跨增援波次；victory/reinforcements 可选字段）；world_to_chapter 是世界↔战棋唯一耦合点（cell_context_to_terrain 7/11 地形映射）；block_layout 统一显式布局 schema。","files":[{"path":"scripts/core/battlefield_loader.gd","type":"gd","lines":523,"role":"JSON 战场 → chapter 加载器（唯一权威校验，res:// + user://）"},{"path":"scripts/core/world_to_chapter.gd","type":"gd","lines":188,"role":"真实世界 cell → 战棋 chapter 适配层（唯一耦合）"},{"path":"scripts/core/block_layout.gd","type":"gd","lines":100,"role":"显式单块战场布局 schema/校验/访问"},{"path":"data/battlefields/arena_1v1.json","type":"data","role":"1v1 竞技场样例"},{"path":"data/battlefields/mountain_pass.json","type":"data","role":"山口样例"},{"path":"data/battlefields/plains_skirmish.json","type":"data","role":"平原遭遇样例"},{"path":"data/battlefields/river_crossing.json","type":"data","role":"渡河样例"},{"path":"data/battlefields/ambush_reinforce.json","type":"data","role":"增援样例（shared）"},{"path":"data/battlefields/last_stand.json","type":"data","role":"坚守样例（shared）"}],"tests":[{"path":"tests/battlefields_contract.gd","note":"6 战场加载/校验"},{"path":"tests/world_terrain_mapping_contract.gd","note":"cell→地形 7 种映射"}]},{"id":"battle.save","name":"战旗存档","desc":"逐战场独立存档：纯数据编解码/校验（版本 1）+ user://battle_saves/ 磁盘读写（tmp+bak 原子写）。","files":[{"path":"scripts/core/battle_save_codec.gd","type":"gd","lines":469,"role":"存档纯数据编码/解码/校验（版本 1）"},{"path":"scripts/core/battle_save_store.gd","type":"gd","lines":233,"role":"存档磁盘读写（user://battle_saves/，原子写）"}],"tests":[{"path":"tests/battle_save_contract.gd","note":"编解码往返/原子写"}]},{"id":"battle.scene","name":"战斗场景编排（battle.gd）","desc":"核心战场场景编排器（1934 行）：回合流转、单位管理、增援刷入挂接（敌方回合开始先于 AI）、结算调用演出、B1/B2 双模式适配。Battle.tscn 不能直启（依赖 SceneArgs.battle_args）。","files":[{"path":"scripts/scenes/battle.gd","type":"gd","lines":1934,"role":"核心战场场景编排器"},{"path":"scenes/Battle.tscn","type":"tscn","role":"战场场景（依赖 SceneArgs）"}],"tests":[{"path":"tests/battle_action_chain_contract.gd","note":"行动链集成（shared）"}]},{"id":"battle.render","name":"战棋渲染（iso 战场侧）","desc":"等距方块柱战场渲染（像素 Minecraft 风）：战场渲染器、棋盘相机与屏幕拾取、2D 等距坐标、单位 3D 立绘/HP 条、8 职业精灵图表加载。","files":[{"path":"scripts/iso/battlefield_renderer.gd","type":"gd","lines":830,"role":"JSON 战场等距方块渲染器"},{"path":"scripts/iso/iso_board.gd","type":"gd","lines":86,"role":"正交等距棋盘相机与屏幕拾取"},{"path":"scripts/iso/iso_coords.gd","type":"gd","lines":88,"role":"2D 等距坐标变换"},{"path":"scripts/iso/unit_sprite.gd","type":"gd","lines":394,"role":"3D 等距单位立绘/HP 条/头顶文本"},{"path":"scripts/iso/character_sheet.gd","type":"gd","lines":170,"role":"8 职业水平精灵图加载与朝向/姿态解析"},{"path":"scripts/iso/profession_visual.gd","type":"gd","lines":47,"role":"职业立绘/动画加载适配"}],"tests":[{"path":"tests/battlefield_render_contract.gd","note":"战场渲染"},{"path":"tests/battle_3d_contract.gd","note":"战斗 3D 拾取/渲染"},{"path":"tests/battle_screen_pick_contract.gd","note":"屏幕拾取"},{"path":"tests/character_sheet_contract.gd","note":"精灵图解析"}]},{"id":"battle.ui","name":"战斗 UI","desc":"战场屏幕空间 UI：主 UI（1211 行）、范围/光标可视化层、战场设置页、战场选择面板（O 键，game_hud）、操作提示条、右侧多 Tab 面板、统一控件工厂与主题（ui_theme/ui_factory）。","files":[{"path":"scripts/battle/battle_ui.gd","type":"gd","lines":1211,"role":"战场屏幕空间 UI（含交换菜单）"},{"path":"scripts/battle/range_overlay.gd","type":"gd","lines":517,"role":"战场范围/光标可视化层"},{"path":"scripts/battle/battle_settings_tab.gd","type":"gd","lines":37,"role":"右侧【战场设置】页内容构造器"},{"path":"scripts/game_hud.gd","type":"gd","lines":358,"role":"战场选择面板（O 键，列 data/battlefields/*.json）"},{"path":"scripts/hint_bar.gd","type":"gd","lines":124,"role":"可复用操作提示条（keycap 提示）"},{"path":"scripts/side_panel.gd","type":"gd","lines":133,"role":"右侧常驻多 Tab 面板"},{"path":"scripts/ui/ui_factory.gd","type":"gd","lines":153,"role":"统一控件工厂（旧主题体系）"},{"path":"scripts/ui/ui_theme.gd","type":"gd","lines":186,"role":"统一 UI 主题色板/样式工厂（旧主题体系）"}],"tests":[{"path":"tests/game_hud_contract.gd","note":"战场选择面板（已修复）"},{"path":"tests/hint_bar_contract.gd","note":"提示条"}]},{"id":"battle.present","name":"沉浸演出层","desc":"B1/B2 共用演出：开战对峙滑入、回合编排（敌方 AI + 托管）、AttackEvent 只读打击回放、名牌/Boss 横幅/胜负结算演出、可等待沉浸镜头 + 遮挡判定、遭遇转场。可开关可快进（*_finished(skipped) 信号）；结算只读事件、不复写结算。","files":[{"path":"scripts/battle/battle_presentation.gd","type":"gd","lines":152,"role":"开战对峙演出（滑入/定格/滑回）"},{"path":"scripts/battle/turn_director.gd","type":"gd","lines":351,"role":"敌方 AI 回合 + 托管回合编排"},{"path":"scripts/battle/action_anim.gd","type":"gd","lines":649,"role":"AttackEvent 只读打击演出回放器"},{"path":"scripts/battle/result_presentation.gd","type":"gd","lines":678,"role":"名牌/Boss 横幅/胜负与章节末结算演出"},{"path":"scripts/battle/immersive_camera.gd","type":"gd","lines":470,"role":"可等待式沉浸交战镜头"},{"path":"scripts/battle/encounter_transition.gd","type":"gd","lines":168,"role":"B1/B2 共用遭遇转场屏幕层"},{"path":"scripts/iso/battle_occluder.gd","type":"gd","lines":86,"role":"沉浸战斗遮挡判定（纯几何可 headless）"},{"path":"shaders/encounter_warp.gdshader","type":"shader","role":"遭遇转场扭曲"}],"tests":[{"path":"tests/battle_presentation_hooks_contract.gd","note":"演出钩子（基线红，待修）"},{"path":"tests/battle_result_presentation_contract.gd","note":"结算演出"},{"path":"tests/action_anim_contract.gd","note":"打击回放（基线超时，autoload 依赖）"},{"path":"tests/encounter_transition_contract.gd","note":"转场"},{"path":"tests/immersive_battle_camera_contract.gd","note":"沉浸镜头（基线超时）"},{"path":"tests/immersive_battle_camera_contract.tscn","type":"tscn","note":"契约场景"},{"path":"tests/immersive_battle_integration_contract.gd","note":"沉浸集成（基线超时）"},{"path":"tests/immersive_battle_integration_contract.tscn","type":"tscn","note":"契约场景"},{"path":"tests/battle_occluder_contract.gd","note":"遮挡判定"}]},{"id":"battle.automation","name":"无头自动化 CLI","desc":"声明式战场无表现执行：场景加载器 → runner（同点位发 reinforce 等事件）→ 战报写盘（events.jsonl/result.json/summary.txt）；CLI 入口退出码 0–4。托管自动战斗（autoplay）用 player_ai。","files":[{"path":"scripts/battle/automation/battle_scenario_loader.gd","type":"gd","lines":409,"role":"声明式战场场景加载器"},{"path":"scripts/battle/automation/battle_runner.gd","type":"gd","lines":793,"role":"声明式战场无表现执行器"},{"path":"scripts/battle/automation/battle_report.gd","type":"gd","lines":191,"role":"战报写盘（events.jsonl/result.json/summary）"},{"path":"tools/battle_cli.gd","type":"gd","lines":149,"role":"命令行入口（SceneTree --script，退出码 0-4）"}],"tests":[{"path":"tests/battle_automation_contract.gd","note":"runner/report"},{"path":"tests/battle_cli_contract.gd","note":"CLI 端到端"}]}]},{"id":"editor","name":"战场地图编辑器","icon":"🗺️","desc":"E 键入口的 JSON 战场调试工具：画笔/填充/橡皮/replace/角色 + 种子生成 + 区域复制/剪切/粘贴/移动 + 命名预设 + 取色器 + 用户素材库；保存即回读校验入列（user://battlefields/）。","children":[{"id":"editor.main","name":"编辑器主场景（map_editor.gd）","desc":"编辑器单体主文件（3285 行/150 函数）：工具面板、模式切换、快捷键、保存流程。⚠️ 已知契约红：三处直建控件（Button.new@943/CheckButton.new@1410/OptionButton.new@2124）+ 侧栏宽度/z 重建断言待修（roadmap P0-3）。","files":[{"path":"scripts/scenes/map_editor.gd","type":"gd","lines":3285,"role":"战场地图编辑器主场景（单体，膨胀最快）"},{"path":"scenes/MapEditor.tscn","type":"tscn","role":"编辑器场景"}],"tests":[{"path":"tests/map_editor_contract.gd","note":"保存/加载/校验"},{"path":"tests/map_editor_ui_contract.gd","note":"侧栏宽度/单块增量更新（契约红，待修）"}]},{"id":"editor.canvas","name":"画布与文档模型","desc":"等距方块画布（IsoBoard 3D 相机）+ 战场文档模型（种子地形生成 + JSON 序列化/解析/保存）+ 真实材质缩略图 + 通用方块选择器（内置地形 + 已保存地块素材统一选中信号）。","files":[{"path":"scripts/editor/editor_canvas.gd","type":"gd","lines":908,"role":"编辑器画布（等距方块，IsoBoard 3D 相机）"},{"path":"scripts/editor/battlefield_doc.gd","type":"gd","lines":583,"role":"编辑器文档模型：种子生成 + JSON 序列化/保存"},{"path":"scripts/editor/tile_preview.gd","type":"gd","lines":114,"role":"调色板等距缩略图（真实 ColumnBatch 渲染）"},{"path":"scripts/editor/block_selector.gd","type":"gd","lines":331,"role":"通用方块选择器（内置 + 地块素材）"}]},{"id":"editor.region","name":"区域操作与预设","desc":"五层数据内核（rows/block_z/tile_overrides/props/units，坐标相对左上角，PAYLOAD_VERSION=1）：复制/剪切/粘贴/拖动移动/方向键 nudge；命名预设持久化（user://editor_presets/presets.json，tmp+bak 原子写）；可复用选择范围模型。","files":[{"path":"scripts/editor/region_clipboard.gd","type":"gd","lines":370,"role":"区域复制/剪切/粘贴/移动五层数据内核"},{"path":"scripts/editor/region_preset_store.gd","type":"gd","lines":287,"role":"区域预设命名持久化（presets.json 原子写）"},{"path":"scripts/editor/selection_range.gd","type":"gd","lines":176,"role":"框选/体选状态内核"}],"tests":[{"path":"tests/editor_region_clipboard_contract.gd","note":"五层 payload（116 断言）"},{"path":"tests/editor_region_preset_store_contract.gd","note":"预设 CRUD（73 断言）"},{"path":"tests/editor_selection_contract.gd","note":"选择范围"},{"path":"tests/map_editor_region_ops_contract.gd","note":"区域操作集成"}]},{"id":"editor.pickers","name":"选择器与弹窗","desc":"可复用 UI 件：真实图标方块列表（kind:id 复合选中）、固定 4 列画廊选择弹窗（640x480，确认回填）、快捷键提示弹窗（键帽行）。","files":[{"path":"scripts/editor/editor_block_list.gd","type":"gd","lines":101,"role":"可复用方块列表（三态外观）"},{"path":"scripts/editor/editor_block_picker_dialog.gd","type":"gd","lines":101,"role":"4 列画廊方块选择弹窗"},{"path":"scripts/editor/shortcut_hints_dialog.gd","type":"gd","lines":103,"role":"快捷键提示弹窗（键帽行）"}],"tests":[{"path":"tests/editor_block_picker_contract.gd","note":"选择弹窗"}]},{"id":"editor.assets","name":"素材库面板","desc":"编辑器「素材」Tab（919 行）：用户素材库浏览/导入/翻页/应用，消费 assets 子系统服务。","files":[{"path":"scripts/editor/asset_library_panel.gd","type":"gd","lines":919,"role":"用户素材库面板（编辑器素材 Tab）"}],"tests":[{"path":"tests/user_asset_editor_contract.gd","note":"面板集成"},{"path":"tests/user_asset_pagination_contract.gd","note":"翻页"}]}]},{"id":"ui","name":"UI 组件库与主题","icon":"🧩","desc":"22 个 @tool 像素组件 + ComponentTheme 集中主题工厂；DESIGN.md 是设计规范单一事实来源（token 体系/六薄容器/禁忌/三档分辨率验收）。业务 UI 尚未迁移（roadmap P3-15）。","children":[{"id":"ui.components","name":"功能组件（16）","desc":"按钮三语义变体、输入/滑条/进度、下拉动作菜单、弹层（焦点记忆）、标签页、卡片面板、图标/图片、音视频容器。全部 @tool，画廊实时预览。","files":[{"path":"ui/components/pixel_button.gd","type":"gd","lines":193,"role":"按钮：主/次/危险语义 + 悬停/点击音效"},{"path":"ui/components/pixel_check_button.gd","type":"gd","lines":24,"role":"CheckButton 薄包装"},{"path":"ui/components/pixel_option_button.gd","type":"gd","lines":24,"role":"OptionButton 薄包装"},{"path":"ui/components/pixel_line_edit.gd","type":"gd","lines":24,"role":"LineEdit 薄包装"},{"path":"ui/components/pixel_text_area.gd","type":"gd","lines":30,"role":"多行文本（保留原生行为）"},{"path":"ui/components/pixel_slider.gd","type":"gd","lines":24,"role":"HSlider 薄包装"},{"path":"ui/components/pixel_spin_box.gd","type":"gd","lines":29,"role":"SpinBox 薄包装"},{"path":"ui/components/pixel_progress_bar.gd","type":"gd","lines":24,"role":"ProgressBar 薄包装"},{"path":"ui/components/pixel_dropdown.gd","type":"gd","lines":58,"role":"动作菜单（MenuButton + PopupMenu 信号）"},{"path":"ui/components/pixel_popup.gd","type":"gd","lines":59,"role":"弹层（焦点记忆与恢复）"},{"path":"ui/components/pixel_tabs.gd","type":"gd","lines":31,"role":"标签页（TabBar 主题）"},{"path":"ui/components/pixel_panel.gd","type":"gd","lines":81,"role":"卡片：标题 + 说明 + 内容槽"},{"path":"ui/components/pixel_panel.tscn","type":"tscn","role":"卡片场景（@tool 预览）"},{"path":"ui/components/pixel_icon.gd","type":"gd","lines":35,"role":"图标（固定尺寸 + 着色）"},{"path":"ui/components/pixel_image.gd","type":"gd","lines":75,"role":"图片容器（等比/裁切）"},{"path":"ui/components/pixel_audio_player.gd","type":"gd","lines":222,"role":"音频容器（播放控制 + 进度）"},{"path":"ui/components/pixel_video_player.gd","type":"gd","lines":222,"role":"视频容器（播放控制 + 进度）"}]},{"id":"ui.layout","name":"布局容器（6）","desc":"DESIGN.md 六薄容器：VBox/HBox/Grid/Margin/Center/Scroll，集中间距与边距 token，Scroll 默认仅纵向（禁横向滚动）。","files":[{"path":"ui/components/pixel_v_box.gd","type":"gd","lines":32,"role":"纵向布局（间距 token）"},{"path":"ui/components/pixel_h_box.gd","type":"gd","lines":32,"role":"横向布局（间距 token）"},{"path":"ui/components/pixel_grid.gd","type":"gd","lines":42,"role":"网格布局（横纵间距 token）"},{"path":"ui/components/pixel_margin.gd","type":"gd","lines":62,"role":"边距容器（内容边距 token）"},{"path":"ui/components/pixel_center.gd","type":"gd","lines":7,"role":"零配置居中容器"},{"path":"ui/components/pixel_scroll.gd","type":"gd","lines":26,"role":"滚动容器（默认仅纵向）"}]},{"id":"ui.theme","name":"主题工厂与设计 token","desc":"ComponentTheme（504 行）是 DESIGN.md token 的唯一实现：SPACE/CORNER/FONT/MARGIN token、按钮语义变体、TabContainer/卡片面。DESIGN.md 规范：禁裸数字样式值/自建 StyleBox/绝对定位/横向滚动。","files":[{"path":"ui/theme/component_theme.gd","type":"gd","lines":504,"role":"组件库集中 Theme 工厂（token 唯一实现）"},{"path":"DESIGN.md","type":"md","role":"UI 设计规范单一事实来源（201 行）"}],"tests":[{"path":"tests/ui_contract.gd","note":"静态扫描业务脚本禁直建控件（当前抓红 map_editor）"}]},{"id":"ui.gallery","name":"演示画廊","desc":"F6 打开的组件画廊（717 行精简版）：全组件实时预览与状态演示。","files":[{"path":"scripts/scenes/ui_component_gallery.gd","type":"gd","lines":717,"role":"UI 组件库演示画廊"},{"path":"scenes/UIComponentGallery.tscn","type":"tscn","role":"画廊场景（F6）"}],"tests":[{"path":"tests/ui_components_contract.gd","note":"组件行为（1062 checks）"}]}]},{"id":"assets","name":"用户素材系统","icon":"🖼️","desc":"用户自定义素材（方块贴图）：v1 描述符 schema + 库 JSON 持久化、本地导入 + 网络清单/图片按需加载（源三档优先级可配，断源优雅降级）、视觉适配烘焙；落盘 user://custom_assets/。","children":[{"id":"assets.service","name":"素材服务","desc":"三件套：catalog（schema 与库持久化）、service（本地导入 + HTTP 清单/图片按需加载，优先级 asset_source.cfg > 库内 settings > DEFAULT 127.0.0.1:8076）、visual_adapter（bake_image 视觉适配）。","files":[{"path":"scripts/assets/user_asset_service.gd","type":"gd","lines":883,"role":"素材服务：本地导入 + 网络清单/图片按需加载"},{"path":"scripts/assets/user_asset_catalog.gd","type":"gd","lines":368,"role":"v1 描述符 schema 与库 JSON 持久化"},{"path":"scripts/assets/user_asset_visual_adapter.gd","type":"gd","lines":381,"role":"用户素材视觉适配器（bake_image）"},{"path":"docs/user_assets.md","type":"md","role":"素材系统手册"}],"tests":[{"path":"tests/user_asset_catalog_contract.gd","note":"schema/持久化"},{"path":"tests/user_asset_runtime_contract.gd","note":"运行时加载"},{"path":"tests/user_asset_source_live_contract.gd","note":"live 源（基线超时，依赖本机 8076）"}]},{"id":"assets.tooling","name":"清单构建工具","desc":"blocks.json 清单生成器（node --test 7 项）：素材目录 → HTTP 清单源。","files":[{"path":"tools/build_blocks_manifest.mjs","type":"mjs","role":"素材清单生成器"},{"path":"tools/build_blocks_manifest.test.mjs","type":"mjs","role":"清单生成器测试（node --test）"}]}]},{"id":"dialogue","name":"对话系统","icon":"💬","desc":"独立演示（未接正式流程，roadmap P2-11）：上方立绘 + 名称牌、下方逐字台词。","children":[{"id":"dialogue.demo","name":"对话演示场景","desc":"DialogueDemo 场景 + demo_intro.json；按 story/15_onboarding.md 接入引导是 roadmap P2-11。","files":[{"path":"scripts/scenes/dialogue_demo.gd","type":"gd","lines":337,"role":"独立对话演示（立绘 + 逐字台词）"},{"path":"scenes/DialogueDemo.tscn","type":"tscn","role":"对话演示场景"},{"path":"data/dialogue/demo_intro.json","type":"data","role":"演示对话数据"}],"tests":[{"path":"tests/dialogue_demo_contract.gd","note":"演示行为"}]}]},{"id":"debug","name":"调试与工具链","icon":"🛠️","desc":"游戏内调试控制台、MCP 调试桥、pixelfx 特效画廊与烘焙导出、素材切片/音频离线管线。","children":[{"id":"debug.console","name":"游戏内调试控制台","desc":"PankuConsole（vendored autoload Panku，~ 键）+ 项目 dbg.* 命令集。","files":[{"path":"scripts/debug_console_commands.gd","type":"gd","lines":135,"role":"PankuConsole dbg.* 命令集"},{"path":"addons/panku_console/","type":"dir","role":"vendored 控制台 v1.7.9（98 .gd + 2 shader，autoload）"}]},{"id":"debug.mcp","name":"MCP 调试桥（breakpoint_mcp）","desc":"vendored 调试插件 v1.23.0（autoload BreakpointRuntimeBridge）：loopback JSON 桥接编辑器 9080 / 运行时 9081 给 MCP host；godot MCP 工具按会话激活（BREAKPOINT_TOOLSETS=runtime,dap,knowledge）。","files":[{"path":"addons/breakpoint_mcp/","type":"dir","role":"vendored 调试桥 v1.23.0（9 .gd；含独立 CLAUDE.md）"}]},{"id":"debug.fx","name":"pixelfx 特效","desc":"vendored 像素特效库 v0.3.0（244 特效/24 类，PixelFx2D BAKED/LIVE + PixelFxAct2D）：画廊场景全量浏览 + 离线烘焙导出缩略图。","files":[{"path":"addons/pixelfx/","type":"dir","role":"vendored 特效库 v0.3.0（290 .gd，MIT）"},{"path":"scripts/scenes/pixelfx_gallery.gd","type":"gd","lines":599,"role":"特效画廊（244 缩略图墙）"},{"path":"scenes/PixelFxGallery.tscn","type":"tscn","role":"画廊场景"},{"path":"scripts/tools/pixelfx_export.gd","type":"gd","lines":48,"role":"离线烘焙特效缩略图 png"}],"tests":[{"path":"tests/pixelfx_contract.gd","note":"特效契约"}]},{"id":"debug.pipeline","name":"素材切片与音频管线（离线工具）","desc":"精灵图切片（职业 turnaround/UI sheet）、art/audio 注册表生成、语音切分。不参与运行时。","files":[{"path":"tools/art/gen_art_registry.py","type":"py","role":"art 注册表生成"},{"path":"tools/art/gen_turnarounds.sh","type":"sh","role":"turnaround 生成"},{"path":"tools/slice_class_sheets.py","type":"py","role":"职业精灵图切片"},{"path":"tools/slice_ui_sheet.py","type":"py","role":"UI 图集切片"},{"path":"tools/audio/gen_voice_registry.py","type":"py","role":"语音注册表生成"},{"path":"tools/audio/split_voices.py","type":"py","role":"语音切分"},{"path":"tools/audio/split_voices.sh","type":"sh","role":"语音切分入口"},{"path":"meowa_tiles/generated/remove_fake_transparency.py","type":"py","role":"素材伪透明清理（离线）"}]}]},{"id":"quality","name":"测试基础设施","icon":"✅","desc":"无框架契约测试体系：headless --script 契约（78 个，挂在各功能下）+ 共享 fixtures + 全量基线脚本。地形测试用固化 SHA-256 快照检测回归。","children":[{"id":"quality.infra","name":"基线与 fixtures","desc":"run_contract_baseline.sh 单测超时 900s 逐份收退出码；fixtures 供模块扩展契约使用；debug_test 是 Phase 1 自测 autoload。2026-11-15 macOS 基线：62/72（详见 docs/testing_baseline_2026-11-15.md）。","files":[{"path":"tools/run_contract_baseline.sh","type":"sh","role":"全量契约基线跑批（超时 900s/个）"},{"path":"tests/fixtures/volcanic_biome.gd","type":"gd","role":"fixture：自定义 biome"},{"path":"tests/fixtures/module_extension_volcanic_biome.gd","type":"gd","role":"fixture：模块扩展 biome"},{"path":"tests/fixtures/module_extension_heat_affinity_scorer.gd","type":"gd","role":"fixture：模块扩展行为评分"},{"path":"tests/fixtures/custom_animal_behavior_scorer.gd","type":"gd","role":"fixture：自定义动物行为评分"},{"path":"tests/fixtures/unknown_butterfly_ambient_renderer.gd","type":"gd","role":"fixture：未知物种渲染器（错误路径）"},{"path":"tests/fixtures/incomplete_ambient_renderer.gd","type":"gd","role":"fixture：不完整渲染器（错误路径）"},{"path":"scripts/tests/debug_test.gd","type":"gd","lines":209,"role":"Phase 1 自测 autoload"},{"path":"docs/testing_baseline_2026-11-15.md","type":"md","role":"全量基线报告（62/72）"}]}]}],"vendored":[{"path":"addons/breakpoint_mcp/","name":"breakpoint_mcp","version":"v1.23.0","files":9,"role":"MCP 调试桥（debug.mcp）"},{"path":"addons/panku_console/","name":"panku_console","version":"v1.7.9","files":98,"role":"游戏内 REPL 控制台（debug.console）"},{"path":"addons/pixelfx/","name":"pixelfx","version":"v0.3.0","files":290,"role":"像素特效库（debug.fx）"},{"path":"addons/at-icons/","name":"at-icons","version":"v1.6.0","files":0,"role":"SVG 图标库（未启用，仅编辑器可用 control/ 色系）"}],"unmapped":[{"path":".claude/skills/godot-2d-movement/assets/test_character_controller.gd","reason":"DSH skill 示例资产，非游戏代码"},{"path":".claude/skills/godot-3d-essentials/assets/check_3d_scene.gd","reason":"DSH skill 示例资产"},{"path":".claude/skills/godot-animation/assets/test_animation_states.gd","reason":"DSH skill 示例资产"},{"path":".claude/skills/godot-audio/assets/check_audio_buses.gd","reason":"DSH skill 示例资产"},{"path":".claude/skills/godot-gdscript/assets/check_scripts_compile.gd","reason":"DSH skill 示例资产"},{"path":"data/battlefields/contract_asset_map.json.bak","reason":"契约产物脏文件（roadmap P0-2 待清理）"},{"path":"_lead_git_status.sh","reason":"会话辅助脚本，非游戏代码"}]}
+</script>
+
+<script>
+'use strict';
+/* ---------- data ---------- */
+let DATA = null;
+try { DATA = JSON.parse(document.getElementById('seed').textContent); } catch (e) { console.error(e); }
+// prefer live file (works when served over http); fall back to embedded seed
+fetch('feature_map.json').then(r => r.ok ? r.json() : null).then(j => { if (j) { DATA = j; boot(); } }).catch(() => {});
+
+/* ---------- index ---------- */
+let FEATURES = [];            // {id,name,desc,cat,icon,catId,node}
+let FILE_INDEX = {};          // path -> [{feat, role, lines, type, note}]
+let TEST_INDEX = {};          // test path (tscn-stripped) -> [featId]
+let FOLDER_ROOT = null;       // folder trie
+let ALL_DIR_PATHS = [];
+let RANKED = [];              // top-100 files by lines
+const TYPE_ORDER = {gd:0,tscn:1,shader:2,config:3,data:4,mjs:5,sh:6,py:7,md:8,dir:9};
+
+function indexData() {
+	FEATURES = []; FILE_INDEX = {}; TEST_INDEX = {};
+	DATA.tree.forEach(cat => {
+		cat.children.forEach(f => {
+			FEATURES.push({ id:f.id, name:f.name, desc:f.desc||'', cat:cat.name, icon:cat.icon, catId:cat.id, node:f });
+			(f.files||[]).forEach(x => {
+				(FILE_INDEX[x.path] = FILE_INDEX[x.path] || []).push({ feat:f.id, role:x.role||'', lines:x.lines, type:x.type, note:x.note });
+			});
+			(f.tests||[]).forEach(t => {
+				const key = t.path.replace(/\.tscn$/, '');
+				TEST_INDEX[key] = TEST_INDEX[key] || [];
+				TEST_INDEX[key].push(f.id);
+				(FILE_INDEX[t.path] = FILE_INDEX[t.path] || []).push({ feat:f.id, role:t.note||'契约测试', lines:null, type:t.type||'gd', note:t.note });
+			});
+		});
+	});
+}
+const featById = id => FEATURES.find(f => f.id === id);
+const fileCount = f => (f.node.files||[]).length + (f.node.tests||[]).length;
+const ownersOf = refs => [...new Set((refs||[]).map(r => r.feat))];
+
+/* ---------- folder trie ---------- */
+function buildFolders() {
+	FOLDER_ROOT = { name:'', path:'', dirs:{}, files:[] };
+	Object.keys(FILE_INDEX).sort().forEach(p => {
+		const parts = p.split('/');
+		let node = FOLDER_ROOT;
+		for (let i = 0; i < parts.length - 1; i++) {
+			const d = parts[i];
+			if (!node.dirs[d]) node.dirs[d] = { name:d, path:(node.path ? node.path+'/' : '')+d, dirs:{}, files:[] };
+			node = node.dirs[d];
+		}
+		node.files.push(p);
+	});
+	ALL_DIR_PATHS = [];
+	(function cnt(n){
+		let c = n.files.length;
+		for (const k in n.dirs) { c += cnt(n.dirs[k]); ALL_DIR_PATHS.push(n.dirs[k].path); }
+		n.count = c; return c;
+	})(FOLDER_ROOT);
+}
+function findDir(path) {
+	if (!path) return FOLDER_ROOT;
+	let n = FOLDER_ROOT;
+	for (const p of path.split('/')) { n = n.dirs[p]; if (!n) return null; }
+	return n;
+}
+const dirOf = p => { const i = p.lastIndexOf('/'); return i < 0 ? '' : p.slice(0, i); };
+
+/* ---------- feature colors (text hash -> hue) ---------- */
+function hashHue(s){ let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h % 360; }
+const FEAT_HUE = {};
+function featHue(id){ if (!(id in FEAT_HUE)) { const f = featById(id); FEAT_HUE[id] = hashHue(f ? f.name : id); } return FEAT_HUE[id]; }
+function featBadge(id){
+	const f = featById(id); if (!f) return '';
+	const h = featHue(id);
+	return `<span class="fbadge" data-go="${id}" style="background:hsl(${h},45%,20%);border-color:hsl(${h},45%,36%);color:hsl(${h},80%,74%)" title="${f.cat} · ${f.name}">${f.name}</span>`;
+}
+function featDot(id){ return `<span class="dot" style="background:hsl(${featHue(id)},55%,55%)"></span>`; }
+
+/* ---------- sidebar ---------- */
+function renderSidebar() {
+	const sb = document.getElementById('sidebar');
+	sb.innerHTML = '';
+	const tabs = document.createElement('div');
+	tabs.id = 'sideTabs';
+	tabs.innerHTML = `<div class="stab ${state.sideView==='feat'?'on':''}" data-tab="feat">🗂 功能</div>
+	                  <div class="stab ${state.sideView==='folder'?'on':''}" data-tab="folder">📁 文件夹</div>
+	                  <div class="stab ${state.sideView==='rank'?'on':''}" data-tab="rank">📊 Top100</div>`;
+	tabs.querySelectorAll('.stab').forEach(t => t.onclick = () => { if (state.sideView !== t.dataset.tab) { state.sideView = t.dataset.tab; renderSidebar(); } });
+	sb.appendChild(tabs);
+	const body = document.createElement('div');
+	body.className = 'sidebody';
+	sb.appendChild(body);
+	if (state.sideView === 'feat') renderSidebarFeat(body);
+	else if (state.sideView === 'folder') renderSidebarFolder(body);
+	else renderSidebarRank(body);
+}
+
+function renderSidebarFeat(sb) {
+	DATA.tree.forEach(cat => {
+		const div = document.createElement('div');
+		div.className = 'cat' + (cat.id === 'quality' ? '' : ' open');
+		const nFiles = cat.children.reduce((a,f) => a + (f.files||[]).length, 0);
+		div.innerHTML = `<div class="cat-head"><span class="caret">▶</span><span class="ci">${cat.icon}</span><span class="cn">${cat.name}</span><span class="cc">${cat.children.length}·${nFiles}</span></div>`;
+		const list = document.createElement('div');
+		list.className = 'feats';
+		cat.children.forEach(f => {
+			const el = document.createElement('div');
+			el.className = 'feat' + (state.view === 'feat' && state.sel === f.id ? ' sel' : '');
+			el.innerHTML = `${featDot(f.id)}<span>${f.name}</span><span class="fc">${fileCount({node:f})}</span>`;
+			el.onclick = () => select(f.id);
+			list.appendChild(el);
+		});
+		div.firstChild.onclick = () => div.classList.toggle('open');
+		div.appendChild(list);
+		sb.appendChild(div);
+	});
+}
+
+function renderSidebarFolder(sb) {
+	function drawDir(node, depth, container) {
+		Object.keys(node.dirs).sort().forEach(name => {
+			const d = node.dirs[name];
+			const open = state.openDirs.has(d.path);
+			const head = document.createElement('div');
+			head.className = 'feat dhead' + (state.view === 'folder' && state.folder === d.path ? ' sel' : '');
+			head.style.paddingLeft = (12 + depth * 13) + 'px';
+			head.innerHTML = `<span style="font-size:9px;color:var(--faint);width:9px;flex-shrink:0">${open?'▼':'▶'}</span><span>📁 ${name}</span><span class="fc">${d.count}</span>`;
+			const kids = document.createElement('div');
+			kids.style.display = open ? '' : 'none';
+			head.onclick = () => {
+				if (state.openDirs.has(d.path)) { state.openDirs.delete(d.path); kids.style.display='none'; head.firstChild.textContent='▶'; }
+				else { state.openDirs.add(d.path); kids.style.display=''; head.firstChild.textContent='▼'; }
+				renderFolder(d.path); markSel(head);
+			};
+			container.appendChild(head); container.appendChild(kids);
+			drawDir(d, depth + 1, kids);
+		});
+		node.files.slice().sort((a,b) => a.split('/').pop().localeCompare(b.split('/').pop())).forEach(p => {
+			const el = document.createElement('div');
+			el.className = 'feat fleaf' + (state.view === 'file' && state.file === p ? ' sel' : '');
+			el.style.paddingLeft = (12 + depth * 13 + 17) + 'px';
+			el.title = p;
+			const feats = ownersOf(FILE_INDEX[p]);
+			const dots = feats.slice(0, 3).map(featDot).join('');
+			el.innerHTML = `<span style="font-size:10px;opacity:.7">📄</span><span class="fname">${p.split('/').pop()}</span><span class="dots">${dots}${feats.length>3?`<span class="fc" style="font-size:9px">+${feats.length-3}</span>`:''}</span>`;
+			el.onclick = () => { state.view = 'file'; state.file = p; markSel(el); renderFile(p); };
+			container.appendChild(el);
+		});
+	}
+	function markSel(el) {
+		sb.querySelectorAll('.feat.sel').forEach(x => x.classList.remove('sel'));
+		el.classList.add('sel');
+	}
+	drawDir(FOLDER_ROOT, 0, sb);
+	// root-level files (e.g. main.gd) live in FOLDER_ROOT.files — drawn above at depth 0 already
+}
+
+function renderSidebarRank(sb) {
+	if (!RANKED.length) { sb.innerHTML = '<div class="empty" style="padding:16px 12px">无行数数据</div>'; return; }
+	const max = RANKED[0].lines;
+	RANKED.forEach((x, i) => {
+		const el = document.createElement('div');
+		el.className = 'feat' + (state.view === 'file' && state.file === x.p ? ' sel' : '');
+		const w = Math.max(3, Math.round(x.lines / max * 100));
+		el.style.background = `linear-gradient(90deg, rgba(232,176,75,.09) ${w}%, transparent ${w}%)`;
+		el.title = `${x.p} — ${x.lines.toLocaleString()} 行`;
+		const name = x.p.split('/').pop(), dir = dirOf(x.p);
+		el.innerHTML = `<span class="rk ${i < 3 ? 'top' : ''}">${i + 1}</span>
+			<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-weight:600">${name}</b> <span style="color:var(--faint);font-size:10.5px">${dir ? dir + '/' : ''}</span></span>
+			<span style="display:inline-flex;gap:2px;flex-shrink:0">${x.feats.slice(0, 2).map(featDot).join('')}</span>
+			<span class="fc" style="margin-left:6px">${x.lines.toLocaleString()}</span>`;
+		el.onclick = () => {
+			state.view = 'file'; state.file = x.p;
+			sb.querySelectorAll('.feat.sel').forEach(y => y.classList.remove('sel'));
+			el.classList.add('sel'); renderFile(x.p);
+		};
+		sb.appendChild(el);
+	});
+}
+
+/* ---------- content views ---------- */
+function extBadge(type) { return type ? `<span class="ext ${type}">${type}</span>` : ''; }
+
+function renderFeature(id) {
+	const f = featById(id); if (!f) return;
+	const el = document.getElementById('content');
+	const files = (f.node.files||[]).slice().sort((a,b) => (TYPE_ORDER[a.type]??9)-(TYPE_ORDER[b.type]??9) || (b.lines||0)-(a.lines||0));
+	const tests = f.node.tests || [];
+	const totalLines = files.reduce((a,x) => a + (x.lines||0), 0);
+	const siblings = DATA.tree.find(c => c.id === f.catId).children.filter(x => x.id !== id);
+
+	el.innerHTML = `
+		<div class="crumb"><a data-go="">图谱</a> / <a data-go="${f.catId}">${f.cat}</a> / ${f.name}</div>
+		<div class="h2row"><span class="ci">${f.icon}</span><h2>${f.name}</h2><span class="tag">${f.id}</span></div>
+		<p class="fdesc">${f.desc}</p>
+		${files.length ? `<h3>文件 · ${files.length}（${totalLines.toLocaleString()} 行代码）</h3>
+		<table><thead><tr><th style="width:40%">路径</th><th>职责</th><th style="width:70px">行数</th><th style="width:180px">同时属于</th></tr></thead><tbody>
+		${files.map(x => {
+			const others = ownersOf(FILE_INDEX[x.path]).filter(fid => fid !== id);
+			return `<tr><td class="path" data-file="${x.path}">${extBadge(x.type)}${x.path}</td>
+			<td class="role">${x.note || x.role || ''}</td>
+			<td class="lines">${x.lines ? x.lines.toLocaleString() : ''}</td>
+			<td class="badges">${others.map(featBadge).join('') || '<span style="color:var(--faint);font-size:11px">—</span>'}</td></tr>`;
+		}).join('')}
+		</tbody></table>` : ''}
+		${tests.length ? `<h3>契约测试 · ${tests.length}</h3>
+		<table><thead><tr><th style="width:44%">测试</th><th>覆盖点</th></tr></thead><tbody>
+		${tests.map(t => `<tr><td class="path">${extBadge(t.type||'gd')}${t.path}</td><td class="tnote">${t.note||''}</td></tr>`).join('')}
+		</tbody></table>` : ''}
+		${siblings.length ? `<h3>同级功能</h3><div class="childchips">${siblings.map(s => `<span class="chip" data-go="${s.id}">${s.name}</span>`).join('')}</div>` : ''}
+	`;
+}
+
+function renderFolder(path) {
+	const node = findDir(path);
+	const el = document.getElementById('content');
+	if (!node) { el.innerHTML = `<div class="empty">目录不存在：${path}</div>`; return; }
+	state.view = 'folder'; state.folder = path;
+	const all = [];
+	(function walk(n){ n.files.forEach(p => all.push(p)); for (const k in n.dirs) walk(n.dirs[k]); })(node);
+	all.sort();
+	const subdirs = Object.keys(node.dirs).sort();
+	const segs = path ? path.split('/') : [];
+	let acc = '';
+	const crumbHtml = `<a data-dir="">图谱</a> / <a data-dir="">/</a>` + segs.map(s => { acc = acc ? acc+'/'+s : s; return ` <a data-dir="${acc}">${s}</a>`; }).join(' / ');
+	const totalLines = all.reduce((a,p) => { const l = (FILE_INDEX[p]||[]).map(r=>r.lines).find(x=>x); return a + (l||0); }, 0);
+
+	el.innerHTML = `
+		<div class="crumb">${crumbHtml}</div>
+		<div class="h2row"><span class="ci">📁</span><h2>${path || '（根目录）'}</h2><span class="tag">${all.length} 文件${totalLines?' · '+totalLines.toLocaleString()+' 行':''}</span></div>
+		<p class="fdesc">递归列出本目录及子目录的全部收录文件。行尾彩色徽章 = 所属功能（颜色按功能名生成，点徽章跳转功能）——同目录里颜色与邻居格格不入的文件，往往就是放错位置的。</p>
+		${subdirs.length ? `<h3>子目录 · ${subdirs.length}</h3>
+		<div class="childchips">${subdirs.map(d => `<span class="chip" data-dir="${path?path+'/':''}${d}">📁 ${d} <span style="color:var(--faint)">${node.dirs[d].count}</span></span>`).join('')}</div>` : ''}
+		<h3>文件 · ${all.length}（递归）</h3>
+		${all.length ? `<table><thead><tr><th style="width:34%">路径</th><th>职责</th><th style="width:70px">行数</th><th style="width:240px">所属功能</th></tr></thead><tbody>
+		${all.map(p => {
+			const refs = FILE_INDEX[p] || [];
+			const r0 = refs.find(r => r.role) || refs[0] || {};
+			return `<tr><td class="path" data-file="${p}" title="${p}">${extBadge(r0.type)}${path ? p.slice(path.length+1) : p}</td>
+			<td class="role">${r0.role||''}</td>
+			<td class="lines">${r0.lines ? r0.lines.toLocaleString() : ''}</td>
+			<td class="badges">${ownersOf(refs).map(featBadge).join('')}</td></tr>`;
+		}).join('')}
+		</tbody></table>` : '<div class="empty">本目录无收录文件</div>'}
+	`;
+}
+
+function renderFile(path) {
+	const refs = FILE_INDEX[path] || [];
+	const el = document.getElementById('content');
+	const base = path.replace(/\.tscn$/, '');
+	const testedBy = TEST_INDEX[base] || [];
+	if (!refs.length && !testedBy.length) { el.innerHTML = `<div class="empty">未收录：${path}</div>`; return; }
+	state.view = 'file'; state.file = path;
+	const seen = new Set(); const uniqRefs = refs.filter(r => !seen.has(r.feat) && seen.add(r.feat));
+	const lines = refs.map(r => r.lines).find(x => x) || null;
+	const d = dirOf(path);
+	el.innerHTML = `
+		<div class="crumb"><a data-go="">图谱</a> / <a data-dir="${d}">📁 ${d || '/'}</a> / 文件详情</div>
+		<div class="fdetail">
+			<div class="fp">${path}</div>
+			<div class="meta">${refs[0] ? extBadge(refs[0].type) : ''}${refs[0]?.type||'test'}${lines ? ' · '+lines.toLocaleString()+' 行' : ''} · 被引用于 ${uniqRefs.length} 个功能</div>
+			<h3>归属功能</h3>
+			<ul>${(uniqRefs.length ? uniqRefs : testedBy.map(fid => ({feat:fid}))).map(r => {
+				const f = featById(r.feat); return f ? `<li data-go="${f.id}">${featDot(f.id)}<span>${f.cat} › ${f.name}</span><span style="color:var(--faint);font-size:12px">${r.role||''}</span></li>` : '';
+			}).join('')}</ul>
+			${testedBy.length && uniqRefs.length ? `<h3>契约测试覆盖</h3><ul>${testedBy.map(fid=>{const f=featById(fid);return `<li data-go="${fid}">${featDot(fid)}<span>✅ ${f?f.name:fid}</span></li>`}).join('')}</ul>` : ''}
+		</div>
+	`;
+}
+
+function renderSearch(q) {
+	const el = document.getElementById('content');
+	const ql = q.toLowerCase();
+	const hits = [];
+	Object.entries(FILE_INDEX).forEach(([p, refs]) => {
+		if (p.toLowerCase().includes(ql) || refs.some(r => (r.role||'').toLowerCase().includes(ql)))
+			hits.push(p);
+	});
+	const featHits = FEATURES.filter(f => f.name.toLowerCase().includes(ql) || f.id.includes(ql) || (f.desc||'').toLowerCase().includes(ql));
+	el.innerHTML = `
+		<div class="crumb">搜索「${q}」</div>
+		<h2>文件 ${hits.length} · 功能 ${featHits.length}</h2>
+		${featHits.length ? `<h3>功能</h3><div class="childchips">${featHits.map(f=>`<span class="chip" data-go="${f.id}">${f.name}</span>`).join('')}</div>` : ''}
+		<h3>文件</h3>
+		${hits.length ? hits.slice(0,200).map(p => {
+			const refs = FILE_INDEX[p];
+			const r0 = refs.find(r=>r.lines) || refs[0];
+			return `<div class="sr-item" data-file="${p}">
+				<div class="sr-path">${extBadge(r0?.type)}${p}</div>
+				<div class="sr-meta">${r0?.role||''}${r0?.lines?' · '+r0.lines.toLocaleString()+' 行':''}</div>
+				<div class="sr-feats">${ownersOf(refs).map(featBadge).join('')}</div>
+			</div>`;
+		}).join('') : '<div class="empty">无匹配文件</div>'}
+	`;
+}
+
+function renderCoverage() {
+	const el = document.getElementById('content');
+	const mappedFiles = Object.keys(FILE_INDEX).length;
+	const v = DATA.vendored || [], u = DATA.unmapped || [];
+	el.innerHTML = `
+		<div class="crumb"><a data-go="">图谱</a> / 覆盖率</div>
+		<h2>覆盖率报告</h2>
+		<p class="cov-note">项目自有代码文件（git 追踪，不含 addons 与引擎生成物）已全量映射到 ${FEATURES.length} 个功能节点。
+		文件可多归属（shared）；vendored 插件按模块级收录；下方为显式排除项。</p>
+		<h3>归属统计</h3>
+		<table><tbody>
+			<tr><td class="role">功能节点</td><td class="lines">${FEATURES.length}</td></tr>
+			<tr><td class="role">收录文件（含场景/着色器/配置/测试，去重）</td><td class="lines">${mappedFiles}</td></tr>
+			<tr><td class="role">多归属文件（shared）</td><td class="lines">${Object.values(FILE_INDEX).filter(r=>ownersOf(r).length>1).length}</td></tr>
+			<tr><td class="role">vendored 模块</td><td class="lines">${v.length}</td></tr>
+		</tbody></table>
+		<h3>Vendored 模块（不展开单文件）</h3>
+		<div class="vend">${v.map(x=>`<div class="vcard"><div class="vn">${x.path}</div><div class="vm">${x.name} ${x.version} · ~${x.files} .gd<br>${x.role}</div></div>`).join('')}</div>
+		${u.length?`<h3>显式排除（${u.length}）</h3>
+		<table><tbody>${u.map(x=>`<tr><td class="path" style="cursor:default">${x.path}</td><td class="tnote">${x.reason}</td></tr>`).join('')}</tbody></table>`:''}
+	`;
+}
+
+/* ---------- router ---------- */
+const state = { sel:null, view:'home', sideView:'feat', folder:'', file:'', openDirs:new Set() };
+function select(id) { state.sel = id; state.view = 'feat'; renderSidebar(); renderFeature(id); document.getElementById('content').scrollTop = 0; }
+function go(target) {
+	if (!target) { state.view='home'; renderSidebar(); renderHome(); return; }
+	const cat = DATA.tree.find(c=>c.id===target);
+	if (cat && !featById(target)) {
+		document.querySelectorAll('.cat').forEach((d,i)=>d.classList.toggle('open', DATA.tree[i].id===target));
+		select(cat.children[0].id); return;
+	}
+	select(target);
+}
+function renderHome() {
+	const el = document.getElementById('content');
+	el.innerHTML = `
+		<div class="crumb">图谱总览</div>
+		<h2>Pixel World 功能依赖图谱</h2>
+		<p class="fdesc">${DATA.description||''}<br><span style="color:var(--faint);font-size:12px">生成于 ${DATA.generated||''} · HEAD ${DATA.head_commit||''} · 左侧选择功能，或按 <code>/</code> 搜索</span></p>
+		<p class="fdesc" style="margin-top:-8px">💡 左侧可切换 <b>📁 文件夹视图</b>（按真实目录树浏览，徽章颜色突兀的文件可能放错位置）或 <b>📊 Top100</b>（按行数排行的前 100 个文件，底色金条 = 相对体量）。文件行尾的彩色徽章 = 所属功能（颜色由功能名生成），点徽章跳功能。</p>
+		${DATA.tree.map(cat=>`
+			<h3 style="margin-top:26px">${cat.icon} ${cat.name}</h3>
+			<div class="childchips">${cat.children.map(f=>`<span class="chip" data-go="${f.id}">${f.name} <span style="color:var(--faint)">${(f.files||[]).length}</span></span>`).join('')}</div>
+		`).join('')}
+	`;
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+	const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+	const d = e.target.closest('[data-dir]'); if (d) { renderFolder(d.dataset.dir); document.getElementById('content').scrollTop = 0; return; }
+	const f = e.target.closest('[data-file]'); if (f) { renderFile(f.dataset.file); return; }
+});
+document.getElementById('search').addEventListener('input', e => {
+	const q = e.target.value.trim();
+	if (!q) { state.view==='home' ? renderHome() : (state.view==='feat' && state.sel) ? renderFeature(state.sel) : state.view==='folder' ? renderFolder(state.folder) : state.file && renderFile(state.file); return; }
+	renderSearch(q);
+});
+document.getElementById('covBtn').onclick = () => renderCoverage();
+document.getElementById('expandAll').onclick = () => {
+	if (state.sideView === 'feat') {
+		const cats = document.querySelectorAll('.cat');
+		const anyClosed = [...cats].some(c=>!c.classList.contains('open'));
+		cats.forEach(c=>c.classList.toggle('open', anyClosed));
+	} else if (state.sideView === 'folder') {
+		const anyClosed = ALL_DIR_PATHS.some(p=>!state.openDirs.has(p));
+		state.openDirs = anyClosed ? new Set(['', ...ALL_DIR_PATHS]) : new Set(['', ...Object.keys(FOLDER_ROOT.dirs)]);
+		renderSidebar();
+	}
+};
+document.addEventListener('keydown', e => {
+	if (e.key==='/' && document.activeElement.id!=='search') { e.preventDefault(); document.getElementById('search').focus(); }
+	if (e.key==='Escape') { document.getElementById('search').value=''; document.getElementById('search').blur(); }
+});
+
+/* ---------- boot ---------- */
+function boot() {
+	indexData();
+	buildFolders();
+	RANKED = Object.entries(FILE_INDEX)
+		.map(([p, refs]) => ({ p, lines: refs.map(r => r.lines).find(x => x) || 0, feats: ownersOf(refs) }))
+		.filter(x => x.lines > 0)
+		.sort((a, b) => b.lines - a.lines)
+		.slice(0, 100);
+	if (!state.openDirs.size) state.openDirs = new Set(['', ...Object.keys(FOLDER_ROOT.dirs)]);
+	const totFeatures = FEATURES.length;
+	const mapped = Object.keys(FILE_INDEX).length;
+	const shared = Object.values(FILE_INDEX).filter(r=>ownersOf(r).length>1).length;
+	document.getElementById('stats').innerHTML =
+		`<span class="stat">功能 <b>${totFeatures}</b></span>
+		 <span class="stat">文件 <b>${mapped}</b></span>
+		 <span class="stat">shared <b>${shared}</b></span>
+		 <span class="stat acc">覆盖 <b>100%</b></span>`;
+	renderSidebar();
+	renderHome();
+}
+if (DATA) boot();
+</script>
+</body>
+</html>

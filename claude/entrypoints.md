@@ -1,6 +1,6 @@
 # 入口与启动
 
-> 更新：2026-11-15（autoload 5→8：+GameCursor/Sfx/LoadingScreen；scenes 7→11；新增 startup.cfg 调试启动配置）。
+> 更新：2026-11-15（第二轮增量：编辑器能力扩充——区域操作/预设/取色器；autoload 与场景数不变 8/11）。
 
 ## 引擎入口
 
@@ -43,7 +43,7 @@
 | `main.tscn` | `main.gd` | 世界根场景（Node2D "Main" + 子节点 "DebugConsoleCommands"） | `Game` 列表的"生态世界"按钮；`startup.cfg` 指定；编辑器手动运行 |
 | `scenes/Title.tscn` | `scripts/scenes/title.gd` | 标题屏（Control） | `startup.cfg` 默认 `last_scene`；手动运行 |
 | `scenes/Battle.tscn` | `scripts/scenes/battle.gd` | 战斗独立场景（B2，世界地形） | `inline_mode=false` 按 P；**JSON 战场固定走此场景**（O 键选择） |
-| `scenes/MapEditor.tscn` | `scripts/scenes/map_editor.gd` | 战场地图编辑器 | 世界内按 `E`；HUD 按钮；依赖编辑器参数，一般不直启 |
+| `scenes/MapEditor.tscn` | `scripts/scenes/map_editor.gd` | 战场地图编辑器（画笔/填充/橡皮/角色/replace + 区域复制-移动-命名预设 + 取色器 + 用户素材） | 世界内按 `E`；HUD 按钮；依赖编辑器参数，一般不直启 |
 | `scenes/LoadingScreen.tscn` | `scripts/ui/loading_screen.gd` | 加载遮罩（**autoload，不作为普通场景运行**） | `LoadingScreen.show_loading()` 代码调用 |
 | `scenes/SkillTest.tscn` | `scripts/tests/test_skills.gd` | 技能/物品自测场景 | 编辑器手动运行（headless 测试入口） |
 | `scenes/UIComponentGallery.tscn` | `scripts/scenes/ui_component_gallery.gd` | UI 组件库交互画廊（16 组件，六页） | F6 独立运行；ESC 退出；默认排除出 startup 记录 |

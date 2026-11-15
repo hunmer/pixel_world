@@ -1,6 +1,6 @@
 # 开发约定
 
-> 更新：2026-11-15（macOS 路径、主场景 Game.tscn、69 契约、battle_cli/startup.cfg 命令、HANDOFF 引用更新）。本文件收集对 Agent 与人类贡献者最实用的命令、规范与禁忌。高优先级条目同时摘要在根 `CLAUDE.md`；agent 工作约束另见根 `AGENTS.md`。
+> 更新：2026-11-15（第二轮增量：DESIGN.md UI 规范、78 契约与基线状态、编辑器区域操作/预设约定、增援与胜利字段）。本文件收集对 Agent 与人类贡献者最实用的命令、规范与禁忌。高优先级条目同时摘要在根 `CLAUDE.md`；agent 工作约束另见根 `AGENTS.md`。
 
 ## 运行与启动
 
@@ -39,12 +39,12 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 ## 测试
 
 - **无第三方测试框架**。测试形态：
-  1. `tests/*_contract.gd`（**69 个**）：`extends SceneTree`，在 `_initialize` → `call_deferred("_run")` 中跑断言，失败用 `push_error` + `quit(1)`。**地形生成测试用固化的 SHA-256 快照检测回归**（改了确定性会挂）。
+  1. `tests/*_contract.gd`（**78 个**）：`extends SceneTree`，在 `_initialize` → `call_deferred("_run")` 中跑断言，失败用 `push_error` + `quit(1)`。**地形生成测试用固化的 SHA-256 快照检测回归**（改了确定性会挂）。
   2. `scripts/tests/*.gd`：`extends Node`，`_ready` 里自跑 `_ok/_pass/_fail/_print_summary`（仿 `debug_test.gd` 框架）。
   3. 探针 2 个：`tests/flat_rotation_probe` / `mesh_draw_probe`。
   4. Node `--test`（素材清单生成器 7 项，`tools/build_blocks_manifest.test.mjs`）。
-  5. UI 组件库 headless 契约 `tests/ui_contract.gd`（735 checks）。
-- 已知通过状态（2026-11-11 历史记录）：`SkillTest.tscn` 44/44、`debug_test.gd` 35/35（历史）、battlefields / map_editor / battle_screen_pick / battlefield_render 契约绿。⚠️ `game_hud_contract.gd` **据旧记录在 HEAD 上本就坏**（`--script` 模式无 autoload，`game_hud.gd` 引 `Settings` 编译错；2026-11-15 macOS 未复验）。**macOS 迁移后全量基线待重建**（roadmap P1）。
+  5. UI 组件库 headless 契约 `tests/ui_contract.gd` + `ui_components_contract.gd`（1062 checks；`ui_contract` 还静态扫描业务脚本禁直建控件）。
+- 已知状态（2026-11-15 macOS 全量基线，`tools/run_contract_baseline.sh`）：62/72 通过；6 失败（详见 `testing-and-quality.md` 状态表，其中 `ui` / `map_editor_ui` 为编辑器波新增回归待修）+ 4 超时（autoload 依赖型挂起，待契约侧修复）。其后契约总数 72→78，新增 6 个全绿。
 - **只跑修改过的测试，不盲目跑全量**（AGENTS.md）；首跑 headless 含资源导入，耗时偏长属正常。
 - **代码测试 > 截图**：调试时优先用断言 / 日志，不擅自截图（历史 HANDOFF 明示约束）。验证等级：L1 日志 / L2 断言 / L3 断点 + `runtime_assert_*` 自动验证，不要 `print` 后肉眼判断（AGENTS.md）。
 
@@ -74,8 +74,9 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 - **结算与表现分离**：`battle_action_resolver.gd` 是 battle.gd 与自动化共享的结算内核；改战斗规则只改它 + systems，勿在演出/UI 层复写结算逻辑。演出可开关可快进，关演出必须不影响结算正确性。
 - 战场坐标 `(0,0)` = 世界 `world_origin + (bx,by)`；`GridSystem` 完全不感知世界坐标，由 `UnitSprite` 渲染时加 origin 转换。
 - **JSON 战场**：schema 与校验规则见 `public-interfaces.md`；`rows` 是**顶层字段**；`BattlefieldLoader` 是唯一权威校验点（编辑器 `quick_validate` 只是轻校验）。用户战场放 `user://battlefields/`（与 `res://data/battlefields/` 同名时 res 优先）。
-- **编辑器**：SpinBox 竞态用 `_syncing_boxes` 模式防；素材库面板消费 `UserAssetService`，勿绕过服务直读 blob。
-- **UI 组件库**：新 UI 优先用 `ui/` 的 Pixel* 组件 + `ComponentTheme`（别再手搓第九套按钮样式）；旧业务 UI 迁移按 roadmap 渐进，不阻塞功能开发。
+- **编辑器**：SpinBox 竞态用 `_syncing_boxes` 模式防；素材库面板消费 `UserAssetService`，勿绕过服务直读 blob。区域操作（复制/粘贴/移动）一律走 `EditorRegionClipboard` 五层 payload，勿自拼 Dictionary 丢层（tile_overrides/block_z/props/units 都要跟）；命名预设只经 `EditorRegionPresetStore` 落盘（原子写）。
+- **胜利条件 / 增援**：只通过战场 JSON 的 `victory` / `reinforcements` 字段声明（schema 见 `public-interfaces.md`），`BattlefieldLoader` 静态严校验；勿在 battle.gd 里写死特定战场的胜负特判。增援刷入只调 `ReinforcementSpawner`，勿在演出层自刷。
+- **UI 组件库 / 设计 token**：新 UI 一律用 `ui/` 的 Pixel* 组件（22 个，含 6 布局容器）+ `ComponentTheme`，间距/圆角/字号取值**只从 DESIGN.md token 常量取**——禁裸数字样式值、自建 StyleBox、绝对定位、横向滚动（正误例与三档分辨率验收见根 `DESIGN.md`）。`tests/ui_contract.gd` 会静态扫描业务脚本里的 `Button.new()/CheckButton.new()/OptionButton.new()` 直建控件并置 FAIL；旧业务 UI 迁移按 roadmap 渐进，不阻塞功能开发。
 
 ## 视角 / 3D 渲染约定
 

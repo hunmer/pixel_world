@@ -1,6 +1,6 @@
 # Roadmap — 后续可逐步完善清单
 
-> 生成：2026-11-15（/init-project 扫描产出）。按**优先级分层（P0–P3）+ 前置依赖**组织。
+> 生成：2026-11-15（/init-project 扫描产出）；状态更新：2026-11-15 二轮增量扫描。按**优先级分层（P0–P3）+ 前置依赖**组织。
 > 用法：从 P0 开始自上而下做；同一层内按前置依赖排序。每项给「做什么 / 为什么 / 前置 / 验收 / 规模」。
 > 完成一项就把它标 ✅ 并在 `claude/changelog.md` 记一笔；本文档随进度滚动维护。
 > **玩法元素差距**（对照高完成度战旗的胜负条件/增援/转职/经济等）另见 [gameplay_gap.md](gameplay_gap.md)，两份互补：本文管工程与内容管线，那份管玩法机制。
@@ -9,8 +9,8 @@
 
 | 层 | 主题 | 条目 |
 | --- | --- | --- |
-| **P0** | 修坏 & 堵漏（小时级） | 1 修 game_hud 契约 · 2 清理失效引用/调试遗留 |
-| **P1** | 补基线 & 保正确（天级） | 3 macOS 全量测试基线 · 4 世界战场地形覆盖 · 5 B2 世界路径验证 · 6 素材源解绑 |
+| **P0** | 修坏 & 堵漏（小时级） | 1 修 game_hud 契约 ✅ · 2 清理失效引用/调试遗留（半 ✅）· **3 修 ui/map_editor_ui 契约回归（新）** |
+| **P1** | 补基线 & 保正确（天级） | 3 macOS 全量测试基线 ✅（余项跟进）· 4 世界战场地形覆盖 ✅ · 5 B2 世界路径验证 · 6 素材源解绑（大半 ✅） |
 | **P2** | 内容扩张（story 目标态） | 7 差距映射表（**关键路径根**）· 8 职业扩 13 · 9 技能/道具扩容 · 10 章节/战场扩 15 · 11 对话接入引导 · 12 素材四向展开 |
 | **P3** | 重构 & 打磨（有余力再做） | 13 main.gd 拆分 · 14 双轨配置收尾 · 15 UI 组件库推广 · 16 CI/lint · 17 导出配置 · 18 世界状态持久化 · 19 音乐扩容 |
 
@@ -18,10 +18,11 @@
 
 ```mermaid
 graph LR
-    A[P0-1 game_hud 修复] --> B[P1-3 全量基线]
-    B --> C[P1-4 地形覆盖 3→11]
+    A[P0-1 game_hud 修复 ✅] --> B[P1-3 全量基线 ✅]
+    Z[P0-3 ui/map_editor_ui 契约回归] --> B2[基线余项归零]
+    B --> C[P1-4 地形覆盖 3→7 ✅]
     B --> D[P1-5 B2 世界路径验证]
-    B --> E[P3-13 main.gd 拆分]
+    B --> E[P3-13 main.gd/map_editor.gd 拆分]
     B --> F[P3-14 双轨配置收尾]
     B --> G[P3-18 世界持久化]
     H[P2-7 差距映射表] --> I[P2-8 职业]
@@ -35,29 +36,40 @@ graph LR
 
 ## P0 — 修坏 & 堵漏（小时级，无前置，可立即做）
 
-### 1. 修复 `game_hud_contract.gd` ⚡
+### 1. 修复 `game_hud_contract.gd` ⚡ ✅ 2026-11-15（e8fda38）
 
-- **做什么**：让该契约能在 `--headless --script` 模式下运行。旧记录的死因：`--script` 模式**不加载 autoload**，而 `scripts/ui/game_hud.gd` 引用 `Settings` 编译报错。修法二选一：① 测试内显式 `Settings` 替身/预载；② HUD 依赖改注入式（构造时传入）。
-- **为什么**：69 个契约里它是唯一已知红的；红了就永远干扰"全绿"判断。
-- **前置**：无。**验收**：`godot --headless --path . --script res://tests/game_hud_contract.gd` 退出码 0。**规模**：小（半天内）。
+- **已完成**：契约在 2026-11-15 全量基线中通过（`docs/testing_baseline_2026-11-15.md`，72 契约 62 过之一）。
+- ~~旧记录死因：`--script` 模式不加载 autoload，而 `game_hud.gd` 引用 `Settings` 编译报错。~~
 
-### 2. 清理失效引用与调试遗留 ⚡
+### 2. 清理失效引用与调试遗留 ⚡（半 ✅ 2026-11-15）
 
-- **清单**（已逐一核实存在）：
+- **已清**：根目录 `b1_*.png` 调试截图已删光；孤儿 `tests/zz_align_probe.gd.uid` 已清。
+- **仍剩**：
   - `AGENTS.md:47` 仍引用已删除的 `rules/image-viewing.md`（用户文件，建议本人改，agent 勿动）；
-  - 孤儿 uid：`tests/zz_align_probe.gd.uid`（对应 .gd 已删）；
-  - 根目录调试截图 `b1_debug.png`、`b1_depth_probe.png`、`b1_fixed.png`、`b1_negative_depth_probe.png`、`b1_offset_probe.png`（历史 B1 排查产物，gitignore 或删除）。
-- **前置**：无。**验收**：`git grep image-viewing` 仅剩历史文档；`tests/` 无孤儿 .uid；根目录无 b1_*.png。**规模**：极小。
+  - `data/battlefields/contract_asset_map.json.bak`（契约产物脏文件，6943B，gitignore 或删除）。
+- **验收**：`git grep image-viewing` 仅剩历史文档；根目录无 b1_*.png；无 .bak 脏文件。**规模**：极小。
+
+### 3. 修复 `ui` / `map_editor_ui` 契约回归 ⚡（新，2026-11-15 扫描发现）
+
+- **做什么**：两契约当前红（实测 exit=1）：
+  - `tests/ui_contract.gd`：静态扫描抓到 `scripts/editor/map_editor.gd` 三处直建控件 —— `Button.new()`@943、`CheckButton.new()`@1410（`_place_preview_toggle`）、`OptionButton.new()`@2124（`_mode_option`）；且该文件头注释自称"不再自带样式 helper 与裸 Button.new"，名实不符。
+  - `tests/map_editor_ui_contract.gd`：三断言失败 —— (1024,640) 与 (1280,800) 下"侧栏保持 320px"；改 z 后实际重建的单块 `level=6`（应为增量更新而非全量重建）。
+- **修法方向**：三处直建换 `ui/` 组件（`PixelButton`/`PixelCheckButton`/`PixelOptionButton`）；侧栏宽度与单块重建逻辑按契约语义修（侧栏宽度用 DESIGN token；z 变更走单块更新路径）。
+- **为什么**：`ui_contract` 是组件库推广（P3-15）的护栏，map_editor 是第一个被抓红的业务脚本；红着就无法判断后续 UI 改动是否合规。
+- **前置**：无。**验收**：两契约 headless 退出码 0，且 map_editor 视觉无回归（编辑器契约 12 项全绿）。**规模**：小–中。
 
 ---
 
 ## P1 — 补基线 & 保正确（天级）
 
-### 3. macOS 全量契约测试基线 ⭐（P1 的根）
+### 3. macOS 全量契约测试基线 ⭐（P1 的根）✅ 2026-11-15（首份已产出，余项跟进）
 
-- **做什么**：在 macOS 本机 headless 跑完 69 契约 + SkillTest，产出「通过/失败/跳过」清单，写进 `claude/testing-and-quality.md` 并更新 changelog。首跑含资源导入会慢（已实测 >90s 转后台），建议批量脚本 + 逐份收退出码。
-- **为什么**：项目从 Windows 迁到 macOS 后**没有任何一份完整通过记录**；后面所有 P1–P3 改动都需要"改之前是绿的"这一前提。
-- **前置**：P0-1（否则永远 1 红）。**验收**：testing-and-quality.md 有 2026-11-xx 的全量结果表。**规模**：中（一次跑批 + 修环境问题）。
+- **已完成**：`tools/run_contract_baseline.sh` + `docs/testing_baseline_2026-11-15.md`（72 契约：**62 过 / 6 败 / 4 超时**）；`claude/testing-and-quality.md` 已有结果表。game_hud 在基线中通过。
+- **余项**（转入 P0-3 与后续跟进）：
+  - 2 红（`ui` / `map_editor_ui`）→ **P0-3**；
+  - 4 败未复跑：`battle_action_chain` / `battle_presentation_hooks` / `isometric_view`（真红待修）；`sunlight_3d_gl` 属 headless 环境限制，非回归（需带渲染环境跑）；
+  - 4 超时：`action_anim` / `immersive_battle_camera` / `world_map_overlay`（`--script` 模式 autoload 依赖编译失败挂起 900s，需测试内替身或改 preload 方案）；`user_asset_source_live`（8076 源未启 + 失败路径索引越界）。
+- **验收**（收口时）：全量基线 78 契约 0 红 0 超时（环境受限项显式 SKIP）。**规模**：余项小–中。
 
 ### 4. 世界就地战场地形覆盖 3→11 ⭐⭐（玩法收益最大）✅ 2026-11-15（`feat(world-battle): expand cell_context_to_terrain mapping beyond 3 terrains`，见 git log hash）
 
@@ -78,11 +90,11 @@ graph LR
 - **做什么**：`Settings.battle_inline_mode=false` 时按 P 进 B2（世界地形快照战）的整链路（world_to_chapter → Battle.tscn → 渲染 → 结算 → 存档 resume → 返回）历史交接从未深度验证过。用 godot MCP（`dbg_launch` + `runtime_assert_*`）跑一轮全链路断言。
 - **前置**：P1-3。**验收**：L2 断言脚本或 MCP 断言记录；发现的问题单独开条目。**规模**：小–中。
 
-### 6. 用户素材源解绑 `127.0.0.1:8076`
+### 6. 用户素材源解绑 `127.0.0.1:8076`（大半 ✅ 2026-11-15，3a08327）
 
-- **做什么**：素材清单源默认硬编码本机回环地址（历史机器 F:/blocks + http-server）。① 源地址进 `user://settings.cfg` 或独立配置并提供 UI 入口；② `docs/user_assets.md` 补"换机器重建源"最小步骤（含 `tools/build_blocks_manifest.mjs` 离线生成清单文件的用法）；③ 评估支持 `file://`/本地目录直读作为无 HTTP fallback。
-- **为什么**：当前换机器素材库即不可用；阻塞 P2-12 的可移植性。
-- **前置**：无。**验收**：断网/无源时编辑器素材面板优雅降级（占位图不崩）；改源后重导幂等。**规模**：中。
+- **已完成**：源地址三档优先级可配 —— `user://asset_source.cfg` `[asset_source] source_url` 覆盖 > 库内 `settings.source_url` > `DEFAULT_SOURCE_URL`（`user_asset_service.gd:30/:33/:96`）；无源时优雅降级（占位不崩）。
+- **仍剩**：① `docs/user_assets.md` 补"换机器重建源"最小步骤（含 `tools/build_blocks_manifest.mjs` 离线生成清单的用法）；② 评估 `file://`/本地目录直读作为无 HTTP fallback；③ `user_asset_source_live` 契约当前超时红（源未启 + 失败路径索引越界），修完才算验收闭环。
+- **验收**：断网/无源时编辑器素材面板优雅降级；改源后重导幂等；live 契约绿。**规模**：余项小。
 
 ---
 
@@ -125,9 +137,10 @@ graph LR
 
 ## P3 — 重构 & 打磨（有余力再做，勿阻塞 P2）
 
-### 13. `main.gd`（4319 行/176 函数）拆分
+### 13. `main.gd`（4319 行/176 函数）拆分 —— 与 `map_editor.gd`（3285 行/150 函数）双单体治理
 
-- **做什么**：按函数簇（配置编译 / 流式生成 / 生态 / 表现 / HUD / 战斗入口）渐进抽出到 `scripts/world/` 既有子域，`main.gd` 收敛为装配层。**红线**：流式生成与确定性调用顺序不得变（SHA-256 快照测试是护栏）。
+- **做什么**：main.gd 按函数簇（配置编译 / 流式生成 / 生态 / 表现 / HUD / 战斗入口）渐进抽出到 `scripts/world/` 既有子域，`main.gd` 收敛为装配层。**红线**：流式生成与确定性调用顺序不得变（SHA-256 快照测试是护栏）。
+- **2026-11-15 扫描注**：`scripts/editor/map_editor.gd` 本轮 +~900 行涨到 3285 行/150 函数（区域操作/取色器/弹窗全塞主文件），膨胀速度超 main.gd；区域操作已有 `region_clipboard`/`region_preset_store` 模块可挂，下一步编辑器功能应先进模块再挂主文件，或同法拆分。
 - **前置**：P1-3 基线 + 每抽一簇跑地形快照契约。**验收**：每次抽取独立 commit、全量契约绿、无行为 diff。**规模**：大（分多次）。
 
 ### 14. 双轨配置迁移收尾
@@ -137,8 +150,8 @@ graph LR
 
 ### 15. UI 组件库推广到业务 UI
 
-- **做什么**：`ui/` 16 组件（735 headless checks）迁移 `battle_ui` / `map_editor` / `game_hud` 旧手搓 UI；按"改哪个界面迁哪个"渐进，不专门停功能做大迁移。
-- **前置**：无（随时可做）。**验收**：被迁移界面过既有契约 + 画廊视觉对齐。**规模**：大（按界面摊平）。
+- **做什么**：`ui/` 22 组件（1062 headless checks）+ 根 `DESIGN.md` token 规范迁移 `battle_ui` / `map_editor` / `game_hud` 旧手搓 UI；按"改哪个界面迁哪个"渐进，不专门停功能做大迁移。**第一个被抓红的就是 map_editor**（P0-3：三处直建控件），修它即是本项第一步。
+- **前置**：无（随时可做）。**验收**：被迁移界面过既有契约（`ui_contract` 静态扫描 + 画廊视觉对齐）。**规模**：大（按界面摊平）。
 
 ### 16. CI / lint 引入
 

@@ -1,6 +1,6 @@
 # 文件清单与目录地图
 
-> 更新：2026-11-15（scripts 75→113 .gd；tests 37→71；scenes 5→11；新增 ui/ 素材库、docs/、tools/、用户素材与音效系统）。
+> 更新：2026-11-15（第二轮增量：scripts 113→122 .gd；tests 71→80（69→78 契约）；ui 17→23；新增编辑器区域子系统与增援刷入；根新增 DESIGN.md）。
 
 ## 顶层结构
 
@@ -12,16 +12,18 @@ pixel_world/  (本机 /Users/Zhuanz/Documents/pixel_world；历史路径 G:/ →
 ├── icon.svg(.import)      项目图标
 ├── README.md / README.zh-CN.md   项目说明（双语，含截图）
 ├── AGENTS.md              agent 工作约束（MCP 按会话激活、场景路由表、runtime_assert_*）
+├── DESIGN.md              ★ UI 设计规范单一事实来源（token 体系 + 六薄容器 + 禁忌 + 验收，2026-11-15 新增）
 ├── ASSET_LICENSE.md / LICENSE / .editorconfig / .gitignore / .gitattributes
 │
-├── scripts/               ★ 全部项目 GDScript（113 个 .gd，见下）
-├── ui/                    ★ 共享 UI 组件库（16 个 Pixel* @tool 控件 + ComponentTheme + README 304 行）
+├── scripts/               ★ 全部项目 GDScript（122 个 .gd，见下）
+├── ui/                    ★ 共享 UI 组件库（22 个 Pixel* @tool 控件（+6 布局容器）+ ComponentTheme + README）
 ├── scenes/                11 个 .tscn：Battle / DialogueDemo / Game / HomeEntry / Isometric3DTest /
 │                          LoadingScreen / MapEditor / PixelFxGallery / SkillTest / Title / UIComponentGallery
-├── tests/                 71 个 .gd（69 契约 + 2 探针）+ fixtures/（模块扩展夹具 + battle_scenarios/ 4 JSON）
+├── tests/                 80 个 .gd（78 契约 + 2 探针）+ fixtures/（模块扩展夹具 + battle_scenarios/ 4 JSON）
 ├── config/                JSON 配置（生态 + 表现层 + sunlight.json + startup.cfg 调试启动配置）
-├── data/                  战棋 JSON：professions/skills/items + battlefields/(4) + dialogue/(demo_intro)
-├── docs/                  battle_automation.md / startup_config.md / user_assets.md + screenshots/(22)
+├── data/                  战棋 JSON：professions/skills/items + battlefields/(6) + dialogue/(demo_intro)
+├── docs/                  battle_automation / startup_config / user_assets / gameplay_gap / roadmap /
+│                          testing_baseline_2026-11-15 + feature_map.json/.html（功能依赖图谱，双击 HTML 可看）+ screenshots/(22)
 ├── rules/                 4 篇 agent 规则文档（godot-tools-map、mcp-debugging、autoplay-hosting、skill-item-system）
 ├── story/                 19 篇设计 bible（目标态：13 职业/27 技能/25 道具；当前 data/ 仅 8/8/8）
 ├── handoff/               3 篇专题交接：isometric-rotation / game-sfx-system / immersive-battle-presentation
@@ -37,11 +39,11 @@ pixel_world/  (本机 /Users/Zhuanz/Documents/pixel_world；历史路径 G:/ →
 
 > ⚠️ 根目录 `HANDOFF.md` 已删除，交接文档统一在 `handoff/`（3 篇）。`rules/image-viewing.md` 也已移除（rules/ 现存 4 篇）。
 
-## `scripts/` 详细地图（113 .gd）
+## `scripts/` 详细地图（122 .gd）
 
 ```
 scripts/
-├── core/                      【战棋纯逻辑，迁移自 phaserjs，零渲染依赖】13 .gd
+├── core/                      【战棋纯逻辑，迁移自 phaserjs，零渲染依赖】14 .gd
 │   ├── enums.gd               class_name Enums（Faction/Mode 等，StringName）
 │   ├── unit.gd                UnitData 构造 + 默认成长率
 │   ├── professions.gd         class_name ProfessionData（懒加载 data/professions.json）
@@ -50,24 +52,26 @@ scripts/
 │   ├── weapons.gd             class_name WeaponData（武器三角 + 经验公式）
 │   ├── terrain.gd             class_name TerrainData（11 地形查表）
 │   ├── cmd_args.gd            启动命令行解析（纯静态，零依赖）
-│   ├── world_to_chapter.gd    ★ 世界 cell → 战棋 chapter 适配层（两子系统唯一耦合）
-│   ├── battlefield_loader.gd  ★ JSON 战场加载 + 唯一权威校验（res:// 与 user://battlefields/）
+│   ├── world_to_chapter.gd    ★ 世界 cell → 战棋 chapter 适配层（两子系统唯一耦合；地形映射 7/11 种）
+│   ├── battlefield_loader.gd  ★ JSON 战场加载 + 唯一权威校验（victory/reinforcements 字段；res:// 与 user://battlefields/）
 │   ├── battle_save_codec.gd   战旗存档编解码（chapter+state ⇄ 落盘 dict，version=1）
 │   ├── battle_save_store.gd   存档原子落盘（tmp+bak 两段写 / index.json 自恢复）
-│   └── block_layout.gd        用户素材方块布局（编辑器素材画布消费）
+│   ├── block_layout.gd        用户素材方块布局（编辑器素材画布消费）
+│   └── reinforcement_spawner.gd ★ 按回合波次增援刷入（spawn_due/pending_units；演出/无头两链路共用）
 │
-├── systems/                   【战棋战斗子系统】11 .gd
+├── systems/                   【战棋战斗子系统】12 .gd
 │   ├── grid_system.gd         网格世界模型（实例：new(w,h,map)）
 │   ├── combat_system.gd       战斗结算（全静态）
 │   ├── skill_system.gd        技能结算（全静态）
 │   ├── item_system.gd         物品结算（全静态）
 │   ├── buff_system.gd         buff/属性修正（全静态零依赖）
-│   ├── turn_manager.gd        回合调度（实例）
+│   ├── turn_manager.gd        回合调度（实例；victory 注入 + check_victory 胜利判定）
 │   ├── enemy_ai.gd            敌方 AI 决策
 │   ├── player_ai.gd           玩家方托管决策器
 │   ├── ai_difficulty.gd       AI 难度分级（设置面板可调）
 │   ├── ai_difficulty_scoring.gd  难度评分参数
-│   └── attack_event.gd        攻击事件结构（表现层钩子消费）
+│   ├── attack_event.gd        攻击事件结构（表现层钩子消费）
+│   └── trade_system.gd        相邻友军物品传递（can_trade/adjacent_trade_targets/execute_trade）
 │
 ├── iso/                       【等距渲染层：主世界 3D + 战棋 B1/B2】11 .gd
 │   ├── iso_projection_3d.gd   ★ 3D 投影标尺（TILE_PIXELS 32 / TILE_HEIGHT 16 / LEVEL_PIXELS 10）
@@ -99,22 +103,30 @@ scripts/
 │       ├── battle_runner.gd            无表现确定性对局执行器
 │       └── battle_report.gd            events.jsonl / result.json / summary.txt 战报
 │
-├── editor/                    【战场编辑器】4 .gd
+├── editor/                    【战场编辑器】11 .gd
 │   ├── battlefield_doc.gd     文档模型（generate(seed)/to_json_dict/save_model/quick_validate）
 │   ├── editor_canvas.gd       画布（内嵌 BattlefieldRenderer；多高度拾取；cell 信号；平移缩放）
 │   ├── tile_preview.gd        地形调色板缩略图（真实柱渲染，4 列）
-│   └── asset_library_panel.gd ★ 用户素材库面板（导入/清单刷新/画布放置）
+│   ├── asset_library_panel.gd ★ 用户素材库面板（导入/清单刷新/画布放置）
+│   ├── block_selector.gd      方块选择器（素材 Tab）
+│   ├── selection_range.gd     区域选择（拖拽框选 + 键盘扩展）
+│   ├── region_clipboard.gd    ★ 区域剪贴板内核（五层 payload；extract/paste/move/clear_rect）
+│   ├── region_preset_store.gd ★ 区域命名预设持久化（user://editor_presets/presets.json 原子写）
+│   ├── editor_block_list.gd   方块画廊列表（GridContainer，三态外观）
+│   ├── editor_block_picker_dialog.gd  4 列方块选择弹窗（640×480 Window）
+│   └── shortcut_hints_dialog.gd       快捷键提示浮层（复用 hint_bar 键帽）
 │
 ├── scenes/                    【场景脚本】12 .gd
 │   ├── battle.gd              ★ 战斗场景编排器（状态机/生命周期/输入/胜负/演出编排）
 │   ├── title.gd               标题屏
-│   ├── map_editor.gd          ★ 战场编辑器场景（画笔/填充/橡皮/角色 + 地形升降笔刷 + 素材 Tab）
+│   ├── map_editor.gd          ★ 战场编辑器场景（3285 行/150 函数：画笔/填充/橡皮/角色/replace + 地形升降笔刷 +
+│   │                             区域复制-移动-预设 + 取色器 + 素材 Tab）
 │   ├── game_entry.gd          Game.tscn 入口（战场列表 / 冷启动续玩路由）
 │   ├── game_session.gd        ★ autoload：战旗会话路由 + 分战场存档（user://battle_saves/）
 │   ├── home_entry.gd          HomeEntry.tscn（主页占位入口）
 │   ├── dialogue_demo.gd       对话系统演示（data/dialogue/demo_intro.json）
 │   ├── startup_config.gd      ★ 调试启动配置（config/startup.cfg：auto_open_last_scene 等）
-│   ├── ui_component_gallery.gd  UI 组件画廊（16 组件交互演示）
+│   ├── ui_component_gallery.gd  UI 组件画廊（22 组件交互演示）
 │   ├── pixelfx_gallery.gd     PixelFx 特效画廊
 │   ├── isometric_3d_test.gd   3D 柱网格旋转验证场景
 │   └── scene_args.gd          跨场景传参 autoload（SceneArgs）
@@ -185,7 +197,8 @@ scripts/
 ui/
 ├── README.md                 304 行使用文档（ComponentTheme / 组件清单 / 画廊说明）
 ├── theme/component_theme.gd  class_name ComponentTheme：每次 create() 新建独立 Theme；语义→Type Variation
-└── components/               16 个 @tool 控件（全部复用 scripts/ui/ui_theme + ui_factory，不改其行为）
+└── components/               22 个 @tool 控件（16 功能控件 + 6 薄布局容器 VBox/HBox/Grid/Margin/Center/Scroll；
+                              token 走 ComponentTheme/DESIGN.md，全部复用 scripts/ui/ui_theme + ui_factory）
     ├── pixel_button.gd / pixel_check_button.gd / pixel_option_button.gd / pixel_dropdown.gd
     ├── pixel_line_edit.gd / pixel_text_area.gd / pixel_slider.gd / pixel_spin_box.gd
     ├── pixel_progress_bar.gd / pixel_tabs.gd / pixel_panel.gd(+.tscn) / pixel_popup.gd
@@ -230,7 +243,7 @@ ui/
 | 类型 | 数量 | 说明 |
 | --- | --- | --- |
 | 总文件 | **11560** | 含 addons vendored 与全部素材 |
-| `.gd` | **612** | scripts 113 / tests 71 / ui 17 / addons ~400 / tools 等 |
+| `.gd` | **~635** | scripts 122 / tests 80 / ui 23 / addons ~400 / tools 等 |
 | `.md` | 223 | story 19 + rules 4 + claude/ + docs/ + handoff/ + addons 文档 |
 | `.tscn` | 自有 16 | main + scenes/11 + ui/pixel_panel + tests 探针 + addons |
 | `.png` | 566 | meowa_tiles 165 + assets + docs/screenshots 22 等 |

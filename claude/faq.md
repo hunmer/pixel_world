@@ -1,6 +1,6 @@
 # 常见问题（FAQ）与定位路径
 
-> 更新：2026-11-15（新增 Q19–Q24：UI 组件库 / 用户素材 / startup.cfg / 战斗自动化 / 存档 / roadmap；修正计数与失效引用）。每条给出"问题 → 在哪找答案 / 在哪改"。
+> 更新：2026-11-15（第二轮增量：+Q25 增援/胜利配置、Q26 区域预设存储；更新 Q7/Q17/Q20/Q24 与计数）。每条给出"问题 → 在哪找答案 / 在哪改"。
 
 ### Q1：项目到底是做什么的？两个子系统什么关系？
 一个 Godot 4.7 等距像素**生态世界**（无限确定性流式生成 + 动植物/天气/昼夜/3D 阳光阴影），其中**嵌入了回合制战棋战斗**（从 phaserjs 迁移），按 P 在真实地形上战斗，或从 JSON 战场文件开战。两子系统唯一耦合是 `scripts/core/world_to_chapter.gd`；JSON 战场入口是 `battlefield_loader.gd`（产出同构 chapter）。详见 `overview.md` 与 `module-responsibilities.md`。
@@ -25,7 +25,7 @@
 - ⚠️ B2 世界地形路径未深度验证（历史交接记录）。详见 `module-responsibilities.md` 战棋数据流 + `testing-and-quality.md`。
 
 ### Q7：怎么加一个 JSON 战场 / 用编辑器做地图？
-两条路：① 手写 JSON（抄 `data/battlefields/arena_1v1.json`，schema 见 `public-interfaces.md`——`rows` 是**顶层字段**；`BattlefieldLoader` 是唯一权威校验）；② 世界内按 `E` 开编辑器（`scripts/scenes/map_editor.gd` + `scripts/editor/`）：画笔/填充/橡皮/角色四工具，或种子一键生成，保存即回读校验并出现在 O 键列表。用户目录战场放 `user://battlefields/`。编辑器还可从**用户素材库**（AssetLibraryPanel）选导入的方块图当地形贴图。
+两条路：① 手写 JSON（抄 `data/battlefields/arena_1v1.json`，schema 见 `public-interfaces.md`——`rows` 是**顶层字段**，可选 `victory` / `reinforcements` 玩法字段；`BattlefieldLoader` 是唯一权威校验）；② 世界内按 `E` 开编辑器（`scripts/scenes/map_editor.gd` + `scripts/editor/`）：画笔/填充/橡皮/角色/replace 五工具 + **区域复制/剪切/拖动移动/方向键 nudge**，或种子一键生成，保存即回读校验并出现在 O 键列表。用户目录战场放 `user://battlefields/`。编辑器还可从**用户素材库**（AssetLibraryPanel）选导入的方块图当地形贴图，取色器（Alt）可临时吸取画布颜色。
 
 ### Q8：视角怎么旋转？为什么只有 4 个角度？
 `Z`/`Q`/`←` 逆时针、`X`/`→`（战斗中 `E`）顺时针、中键拖拽平滑旋转；`R` 复位视角、`F` 复位缩放、`Ctrl+R` 才是重新生成世界。3D 正交迁移后**旋转只动 Camera3D**，不重建地形。只有 4 个正交角度（0/90/180/270，`isometric_view.gd SUPPORTED_ANGLES`）是因为素材逐角度验收仅通过四视角，其余角度有地形拼缝。
@@ -55,7 +55,7 @@ Panku REPL（autoload `Panku`），项目命令集 `dbg.*` 注册于 `scripts/de
 **不能**。`story/` 是目标态设计 bible（13 职业/27 技能/25 道具/15 章），运行时事实是 `data/` 的 8 职业/8 技能/8 物品 + 4 个 JSON 战场。实现 story 内容时按 `story/` 规划改 `data/`，勿混用。逐项差距与推进顺序见 `docs/roadmap.md`。
 
 ### Q17：项目有数据库 / 后端 / 网络吗？
-**没有后端**。纯单机。磁盘持久化全清单：`user://settings.cfg`（偏好）、`user://battle_saves/`（战旗存档）、`user://battlefields/`（自定义战场）、`user://custom_assets/`（用户素材 blob）、`user://startup.cfg`（导出后的调试启动配置）。进程间接口：breakpoint_mcp loopback 调试桥（9080 编辑器 / 9081 运行时，单实例）；**用户素材清单源**是唯一出站 HTTP（默认 `http://127.0.0.1:8076/blocks.json`，本机回环，可在服务设置改）。
+**没有后端**。纯单机。磁盘持久化全清单：`user://settings.cfg`（偏好）、`user://battle_saves/`（战旗存档）、`user://battlefields/`（自定义战场）、`user://editor_presets/`（编辑器区域命名预设）、`user://custom_assets/`（用户素材 blob）、`user://startup.cfg`（导出后的调试启动配置）。进程间接口：breakpoint_mcp loopback 调试桥（9080 编辑器 / 9081 运行时，单实例）；**用户素材清单源**是唯一出站 HTTP（默认 `http://127.0.0.1:8076/blocks.json` 本机回环；优先级 `asset_source.cfg [asset_source] source_url` 覆盖 > 库内 settings > 默认，断源优雅降级）。
 
 ### Q18：在哪能看到代码与 TS 源的对应关系？
 战棋部分脚本顶部注释普遍标注对应 TS 源（迁移自 phaserjs）。但 TS 源**不在本仓库**（外部 phaserjs 项目）。本仓库是纯 GDScript。
@@ -64,7 +64,7 @@ Panku REPL（autoload `Panku`），项目命令集 `dbg.*` 注册于 `scripts/de
 `ui/` 下 16 个 `@tool` 像素组件（PixelButton/PixelPanel/…）+ `ui/theme/component_theme.gd`，2026-11 新增。交互画廊 F6（`scenes/UIComponentGallery.tscn`，ESC 退）。**现有业务 UI（battle_ui / map_editor / HUD）尚未迁移**，新旧两套并存——迁移计划见 `docs/roadmap.md`。组件文档：`ui/README.md`。
 
 ### Q20：用户素材（自定义方块图）怎么进游戏？
-编辑器 → 素材库面板（AssetLibraryPanel）。链路：本机 HTTP 清单源（默认 `http://127.0.0.1:8076/blocks.json`）→ `UserAssetService` 导入（sha 去重幂等）→ `user://custom_assets/` blob → `UserAssetVisualAdapter` 烘焙贴图 → 编辑器/战场渲染。**换机器要重建素材源**（历史机器 F:/blocks + http-server）。完整运维手册：`docs/user_assets.md`。
+编辑器 → 素材库面板（AssetLibraryPanel）。链路：本机 HTTP 清单源（默认 `http://127.0.0.1:8076/blocks.json`）→ `UserAssetService` 导入（sha 去重幂等）→ `user://custom_assets/` blob → `UserAssetVisualAdapter` 烘焙贴图 → 编辑器/战场渲染。**素材源已可配置**：`asset_source.cfg [asset_source] source_url` 覆盖 > 库内 settings.source_url > 默认，断源优雅降级；换机器改配置或自建源即可（`docs/user_assets.md`）。
 
 ### Q21：为什么 F5 直接进了上次的场景？
 `config/startup.cfg` 的调试启动配置：`auto_open_last_scene=true` 时启动从 `Game.tscn` 直跳 `last_scene`（`SkillTest` / `UIComponentGallery` 默认排除）。`--battlefield` / `--reset-battle` 命令行优先。想每次都走正常入口就把它关掉。详见 `docs/startup_config.md`。
@@ -76,4 +76,10 @@ Panku REPL（autoload `Panku`），项目命令集 `dbg.*` 注册于 `scripts/de
 `user://battle_saves/`，**每个战旗独立档案**（身份 `bf:res|user/<id>` 或 `world:<seed>/<x>/<y>`，文件名=身份+sha1 前缀），互不覆盖；完整行动边界 `GameSession.commit()` 落盘，tmp+bak 原子写，主档损坏自动回退。`--reset-battle[=id]` 只重置目标档案。新版本存档拒绝恢复但不覆盖。冷启动 `Game.tscn` 自动续玩最近战旗。
 
 ### Q24：后续要完善的东西在哪看优先级和前置？
-`docs/roadmap.md`（2026-11-15 起）：按优先级分层（P0 修坏→P1 补基线→P2 内容扩张→P3 重构/打磨），每项标注前置依赖、验收方式与预估规模。
+`docs/roadmap.md`（2026-11-15 起）：按优先级分层（P0 修坏→P1 补基线→P2 内容扩张→P3 重构/打磨），每项标注前置依赖、验收方式与预估规模；玩法与 story/ 目标态的差距矩阵另见 `docs/gameplay_gap.md`。
+
+### Q25：怎么给战场配胜利条件 / 增援？
+战场 JSON 顶层可选字段：`victory: {type: "rout"|"defend_turns"|"seize", turns?: N}`（缺省 rout 歼灭）；`reinforcements: [{turn: N≥1, units: [同 enemyUnits 条目但无 x/y], positions: [{x,y}] 与 units 等长}]`。运行时由 `TurnManager.check_victory` 与 `ReinforcementSpawner.spawn_due`（敌方回合开始刷入，已消费波次从 chapter 移除防存档恢复重刷）消费；样例 `data/battlefields/ambush_reinforce.json` / `last_stand.json`；schema 细节见 `public-interfaces.md`。
+
+### Q26：编辑器的区域预设 / 复制的地形存哪？
+区域剪贴板在内存（`EditorRegionClipboard` 五层 payload）；**命名预设**落盘 `user://editor_presets/presets.json`（单文件 + tmp/bak 原子写，`EditorRegionPresetStore` 管理 list/save/load/rename/delete）。两者坐标都相对选区左上角，粘贴时平移。
