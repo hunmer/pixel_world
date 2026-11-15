@@ -35,7 +35,8 @@
 ## 原地松开=纯点击；关闭后回到区域内拖动/两次点击语义。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
 ## 按钮一律由 ui/components 像素组件创建（UIFactory / PixelButton 预加载），
-## 本文件不再自带样式 helper 与裸 Button.new；领域按钮工厂（_add_tool_btn 等）保留。
+## 本文件不再自带样式 helper；领域按钮工厂与悬浮层/弹窗构建在
+## scripts/editor/map_editor_overlays.gd 等模块，本门面只保留总装与接线。
 ##
 ## 入口：世界内 E 键 / 战场面板「打开编辑器」按钮；返回 -> res://main.tscn。
 
@@ -44,12 +45,9 @@ extends Control
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const EditorCanvasScript = preload("res://scripts/editor/editor_canvas.gd")
-const TilePreviewScript = preload("res://scripts/editor/tile_preview.gd")
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const ProfessionDataScript = preload("res://scripts/core/professions.gd")
-const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const ShortcutHintsDialogScript = preload("res://scripts/editor/shortcut_hints_dialog.gd")
-const AssetLibraryPanelScript = preload("res://scripts/editor/asset_library_panel.gd")
 const UserAssetServiceScript = preload("res://scripts/assets/user_asset_service.gd")
 const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
 const UserAssetCatalogScript = preload("res://scripts/assets/user_asset_catalog.gd")
@@ -59,6 +57,12 @@ const EditorBlockListScript = preload("res://scripts/editor/editor_block_list.gd
 const EditorBlockPickerDialogScript = preload("res://scripts/editor/editor_block_picker_dialog.gd")
 const RegionClipboardScript = preload("res://scripts/editor/region_clipboard.gd")
 const RegionPresetStoreScript = preload("res://scripts/editor/region_preset_store.gd")
+const MapEditorHistoryScript = preload("res://scripts/editor/map_editor_history.gd")
+const MapEditorPaintOpsScript = preload("res://scripts/editor/map_editor_paint_ops.gd")
+const MapEditorPanelTabsScript = preload("res://scripts/editor/map_editor_panel_tabs.gd")
+const MapEditorBlockPaletteScript = preload("res://scripts/editor/map_editor_block_palette.gd")
+const MapEditorOverlaysScript = preload("res://scripts/editor/map_editor_overlays.gd")
+const MapEditorFileIoScript = preload("res://scripts/editor/map_editor_file_io.gd")
 
 const Tool = {
 	PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5,
@@ -231,7 +235,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	model = BattlefieldDocScript.create_empty()
 	_selection_range.changed.connect(_on_selection_range_changed)
-	_prop_paths = _scan_prop_paths()  # 植物素材枚举（_build_terrain_tab 用）
+	_prop_paths = MapEditorPanelTabsScript.scan_prop_paths()  # 植物素材枚举（_build_terrain_tab 用）
 	_init_asset_service()  # 素材服务必须先于 UI（画布/面板注入共享 adapter）
 	_preset_store = RegionPresetStoreScript.new()  # 预设存储先于 UI（列表初始刷新）
 	_build_ui()
@@ -521,303 +525,35 @@ func _build_ui() -> void:
 ## Tab【文件】：id / 名称 / 托管 / 读取 / 保存 / 返回
 func _build_file_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "文件", "floppy_disk")
-	var id_row := HBoxContainer.new()
-	id_row.add_theme_constant_override("separation", 4)
-	id_row.add_child(UIFactoryScript.label("id:", 11, TEXT_DIM))
-	_id_edit = UIFactoryScript.line_edit()
-	_id_edit.text = "custom_map"
-	_id_edit.placeholder_text = "snake_case"
-	_id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	id_row.add_child(_id_edit)
-	tab.add_child(id_row)
-	UIFactoryScript.center_row(id_row)
-
-	var name_row := HBoxContainer.new()
-	name_row.add_theme_constant_override("separation", 4)
-	name_row.add_child(UIFactoryScript.label("名称:", 11, TEXT_DIM))
-	_name_edit = UIFactoryScript.line_edit()
-	_name_edit.text = "自定义战场"
-	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_row.add_child(_name_edit)
-	tab.add_child(name_row)
-	UIFactoryScript.center_row(name_row)
-
 	_hosting_check = UIFactoryScript.check_button(
 		"托管", "开启后战斗自动托管运行（AI 对 AI），调试观察用"
 	)
-	tab.add_child(_hosting_check)
-
 	_load_box = UIFactoryScript.option_button()
-	_load_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_refresh_load_box()
-	tab.add_child(_load_box)
-
-	var io_row := HBoxContainer.new()
-	io_row.add_theme_constant_override("separation", 4)
-	var load_btn := UIFactoryScript.button("读取", _load_selected, "folder_open")
-	load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	io_row.add_child(load_btn)
-	var save_btn := UIFactoryScript.button("保存", _save, "floppy_disk")
-	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	io_row.add_child(save_btn)
-	tab.add_child(io_row)
-
-	var back_btn := UIFactoryScript.button("返回(Esc)", _back_to_world, "doorway_exit")
-	back_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tab.add_child(back_btn)
+	MapEditorPanelTabsScript.build_file_tab(self, tab)
 
 
 ## Tab【生成】：种子 / 随机种子 / 宽高 / 生成 / 清空地形
 func _build_generate_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "生成", "dice")
-	var seed_row := HBoxContainer.new()
-	seed_row.add_theme_constant_override("separation", 4)
-	seed_row.add_child(UIFactoryScript.label("种子:", 11, TEXT_DIM))
-	_seed_edit = UIFactoryScript.line_edit()
-	_seed_edit.text = "demo"
-	_seed_edit.placeholder_text = "任意文本，同种子同地图"
-	_seed_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	seed_row.add_child(_seed_edit)
-	tab.add_child(seed_row)
-	UIFactoryScript.center_row(seed_row)
-
-	var dice_btn := UIFactoryScript.button("随机种子", func():
-		_seed_edit.text = str(Time.get_unix_time_from_system()).sha1_text().substr(0, 8)
-		_generate(), "dice")
-	dice_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tab.add_child(dice_btn)
-
-	var size_row := HBoxContainer.new()
-	size_row.add_theme_constant_override("separation", 4)
-	size_row.add_child(UIFactoryScript.label("宽:", 11, TEXT_DIM))
-	_width_box = SpinBox.new()
-	_width_box.min_value = BattlefieldDocScript.MIN_SIZE
-	_width_box.max_value = BattlefieldDocScript.MAX_SIZE
-	_width_box.value = model.width
-	_width_box.value_changed.connect(func(_v: float): _on_resize())
-	_width_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	size_row.add_child(_width_box)
-	size_row.add_child(UIFactoryScript.label("高:", 11, TEXT_DIM))
-	_height_box = SpinBox.new()
-	_height_box.min_value = BattlefieldDocScript.MIN_SIZE
-	_height_box.max_value = BattlefieldDocScript.MAX_SIZE
-	_height_box.value = model.height
-	_height_box.value_changed.connect(func(_v: float): _on_resize())
-	_height_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	size_row.add_child(_height_box)
-	tab.add_child(size_row)
-	UIFactoryScript.center_row(size_row)
-
-	var gen_row := HBoxContainer.new()
-	gen_row.add_theme_constant_override("separation", 4)
-	var gen_btn := UIFactoryScript.button("生成", _generate, "sprout")
-	gen_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	gen_row.add_child(gen_btn)
-	var clear_btn := UIFactoryScript.button("清空地形", func():
-		_push_undo("清空地形")
-		model.rows = BattlefieldDocScript.create_empty(model.width, model.height).rows
-		model.props = []  # 植物层一并清空
-		_refresh_canvas()
-		_status("地形已清空（单位保留）"), "trash_can")
-	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	gen_row.add_child(clear_btn)
-	tab.add_child(gen_row)
+	MapEditorPanelTabsScript.build_generate_tab(self, tab)
 
 
 ## 左上角悬浮工具条：选择 / 画笔 / 填充 / 橡皮 / 高度升降 / 角色（覆盖在画布上）
 func _build_tool_bar() -> Control:
-	var bar := PanelContainer.new()
-	bar.name = "ToolBar"
-	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	bar.offset_left = 8
-	bar.offset_top = 8
-	bar.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
-	var box := VBoxContainer.new()
-	box.name = "ToolBox"
-	box.add_theme_constant_override("separation", 4)
-	bar.add_child(box)
-	var tool_group := ButtonGroup.new()
-	tool_group.pressed.connect(func(btn: Button):
-		current_tool = btn.get_meta("tool")
-		_on_tool_changed()
-		if current_tool == Tool.SELECT or current_tool == Tool.FILL:
-			_open_selection_popup())
-	_add_tool_btn(box, tool_group, Tool.SELECT, "选择", "mouse_pointer")
-	_add_tool_btn(box, tool_group, Tool.PAINT, "画笔", "paintbrush")
-	_add_tool_btn(box, tool_group, Tool.FILL, "填充", "bucket_fill")
-	_add_tool_btn(box, tool_group, Tool.ERASE, "橡皮", "eraser")
-	_add_tool_btn(box, tool_group, Tool.HEIGHT_UP, "地形上升", "arrow_up_from_line")
-	_add_tool_btn(box, tool_group, Tool.HEIGHT_DOWN, "地形下降", "arrow_down_to_line")
-	_add_tool_btn(box, tool_group, Tool.UNIT, "角色", "person")
-	_tool_buttons[Tool.PAINT].button_pressed = true
-	# 移动工具开关：ToolBox 第 8 钮（用户已取消 7 钮契约）。独立开关，
-	# 不入 tool_group（不与 7 个画布工具互斥，可任意工具下叠加开启）
-	var move_toggle := _pixel_btn()
-	move_toggle.name = "MoveToolToggle"
-	move_toggle.toggle_mode = true
-	var move_icon: Texture2D = UIThemeScript.icon("move")
-	if move_icon != null:
-		# 与上方 7 钮同观感：方形图标按钮（tooltip 提示用途）
-		move_toggle.icon = move_icon
-		move_toggle.set("icon_size", 22)
-		move_toggle.text = ""
-		move_toggle.custom_minimum_size = Vector2(34, 34)
-		move_toggle.expand_icon = true
-	else:
-		move_toggle.text = "移动"
-	move_toggle.tooltip_text = "移动工具：拖拽移动选中区域"
-	move_toggle.focus_mode = Control.FOCUS_NONE
-	move_toggle.toggled.connect(_on_move_tool_toggled)
-	box.add_child(move_toggle)
-	_move_tool_toggle = move_toggle
-	# 替换方块：ToolBox 第 9 钮，保持在移动开关之后以稳定既有按钮索引。
-	_add_tool_btn(box, tool_group, Tool.REPLACE, "替换方块", "replace")
-	var replace_btn := _tool_buttons[Tool.REPLACE] as Button
-	replace_btn.name = "ReplaceToolBtn"
-	replace_btn.custom_minimum_size = Vector2(34, 34)
-	if replace_btn.icon == null:
-		replace_btn.text = "替"
-		replace_btn.tooltip_text = "替换方块工具"
-	# 吸管：ToolBox 第 10 钮；点击写前景，Alt+点击写背景，不产生文档历史。
-	_add_tool_btn(box, tool_group, Tool.PICK, "吸管", "pipette")
-	var pick_btn := _tool_buttons[Tool.PICK] as Button
-	pick_btn.name = "PickToolBtn"
-	pick_btn.custom_minimum_size = Vector2(34, 34)
-	pick_btn.tooltip_text = "吸管：点击吸取前景，Alt+点击吸取背景；其它工具按住 Alt 临时吸取，Shift+点击取背景"
-	if pick_btn.icon == null:
-		pick_btn.text = "吸"
-	return bar
+	return MapEditorOverlaysScript.build_tool_bar(self)
 
 
 ## 条件替换弹窗：双下拉编码 terrain:<glyph> / asset:<id>；只有执行按钮写模型。
 func _build_replace_popup() -> void:
-	var popup := PanelContainer.new()
-	popup.name = "ReplacePopup"
-	popup.visible = false
-	popup.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	popup.offset_left = 52
-	popup.offset_top = 8
-	popup.offset_right = 352
-	popup.offset_bottom = 310
-	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
-	_replace_popup = popup
-	add_child(popup)
-	var box := VBoxContainer.new()
-	box.name = "ReplacePopupBox"
-	box.add_theme_constant_override("separation", 6)
-	popup.add_child(box)
-	box.add_child(UIFactoryScript.label("替换方块", 13, ACCENT))
-	box.add_child(UIFactoryScript.label("被替换方块", 10, TEXT_DIM))
 	_replace_source_opt = UIFactoryScript.button("选择被替换方块", _open_replace_picker.bind("source"))
-	_replace_source_opt.name = "ReplaceSourceOpt"
-	_replace_source_opt.custom_minimum_size = Vector2(0, 40)
-	_replace_source_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(_replace_source_opt)
-	box.add_child(UIFactoryScript.label("替换为", 10, TEXT_DIM))
 	_replace_dest_opt = UIFactoryScript.button("选择替换目标", _open_replace_picker.bind("dest"))
-	_replace_dest_opt.name = "ReplaceDestOpt"
-	_replace_dest_opt.custom_minimum_size = Vector2(0, 40)
-	_replace_dest_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(_replace_dest_opt)
-	_replace_scope_label = UIFactoryScript.label("当前范围：全图 0 格", 11, TEXT_MAIN)
-	_replace_scope_label.name = "ReplaceScopeLabel"
-	box.add_child(_replace_scope_label)
 	_replace_apply_btn = UIFactoryScript.button("执行替换", _apply_replace, "replace")
-	_replace_apply_btn.name = "ReplaceApplyBtn"
-	_replace_apply_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(_replace_apply_btn)
-	_replace_hint = UIFactoryScript.label("点地图格子可快速设为被替换方块", 10, TEXT_DIM)
-	_replace_hint.name = "ReplaceHint"
-	_replace_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_replace_hint)
-	_replace_picker_dialog = EditorBlockPickerDialogScript.new()
-	_replace_picker_dialog.name = "ReplaceBlockPicker"
-	_replace_picker_dialog.visible = false
-	add_child(_replace_picker_dialog)
-	_replace_picker_dialog.block_chosen.connect(_on_replace_picker_chosen)
-	_populate_replace_options()
-	_select_replace_option(_replace_source_opt, "terrain:.")
-	_select_replace_option(_replace_dest_opt, _replace_code_for_block(_block_fg))
-	_refresh_replace_scope()
+	MapEditorOverlaysScript.build_replace_popup(self)
 
 
 ## 画布右侧最近吸取栏：独立于右侧 SidePanel，最多 8 个 34px 窄条按钮，超出后滚动。
 func _build_recent_picks_bar(holder: Control) -> void:
-	var bar := PanelContainer.new()
-	bar.name = "RecentPicksBar"
-	bar.anchor_left = 1.0
-	bar.anchor_top = 0.0
-	bar.anchor_right = 1.0
-	bar.anchor_bottom = 1.0
-	bar.offset_left = -104
-	bar.offset_top = 52
-	bar.offset_right = -8
-	bar.offset_bottom = -44
-	bar.custom_minimum_size = Vector2(96, 0)
-	bar.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
-	holder.add_child(bar)
-	_recent_picks_bar = bar
-	var box := VBoxContainer.new()
-	box.name = "RecentPicksVBox"
-	box.add_theme_constant_override("separation", 4)
-	bar.add_child(box)
-	var title := UIFactoryScript.label("最近吸取", 12, ACCENT)
-	title.name = "RecentPicksTitle"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-	var scroll := ScrollContainer.new()
-	scroll.name = "RecentPickScroll"
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(scroll)
-	_recent_pick_list = VBoxContainer.new()
-	_recent_pick_list.name = "RecentPickList"
-	_recent_pick_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_recent_pick_list.add_theme_constant_override("separation", 2)
-	scroll.add_child(_recent_pick_list)
-	_refresh_recent_picks()
-
-
-## 候选与方块选择器一致：全部内置地形 + 素材库中 kind=terrain 且 saved=true 的素材。
-func _populate_replace_options() -> void:
-	if _replace_source_opt == null or _replace_dest_opt == null:
-		return
-	var source_code := _replace_source_code()
-	var dest_code := _replace_dest_code()
-	_replace_items.clear()
-	for terrain: StringName in BattlefieldDocScript.TERRAIN_GLYPH:
-		var label := "地形 · %s" % String(BattlefieldDocScript.TERRAIN_CN.get(terrain, String(terrain)))
-		var code := "terrain:%s" % String(BattlefieldDocScript.TERRAIN_GLYPH[terrain])
-		_replace_items.append(_replace_item_for_code(code, label))
-	if _asset_service != null:
-		var assets: Array = _asset_service.list_assets()
-		assets.sort_custom(func(a, b):
-			return String((a as Dictionary).get("id", "")) < String((b as Dictionary).get("id", "")))
-		for raw in assets:
-			var d := raw as Dictionary
-			if String(d.get("kind", "")) != UserAssetCatalogScript.KIND_TERRAIN \
-					or not bool(d.get("saved", false)):
-				continue
-			var aid := String(d.get("id", ""))
-			_replace_items.append(_replace_item_for_code("asset:%s" % aid,
-				"素材 · %s" % String(d.get("name", aid))))
-	_select_replace_option(_replace_source_opt, source_code)
-	_select_replace_option(_replace_dest_opt, dest_code)
-
-
-func _replace_item_for_code(code: String, label: String = "") -> Dictionary:
-	var kind := "asset" if code.begins_with("asset:") else "terrain"
-	var id := code.substr(6) if kind == "asset" else code.substr(8)
-	if label.is_empty():
-		label = ("素材 · %s" % id) if kind == "asset" else "地形 · %s" % id
-	var texture: Texture2D = null
-	if kind == "asset":
-		texture = _recent_pick_texture({"kind": "asset", "id": id, "z": 0})
-	else:
-		var terrain := BattlefieldDocScript.glyph_to_terrain(id)
-		texture = _recent_pick_texture({"kind": "terrain", "id": String(terrain), "z": 0})
-	return {"kind": kind, "id": id, "label": label, "texture": texture}
+	MapEditorOverlaysScript.build_recent_picks_bar(self, holder)
 
 
 func _replace_source_code() -> String:
@@ -839,15 +575,6 @@ func _replace_code_for_block(block: Dictionary) -> String:
 	return "terrain:%s" % String(BattlefieldDocScript.TERRAIN_GLYPH.get(terrain, "."))
 
 
-func _replace_code_at(cell: Vector2i) -> String:
-	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
-		return ""
-	var aid := BattlefieldDocScript.tile_override_at(model, cell)
-	if not aid.is_empty():
-		return "asset:%s" % aid
-	return "terrain:%s" % String((model.rows[cell.y] as String).substr(cell.x, 1))
-
-
 ## 选中编码项；地图里吸到但不在已保存素材库的 id 也允许作为源/目标。
 func _select_replace_option(opt: Button, code: String) -> bool:
 	if opt == null or code.is_empty():
@@ -858,7 +585,7 @@ func _select_replace_option(opt: Button, code: String) -> bool:
 			item = candidate
 			break
 	if item.is_empty() and code.begins_with("asset:") and code.length() > 6:
-		item = _replace_item_for_code(code)
+		item = MapEditorOverlaysScript.replace_item_for_code(self, code)
 		_replace_items.append(item)
 	if item.is_empty():
 		return false
@@ -875,7 +602,7 @@ func _select_replace_option(opt: Button, code: String) -> bool:
 func _open_replace_picker(target: String) -> void:
 	if _replace_picker_dialog == null:
 		return
-	_populate_replace_options()
+	MapEditorOverlaysScript.replace_populate_options(self)
 	_replace_picker_target = target
 	var selected := _replace_dest_code() if target == "dest" else _replace_source_code()
 	_replace_picker_dialog.open(_replace_items, selected)
@@ -891,10 +618,10 @@ func _on_replace_picker_chosen(kind: String, id: String) -> void:
 
 
 func _reset_replace_popup() -> void:
-	_populate_replace_options()
+	MapEditorOverlaysScript.replace_populate_options(self)
 	var source_code := "terrain:."
 	if _canvas != null:
-		var hover_code := _replace_code_at(_canvas.hover_cell)
+		var hover_code := MapEditorPaintOpsScript.code_at(model, _canvas.hover_cell)
 		if not hover_code.is_empty():
 			source_code = hover_code
 	_select_replace_option(_replace_source_opt, source_code)
@@ -903,7 +630,7 @@ func _reset_replace_popup() -> void:
 
 
 func _set_replace_source_from_cell(cell: Vector2i) -> void:
-	var code := _replace_code_at(cell)
+	var code := MapEditorPaintOpsScript.code_at(model, cell)
 	if code.is_empty():
 		_status("替换失败：坐标越界", true)
 		return
@@ -922,20 +649,7 @@ func _refresh_replace_scope() -> void:
 
 
 func _build_cell_info() -> Control:
-	var panel := PanelContainer.new()
-	panel.name = "CellInfoPanel"
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	panel.offset_left = 8
-	panel.offset_top = -38
-	panel.offset_right = 250
-	panel.offset_bottom = -8
-	panel.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
-	_cell_info_label = UIFactoryScript.label("未选中格子", 11, TEXT_MAIN)
-	_cell_info_label.name = "CellInfoLabel"
-	_cell_info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(_cell_info_label)
-	return panel
+	return MapEditorOverlaysScript.build_cell_info(self)
 
 
 ## 右下角 34×30 键盘图标；节点名保留 EditorHintBar，点击打开完整键帽弹窗。
@@ -969,111 +683,14 @@ func _build_hint_bar() -> Control:
 ## 全部按钮共用一个 ButtonGroup（选地形清空 current_prop，选植物反之）。
 func _build_terrain_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "地形", "sprout")
-	var terrain_group := ButtonGroup.new()
-	terrain_group.pressed.connect(func(btn: Button):
-		if btn.has_meta("terrain"):
-			current_terrain = btn.get_meta("terrain")
-			_set_block_slot("fg", {"kind": "terrain", "id": String(current_terrain), "z": int(_block_fg.z)})
-			current_prop = ""
-			_clear_asset_selection()
-			_clear_block_asset_selection()
-		elif btn.has_meta("prop"):
-			current_prop = btn.get_meta("prop")
-			_clear_asset_selection()
-			_clear_block_asset_selection())
-	# ---- 地形组（单块 tile，不叠装饰物/高塔）----
-	tab.add_child(UIFactoryScript.label("地形", 12, TEXT_DIM))
-	var tgrid := GridContainer.new()
-	tgrid.name = "TerrainGrid"
-	tgrid.columns = 4
-	tgrid.add_theme_constant_override("h_separation", 2)
-	tgrid.add_theme_constant_override("v_separation", 2)
-	tab.add_child(tgrid)
-	for t: StringName in BattlefieldDocScript.TERRAIN_GLYPH:
-		var tb := _terrain_btn(t, terrain_group)
-		tgrid.add_child(tb)
-		_terrain_buttons[t] = tb
-	# ---- 植物组：全部素材按目录分三小节（树木/植物/装饰）----
-	for group_title: String in BattlefieldDocScript.PLANT_DIRS:
-		tab.add_child(UIFactoryScript.label("%s（%d）" % [group_title, _prop_paths[group_title].size()], 12, TEXT_DIM))
-		var pgrid := GridContainer.new()
-		pgrid.name = "%sGrid" % group_title
-		pgrid.columns = 4
-		pgrid.add_theme_constant_override("h_separation", 2)
-		pgrid.add_theme_constant_override("v_separation", 2)
-		tab.add_child(pgrid)
-		for path: String in _prop_paths[group_title]:
-			var pb := _plant_btn(path, terrain_group)
-			pgrid.add_child(pb)
-	_terrain_buttons[current_terrain].button_pressed = true
-	# 初始地形按钮只负责既有默认选中态；前景/背景仍按新契约从 plain z0 起步。
-	_block_fg = {"kind": "terrain", "id": "plain", "z": 0}
-	_refresh_block_slot_ui()
+	MapEditorPanelTabsScript.build_terrain_tab(self, tab)
 
 
 ## Tab【方块】：编辑当前选格的独立高度（不修改同列/其他格）；
 ## 下方「素材方块」列表展示已下载的素材方块，点选后画笔放置（tile_overrides 层），再点取消。
 func _build_block_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "方块", "cube")
-	tab.add_child(UIFactoryScript.label("用「选择」工具点选格子；拖动其他工具不会改变选择。", 11, TEXT_DIM))
-	var row := HBoxContainer.new()
-	row.name = "BlockZRow"
-	row.add_theme_constant_override("separation", 6)
-	row.add_child(UIFactoryScript.label("所在 z:", 12, TEXT_MAIN))
-	_block_z_box = SpinBox.new()
-	_block_z_box.name = "BlockZSpin"
-	_block_z_box.min_value = BattlefieldDocScript.BLOCK_MIN_Z
-	_block_z_box.max_value = BattlefieldDocScript.BLOCK_MAX_Z
-	_block_z_box.step = 1
-	_block_z_box.rounded = true
-	_block_z_box.editable = false
-	_block_z_box.tooltip_text = "未选择格子时禁用；范围 0..16"
-	_block_z_box.value_changed.connect(_on_block_z_changed)
-	_block_z_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(_block_z_box)
-	tab.add_child(row)
-	UIFactoryScript.center_row(row)
-	var slot_row := HBoxContainer.new()
-	slot_row.name = "BlockSlotRow"
-	slot_row.add_theme_constant_override("separation", 4)
-	_fg_swatch = _pixel_btn()
-	_fg_swatch.name = "FgSwatch"
-	_fg_swatch.disabled = true  # 色块只展示，点击交换统一走 SwapBlocksBtn / Shift+X
-	_fg_swatch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	slot_row.add_child(_fg_swatch)
-	_bg_swatch = _pixel_btn()
-	_bg_swatch.name = "BgSwatch"
-	_bg_swatch.disabled = true
-	_bg_swatch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	slot_row.add_child(_bg_swatch)
-	var swap_btn := _pixel_btn()
-	swap_btn.name = "SwapBlocksBtn"
-	swap_btn.text = "⇄ 交换"
-	swap_btn.tooltip_text = "交换前景/背景方块（Shift+X）"
-	swap_btn.pressed.connect(_swap_block_slots)
-	slot_row.add_child(swap_btn)
-	tab.add_child(slot_row)
-	UIFactoryScript.center_row(slot_row)
-	_refresh_block_slot_ui()
-	tab.add_child(UIFactoryScript.label("每格只有一个独立方块；z=0 为统一平面。", 10, TEXT_DIM))
-	tab.add_child(UIFactoryScript.label("素材方块（已保存 ✓，点选后用画笔放置；再点取消选中）", 11, TEXT_DIM))
-	_block_asset_group = ButtonGroup.new()
-	_block_asset_group.allow_unpress = true  # 再点已选中按钮 = 取消选中
-	_block_asset_grid = EditorBlockListScript.new()
-	_block_asset_grid.name = "BlockAssetGrid"
-	_block_asset_grid.columns = 4
-	_block_asset_grid.add_theme_constant_override("h_separation", 2)
-	_block_asset_grid.add_theme_constant_override("v_separation", 2)
-	_block_asset_grid.block_activated.connect(func(kind: String, id: String):
-		if kind == "asset":
-			_on_block_asset_btn_pressed(id))
-	tab.add_child(_block_asset_grid)
-	_block_asset_empty = UIFactoryScript.label(
-		"暂无已保存的素材方块\n在「素材」Tab 选中方块后点「保存标记」，保存后会出现在这里", 11, UIThemeScript.TEXT_DIM)
-	_block_asset_empty.name = "BlockAssetEmptyHint"
-	_block_asset_empty.visible = false
-	tab.add_child(_block_asset_empty)
-	_rebuild_block_asset_grid()
+	MapEditorPanelTabsScript.build_block_tab(self, tab)
 
 
 ## 写入前景/背景槽；地形前景同步旧 current_terrain，保持既有调色板与测试入口兼容。
@@ -1100,20 +717,11 @@ func _swap_block_slots() -> void:
 
 
 func _block_label(block: Dictionary) -> String:
-	var id := String(block.get("id", "plain"))
-	var name := id
-	if String(block.get("kind", "terrain")) == "terrain":
-		name = String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id))
-	return "%s · z%d" % [name, int(block.get("z", 0))]
+	return MapEditorBlockPaletteScript.label(block)
 
 
 func _refresh_block_slot_ui() -> void:
-	if _fg_swatch != null:
-		_fg_swatch.text = "前 %s" % _block_label(_block_fg)
-		_fg_swatch.tooltip_text = "前景：%s" % _block_label(_block_fg)
-	if _bg_swatch != null:
-		_bg_swatch.text = "后 %s" % _block_label(_block_bg)
-		_bg_swatch.tooltip_text = "背景：%s" % _block_label(_block_bg)
+	MapEditorBlockPaletteScript.refresh_slot_ui(self)
 
 
 ## 只读快照供契约/调试使用；外部修改返回值不会污染会话内最近吸取列表。
@@ -1126,79 +734,16 @@ func _recent_picks_info() -> Array[Dictionary]:
 
 ## 仅吸管成功时调用：按 (kind,id) 去重并置顶，z 取最近一次，最多保留 8 条。
 func _remember_recent_pick(block: Dictionary) -> void:
-	var kind := String(block.get("kind", "terrain"))
-	var id := String(block.get("id", "plain"))
-	for i in range(_recent_picks.size()):
-		var old := _recent_picks[i]
-		if String(old.get("kind", "terrain")) == kind and String(old.get("id", "plain")) == id:
-			_recent_picks.remove_at(i)
-			break
-	_recent_picks.insert(0, {"kind": kind, "id": id, "z": int(block.get("z", 0))})
-	if _recent_picks.size() > 8:
-		_recent_picks.resize(8)
-	_refresh_recent_picks()
-
-
-func _recent_pick_short_label(block: Dictionary) -> String:
-	var id := String(block.get("id", "plain"))
-	if String(block.get("kind", "terrain")) == "terrain":
-		return String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id)).left(2)
-	return id.left(8) + ("…" if id.length() > 8 else "")
+	MapEditorBlockPaletteScript.remember_pick(self, block)
 
 
 ## 最近吸取使用与真实地图一致的地形顶面/素材视觉贴图；加载失败才回退短标签。
 func _recent_pick_texture(block: Dictionary) -> Texture2D:
-	var id := String(block.get("id", "plain"))
-	var previews: Array = []
-	if String(block.get("kind", "terrain")) == "terrain":
-		previews = BattlefieldRendererScript.preview_blocks(StringName(id), false, true)
-	else:
-		if _asset_adapter == null:
-			return null
-		var visual: Dictionary = _asset_adapter.resolve(id)
-		if visual.is_empty() or bool(visual.get("missing", false)):
-			return null
-		previews = [BattlefieldRendererScript.preview_visual_block(visual)]
-	for part in previews:
-		var texture := part.get("texture", null) as Texture2D
-		if texture != null:
-			return texture
-	return null
+	return MapEditorBlockPaletteScript.texture(self, block)
 
 
 func _refresh_recent_picks() -> void:
-	if _recent_pick_list == null:
-		return
-	for child in _recent_pick_list.get_children():
-		_recent_pick_list.remove_child(child)
-		child.queue_free()
-	for i in range(_recent_picks.size()):
-		var block := _recent_picks[i]
-		var button := _pixel_btn()
-		button.name = "RecentPick%d" % i
-		button.text = _recent_pick_short_label(block)
-		button.tooltip_text = _block_label(block)
-		button.custom_minimum_size = Vector2(0, 40)
-		button.clip_text = true
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.pressed.connect(_on_recent_pick_pressed.bind(i))
-		_recent_pick_list.add_child(button)
-		var texture := _recent_pick_texture(block)
-		if texture != null:
-			button.text = ""
-			var thumb := TextureRect.new()
-			thumb.name = "RecentPickThumb"
-			thumb.texture = texture
-			thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			thumb.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			button.add_child(thumb)
-			thumb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			thumb.offset_left = 4.0
-			thumb.offset_top = 2.0
-			thumb.offset_right = -4.0
-			thumb.offset_bottom = -2.0
+	MapEditorBlockPaletteScript.refresh_recent_picks(self)
 
 
 ## 点击取为前景，Shift+点击取为背景；取用本身不改变最近列表顺序。
@@ -1245,113 +790,23 @@ func _pick_block(cell: Vector2i, to_background: bool = false) -> void:
 		% [str(cell), "bg" if to_background else "fg", String(block.kind), String(block.id), int(block.z)])  # L1 埋点
 
 
-## 扫描植物素材目录（BattlefieldDoc.PLANT_DIRS）→ { 组名: [res://路径] }（排序）
-func _scan_prop_paths() -> Dictionary:
-	var out: Dictionary = {}
-	for group_title: String in BattlefieldDocScript.PLANT_DIRS:
-		var paths: Array[String] = []
-		var dir := DirAccess.open(BattlefieldDocScript.PLANT_DIRS[group_title])
-		if dir != null:
-			dir.list_dir_begin()
-			var fn := dir.get_next()
-			while not fn.is_empty():
-				if fn.get_extension() == "png" and not dir.current_is_dir():
-					paths.append(BattlefieldDocScript.PLANT_DIRS[group_title] + "/" + fn)
-				fn = dir.get_next()
-			dir.list_dir_end()
-			paths.sort()
-		out[group_title] = paths
-	return out
-
-
-## 植物按钮：独立贴图 tile（无文字，悬停提示素材名），选中写 current_prop
-func _plant_btn(path: String, group: ButtonGroup) -> Button:
-	var tb := _pixel_btn()
-	tb.toggle_mode = true
-	tb.button_group = group
-	tb.custom_minimum_size = Vector2(46, 96)
-	tb.tooltip_text = path.get_file().get_basename()
-	tb.set_meta("prop", path)
-	UIThemeScript.style_button(tb)
-	var prev := TilePreviewScript.new(&"plain", false, path)
-	tb.add_child(prev)
-	prev.position = (tb.custom_minimum_size - prev.size) * 0.5
-	return tb
-
-
 ## Tab【角色】：阵营 + 8 职业头像网格 + 等级/姓名
 func _build_units_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "角色", "person")
-	var faction_row := HBoxContainer.new()
-	faction_row.add_theme_constant_override("separation", 4)
-	var faction_group := ButtonGroup.new()
-	faction_group.pressed.connect(func(btn: Button):
-		selected_faction = btn.get_meta("faction"))
-	faction_row.add_child(_faction_btn("player", "我方", "shield", faction_group))
-	faction_row.add_child(_faction_btn("enemy", "敌方", "skull", faction_group))
-	tab.add_child(faction_row)
-
-	var class_group := ButtonGroup.new()
-	class_group.pressed.connect(func(btn: Button):
-		selected_class = btn.get_meta("class"))
-	var pgrid := GridContainer.new()
-	pgrid.name = "PortraitGrid"
-	pgrid.columns = 4
-	pgrid.add_theme_constant_override("h_separation", 4)
-	pgrid.add_theme_constant_override("v_separation", 4)
-	tab.add_child(pgrid)
-	# 头像网格：8 职业 4×2、48×48（ProfessionVisual.portrait_path，缺图回退职业首字）
-	for cid: String in CLASS_IDS:
-		var pb := _class_btn(cid, class_group)
-		pgrid.add_child(pb)
-		_class_buttons[cid] = pb
-	_class_buttons[selected_class].button_pressed = true
-
-	var lv_row := HBoxContainer.new()
-	lv_row.add_theme_constant_override("separation", 4)
-	lv_row.add_child(UIFactoryScript.label("等级:", 11, TEXT_DIM))
-	_level_box = SpinBox.new()
-	_level_box.min_value = 1
-	_level_box.max_value = 9
-	_level_box.value = 3
-	_level_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lv_row.add_child(_level_box)
-	lv_row.add_child(UIFactoryScript.label("姓名:", 11, TEXT_DIM))
-	_unit_name_edit = UIFactoryScript.line_edit()
-	_unit_name_edit.placeholder_text = "自动"
-	_unit_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lv_row.add_child(_unit_name_edit)
-	tab.add_child(lv_row)
-	UIFactoryScript.center_row(lv_row)
+	MapEditorPanelTabsScript.build_units_tab(self, tab)
 
 
 ## Tab【历史】：动作时间线（点击任意记录跳转到该状态）
 func _build_history_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "历史", "clock")
-	_history_list = ItemList.new()
-	_history_list.name = "HistoryList"
-	_history_list.custom_minimum_size = Vector2(0, 240)
-	_history_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_history_list.allow_reselect = true
-	_history_list.item_selected.connect(func(idx: int):
-		if not _syncing_history:
-			_jump_history(idx))
-	tab.add_child(_history_list)
-	tab.add_child(UIFactoryScript.label("点击记录跳转到该状态；Ctrl+Z / Ctrl+Y 撤销重做", 10, TEXT_DIM))
+	MapEditorPanelTabsScript.build_history_tab(self, tab)
 
 
 ## Tab【素材】：用户素材库管理（本地导入/远程清单/编辑 render/隐藏），
 ## 选中素材后回「地形」页用画笔放置（地块→tile_overrides 层，植物→props 层）。
 func _build_asset_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "素材", "library")
-	_asset_panel = AssetLibraryPanelScript.new()
-	_asset_panel.name = "AssetLibraryPanel"
-	_asset_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_asset_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_asset_panel.asset_selected.connect(_on_asset_selected)
-	_asset_panel.library_changed.connect(_on_asset_library_changed)
-	tab.add_child(_asset_panel)
-	_asset_panel.setup(_asset_service, _asset_adapter)
+	MapEditorPanelTabsScript.build_asset_tab(self, tab)
 
 
 ## Tab【预设】：区域预设库（保存当前选区为命名预设；填入选区=选区左上角一步
@@ -1359,63 +814,8 @@ func _build_asset_tab(tabs: TabContainer) -> void:
 ## 五层 payload，预设本体持久化在 region_preset_store）。
 func _build_preset_tab(tabs: TabContainer) -> void:
 	var tab := UIFactoryScript.add_tab(tabs, "预设", "bookmark")
-	_preset_name_edit = UIFactoryScript.line_edit("预设名称")
-	_preset_name_edit.name = "PresetNameEdit"
-	_preset_name_edit.text = "预设 %d" % (_preset_store.count() + 1)
-	tab.add_child(_preset_name_edit)
-
-	var save_row := HBoxContainer.new()
-	save_row.add_theme_constant_override("separation", 4)
-	var save_btn := UIFactoryScript.button("保存当前选区", _on_save_preset_pressed)
-	save_btn.name = "SavePresetBtn"
-	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	save_row.add_child(save_btn)
-	tab.add_child(save_row)
-	UIFactoryScript.center_row(save_row)
-
-	_preset_list = ItemList.new()
-	_preset_list.name = "PresetList"
-	_preset_list.custom_minimum_size = Vector2(0, 140)
-	_preset_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	tab.add_child(_preset_list)
-
-	var op_row := HBoxContainer.new()
-	op_row.add_theme_constant_override("separation", 4)
-	var fill_btn := UIFactoryScript.button("填入选区", _on_fill_preset_pressed)
-	fill_btn.name = "FillPresetBtn"
-	fill_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	op_row.add_child(fill_btn)
-	var place_btn := UIFactoryScript.button("放置模式")
-	place_btn.name = "PlacePresetBtn"
-	place_btn.toggle_mode = true
-	place_btn.toggled.connect(_on_place_preset_toggled)
-	place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	op_row.add_child(place_btn)
-	_place_preset_btn = place_btn
-	var rename_btn := UIFactoryScript.button("重命名", _on_rename_preset_pressed)
-	rename_btn.name = "RenamePresetBtn"
-	rename_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	op_row.add_child(rename_btn)
-	var delete_btn := UIFactoryScript.button("删除", _on_delete_preset_pressed)
-	delete_btn.name = "DeletePresetBtn"
-	delete_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	op_row.add_child(delete_btn)
-	var refresh_btn := UIFactoryScript.button("刷新", _on_refresh_preset_pressed)
-	refresh_btn.name = "RefreshPresetBtn"
-	refresh_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	op_row.add_child(refresh_btn)
-	tab.add_child(op_row)
-	UIFactoryScript.center_row(op_row)
-
-	_place_preview_toggle = CheckButton.new()
-	_place_preview_toggle.name = "PlacePreviewToggle"
-	_place_preview_toggle.text = "实时放置预览"
-	_place_preview_toggle.button_pressed = _place_preview_enabled
-	_place_preview_toggle.toggled.connect(_on_place_preview_toggled)
-	tab.add_child(_place_preview_toggle)
-
-	tab.add_child(UIFactoryScript.label("选中区域后可保存为预设；填入选区与放置模式均一步撤销", 10, TEXT_DIM))
-	_refresh_preset_list()
+	var preview_toggle := CheckButton.new()  # 直建控件：随预设簇留在门面（P0-3 统一整改）
+	MapEditorPanelTabsScript.build_preset_tab(self, tab, preview_toggle)
 
 
 ## 素材面板选中变化：写入选中态并同步画布预览格
@@ -1545,7 +945,7 @@ func _clear_asset_selection() -> void:
 ## 选中素材已不存在则清空选中；画布烘焙缓存已随库失效，整图刷新
 func _on_asset_library_changed() -> void:
 	_rebuild_block_asset_grid()
-	_populate_replace_options()
+	MapEditorOverlaysScript.replace_populate_options(self)
 	if _selected_asset.is_empty():
 		_refresh_canvas()
 		return
@@ -1585,98 +985,6 @@ func _pixel_btn() -> Button:
 	return b
 
 
-func _add_tool_btn(parent: Node, group: ButtonGroup, tool: int, text: String, icon_name := "") -> void:
-	var b := _pixel_btn()
-	b.toggle_mode = true
-	b.button_group = group
-	var icon: Texture2D = null
-	if icon_name != "":
-		icon = UIThemeScript.icon(icon_name)
-	if icon != null:
-		# 垂直工具条：只显示图标（tooltip 提示名称），固定方形按钮。
-		# icon_size=22 对齐 34×34 按钮内容区（34-2×6），保住 expand_icon 原观感
-		# （组件默认 icon_max_width=18 会把放大后的图标截小）；b 静态类型是
-		# Button，组件属性经 set() 走 PixelButton setter（触发 _refresh 生效）。
-		b.icon = icon
-		b.set("icon_size", 22)
-		b.text = ""
-		b.tooltip_text = "%s工具" % text
-		b.custom_minimum_size = Vector2(34, 34)
-		b.expand_icon = true
-	else:
-		b.text = text
-		b.tooltip_text = text
-	b.set_meta("tool", tool)
-	UIThemeScript.style_button(b)
-	parent.add_child(b)
-	_tool_buttons[tool] = b
-
-
-## 阵营切换按钮（盾=我方 / 骷髅=敌方，ButtonGroup 单选；缺图回退纯文字）
-func _faction_btn(faction: String, label: String, icon_name: String, group: ButtonGroup) -> Button:
-	var b := _pixel_btn()
-	b.toggle_mode = true
-	b.button_group = group
-	b.set_meta("faction", faction)
-	b.tooltip_text = "%s %s" % [label, faction]
-	b.custom_minimum_size = Vector2(104, 30)
-	var icon: Texture2D = null
-	if icon_name != "":
-		icon = UIThemeScript.icon(icon_name)
-	if icon != null:
-		b.icon = icon
-	b.text = label
-	UIThemeScript.style_button(b)
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.button_pressed = faction == selected_faction
-	return b
-
-
-## 调色板按钮：每项一个 tile 缩略图（无文字，悬停提示地形名）。
-## plant=true 用独立植物贴图（树单独成块，不叠在方块柱上）。
-func _terrain_btn(t: StringName, group: ButtonGroup, plant := false) -> Button:
-	var tb := _pixel_btn()
-	tb.toggle_mode = true
-	tb.button_group = group
-	tb.custom_minimum_size = Vector2(46, 96)
-	tb.tooltip_text = "%s（%s）" % [
-		String(BattlefieldDocScript.TERRAIN_CN.get(t, String(t))),
-		String(BattlefieldDocScript.TERRAIN_GLYPH[t]),
-	]
-	tb.set_meta("terrain", t)
-	UIThemeScript.style_button(tb)
-	var prev := TilePreviewScript.new(t, plant)
-	tb.add_child(prev)
-	# Button 不是 Container：手动按按钮最小尺寸居中（anchors 在无父时会烤错）。
-	prev.position = (tb.custom_minimum_size - prev.size) * 0.5
-	return tb
-
-
-## 职业头像按钮：48×48；有立绘显示 TextureRect，缺图回退职业首字（按钮文本自动居中）
-func _class_btn(cid: String, group: ButtonGroup) -> Button:
-	var b := _pixel_btn()
-	b.toggle_mode = true
-	b.button_group = group
-	b.custom_minimum_size = PORTRAIT_BTN_SIZE
-	var cn := ProfessionDataScript.profession_name(StringName(cid))
-	b.tooltip_text = "%s %s" % [cn, cid]
-	b.set_meta("class", cid)
-	UIThemeScript.style_button(b)
-	if ProfessionVisualScript.portrait_exists(StringName(cid)):
-		var tex: Texture2D = load(ProfessionVisualScript.portrait_path(StringName(cid)))
-		var tr := TextureRect.new()
-		tr.texture = tex
-		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		b.add_child(tr)
-		# Button 不是 Container：显式给尺寸并贴边内缩 3px 居中（TilePreview 同款处理）
-		tr.size = PORTRAIT_BTN_SIZE - Vector2(6, 6)
-		tr.position = Vector2(3, 3)
-	else:
-		b.text = cn.substr(0, 1)
-		b.add_theme_font_size_override("font_size", 14)
-	return b
 # ============================================================
 # 编辑操作（canvas 信号 + 可测方法；生效工具由激活 Tab 决定）
 # ============================================================
@@ -2067,33 +1375,13 @@ func _set_glyph(cell: Vector2i, glyph: String) -> void:
 	_canvas._refresh_cell(cell)
 
 
-## 洪水填充：同图例连通区域 -> 目标地形
+## 洪水填充：同图例连通区域 -> 目标地形（内核在 MapEditorPaintOpsScript.flood_fill_terrain）
 func fill_cell(cell: Vector2i, terrain: StringName) -> void:
-	if cell.x < 0 or cell.y < 0 or cell.x >= model.width or cell.y >= model.height:
+	var filled := MapEditorPaintOpsScript.flood_fill_terrain(model, cell, terrain)
+	if filled <= 0:
 		return
-	var rows: Array = model.rows
-	var from: String = (rows[cell.y] as String).substr(cell.x, 1)
-	var to: String = String(BattlefieldDocScript.TERRAIN_GLYPH.get(terrain, "."))
-	if from == to and (model.get("tile_overrides", {}) as Dictionary).is_empty():
-		return  # 地形未变且无素材覆盖：无可做；有覆盖时要继续走完以便清 override
-	var stack: Array[Vector2i] = [cell]
-	var seen := { cell: true }
-	while not stack.is_empty():
-		var c: Vector2i = stack.pop_back()
-		rows[c.y] = (rows[c.y] as String).substr(0, c.x) + to + (rows[c.y] as String).substr(c.x + 1)
-		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var n: Vector2i = c + d
-			if n.x < 0 or n.y < 0 or n.x >= model.width or n.y >= model.height or seen.has(n):
-				continue
-			if (rows[n.y] as String).substr(n.x, 1) == from:
-				seen[n] = true
-				stack.append(n)
-	# 填充经过的格子一并清素材地块覆盖，否则 override 优先整图替换、内置填充看不见
-	if not (model.get("tile_overrides", {}) as Dictionary).is_empty():
-		for c in seen:
-			BattlefieldDocScript.set_tile_override(model, c, "")
 	_refresh_canvas()
-	_status("填充 %s ×%d 格" % [BattlefieldDocScript.TERRAIN_CN[terrain], seen.size()])
+	_status("填充 %s ×%d 格" % [BattlefieldDocScript.TERRAIN_CN[terrain], filled])
 
 
 # ============================================================
@@ -2103,118 +1391,8 @@ func fill_cell(cell: Vector2i, terrain: StringName) -> void:
 ## 选择模式弹窗（点「选择」/「填充」图标打开，Esc 关闭）：模式切换 + pos1/pos2
 ## 坐标编辑 + 通用方块选择器 + 区域填充/清除按钮。默认隐藏。
 func _build_selection_popup() -> void:
-	var popup := PanelContainer.new()
-	popup.name = "SelectionPopup"
-	popup.visible = false
-	popup.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	popup.offset_left = 52
-	popup.offset_top = 8
-	popup.offset_right = 332
-	popup.offset_bottom = 460
-	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
-	_selection_popup = popup
-	add_child(popup)
-
-	var box := VBoxContainer.new()
-	box.name = "SelectionPopupBox"
-	box.add_theme_constant_override("separation", 6)
-	popup.add_child(box)
-
-	box.add_child(UIFactoryScript.label("选择模式", 13, ACCENT))
-	_mode_option = OptionButton.new()
-	_mode_option.name = "ModeOption"
-	_mode_option.add_item("单格选择", 0)
-	_mode_option.add_item("区域选择", 1)
-	_mode_option.item_selected.connect(_on_selection_mode_item)
-	box.add_child(_mode_option)
-
-	box.add_child(UIFactoryScript.label("区域端点（点击画布设置，可再精修）", 10, TEXT_DIM))
-	box.add_child(_build_region_endpoint_row("pos1", _pos1_boxes))
-	box.add_child(_build_region_endpoint_row("pos2", _pos2_boxes))
-
-	box.add_child(UIFactoryScript.label("填充内容（内置地形 / 已保存素材方块）", 10, TEXT_DIM))
-	_fill_selector = BlockSelectorScript.new()
-	_fill_selector.name = "FillBlockSelector"
-	_fill_selector.custom_minimum_size = Vector2(0, 140)
-	_fill_selector.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_fill_selector.setup(_asset_service, _asset_adapter)
-	_fill_selector.selection_changed.connect(func(kind: StringName, id: String):
-		if id.is_empty():
-			return
-		_set_block_slot("fg", {"kind": String(kind), "id": id, "z": int(_block_fg.z)}))
-	box.add_child(_fill_selector)
-
-	var btns := HBoxContainer.new()
-	btns.name = "RegionBtnRow"
-	btns.add_theme_constant_override("separation", 4)
-	var fill_btn := _pixel_btn()
-	fill_btn.name = "RegionFillBtn"
-	fill_btn.text = "填充区域"
-	fill_btn.pressed.connect(_on_region_fill_pressed)
-	UIThemeScript.style_button(fill_btn)
-	btns.add_child(fill_btn)
-	var clear_btn := _pixel_btn()
-	clear_btn.name = "RegionClearBtn"
-	clear_btn.text = "清除区域"
-	clear_btn.pressed.connect(_on_region_clear_pressed)
-	UIThemeScript.style_button(clear_btn)
-	btns.add_child(clear_btn)
-	var close_btn := _pixel_btn()
-	close_btn.name = "CloseBtn"
-	close_btn.text = "关闭"
-	close_btn.pressed.connect(_close_selection_popup)
-	UIThemeScript.style_button(close_btn)
-	btns.add_child(close_btn)
-	box.add_child(btns)
-
-	# ---- 区域操作：复制/剪切/粘贴（Ctrl+C/X/V 同款；区域内按下拖动=移动）----
-	var ops := HBoxContainer.new()
-	ops.name = "RegionOpRow"
-	ops.add_theme_constant_override("separation", 4)
-	var copy_btn := _pixel_btn()
-	copy_btn.name = "CopyRegionBtn"
-	copy_btn.text = "复制区域"
-	copy_btn.pressed.connect(_on_region_copy_pressed)
-	UIThemeScript.style_button(copy_btn)
-	ops.add_child(copy_btn)
-	var cut_btn := _pixel_btn()
-	cut_btn.name = "CutRegionBtn"
-	cut_btn.text = "剪切区域"
-	cut_btn.pressed.connect(_on_region_cut_pressed)
-	UIThemeScript.style_button(cut_btn)
-	ops.add_child(cut_btn)
-	var paste_btn := _pixel_btn()
-	paste_btn.name = "PasteRegionBtn"
-	paste_btn.text = "粘贴区域"
-	paste_btn.pressed.connect(_on_region_paste_pressed)
-	UIThemeScript.style_button(paste_btn)
-	ops.add_child(paste_btn)
-	box.add_child(ops)
-	var op_hint := UIFactoryScript.label("CTRL+C/X/V 复制/剪切/粘贴 · 区域内拖动=移动 · ESC 取消", 9, TEXT_DIM)
-	op_hint.name = "RegionOpHint"
-	op_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(op_hint)
-
-
-## pos1/pos2 行：标签 + x/y/z 三个 SpinBox（名称 Pos1X 等，坐标 UI 契约用）
-func _build_region_endpoint_row(which: String, store: Dictionary) -> HBoxContainer:
-	var tag: String = which.replace("pos", "Pos")
-	var row := HBoxContainer.new()
-	row.name = "%sRow" % tag
-	row.add_theme_constant_override("separation", 4)
-	row.add_child(UIFactoryScript.label(which, 10, TEXT_DIM))
-	for axis in [&"x", &"y", &"z"]:
-		var sp := SpinBox.new()
-		sp.name = "%s%s" % [tag, String(axis).to_upper()]
-		sp.min_value = BattlefieldDocScript.BLOCK_MIN_Z if axis == &"z" else 0
-		sp.max_value = BattlefieldDocScript.BLOCK_MAX_Z if axis == &"z" else 999
-		sp.step = 1
-		sp.rounded = true
-		sp.value_changed.connect(_on_region_box_changed.bind(which, axis))
-		sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		store[axis] = sp
-		row.add_child(sp)
-	return row
+	_mode_option = OptionButton.new()  # 直建控件：随选择簇留在门面（P0-3 统一整改）
+	MapEditorOverlaysScript.build_selection_popup(self, _mode_option)
 
 
 func _open_selection_popup() -> void:
@@ -2337,12 +1515,18 @@ func _apply_fill(cell: Vector2i) -> void:
 		return
 	match StringName(_block_fg.get("kind", "terrain")):
 		&"asset":
-			_flood_fill_asset(cell, String(_block_fg.get("id", "")))
+			var asset_id := String(_block_fg.get("id", ""))
+			var filled := MapEditorPaintOpsScript.flood_fill_asset(model, cell, asset_id)
+			if filled > 0:
+				_refresh_canvas()
+				_status("素材填充 %s ×%d 格" % [asset_id, filled])
+				print("[editor] 素材洪水填充 asset=%s cells=%d" % [asset_id, filled])  # L1 埋点
 		_:
 			fill_cell(cell, StringName(_block_fg.get("id", "plain")))
 
 
-## 条件替换：完整选区优先，否则全图；仅命中源类型的格子写目标，高度一律不动。
+## 条件替换：完整选区优先，否则全图；仅命中源类型的格子写目标，高度一律不动
+##（匹配/写入内核在 MapEditorPaintOpsScript；匹配与写入之间夹入历史入栈）。
 ## terrain 源只匹配无 tile_override 且 rows 图例相同的格；asset 源只匹配覆盖 id。
 func _apply_replace() -> void:
 	if _replace_source_opt == null or _replace_dest_opt == null:
@@ -2376,15 +1560,7 @@ func _apply_replace() -> void:
 		return
 	var source_kind := "asset" if source_code.begins_with("asset:") else "terrain"
 	var source_value := source_code.substr(6) if source_kind == "asset" else source_code.substr(8)
-	var rows: Array = model.rows
-	var matched: Array = []
-	for c: Vector2i in cells:
-		var override_id := BattlefieldDocScript.tile_override_at(model, c)
-		if source_kind == "asset":
-			if override_id == source_value:
-				matched.append(c)
-		elif override_id.is_empty() and String((rows[c.y] as String).substr(c.x, 1)) == source_value:
-			matched.append(c)
+	var matched: Array = MapEditorPaintOpsScript.match_cells(model, cells, source_kind, source_value)
 	if matched.is_empty():
 		_status("匹配 0 格：未替换", true)
 		return
@@ -2392,17 +1568,11 @@ func _apply_replace() -> void:
 	_push_undo(action)
 	var dest_kind := "asset" if dest_code.begins_with("asset:") else "terrain"
 	var dest_value := dest_code.substr(6) if dest_kind == "asset" else dest_code.substr(8)
-	for c: Vector2i in matched:
-		if dest_kind == "asset":
-			BattlefieldDocScript.set_tile_override(model, c, dest_value)
-		else:
-			var row: String = rows[c.y]
-			rows[c.y] = row.substr(0, c.x) + dest_value + row.substr(c.x + 1)
-			BattlefieldDocScript.set_tile_override(model, c, "")
+	var replaced: int = MapEditorPaintOpsScript.write_cells(model, matched, dest_kind, dest_value)
 	_seal_pending()  # 按钮动作立即落一条历史，不等下一次画布交互
 	_refresh_canvas()
-	_status("%s：%d 格（高度不变）" % [action, matched.size()])
-	print("[editor] %s source=%s dest=%s cells=%d" % [action, source_code, dest_code, matched.size()])  # L1 埋点
+	_status("%s：%d 格（高度不变）" % [action, replaced])
+	print("[editor] %s source=%s dest=%s cells=%d" % [action, source_code, dest_code, replaced])  # L1 埋点
 
 
 ## 区域填充：区域内每格应用选择器内容——内置地形写 rows 并清素材覆盖；
@@ -2411,37 +1581,19 @@ func _apply_replace() -> void:
 ## 找平至带顶 z_hi（单块列模型每列只有一块立方体——选择 0..4 填充即整片抬成 z4
 ## 平台，「填充整个选择范围」而不是只刷表层）；同高选择保持平面行为（全 footprint
 ## 写材质、不动块高）。调用方负责 _push_undo：填充与高度变化同一步历史（原子）。
+##（填充内核在 MapEditorPaintOpsScript.fill_region）
 func _fill_region() -> void:
-	var kind := StringName(_block_fg.get("kind", "terrain"))
-	var id := String(_block_fg.get("id", "plain"))
-	if id.is_empty():
-		kind = &"terrain"
-		id = "plain"
 	var mn := _selection_range.min_corner()
 	var mx := _selection_range.max_corner()
+	var result: Dictionary = MapEditorPaintOpsScript.fill_region(model, mn, mx,
+		StringName(_block_fg.get("kind", "terrain")), String(_block_fg.get("id", "plain")),
+		_selection_range.cells_2d())
+	var kind := StringName(result.get("kind", &"terrain"))
+	var id := String(result.get("id", "plain"))
+	var count := int(result.get("count", 0))
+	var leveled := int(result.get("leveled", 0))
+	var volume := mn.z != mx.z
 	var z_hi := maxi(mn.z, mx.z)
-	var volume := mn.z != mx.z  # 异高 → 全 footprint 填充 + 顶面找平均 z_hi
-	var cells := _selection_range.cells_2d()
-	var rows: Array = model.rows
-	var glyph := String(BattlefieldDocScript.TERRAIN_GLYPH.get(StringName(id), "."))
-	var count := 0
-	var leveled := 0
-	for c in cells:
-		if c.x < 0 or c.y < 0 or c.x >= int(model.width) or c.y >= int(model.height):
-			continue
-		if volume:
-			var cz := BattlefieldDocScript.cell_z(model, c)
-			if cz != z_hi:
-				BattlefieldDocScript.set_cell_z(model, c, z_hi)
-				leveled += 1
-		if kind == &"asset":
-			BattlefieldDocScript.set_tile_override(model, c, id)
-		else:
-			var row: String = rows[c.y]
-			if row.substr(c.x, 1) != glyph:
-				rows[c.y] = row.substr(0, c.x) + glyph + row.substr(c.x + 1)
-			BattlefieldDocScript.set_tile_override(model, c, "")
-		count += 1
 	_refresh_canvas()
 	var label := id if kind == &"asset" else String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id))
 	if volume:
@@ -2450,38 +1602,6 @@ func _fill_region() -> void:
 		_status("区域填充 %s ×%d 格" % [label, count])
 	print("[editor] 区域填充 kind=%s id=%s cells=%d volume=%s z_hi=%d leveled=%d"
 		% [String(kind), id, count, str(volume), z_hi, leveled])  # L1 埋点
-
-
-## 素材洪水填充（无区域、选择器=素材）：同「地形字符 + 现有覆盖」连通的区域
-## 整体替换为素材方块，只写 tile_overrides、不动 rows。
-func _flood_fill_asset(cell: Vector2i, asset_id: String) -> void:
-	if asset_id.is_empty():
-		return
-	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
-		return
-	if BattlefieldDocScript.tile_override_at(model, cell) == asset_id:
-		return  # 起点已是目标素材：无可做
-	var rows: Array = model.rows
-	var from_glyph: String = rows[cell.y].substr(cell.x, 1)
-	var from_override := BattlefieldDocScript.tile_override_at(model, cell)
-	var stack: Array[Vector2i] = [cell]
-	var seen := { cell: true }
-	while not stack.is_empty():
-		var c: Vector2i = stack.pop_back()
-		BattlefieldDocScript.set_tile_override(model, c, asset_id)
-		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var n: Vector2i = c + d
-			if n.x < 0 or n.y < 0 or n.x >= int(model.width) or n.y >= int(model.height) or seen.has(n):
-				continue
-			if (rows[n.y] as String).substr(n.x, 1) != from_glyph:
-				continue
-			if BattlefieldDocScript.tile_override_at(model, n) != from_override:
-				continue
-			seen[n] = true
-			stack.append(n)
-	_refresh_canvas()
-	_status("素材填充 %s ×%d 格" % [asset_id, seen.size()])
-	print("[editor] 素材洪水填充 asset=%s cells=%d" % [asset_id, seen.size()])  # L1 埋点
 
 
 func _on_region_fill_pressed() -> void:
@@ -2584,37 +1704,8 @@ func _update_paste_preview(hover: Vector2i) -> void:
 	if hover.x < 0:
 		_canvas.clear_paste_preview()
 		return
-	var ghost := _ghost_payload_at(_clipboard, hover)
+	var ghost := RegionClipboardScript.ghost_at(model, _clipboard, hover)
 	_canvas.set_placement_preview(ghost.cells, ghost.valid)
-
-
-## 将五层 payload 的 rows/block_z/tile_overrides 展开为 Canvas 幽灵数据。
-## 左上角=anchor；越界格只影响 valid，不进入 cells，也不触碰模型。
-func _ghost_payload_at(payload: Dictionary, anchor: Vector2i) -> Dictionary:
-	var size := RegionClipboardScript.payload_size(payload)
-	var valid := size.x > 0 and size.y > 0 and RegionClipboardScript.bounds_error(
-		model, anchor, anchor + size - Vector2i(1, 1)).is_empty()
-	var cells: Array[Dictionary] = []
-	var rows: Array = payload.get("rows", [])
-	var heights: Array = payload.get("block_z", [])
-	var overrides: Dictionary = payload.get("tile_overrides", {})
-	var width := int(model.get("width", 0))
-	var height := int(model.get("height", 0))
-	for dy in size.y:
-		var row := String(rows[dy])
-		for dx in size.x:
-			var cell := anchor + Vector2i(dx, dy)
-			if cell.x < 0 or cell.y < 0 or cell.x >= width or cell.y >= height:
-				continue
-			var override: Dictionary = overrides.get("%d,%d" % [dx, dy], {})
-			cells.append({
-				"x": cell.x,
-				"y": cell.y,
-				"terrain": row.substr(dx, 1),
-				"asset_id": String(override.get("asset_id", "")),
-				"z": int(heights[dy * size.x + dx]) if dy * size.x + dx < heights.size() else 0,
-			})
-	return {"cells": cells, "valid": valid}
 
 
 ## 提交粘贴：越界/非法仅 _status 报错（不改模型不入历史）；成功一步历史
@@ -2804,7 +1895,7 @@ func _update_place_preview(hover: Vector2i) -> void:
 	var payload: Dictionary = _preset_store.load(_place_preset_id)
 	if payload.is_empty():
 		return
-	var ghost := _ghost_payload_at(payload, hover)
+	var ghost := RegionClipboardScript.ghost_at(model, payload, hover)
 	_canvas.set_placement_preview(ghost.cells, ghost.valid)
 
 
@@ -3038,20 +2129,8 @@ func _push_undo(label: String = "") -> void:
 
 ## 封存 pending 动作的完成状态（快照与当前游标状态相同则丢弃）
 func _seal_pending() -> void:
-	if _pending_label.is_empty() or _history.is_empty():
-		return
-	var label := _pending_label
-	_pending_label = ""
-	var snap := _snapshot(label)
-	if _state_equal(snap, _history[_history_cursor]):
-		return  # 无效操作不入史（越界 / 不可站人被拒）
-	_history.resize(_history_cursor + 1)  # 新编辑截断重做分支
-	_history.append(snap)
-	_history_cursor += 1
-	if _history.size() > UNDO_LIMIT + 1:
-		_history.pop_front()
-		_history_cursor -= 1
-	_refresh_history()
+	if MapEditorHistoryScript.seal(self):
+		_refresh_history()
 
 
 func _undo() -> void:
@@ -3110,51 +2189,17 @@ func _refresh_history() -> void:
 
 
 func _snapshot(label: String = "") -> Dictionary:
-	var units := []
-	for u in model.units:
-		units.append((u as Dictionary).duplicate())
-	var props := []
-	for p in model.get("props", []):
-		props.append((p as Dictionary).duplicate())
-	return {
-		"rows": (model.rows as Array).duplicate(),
-		"units": units,
-		"props": props,
-		"tile_overrides": (model.get("tile_overrides", {}) as Dictionary).duplicate(true),
-		"block_layout": (model.get("block_layout", {}) as Dictionary).duplicate(true),
-		"width": int(model.width),
-		"height": int(model.height),
-		"label": label,
-	}
+	return MapEditorHistoryScript.snapshot(model, label)
 
 
-func _state_equal(snap: Dictionary, other: Dictionary) -> bool:
-	return snap.rows == other.rows and snap.units == other.units \
-		and snap.get("props", []) == other.get("props", []) \
-		and snap.get("tile_overrides", {}) == other.get("tile_overrides", {}) \
-		and snap.get("block_layout", {}) == other.get("block_layout", {})
-
-
-## 恢复快照（rows/units/props/尺寸从快照再深拷贝，栈内条目保持原样可重复恢复）
+## 恢复快照（深拷贝内核在 MapEditorHistoryScript.restore_into；此处补尺寸框回显与画布刷新）
 func _restore(snap: Dictionary) -> void:
-	model.rows = (snap.rows as Array).duplicate()
-	var units := []
-	for u in snap.units:
-		units.append((u as Dictionary).duplicate())
-	model.units = units
-	var props := []
-	for p in snap.get("props", []):
-		props.append((p as Dictionary).duplicate())
-	model.props = props
-	model["tile_overrides"] = (snap.get("tile_overrides", {}) as Dictionary).duplicate(true)
-	model["block_layout"] = (snap.get("block_layout", {}) as Dictionary).duplicate(true)
-	model.width = int(snap.width)
-	model.height = int(snap.height)
+	var size := MapEditorHistoryScript.restore_into(model, snap)
 	_syncing_boxes = true
 	if _width_box != null:
-		_width_box.value = int(model.width)
+		_width_box.value = size.x
 	if _height_box != null:
-		_height_box.value = int(model.height)
+		_height_box.value = size.y
 	_syncing_boxes = false
 	_refresh_canvas()
 
@@ -3164,14 +2209,7 @@ func _restore(snap: Dictionary) -> void:
 # ============================================================
 
 func _refresh_load_box() -> void:
-	if _load_box == null:
-		return
-	_load_box.clear()
-	for entry in BattlefieldLoaderScript.list_battlefields():
-		if String(entry.get("error", "")) != "":
-			continue
-		_load_box.add_item("%s · %s" % [entry.get("name", ""), entry.get("file", "")])
-		_load_box.set_item_metadata(_load_box.item_count - 1, entry.get("path", ""))
+	MapEditorFileIoScript.refresh_load_box(self)
 
 
 func _load_selected() -> void:
@@ -3183,19 +2221,17 @@ func _load_selected() -> void:
 
 ## 从战场 JSON 读入编辑器（rows / map 两种写法都支持）
 func load_path(path: String) -> Dictionary:
-	var f := FileAccess.open(path, FileAccess.READ)
-	if f == null:
-		_status("无法打开 %s" % path, true)
-		return { "ok": false, "error": "无法打开文件" }
-	var json := JSON.new()
-	if json.parse(f.get_as_text()) != OK:
-		_status("JSON 解析失败：%s" % path, true)
-		return { "ok": false, "error": "JSON 解析失败" }
-	var candidate := BattlefieldDocScript.from_json_dict(json.data)
-	var layout_error := BattlefieldDocScript.validate_block_layout(candidate)
-	if not layout_error.is_empty():
-		_status("读取失败：%s" % layout_error, true)
-		return {"ok": false, "error": layout_error}
+	var res: Dictionary = MapEditorFileIoScript.load_candidate(path)
+	if not bool(res.get("ok", false)):
+		var err: String = String(res.get("error", ""))
+		if err == "无法打开文件":
+			_status("无法打开 %s" % path, true)
+		elif err == "JSON 解析失败":
+			_status("JSON 解析失败：%s" % path, true)
+		else:
+			_status("读取失败：%s" % err, true)
+		return { "ok": false, "error": err }
+	var candidate: Dictionary = res.get("model", {})
 	_push_undo("读取")
 	model = candidate
 	_canvas.selected_cell = Vector2i(-1, -1)
@@ -3238,39 +2274,13 @@ func save_current() -> Dictionary:
 	model.id = _id_edit.text
 	model.name = _name_edit.text if not _name_edit.text.strip_edges().is_empty() else "自定义战场"
 	model.hosting = _hosting_check.button_pressed
-	_sync_model_user_assets()  # 被引用素材描述符快照入档（B2 渲染离线自包含）
+	MapEditorFileIoScript.sync_user_assets(model, _asset_service)  # 被引用素材描述符快照入档（B2 渲染离线自包含）
 	var result: Dictionary = BattlefieldDocScript.save_model(model)
 	if bool(result.get("ok", false)):
 		print("[editor] 保存战场: %s" % result.get("path", ""))  # L1 埋点
 	else:
 		print("[editor] 保存失败: %s" % result.get("error", ""))  # L1 埋点
 	return result
-
-
-## 保存前从素材库拷贝被引用素材的描述符快照进 model.user_assets：
-## B2 渲染离线读档自包含（user_assets 缺失时按 id 回退库+占位）；
-## 库中已隐藏/删除的素材保留模型里的旧快照，保证存档与历史引用不丢
-func _sync_model_user_assets() -> void:
-	var referenced := {}
-	for p in model.get("props", []):
-		var aid := String((p as Dictionary).get("asset_id", ""))
-		if not aid.is_empty():
-			referenced[aid] = true
-	for key: String in model.get("tile_overrides", {}):
-		var tval: Variant = model.tile_overrides[key]
-		# 运行期/JSON 形状均为 {"x,y": {"asset_id": ...}}
-		var tid := String((tval as Dictionary).get("asset_id", "") if tval is Dictionary else tval)
-		if not tid.is_empty():
-			referenced[tid] = true
-	var lib: Dictionary = model.get("user_assets", {})
-	for aid: String in referenced:
-		var d: Variant = _asset_service.find_by_id(aid)
-		if d is Dictionary:
-			lib[aid] = (d as Dictionary).duplicate(true)
-	if lib.is_empty():
-		model.erase("user_assets")
-	else:
-		model["user_assets"] = lib
 
 
 func _back_to_world() -> void:

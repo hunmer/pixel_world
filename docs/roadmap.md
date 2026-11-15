@@ -140,7 +140,8 @@ graph LR
 ### 13. `main.gd`（4319 行/176 函数）拆分 —— 与 `map_editor.gd`（3285 行/150 函数）双单体治理
 
 - **做什么**：main.gd 按函数簇（配置编译 / 流式生成 / 生态 / 表现 / HUD / 战斗入口）渐进抽出到 `scripts/world/` 既有子域，`main.gd` 收敛为装配层。**红线**：流式生成与确定性调用顺序不得变（SHA-256 快照测试是护栏）。
-- **2026-11-15 扫描注**：`scripts/editor/map_editor.gd` 本轮 +~900 行涨到 3285 行/150 函数（区域操作/取色器/弹窗全塞主文件），膨胀速度超 main.gd；区域操作已有 `region_clipboard`/`region_preset_store` 模块可挂，下一步编辑器功能应先进模块再挂主文件，或同法拆分。
+- **2026-11-15 扫描注**：`scripts/scenes/map_editor.gd` 本轮 +~900 行涨到 3285 行/150 函数（区域操作/取色器/弹窗全塞主文件），膨胀速度超 main.gd；区域操作已有 `region_clipboard`/`region_preset_store` 模块可挂，下一步编辑器功能应先进模块再挂主文件，或同法拆分。
+- **✅ 2026-11-15 第一增量完成**（pixel-split 团队，方案先行+分批抽取）：main.gd 4319→2283 行（−47.1%，12 个新模块入 `scripts/world/`，RefCounted+Callable 注入无反向依赖）；map_editor.gd 3285→2295 行（−30.1%，6 个新模块入 `scripts/editor/`）。行为护栏：terrain_generation SHA-256 每批零漂移、map_editor_region_ops L1 埋点序列与改前逐行一致；终验 67/74 契约无新增红（user_asset_editor 红系当日午后 16 个功能提交造成的过期断言，非拆分引入，归 P0-3 批次整改）。详见 `docs/plans/main_split_plan.md`、`docs/plans/map_editor_split_plan.md`、`docs/plans/split_report_2026-11-15.md`。**剩余**：两文件仍是 2.2K 行级装配层，可按同法继续抽；改动现留工作区未提交（"每次抽取独立 commit"未执行，待 review 后分批提交）。
 - **前置**：P1-3 基线 + 每抽一簇跑地形快照契约。**验收**：每次抽取独立 commit、全量契约绿、无行为 diff。**规模**：大（分多次）。
 
 ### 14. 双轨配置迁移收尾

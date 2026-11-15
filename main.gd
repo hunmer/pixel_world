@@ -14,7 +14,6 @@ const IsoProjection = preload("res://scripts/iso/iso_projection_3d.gd")
 const IsometricCamera3DScript = preload("res://scripts/iso/isometric_camera_3d.gd")
 const WorldCameraNavigationScript = preload("res://scripts/iso/world_camera_navigation.gd")
 const IsometricTerrain3DScript = preload("res://scripts/iso/isometric_terrain_3d.gd")
-const WanderingAnimalScript = preload("res://scripts/wandering_animal.gd")
 const IsometricDepthSort = preload("res://scripts/isometric_depth_sort.gd")
 const WeatherSystemScript = preload("res://scripts/weather_system.gd")
 const DayNightSystemScript = preload("res://scripts/day_night_system.gd")
@@ -24,7 +23,6 @@ const DepthOfFieldSystemScript = preload("res://scripts/depth_of_field_system.gd
 const GameHudScript = preload("res://scripts/game_hud.gd")
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const WorldMapOverlayScript = preload("res://scripts/world_map_overlay.gd")
-const UnderwaterAnimalShader = preload("res://shaders/underwater_animal.gdshader")
 const DeterministicRngScript = preload("res://scripts/world/deterministic_rng.gd")
 const CellContextScript = preload("res://scripts/world/cell_context.gd")
 const CellStateScript = preload("res://scripts/world/cell_state.gd")
@@ -42,38 +40,38 @@ const CommunityStateStoreScript = preload(
 const AnimalBehaviorRegistryScript = preload(
 	"res://scripts/animals/animal_behavior_registry.gd"
 )
+const EcologyConfigValidatorScript = preload(
+	"res://scripts/world/ecology_config_validator.gd"
+)
+const TerrainTextureCatalogScript = preload(
+	"res://scripts/world/terrain_texture_catalog.gd"
+)
+const MinimapRendererScript = preload("res://scripts/world/minimap_renderer.gd")
+const PlayerOcclusionControllerScript = preload(
+	"res://scripts/world/player_occlusion_controller.gd"
+)
+const EcosystemMatchScript = preload("res://scripts/world/ecosystem_match.gd")
+const PresentationStageScript = preload("res://scripts/world/presentation_stage.gd")
+const FloraSpawnerScript = preload("res://scripts/world/flora_spawner.gd")
+const WorldQueryServiceScript = preload("res://scripts/world/world_query_service.gd")
+const FaunaStreamerScript = preload("res://scripts/world/fauna_streamer.gd")
+const AnimalRuntimeScript = preload("res://scripts/world/animal_runtime.gd")
+
+
 const ECOLOGY_MANIFEST_PATH := "res://config/ecology/manifest.json"
 const ECOSYSTEM_CONFIG_PATH := "res://config/ecosystems.json"
 const FLORA_LAYER_IDS := ["tree", "ground_cover", "decoration"]
 const SORT_DEPTH_SCALE := 16.0  ## 默认角度下与旧版每格 128 的合成深度间距一致
 const SORT_REBASE_DISTANCE := 4096
+const WanderingAnimalScript = preload("res://scripts/wandering_animal.gd")
 
 const ANIMAL_SORT_BIAS := WanderingAnimalScript.SORT_BIAS
 const PLAYER_SORT_BIAS := 0.5
 ## 世界玩家使用的职业精灵图（data/professions.json 8 职业 id 之一；缺图回退占位红点）。
 const PLAYER_SHEET_CLASS := &"swordsman"
-## 精灵图内容包围盒（像素）：脚底=节点原点；用于植物遮挡屏幕包围盒，
-## 与贴图画布尺寸解耦（288 格含大量透明留白，直接量贴图会误淡化周围植物）。
-const PLAYER_SHEET_CONTENT_SIZE := Vector2(224.0, 240.0)
-## 植物锚点比人物更靠近镜头超过该深度余量才判定为遮挡（植物 billboard 有厚度）。
-const PLAYER_PROP_OCCLUSION_DEPTH_MARGIN := 0.05
-## 静止时遮挡集合的定期重算间隔（秒）：防御检测抖动后的卡死状态。
-const PLAYER_OCCLUSION_REFRESH_INTERVAL := 0.5
-## 贴图像素 alpha 命中阈值；低于它视为透明，不触发整格淡化。
-const PROP_TEXTURE_ALPHA_HIT_THRESHOLD := 0.01
-## block 本身还有半个贴图宽度；0.75 格的命中边距最终呈现约 3x3 的可见窗口。
-const PLAYER_OCCLUSION_SCREEN_MARGIN := Vector2(TILE_W * 0.75, TILE_H * 0.75)
-## 每个遮挡块保持固定的强透明度；不能按命中块总数继续拆分，否则高山会近乎消失。
-const PLAYER_OCCLUSION_BLOCK_ALPHA := 0.20
-const ANIMAL_WAIT_MIN := 0.6
-const ANIMAL_WAIT_SPAN := 2.0
 const ANIMAL_FLEE_RADIUS := 6
 const ANIMAL_FLEE_SPEED := 2.0
-const ANIMAL_FLEE_WAIT := 0.08
-const ANIMAL_BLOCKED_RETRY := 0.25
 const ANIMAL_FLEE_DISTANCE_WEIGHT := 1000.0
-const ANIMAL_LEAVE_WATER_BONUS := 10000.0
-const ANIMAL_GROUP_COHESION_WEIGHT := 6.0
 const ANIMAL_DIRECTIONS := [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]
 
 ## 只使用像素安全的缩放倍率，避免任意比例造成像素抖动和采样缝隙。
@@ -98,7 +96,7 @@ enum DesertSurface { NONE, SAND, ROCK, TRANSITION_PARCHED, TRANSITION_SPARSE_GRA
 
 ## 地貌模块：offset 基准高度 / amp 起伏强度 / ridge 山脊化 / steep 水下坡度 / peak 高峰权重
 ## terrace 梯田化强度：>0 时地形向固定周期的台阶吸附，相邻格一次跳 2~3 层（丘陵/山区的陡峭感）
-enum Landform { OCEAN, PLAINS, HILLS, MOUNTAIN, SWAMP }
+const Landform = EcosystemMatchScript.Landform  ## 旧整数地物枚举（定义在 ecosystem_match.gd，值不变）
 const LANDFORM_ID_TO_TYPE := {
 	"ocean": Landform.OCEAN,
 	"plains": Landform.PLAINS,
@@ -123,7 +121,6 @@ var peak_max := 10
 ## 帧率无关的渐近跟随速度；逻辑位置保留小数，渲染位置仍按缩放倍率像素对齐。
 @export_range(1.0, 20.0, 0.5) var camera_smoothing_speed := 8.0
 
-const MINIMAP_SIZE := 129  ## 小地图边长（1 像素 = 1 格，奇数使角色居中）
 const WORLD_MAP_RANGE_MULTIPLIER := 8
 
 var _ecosystem_config := {}
@@ -139,7 +136,6 @@ var _animal_behavior_tag_scan_radius := 1
 var _animal_behavior_registry = AnimalBehaviorRegistryScript.new()
 var _ambient_species := {}
 var _spatial_flora_sources: Array[Dictionary] = []
-var _spatial_flora_plan_cache := {}
 var _ecosystems_by_id := {}
 var _ecosystem_order: Array[Dictionary] = []
 var _default_ecosystem_id := ""
@@ -166,29 +162,14 @@ var _dominant_species_chance := 0.8
 var _tree_placement := FastNoiseLite.new()  ## 低频树木群落：沿用旧植被 seed
 var _ground_cover_placement := FastNoiseLite.new()  ## 高频草丛/花草斑块
 var _decoration_placement := FastNoiseLite.new()  ## 中尺度自然装饰斑块
-var _water_tex: ImageTexture  ## 只含顶面菱形的透明水面 mask
-var _water_left_tex: ImageTexture  ## 单层左侧水墙 mask
-var _water_right_tex: ImageTexture  ## 单层右侧水墙 mask
-var _underwater_texture_cache := {}  ## biome/surface/depth -> 随深度弱化后的湖底材质
-var _rock_tex: ImageTexture   ## 石头方块（rock 补齐到 32x32）
-var _rock_grass_tex: ImageTexture  ## 草顶石（rock_with_grass 补齐，山麓草地）
-var _moss_tex: ImageTexture   ## 苔石（rock-with-moss 补齐，高山处混杂）
-var _soil_tex: ImageTexture   ## 泥土（soil 补齐）
-var _moist_tex: ImageTexture  ## 湿土（moist_soil 补齐，河底与水边一格）
-var _grass_tex: ImageTexture  ## 草顶泥土（soil_with_grass 补齐，普通草地）
-var _little_grass_tex: ImageTexture  ## 稀草泥土（soil_with_little_grass 补齐，泥土里少量混入）
-var _parched_tex: ImageTexture  ## 干裂土（沙漠过渡带的主地表）
-var _sand_tex: ImageTexture  ## 沙漠基础方块（sand 补齐到 32x32）
-var _snow_tex: ImageTexture  ## 雪地贴图补齐到 32x32，和其他地块共用同一锚点
+## 方块贴图目录：水面 mask、各地表补齐贴图与湖底弱化纹理（原 14 个散装贴图字段）
+var _textures := TerrainTextureCatalogScript.new()
 var _cells := {}     ## Vector2i -> bool；真实柱网格由 IsometricTerrain3D 按 chunk 合批
 var _cell_states := {}  ## Vector2i -> CellState；生态、占用与导航的唯一逻辑来源
 var _water_cells := {}  ## 当前流式窗口内的水格索引，供天气落点 O(1) 命中
 var _animals := {}   ## 出生格 -> WanderingAnimal；出生格保持确定性生成身份
-var _animal_frames_cache := {}  ## animal species id -> SpriteFrames
-var _underwater_animal_material_cache := {}  ## water depth -> shared foreground-water material
 var _animal_groups = CommunityStateStoreScript.new(2048)
-var _animal_behavior_distance_cache := {}
-var _ecology_near_tag_cache := {}
+var _world_query := WorldQueryServiceScript.new()  ## 空间查询服务；near_tag 缓存随模块
 var _explored := {}  ## Vector2i -> Color；探索时缓存基础色，地图打开时不再采样地形
 var _cam: Camera3D
 var _terrain: Node3D
@@ -249,18 +230,8 @@ var _move_level_from := 0.0
 var _move_level_to := 0.0
 var _player_visual_position := Vector2.ZERO
 var _move_t := 1.0  ## >= 1 表示静止
-var _player_occluder_cells := {}  ## cell -> 当前遮挡人物的植物格（调试面板查询）
-var _player_occlusion_fading_cells := {}  ## 包含正在恢复不透明度的格
-var _player_occlusion_dirty := true
-var _player_occlusion_refresh_elapsed := 0.0
-var _player_occlusion_last_visual_position := Vector2(1.0e20, 1.0e20)
-var _player_occlusion_last_yaw := 1.0e20
-var _player_occlusion_last_zoom := 1.0e20
-var _player_occlusion_last_stand_level := 1.0e20
-var _prop_texture_image_cache := {}  ## prop 贴图 instance_id -> Image（alpha 精测用）
-
-var _minimap_img: Image
-var _minimap_tex: ImageTexture
+var _player_occlusion := PlayerOcclusionControllerScript.new()  ## 玩家植被遮挡控制器
+var _minimap := MinimapRendererScript.new()  ## 小地图渲染器
 
 
 func _load_ecosystem_config() -> bool:
@@ -540,424 +511,27 @@ func _compile_animal_behavior_stacks() -> bool:
 	return true
 
 
+## 生态配置结构校验已迁移至 scripts/world/ecology_config_validator.gd（纯静态函数集）。
 func _validate_ecosystem_config() -> bool:
-	for plant_id in _plant_species:
-		var plant: Dictionary = _plant_species[plant_id]
-		var layer_id := String(plant.get("layer", ""))
-		if layer_id not in FLORA_LAYER_IDS:
-			push_error("植物缺少有效 layer [%s]: %s" % [plant_id, layer_id])
-			return false
-		var texture_path := String(plant.get("texture", ""))
-		if texture_path.is_empty() or not ResourceLoader.exists(texture_path):
-			push_error("植物资源不存在 [%s]: %s" % [plant_id, texture_path])
-			return false
-		var habitat_value: Variant = plant.get("habitat", {})
-		if not habitat_value is Dictionary:
-			push_error("植物 habitat 必须是 Dictionary [%s]" % plant_id)
-			return false
-		var habitat: Dictionary = habitat_value
-		if not habitat.is_empty():
-			var near_layer := String(habitat.get("near_flora_layer", ""))
-			var radius := int(habitat.get("radius", 0))
-			var fallback_species := String(habitat.get("fallback_species", ""))
-			if near_layer not in FLORA_LAYER_IDS or radius < 1 or radius > 8:
-				push_error("植物 habitat 邻近层或半径无效 [%s]" % plant_id)
-				return false
-			if not _plant_species.has(fallback_species):
-				push_error("植物 habitat fallback 不存在 [%s]: %s" % [
-					plant_id, fallback_species
-				])
-				return false
-			var fallback: Dictionary = _plant_species[fallback_species]
-			if String(fallback.get("layer", "")) != layer_id:
-				push_error("植物 habitat fallback 必须与原物种同层 [%s]" % plant_id)
-				return false
-			if not (fallback.get("habitat", {}) as Dictionary).is_empty():
-				push_error("植物 habitat fallback 不能继续声明 habitat [%s]" % plant_id)
-				return false
-	for animal_id in _animal_species:
-		var animal: Dictionary = _animal_species[animal_id]
-		var directory := String(animal.get("directory", ""))
-		var actions: Dictionary = animal.get("actions", {})
-		if actions.is_empty():
-			push_error("动物缺少 actions: " + String(animal_id))
-			return false
-		for action_id in actions:
-			var action: Dictionary = actions[action_id]
-			var action_file := String(action.get("file", ""))
-			var texture_path := directory.path_join(action_file)
-			if directory.is_empty() or action_file.is_empty():
-				push_error("动物动作缺少目录或文件 [%s/%s]" % [animal_id, action_id])
-				return false
-			if not ResourceLoader.exists(texture_path):
-				push_error("动物动作资源不存在 [%s/%s]: %s" % [animal_id, action_id, texture_path])
-				return false
-			if float(action.get("fps", 1.0)) <= 0.0:
-				push_error("动物动作 fps 必须大于 0 [%s/%s]" % [animal_id, action_id])
-				return false
-			if action.has("frame_size"):
-				var frame_size_value: Variant = action["frame_size"]
-				if (
-					not frame_size_value is Array
-					or frame_size_value.size() != 2
-					or int(frame_size_value[0]) <= 0
-					or int(frame_size_value[1]) <= 0
-					or int(action.get("columns", 0)) <= 0
-					or int(action.get("frames", 0)) <= 0
-				):
-					push_error("动物图集参数无效 [%s/%s]" % [animal_id, action_id])
-					return false
-				var frame_width := int(frame_size_value[0])
-				var frame_height := int(frame_size_value[1])
-				var columns := int(action["columns"])
-				var frame_count := int(action["frames"])
-				var rows := ceili(frame_count / float(columns))
-				var texture: Texture2D = load(texture_path)
-				if columns * frame_width > texture.get_width() or rows * frame_height > texture.get_height():
-					push_error("动物图集范围超出图片 [%s/%s]" % [animal_id, action_id])
-					return false
-		var behavior := String(animal.get("behavior", "wander"))
-		if (
-			not animal.has("behaviors")
-			and behavior not in ["wander", "near_water", "avoid_snow", "prefer_snow"]
-		):
-			push_error("未知动物行为 [%s]: %s" % [animal_id, behavior])
-			return false
-		var foot_offset_y := float(animal.get("foot_offset_y", 0.0))
-		if foot_offset_y < 0.0 or foot_offset_y > 128.0:
-			push_error("动物 foot_offset_y 必须在 0..128 [%s]" % animal_id)
-			return false
-		var movement: Dictionary = animal.get("movement", {})
-		var idle_action := String(movement.get("idle_action", "idle"))
-		var move_action := String(movement.get("move_action", idle_action))
-		if not actions.has(idle_action) or not actions.has(move_action):
-			push_error("动物 movement 引用了未知动作 [%s]: %s / %s" % [animal_id, idle_action, move_action])
-			return false
-		if float(movement.get("duration", 0.0)) <= 0.0:
-			push_error("动物 movement.duration 必须大于 0 [%s]" % animal_id)
-			return false
-		if (
-			movement.has("move_steps")
-			and not _numeric_range_is_valid(movement["move_steps"], 1.0, true)
-		):
-			push_error("动物 move_steps 必须是递增正整数范围 [%s]" % animal_id)
-			return false
-		if (
-			movement.has("step_pause_seconds")
-			and not _numeric_range_is_valid(movement["step_pause_seconds"], 0.0, false)
-		):
-			push_error("动物 step_pause_seconds 必须是非负递增范围 [%s]" % animal_id)
-			return false
-		if movement.has("sort_switch_progress"):
-			var switch_progress := float(movement["sort_switch_progress"])
-			if switch_progress < 0.0 or switch_progress > 1.0:
-				push_error("动物 sort_switch_progress 必须在 0..1 [%s]" % animal_id)
-				return false
-	for ambient_id in _ambient_species:
-		var ambient: Dictionary = _ambient_species[ambient_id]
-		var cluster_size: Variant = ambient.get("cluster_size", [1, 1])
-		if (
-			not cluster_size is Array
-			or cluster_size.size() != 2
-			or int(cluster_size[0]) <= 0
-			or int(cluster_size[1]) < int(cluster_size[0])
-		):
-			push_error("环境生物 cluster_size 无效 [%s]" % ambient_id)
-			return false
-		if int(ambient.get("max_visible", 1)) <= 0:
-			push_error("环境生物 max_visible 必须大于 0 [%s]" % ambient_id)
-			return false
-		if int(ambient.get("max_lights", 0)) < 0:
-			push_error("环境生物 max_lights 不能小于 0 [%s]" % ambient_id)
-			return false
-	for ecosystem in _ecosystem_order:
-		var ecosystem_id := String(ecosystem["id"])
-		var match_value: Variant = ecosystem.get("match", {})
-		if not match_value is Dictionary:
-			push_error("生态 match 必须是 Dictionary [%s]" % ecosystem_id)
-			return false
-		if not _validate_ecosystem_match(match_value, ecosystem_id):
-			return false
-		var seen_flora_pool_ids := {}
-		var seen_fauna_pool_ids := {}
-		for rule_kind in ["flora", "fauna", "ambient"]:
-			var rules_value: Variant = ecosystem.get(rule_kind, [])
-			if not rules_value is Array:
-				push_error("生态规则必须是数组 [%s/%s]" % [ecosystem_id, rule_kind])
-				return false
-			var catalog: Dictionary
-			match rule_kind:
-				"flora":
-					catalog = _plant_species
-				"fauna":
-					catalog = _animal_species
-				_:
-					catalog = _ambient_species
-			for rule_value in rules_value:
-				if not rule_value is Dictionary:
-					push_error("生态规则必须是 Dictionary [%s/%s]" % [ecosystem_id, rule_kind])
-					return false
-				var rule: Dictionary = rule_value
-				if not _chance_value_is_valid(rule.get("chance", 0.0)):
-					push_error("生态生成概率必须在 0..1 [%s/%s]" % [ecosystem_id, rule_kind])
-					return false
-				var pool_value: Variant = rule.get("species", [])
-				if not pool_value is Array or pool_value.is_empty():
-					push_error("生态物种池不能为空 [%s/%s]" % [ecosystem_id, rule_kind])
-					return false
-				for species_id_value in pool_value:
-					var species_id := String(species_id_value)
-					if not catalog.has(species_id):
-						push_error("生态引用了未知物种 [%s/%s]: %s" % [ecosystem_id, rule_kind, species_id])
-						return false
-				if rule_kind == "flora":
-					var layer_id := String(rule.get("layer", ""))
-					if layer_id not in FLORA_LAYER_IDS:
-						push_error("flora rule 缺少有效 layer [%s]: %s" % [ecosystem_id, layer_id])
-						return false
-					var pool_id := String(rule.get("pool_id", ""))
-					if pool_id.is_empty() or seen_flora_pool_ids.has(pool_id):
-						push_error("flora pool_id 为空或重复 [%s]: %s" % [ecosystem_id, pool_id])
-						return false
-					seen_flora_pool_ids[pool_id] = true
-					for species_id_value in pool_value:
-						var species_id := String(species_id_value)
-						var plant: Dictionary = _plant_species[species_id]
-						if String(plant.get("layer", "")) != layer_id:
-							push_error(
-								"flora rule 与物种 layer 不一致 [%s/%s]: %s"
-								% [ecosystem_id, layer_id, species_id]
-							)
-							return false
-					var layer: Dictionary = _flora_layer_configs[layer_id]
-					var noise_above := float(
-						rule.get("noise_above", layer.get("default_noise_above", 0.0))
-					)
-					if noise_above < -1.0 or noise_above > 1.0:
-						push_error("flora noise_above 必须在 -1..1 [%s/%s]" % [ecosystem_id, pool_id])
-						return false
-					if float(rule.get("conflict_weight", 1.0)) <= 0.0:
-						push_error("flora conflict_weight 必须大于 0 [%s/%s]" % [ecosystem_id, pool_id])
-						return false
-					var placement := String(rule.get("placement", "ground"))
-					if placement not in ["ground", "lakebed", "water_surface"]:
-						push_error("未知植物放置方式 [%s]: %s" % [ecosystem_id, placement])
-						return false
-				elif rule_kind == "fauna":
-					var fauna_pool_id := String(rule.get("pool_id", ""))
-					if fauna_pool_id.is_empty() or seen_fauna_pool_ids.has(fauna_pool_id):
-						push_error("fauna pool_id 为空或重复 [%s]: %s" % [ecosystem_id, fauna_pool_id])
-						return false
-					seen_fauna_pool_ids[fauna_pool_id] = true
-					if not _validate_fauna_distribution(rule, ecosystem_id, fauna_pool_id):
-						return false
-	for later_index in range(1, _ecosystem_order.size()):
-		var later_ecosystem: Dictionary = _ecosystem_order[later_index]
-		var later_match: Dictionary = later_ecosystem.get("match", {})
-		for earlier_index in later_index:
-			var earlier_ecosystem: Dictionary = _ecosystem_order[earlier_index]
-			var earlier_match: Dictionary = earlier_ecosystem.get("match", {})
-			if _ecosystem_match_subsumes(earlier_match, later_match):
-				push_error(
-					"生态 [%s] 被前面的规则 [%s] 完全遮蔽"
-					% [String(later_ecosystem["id"]), String(earlier_ecosystem["id"])]
-				)
-				return false
-	return true
-
-
-func _validate_fauna_distribution(
-	rule: Dictionary,
-	ecosystem_id: String,
-	pool_id: String
-) -> bool:
-	var distribution_value: Variant = rule.get("distribution", {})
-	if not distribution_value is Dictionary:
-		push_error("fauna distribution 必须是 Dictionary [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	var distribution: Dictionary = distribution_value
-	if rule.has("only_if_flora_missed") and not rule["only_if_flora_missed"] is bool:
-		push_error("fauna only_if_flora_missed 必须是 bool [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	if int(distribution.get("anchor_spacing", 0)) <= 0:
-		push_error("fauna anchor_spacing 必须大于 0 [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	var anchor_jitter := float(distribution.get("anchor_jitter", 1.0))
-	if anchor_jitter < 0.0 or anchor_jitter > 1.0:
-		push_error("fauna anchor_jitter 必须在 0..1 [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	if not _numeric_range_is_valid(distribution.get("count", []), 1.0, true):
-		push_error("fauna count 必须是递增正整数范围 [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	if int(distribution.get("radius", -1)) < 0:
-		push_error("fauna radius 不能小于 0 [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	if float(distribution.get("social_radius", 0.0)) < 0.0:
-		push_error("fauna social_radius 不能小于 0 [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	if int(distribution.get("requires_water_within", 0)) < 0:
-		push_error("fauna requires_water_within 不能小于 0 [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	if distribution.has("same_ecosystem") and not distribution["same_ecosystem"] is bool:
-		push_error("fauna same_ecosystem 必须是 bool [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	var substitution_value: Variant = distribution.get("substitution", {})
-	if substitution_value is Dictionary and not substitution_value.is_empty():
-		var substitution: Dictionary = substitution_value
-		var substitute_species := String(substitution.get("species", ""))
-		if not _animal_species.has(substitute_species):
-			push_error("fauna substitution 引用了未知动物 [%s/%s]: %s" % [
-				ecosystem_id, pool_id, substitute_species
-			])
-			return false
-		if not _chance_value_is_valid(substitution.get("chance", -1.0)):
-			push_error("fauna substitution chance 无效 [%s/%s]" % [ecosystem_id, pool_id])
-			return false
-		if int(substitution.get("max_count", 0)) <= 0:
-			push_error("fauna substitution max_count 必须大于 0 [%s/%s]" % [ecosystem_id, pool_id])
-			return false
-	elif not substitution_value is Dictionary:
-		push_error("fauna substitution 必须是 Dictionary [%s/%s]" % [ecosystem_id, pool_id])
-		return false
-	return true
-
-
-func _validate_ecosystem_match(match_rule: Dictionary, ecosystem_id: String) -> bool:
-	var allowed_keys := [
-		"water",
-		"shore",
-		"biome",
-		"landform",
-		"minimum_level",
-		"maximum_level",
-	]
-	for key_value in match_rule:
-		var key := String(key_value)
-		if key not in allowed_keys:
-			push_error("生态 match 包含未知字段 [%s]: %s" % [ecosystem_id, key])
-			return false
-	for key in ["water", "shore"]:
-		if match_rule.has(key) and not match_rule[key] is bool:
-			push_error("生态 match.%s 必须是 bool [%s]" % [key, ecosystem_id])
-			return false
-	if match_rule.has("biome"):
-		var biome_value: Variant = match_rule["biome"]
-		var biome_ids: Array = biome_value if biome_value is Array else [biome_value]
-		if biome_ids.is_empty():
-			push_error("生态 match.biome 不能为空 [%s]" % ecosystem_id)
-			return false
-		for biome_id_value in biome_ids:
-			if String(biome_id_value).is_empty():
-				push_error("生态 match.biome 包含空 ID [%s]" % ecosystem_id)
-				return false
-	if match_rule.has("landform"):
-		var landform_value: Variant = match_rule["landform"]
-		var landform_ids: Array = landform_value if landform_value is Array else [landform_value]
-		if landform_ids.is_empty():
-			push_error("生态 match.landform 不能为空 [%s]" % ecosystem_id)
-			return false
-		for landform_id_value in landform_ids:
-			if String(landform_id_value).is_empty():
-				push_error("生态 match.landform 包含空 ID [%s]" % ecosystem_id)
-				return false
-	for key in ["minimum_level", "maximum_level"]:
-		if match_rule.has(key) and not (match_rule[key] is int or match_rule[key] is float):
-			push_error("生态 match.%s 必须是数字 [%s]" % [key, ecosystem_id])
-			return false
-	if (
-		match_rule.has("minimum_level")
-		and match_rule.has("maximum_level")
-		and int(match_rule["minimum_level"]) > int(match_rule["maximum_level"])
-	):
-		push_error("生态 minimum_level 不能大于 maximum_level [%s]" % ecosystem_id)
-		return false
-	return true
-
-
-## earlier 的匹配集合完全包含 later 时，later 永远不会被 first-match 选中。
-func _ecosystem_match_subsumes(earlier: Dictionary, later: Dictionary) -> bool:
-	for key in ["water", "shore", "biome"]:
-		if earlier.has(key) and (not later.has(key) or earlier[key] != later[key]):
-			return false
-	if earlier.has("landform"):
-		if not later.has("landform"):
-			return false
-		var earlier_value: Variant = earlier["landform"]
-		var later_value: Variant = later["landform"]
-		var earlier_ids: Array = earlier_value if earlier_value is Array else [earlier_value]
-		var later_ids: Array = later_value if later_value is Array else [later_value]
-		for landform_id in later_ids:
-			if not earlier_ids.has(landform_id):
-				return false
-	if earlier.has("minimum_level"):
-		if not later.has("minimum_level") or int(earlier["minimum_level"]) > int(later["minimum_level"]):
-			return false
-	if earlier.has("maximum_level"):
-		if not later.has("maximum_level") or int(earlier["maximum_level"]) < int(later["maximum_level"]):
-			return false
-	return true
-
-
-func _chance_value_is_valid(value: Variant) -> bool:
-	if value is float or value is int:
-		var chance := float(value)
-		return chance >= 0.0 and chance <= 1.0
-	if not value is Dictionary or value.is_empty():
-		return false
-	for chance_value in value.values():
-		if not (chance_value is float or chance_value is int):
-			return false
-		var chance := float(chance_value)
-		if chance < 0.0 or chance > 1.0:
-			return false
-	return true
-
-
-func _numeric_range_is_valid(value: Variant, minimum: float, integers_only: bool) -> bool:
-	if not value is Array or value.size() != 2:
-		return false
-	for item in value:
-		if not (item is float or item is int):
-			return false
-		var number := float(item)
-		if number < minimum or (integers_only and not is_equal_approx(number, roundf(number))):
-			return false
-	return float(value[1]) >= float(value[0])
+	return EcologyConfigValidatorScript.validate_ecosystem_config(
+		_plant_species,
+		_animal_species,
+		_ambient_species,
+		_ecosystem_order,
+		_flora_layer_configs,
+		FLORA_LAYER_IDS
+	)
 
 
 func _noise_type_from_name(value: String) -> int:
-	match value.to_lower():
-		"simplex":
-			return FastNoiseLite.TYPE_SIMPLEX
-		"simplex_smooth":
-			return FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-		"value":
-			return FastNoiseLite.TYPE_VALUE
-		"value_cubic":
-			return FastNoiseLite.TYPE_VALUE_CUBIC
-		_:
-			return FastNoiseLite.TYPE_PERLIN
+	return EcologyConfigValidatorScript.noise_type_from_name(value)
 
 
 func _fractal_type_from_name(value: String) -> int:
-	match value.to_lower():
-		"ridged":
-			return FastNoiseLite.FRACTAL_RIDGED
-		"ping_pong":
-			return FastNoiseLite.FRACTAL_PING_PONG
-		_:
-			return FastNoiseLite.FRACTAL_FBM
+	return EcologyConfigValidatorScript.fractal_type_from_name(value)
 
 
-func _noise_instance_for_field(field_id: String) -> FastNoiseLite:
-	if _terrain_sampler != null and _terrain_sampler.noise_registry != null:
-		var registered: FastNoiseLite = _terrain_sampler.noise_registry.get_field(
-			StringName(field_id)
-		)
-		if registered != null:
-			return registered
-	push_error("未知 noise field: " + field_id)
-	return null
+
 
 
 ## 迁移期兼容旧契约/调试入口；这些引用和 TerrainSampler 共用同一批动态 noise 实例。
@@ -979,23 +553,19 @@ func _ready() -> void:
 		return
 	y_sort_enabled = true  # 每根地块柱用合成脚点深度排序；柱内内容由批绘制器固定顺序
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_water_tex = _make_water_face_texture(&"surface")
-	_water_left_tex = _make_water_face_texture(&"left")
-	_water_right_tex = _make_water_face_texture(&"right")
-	_rock_tex = _terrain_materials.get_texture(&"rock")
-	_rock_grass_tex = _terrain_materials.get_texture(&"rock_grass")
-	_moss_tex = _terrain_materials.get_texture(&"mossy_rock")
-	_soil_tex = _terrain_materials.get_texture(&"soil")
-	_moist_tex = _terrain_materials.get_texture(&"moist_soil")
-	_parched_tex = _terrain_materials.get_texture(&"parched_soil")
-	_sand_tex = _terrain_materials.get_texture(&"sand")
-	_underwater_texture_cache.clear()
-	_grass_tex = _terrain_materials.get_texture(&"grass")
-	_little_grass_tex = _terrain_materials.get_texture(&"sparse_grass")
-	_snow_tex = _terrain_materials.get_texture(&"snow")
+	_textures.setup(
+		_terrain_materials,
+		_terrain_sampler,
+		Callable(self, "_cell_rand"),
+		TILE_W,
+		WATER_COLOR,
+		WATER_DEPTH_COLOR,
+		WATER_MAX
+	)
 	_setup_terrain()
 	_setup_player()
 	_setup_camera()
+	_player_occlusion.configure(_player, _cam, _terrain, TILE_W, TILE_H)
 	_setup_depth_of_field()
 	_setup_day_night()
 	_setup_audio()
@@ -1014,9 +584,78 @@ func _ready() -> void:
 			int(args[shot_cell_arg + 1]),
 			int(args[shot_cell_arg + 2])
 		)
+	_configure_generation_services()
 	_regenerate(seed)
 	if "--shot" in OS.get_cmdline_user_args():
 		_shot_and_quit()
+
+
+## 生成服务接线：配置编译完成后一次性注入（字典按引用同步，无需重复调用）。
+func _configure_generation_services() -> void:
+	_world_query.configure(
+		_cell_states,
+		Callable(self, "_sample_cell_context")
+	)
+	_flora.configure(
+		_plant_species,
+		_ambient_species,
+		_flora_layer_configs,
+		_dominant_species_chance,
+		_flora_conflict_seed,
+		rock_level,
+		WATER_SURFACE_LEVEL,
+		LANDFORM_ID_TO_TYPE,
+		_spatial_flora_sources,
+		_community_runtime,
+		_ambient_registry,
+		_terrain_sampler,
+		Callable(self, "_cell_rand"),
+		Callable(self, "_cell_context_for_query"),
+		Callable(self, "_ecology_near_tag"),
+		Callable(self, "_community_rand01"),
+		Callable(self, "_render_block")
+	)
+	_fauna.configure(
+		_community_runtime,
+		_animal_groups,
+		_cells,
+		_cell_states,
+		_animals,
+		WATER_MAX,
+		WATER_SURFACE_LEVEL,
+		LANDFORM_ID_TO_TYPE,
+		Callable(self, "_cell_rand"),
+		Callable(self, "_community_rand01"),
+		Callable(self, "_ecology_near_tag"),
+		Callable(self, "_ecology_chance"),
+		Callable(self, "_pick_species"),
+		Callable(self, "_quantize"),
+		Callable(self, "_cell_context_for_query"),
+		Callable(self, "_community_water_clearance_valid"),
+		Callable(self, "_spawn_animal"),
+		Callable(self, "_animal_cell_reserved")
+	)
+	_animal_runtime.configure(
+		self,
+		_animals,
+		_cell_states,
+		_animal_species,
+		_animal_behavior_stacks,
+		_animal_behavior_registry,
+		_animal_groups,
+		WATER_MAX,
+		WATER_SURFACE_LEVEL,
+		WATER_COLOR,
+		ANIMAL_SORT_BIAS,
+		ANIMAL_DIRECTIONS,
+		Callable(self, "_cell_rand"),
+		Callable(self, "_quantize"),
+		Callable(self, "_cell_context_for_query"),
+		Callable(self, "_water_clearance"),
+		Callable(self, "_column_sort_y"),
+		Callable(self, "_cell_feet_pos"),
+		Callable(self, "_grid_to_screen")
+	)
 
 
 func _regenerate(new_seed: int) -> void:
@@ -1036,9 +675,7 @@ func _regenerate(new_seed: int) -> void:
 		_ambient_registry.clear_all()
 	for cell in _cells.keys():
 		_free_cell(cell)
-	_player_occluder_cells.clear()
-	_player_occlusion_fading_cells.clear()
-	_player_occlusion_dirty = true
+	_player_occlusion.clear_recorded()
 	_explored.clear()
 	_sort_origin = _player_cell
 	_has_sort_origin = true
@@ -1180,13 +817,13 @@ func _spawn_cell(cell: Vector2i) -> void:
 	var blocks: Array[Dictionary] = state.render_blocks
 	var water_depth := WATER_SURFACE_LEVEL - q
 	for level in q + 1:
-		var solid_texture := _solid_tex(q, level, cell, context)
+		var solid_texture := _textures.solid_tex(q, level, cell, context)
 		if q <= WATER_MAX:
-			solid_texture = _underwater_texture_for_context(context, water_depth)
+			solid_texture = _textures.underwater_texture_for_context(context, water_depth)
 		blocks.append(_render_block(solid_texture, level))
 	if q <= WATER_MAX:
 		_append_water_volume(cell, q, blocks)
-	_spawn_flora(
+	_flora.spawn_flora(
 		cell,
 		q,
 		int(LANDFORM_ID_TO_TYPE.get(
@@ -1209,7 +846,7 @@ func _spawn_cell(cell: Vector2i) -> void:
 	_cells[cell] = true
 	if q <= WATER_MAX:
 		_water_cells[cell] = true
-	_spawn_ambient_for_cell(
+	_flora.spawn_ambient_for_cell(
 		cell,
 		q,
 		int(LANDFORM_ID_TO_TYPE.get(
@@ -1218,9 +855,10 @@ func _spawn_cell(cell: Vector2i) -> void:
 		)),
 		context.region_anchor,
 		state,
-		self
+		self,
+		_current_seed
 	)
-	_player_occlusion_dirty = true
+	_player_occlusion.mark_dirty()
 
 
 func _append_water_volume(cell: Vector2i, lakebed_level: int, blocks: Array) -> void:
@@ -1231,16 +869,16 @@ func _append_water_volume(cell: Vector2i, lakebed_level: int, blocks: Array) -> 
 	var expose_back_left := _quantize(cell.x, cell.y - 1) > WATER_MAX
 	for level in range(lakebed_level + 1, WATER_SURFACE_LEVEL + 1):
 		if expose_left:
-			blocks.append(_water_block(_water_left_tex, level, WATER_SIDE_ALPHA, &"left_side"))
+			blocks.append(_water_block(_textures.water_left_tex, level, WATER_SIDE_ALPHA, &"left_side"))
 		if expose_right:
-			blocks.append(_water_block(_water_right_tex, level, WATER_SIDE_ALPHA, &"right_side"))
+			blocks.append(_water_block(_textures.water_right_tex, level, WATER_SIDE_ALPHA, &"right_side"))
 		if expose_back_left:
-			blocks.append(_water_block(_water_left_tex, level, WATER_SIDE_ALPHA, &"left_side_opposite"))
+			blocks.append(_water_block(_textures.water_left_tex, level, WATER_SIDE_ALPHA, &"left_side_opposite"))
 		if expose_back_right:
-			blocks.append(_water_block(_water_right_tex, level, WATER_SIDE_ALPHA, &"right_side_opposite"))
+			blocks.append(_water_block(_textures.water_right_tex, level, WATER_SIDE_ALPHA, &"right_side_opposite"))
 	# 顶面只画一次，所有水格在同一个水位无缝拼接；透明像素不会重复覆盖。
 	var surface_block := _water_block(
-		_water_tex,
+		_textures.water_tex,
 		WATER_SURFACE_LEVEL,
 		WATER_SURFACE_ALPHA,
 		&"surface"
@@ -1287,9 +925,7 @@ func _render_block(
 
 
 func _free_cell(cell: Vector2i) -> void:
-	_player_occluder_cells.erase(cell)
-	_player_occlusion_fading_cells.erase(cell)
-	_player_occlusion_dirty = true
+	_player_occlusion.on_cell_freed(cell)
 	if _ambient_registry != null:
 		_ambient_registry.remove_cell_all(cell)
 	_cell_states.erase(cell)
@@ -1309,9 +945,8 @@ func _update_streaming() -> void:
 	if _battle_active:
 		return  # 战斗中冻结流式（战场 cell 不被释放/生成）
 	# Habitat 邻近查询只在一次流式批次内复用，避免无限世界探索时缓存无界增长。
-	_ecology_near_tag_cache.clear()
-	_spatial_flora_plan_cache.clear()
-	_raw_selected_flora_cache.clear()
+	_world_query.clear_caches()
+	_flora.clear_caches()
 	_ensure_sort_origin(_stream_center)
 	for cell in _cells.keys():
 		if not _in_stream(cell, _stream_center):
@@ -1326,7 +961,7 @@ func _update_streaming() -> void:
 		if _terrain.flush() > 0:
 			# chunk 重建会清掉植物淡化状态（注册表重建），需要重算遮挡集合，
 			# 否则已记录的遮挡格会带着"已处理"标记而永远不再淡化。
-			_player_occlusion_dirty = true
+			_player_occlusion.mark_dirty()
 	# 所有地块与静态生态对象完成后再生成动物群，避免群成员落在尚未加载的树木或装饰上。
 	_spawn_fauna_for_stream()
 	_cleanup_streamed_animals()
@@ -1367,7 +1002,7 @@ func _column_sort_y(cell: Vector2i) -> float:
 ## 角度变化只旋转 Camera3D；地形、生态状态和连续网格坐标全部保持不变。
 func _refresh_view_projection() -> void:
 	_view_rotation_culling = false
-	_player_occlusion_dirty = true
+	_player_occlusion.mark_dirty()
 
 
 func _restore_view_draw_culling() -> void:
@@ -1383,7 +1018,7 @@ func _ensure_sort_origin(near_cell: Vector2i) -> void:
 	if absi(distance.x) < SORT_REBASE_DISTANCE and absi(distance.y) < SORT_REBASE_DISTANCE:
 		return
 	_sort_origin = near_cell
-	_player_occlusion_dirty = true
+	_player_occlusion.mark_dirty()
 	_move_sort_from = _column_sort_y(_move_from_cell) + PLAYER_SORT_BIAS
 	_move_sort_to = _column_sort_y(_player_cell) + PLAYER_SORT_BIAS
 	_set_player_render_position(
@@ -1405,62 +1040,6 @@ func _is_beach(cell: Vector2i, q: int) -> bool:
 	return _terrain_sampler.is_shore(cell, q)
 
 
-## 实心柱第 level 层的材质：q 为柱顶所在层号
-func _solid_tex(
-	q: int,
-	level: int,
-	cell: Vector2i,
-	cell_context = null
-) -> Texture2D:
-	if q <= WATER_MAX:
-		return _moist_tex  # 河底/湖底用湿土
-	var context = cell_context if cell_context != null else _terrain_sampler.sample(cell)
-	var surface_id: StringName = context.surface_id
-	var biome_id: StringName = context.biome_id
-	# 保留当前高山苔石的确定性整柱变体；它也是一个注册材质，不再是 preload 特例。
-	if (
-		surface_id == &"rock"
-		and biome_id not in [&"desert", &"desert_transition"]
-		and q >= 15
-		and _cell_rand(cell, 77) < 0.4
-	):
-		return _terrain_materials.get_texture(&"mossy_rock", &"top", biome_id)
-	# 当前温带柱壁曾有少量稀草纹理，继续保留该视觉随机流；其他（包括未来新增）
-	# surface 直接使用自身声明的 top/column 材质，无需在这里增加 biome 分支。
-	if level < q and surface_id in [&"grass", &"rock_grass", &"moist_soil"]:
-		return _soil_or_little_grass(cell, level)
-	var role := &"top" if level == q else &"column"
-	var texture: Texture2D = _terrain_materials.get_texture(
-		surface_id,
-		role,
-		biome_id
-	)
-	return texture if texture != null else _soil_tex
-
-
-## 湖底来源由 surface material 决定；新 biome 只需覆盖 underwater_texture，
-## 不再向 renderer 增加 desert/volcanic/ice 等名称分支。
-func _underwater_texture_for_context(context, water_depth: int) -> Texture2D:
-	var safe_depth := maxi(1, water_depth)
-	var cache_key := "%s/%s/%d" % [
-		context.surface_id,
-		context.biome_id,
-		safe_depth,
-	]
-	if _underwater_texture_cache.has(cache_key):
-		return _underwater_texture_cache[cache_key]
-	var base_texture: Texture2D = _terrain_materials.get_texture(
-		context.surface_id,
-		&"underwater",
-		context.biome_id
-	)
-	if base_texture == null:
-		base_texture = _moist_tex
-	var texture := _make_underwater_ground_texture(safe_depth, base_texture)
-	_underwater_texture_cache[cache_key] = texture
-	return texture
-
-
 func _desert_surface_kind(cell: Vector2i, q: int, biome: int) -> int:
 	var biome_id := StringName(_biome_id(biome))
 	var surface_id: StringName = _terrain_sampler.biome_registry.surface_kind(
@@ -1480,194 +1059,76 @@ func _desert_surface_kind(cell: Vector2i, q: int, biome: int) -> int:
 	return DesertSurface.NONE
 
 
-## 泥土里按 8% 混入稀草泥土（按格+层确定性随机）
-func _soil_or_little_grass(cell: Vector2i, level: int) -> Texture2D:
-	return _little_grass_tex if _cell_rand(cell, 88 + level) < 0.08 else _soil_tex
-
-
 # ---------- 植被 / 动物 ----------
 
-var _flora_cache := {}
-var _raw_selected_flora_cache := {}
-
-
-func _plant_tex(species_id: String) -> Texture2D:
-	if not _flora_cache.has(species_id):
-		if not _plant_species.has(species_id):
-			push_error("生态配置引用了未知植物: " + species_id)
-			return null
-		var species: Dictionary = _plant_species[species_id]
-		_flora_cache[species_id] = load(String(species.get("texture", "")))
-	return _flora_cache[species_id]
-
-
-## 每个群落按 selection_seed_key 确定优势种；配置里的物种顺序与重复项都代表权重。
-func _pick_species(rule: Dictionary, gc: Vector2i, cell: Vector2i) -> String:
-	var pool: Array = rule.get("species", [])
-	if pool.is_empty():
-		return ""
-	var seed_key := String(rule.get("selection_seed_key", rule.get("pool_id", "species")))
-	var salt := seed_key.hash()
-	var dominant: int = int(_cell_rand(gc, salt + 50) * pool.size()) % pool.size()
-	var dominant_chance := _dominant_species_chance
-	var layer_id := String(rule.get("layer", ""))
-	if _flora_layer_configs.has(layer_id):
-		var layer: Dictionary = _flora_layer_configs[layer_id]
-		dominant_chance = float(layer.get("dominant_chance", dominant_chance))
-	if _cell_rand(cell, salt + 100) < dominant_chance:
-		return String(pool[dominant])
-	var total := 0.0
-	for i in pool.size():
-		if i != dominant:
-			total += _cell_rand(gc, salt + i)
-	var rr := _cell_rand(cell, salt + 101) * total
-	for i in pool.size():
-		if i != dominant:
-			rr -= _cell_rand(gc, salt + i)
-			if rr <= 0.0:
-				return String(pool[i])
-	return String(pool[dominant])
+var _flora := FloraSpawnerScript.new()
+var _fauna := FaunaStreamerScript.new()
+var _animal_runtime := AnimalRuntimeScript.new()
 
 
 func _ecosystem_id_for_cell(q: int, biome: int, beach: bool, lf: int) -> String:
-	if _community_runtime != null and _community_runtime.is_configured():
-		return _community_runtime.legacy_ecosystem_id(
-			_legacy_cell_context(q, biome, beach, lf)
-		)
-	for ecosystem in _ecosystem_order:
-		var match_rule: Dictionary = ecosystem.get("match", {})
-		if _ecosystem_matches(match_rule, q, biome, beach, lf):
-			return String(ecosystem["id"])
-	return _default_ecosystem_id
+	return EcosystemMatchScript.ecosystem_id_for_cell(
+		_community_runtime,
+		_ecosystem_order,
+		_default_ecosystem_id,
+		_landform_ids,
+		_terrain_sampler,
+		WATER_SURFACE_LEVEL,
+		WATER_MAX,
+		q,
+		biome,
+		beach,
+		lf
+	)
 
 
 ## 旧测试与存档仍使用整数 biome/landform；在边界处转换成统一 CellContext。
 ## 新生态链始终直接消费 TerrainSampler 产生的动态 ID。
 func _legacy_cell_context(q: int, biome: int, beach: bool, lf: int):
-	var landform_id := ""
-	if lf >= 0 and lf < _landform_ids.size():
-		landform_id = _landform_ids[lf]
-	return CellContextScript.new(
-		Vector2i.ZERO,
+	return EcosystemMatchScript.legacy_cell_context(
+		_landform_ids,
+		_terrain_sampler,
+		WATER_SURFACE_LEVEL,
+		WATER_MAX,
 		q,
-		StringName(_biome_id(biome)),
 		biome,
-		StringName(landform_id),
-		lf,
-		maxi(0, WATER_SURFACE_LEVEL - q),
-		q <= WATER_MAX,
 		beach,
-		&"water" if q <= WATER_MAX else &"",
-		Vector2i.ZERO
+		lf
 	)
 
 
-func _ecosystem_matches(match_rule: Dictionary, q: int, biome: int, beach: bool, lf: int) -> bool:
-	if match_rule.has("water") and bool(match_rule["water"]) != (q <= WATER_MAX):
-		return false
-	if match_rule.has("shore") and bool(match_rule["shore"]) != beach:
-		return false
-	if match_rule.has("biome") and String(match_rule["biome"]) != _biome_id(biome):
-		return false
-	if match_rule.has("landform"):
-		var configured_landform: Variant = match_rule["landform"]
-		if configured_landform is Array:
-			if not configured_landform.has(_landform_ids[lf]):
-				return false
-		elif String(configured_landform) != _landform_ids[lf]:
-			return false
-	if match_rule.has("minimum_level") and q < int(match_rule["minimum_level"]):
-		return false
-	if match_rule.has("maximum_level") and q > int(match_rule["maximum_level"]):
-		return false
-	return true
+func _ecosystem_matches(
+	match_rule: Dictionary,
+	q: int,
+	biome: int,
+	beach: bool,
+	lf: int
+) -> bool:
+	return EcosystemMatchScript.ecosystem_matches(
+		match_rule,
+		_landform_ids,
+		_terrain_sampler,
+		WATER_MAX,
+		q,
+		biome,
+		beach,
+		lf
+	)
 
 
 func _biome_id(biome: int) -> String:
-	return String(_terrain_sampler.biome_id_for_index(biome))
+	return EcosystemMatchScript.biome_id(_terrain_sampler, biome)
 
 
 func _ecology_chance(chance_value: Variant, lf: int, q: int) -> float:
-	if chance_value is float or chance_value is int:
-		return float(chance_value)
-	if not chance_value is Dictionary:
-		return 0.0
-	var chances: Dictionary = chance_value
-	if lf == Landform.MOUNTAIN or q >= rock_level:
-		return float(chances.get("mountain_or_rock", chances.get("default", 0.0)))
-	if lf == Landform.SWAMP:
-		return float(chances.get("swamp", chances.get("default", 0.0)))
-	if lf == Landform.HILLS:
-		return float(chances.get("hills", chances.get("default", 0.0)))
-	return float(chances.get("default", 0.0))
+	return EcosystemMatchScript.ecology_chance(chance_value, rock_level, lf, q)
 
 
-## 三个静态生态层分别使用独立噪声。所有命中的规则只先产生候选，同格最终只绘制一个。
-func _raw_flora_candidates_for_rules(
-	cell: Vector2i,
-	q: int,
-	lf: int,
-	gc: Vector2i,
-	rules: Array
-) -> Array[Dictionary]:
-	var candidates: Array[Dictionary] = []
-	var water_depth := WATER_SURFACE_LEVEL - q
-	for rule_value in rules:
-		var rule: Dictionary = rule_value
-		var layer_id := String(rule.get("layer", ""))
-		var layer: Dictionary = _flora_layer_configs[layer_id]
-		var noise_field_id := String(layer.get("noise_field", ""))
-		var layer_noise := _noise_instance_for_field(noise_field_id).get_noise_2d(cell.x, cell.y)
-		var noise_above := float(
-			rule.get("noise_above", layer.get("default_noise_above", 0.0))
-		)
-		if layer_noise < noise_above:
-			continue
-		if rule.has("max_water_depth") and water_depth > int(rule["max_water_depth"]):
-			continue
-		var placement_seed := int(rule.get("placement_seed", 0))
-		var chance := _ecology_chance(rule.get("chance", 0.0), lf, q)
-		if _cell_rand(cell, placement_seed) >= chance:
-			continue
-		var plant_id := _pick_species(rule, gc, cell)
-		if plant_id.is_empty():
-			continue
-		var placement := String(rule.get("placement", "ground"))
-		candidates.append({
-			"sort_key": "%s/%s/%s" % [layer_id, String(rule.get("pool_id", "")), plant_id],
-			"species_id": plant_id,
-			"layer": layer_id,
-			"placement": placement,
-			"level": WATER_SURFACE_LEVEL if placement == "water_surface" else q,
-			"render_priority": int(rule.get("render_priority", 8)),
-			"modulate": (
-				_underwater_flora_modulate(water_depth)
-				if placement == "lakebed"
-				else Color.WHITE
-			),
-			"conflict_weight": float(rule.get("conflict_weight", 1.0)),
-		})
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return String(a["sort_key"]) < String(b["sort_key"])
-	)
-	return candidates
+
+func _pick_species(rule: Dictionary, gc: Vector2i, cell: Vector2i) -> String:
+	return _flora.pick_species(rule, gc, cell)
 
 
-## 旧契约的兼容入口；正式生成链由 CommunityRuntime 提供加法合并后的 rules。
-func _raw_flora_candidates_for_cell(
-	cell: Vector2i,
-	q: int,
-	lf: int,
-	gc: Vector2i,
-	ecosystem: Dictionary
-) -> Array[Dictionary]:
-	return _raw_flora_candidates_for_rules(
-		cell, q, lf, gc, ecosystem.get("flora", [])
-	)
-
-
-## 带 habitat 的物种只改变候选最终显示的品种，不删除候选或改变冲突权重。
-## 因此空旷处的蘑菇会被同层草丛接替，但已经调好的地被总密度保持不变。
 func _flora_candidates_for_cell(
 	cell: Vector2i,
 	q: int,
@@ -1675,62 +1136,7 @@ func _flora_candidates_for_cell(
 	gc: Vector2i,
 	ecosystem: Dictionary
 ) -> Array[Dictionary]:
-	return _flora_candidates_for_rules(
-		cell, q, lf, gc, ecosystem.get("flora", [])
-	)
-
-
-func _flora_candidates_for_rules(
-	cell: Vector2i,
-	q: int,
-	lf: int,
-	gc: Vector2i,
-	rules: Array
-) -> Array[Dictionary]:
-	var candidates := _raw_flora_candidates_for_rules(cell, q, lf, gc, rules)
-	for index in candidates.size():
-		var candidate: Dictionary = candidates[index]
-		candidate["species_id"] = _resolve_flora_habitat_species(
-			cell,
-			String(candidate["species_id"])
-		)
-		candidates[index] = candidate
-	return candidates
-
-
-func _resolve_flora_habitat_species(cell: Vector2i, species_id: String) -> String:
-	var species: Dictionary = _plant_species.get(species_id, {})
-	var habitat: Dictionary = species.get("habitat", {})
-	if habitat.is_empty():
-		return species_id
-	var near_layer := String(habitat.get("near_flora_layer", ""))
-	var radius := int(habitat.get("radius", 0))
-	if _has_raw_selected_flora_layer_within(cell, near_layer, radius):
-		return species_id
-	return String(habitat.get("fallback_species", species_id))
-
-
-## 邻近查询必须基于未应用 habitat 的确定性最终候选，不能读取流式 `_cells`。
-## 这样结果不依赖格子的生成先后，也不会在蘑菇查询树木时递归调用自身。
-func _raw_selected_flora_for_cell(cell: Vector2i) -> Dictionary:
-	if _raw_selected_flora_cache.has(cell):
-		return _raw_selected_flora_cache[cell]
-	var context = _cell_context_for_query(cell)
-	var rules: Array = _community_runtime.cell_flora_rules_for_cell(
-		context,
-		Callable(self, "_ecology_near_tag")
-	)
-	var candidates := _raw_flora_candidates_for_rules(
-		cell,
-		context.height,
-		int(LANDFORM_ID_TO_TYPE.get(String(context.landform_id), Landform.PLAINS)),
-		context.region_anchor,
-		rules
-	)
-	candidates.append_array(_spatial_flora_candidates_for_cell(context))
-	var selected := _select_flora_candidate(cell, candidates)
-	_raw_selected_flora_cache[cell] = selected
-	return selected
+	return _flora.flora_candidates_for_cell(cell, q, lf, gc, ecosystem)
 
 
 func _has_raw_selected_flora_layer_within(
@@ -1738,572 +1144,32 @@ func _has_raw_selected_flora_layer_within(
 	layer_id: String,
 	radius: int
 ) -> bool:
-	for offset_y in range(-radius, radius + 1):
-		for offset_x in range(-radius, radius + 1):
-			if offset_x == 0 and offset_y == 0:
-				continue
-			var selected := _raw_selected_flora_for_cell(
-				cell + Vector2i(offset_x, offset_y)
-			)
-			if String(selected.get("layer", "")) == layer_id:
-				return true
-	return false
+	return _flora.has_raw_selected_flora_layer_within(cell, layer_id, radius)
 
 
 func _select_flora_candidate(cell: Vector2i, candidates: Array[Dictionary]) -> Dictionary:
-	if candidates.is_empty():
-		return {}
-	var total_weight := 0.0
-	for candidate in candidates:
-		total_weight += float(candidate.get("conflict_weight", 1.0))
-	var cursor := _cell_rand(cell, _flora_conflict_seed) * total_weight
-	for candidate in candidates:
-		cursor -= float(candidate.get("conflict_weight", 1.0))
-		if cursor <= 0.0:
-			return candidate
-	return candidates.back()
+	return _flora.select_flora_candidate(cell, candidates)
 
-
-## 动植物定义由 ecology manifest 与 CommunityRuntime 驱动；这里只保留候选冲突与放置机制。
-func _spawn_flora(
-	cell: Vector2i,
-	q: int,
-	lf: int,
-	gc: Vector2i,
-	state
-) -> void:
-	var rules: Array = _community_runtime.cell_flora_rules_for_cell(
-		state.context,
-		Callable(self, "_ecology_near_tag")
-	)
-	var selected := _select_flora_candidate(
-		cell,
-		_flora_candidates_with_spatial(cell, q, lf, gc, rules, state.context)
-	)
-	if not selected.is_empty():
-		_place_flora(
-			String(selected["species_id"]),
-			String(selected["layer"]),
-			String(selected["placement"]),
-			int(selected["level"]),
-			state,
-			int(selected["render_priority"]),
-			selected.get("modulate", Color.WHITE)
-		)
-
-
-func _flora_candidates_with_spatial(
-	cell: Vector2i,
-	q: int,
-	lf: int,
-	gc: Vector2i,
-	rules: Array,
-	context
-) -> Array[Dictionary]:
-	var candidates := _flora_candidates_for_rules(cell, q, lf, gc, rules)
-	for candidate_value in _spatial_flora_candidates_for_cell(context):
-		var candidate: Dictionary = candidate_value
-		candidate["species_id"] = _resolve_flora_habitat_species(
-			cell,
-			String(candidate.get("species_id", ""))
-		)
-		candidates.append(candidate)
-	return candidates
-
-
-func _spatial_flora_candidates_for_cell(context) -> Array[Dictionary]:
-	var candidates: Array[Dictionary] = []
-	if context == null:
-		return candidates
-	var cell: Vector2i = context.cell
-	for source in _spatial_flora_sources:
-		var definition: Dictionary = source.get("definition", {})
-		var distribution: Dictionary = definition.get("distribution", {})
-		var spacing := maxi(1, int(distribution.get("anchor_spacing", 1)))
-		var radius := maxi(0, int(distribution.get("radius", 0)))
-		var minimum_bucket := CommunitySpawnerScript.bucket_for_cell(
-			cell - Vector2i(radius, radius), spacing
-		)
-		var maximum_bucket := CommunitySpawnerScript.bucket_for_cell(
-			cell + Vector2i(radius, radius), spacing
-		)
-		for bucket_y in range(minimum_bucket.y, maximum_bucket.y + 1):
-			for bucket_x in range(minimum_bucket.x, maximum_bucket.x + 1):
-				var plan := _spatial_flora_plan(
-					source,
-					Vector2i(bucket_x, bucket_y)
-				)
-				if not bool(plan.get("complete", false)):
-					continue
-				for member_value in plan.get("members", []):
-					var member: Dictionary = member_value
-					if member.get("cell", Vector2i.ZERO) != cell:
-						continue
-					var candidate := _spatial_flora_candidate(
-						definition,
-						member,
-						context
-					)
-					if not candidate.is_empty():
-						candidates.append(candidate)
-	return candidates
-
-
-func _spatial_flora_plan(source: Dictionary, bucket: Vector2i) -> Dictionary:
-	var cache_key := "%s/%s/%d/%d" % [
-		String(source.get("source_biome_id", "")),
-		String(source.get("community_id", "")),
-		bucket.x,
-		bucket.y,
-	]
-	if _spatial_flora_plan_cache.has(cache_key):
-		return _spatial_flora_plan_cache[cache_key]
-	var habitat_valid: Callable = func(candidate: Vector2i) -> bool:
-		return _community_runtime.flora_source_matches_context(
-			source,
-			_cell_context_for_query(candidate),
-			Callable(self, "_ecology_near_tag")
-		)
-	var plan: Dictionary = CommunitySpawnerScript.plan_community(
-		source.get("definition", {}),
-		bucket,
-		Callable(self, "_community_rand01"),
-		habitat_valid,
-		habitat_valid
-	)
-	_spatial_flora_plan_cache[cache_key] = plan
-	return plan
-
-
-func _spatial_flora_candidate(
-	definition: Dictionary,
-	member: Dictionary,
-	context
-) -> Dictionary:
-	var species_id := String(member.get("species", member.get("species_id", "")))
-	var species: Dictionary = _plant_species.get(species_id, {})
-	var layer_id := String(species.get("layer", ""))
-	if species_id.is_empty() or layer_id.is_empty():
-		return {}
-	var habitat_value: Variant = definition.get("habitat", {})
-	var habitat: Dictionary = habitat_value if habitat_value is Dictionary else {}
-	var placement := String(habitat.get("placement", "ground"))
-	for spec_value in definition.get("members", []):
-		if not spec_value is Dictionary:
-			continue
-		var spec: Dictionary = spec_value
-		if String(spec.get("species_id", spec.get("species", ""))) == species_id:
-			placement = String(spec.get("placement", placement))
-			break
-	var render_priority := int(definition.get(
-		"render_priority",
-		12 if placement == "water_surface" else 0 if placement == "lakebed" else 8
-	))
-	return {
-		"sort_key": "%s/%s/%s" % [
-			layer_id,
-			String(definition.get("id", "community")),
-			species_id,
-		],
-		"species_id": species_id,
-		"layer": layer_id,
-		"placement": placement,
-		"level": WATER_SURFACE_LEVEL if placement == "water_surface" else context.height,
-		"render_priority": render_priority,
-		"modulate": (
-			_underwater_flora_modulate(context.water_depth)
-			if placement == "lakebed"
-			else Color.WHITE
-		),
-		"conflict_weight": float(definition.get("conflict_weight", 1.0)),
-	}
-
-
-## 静态生态对象和所属地块柱一起绘制；地被不参与玩家遮挡，树木与装饰物仍可遮挡。
-func _place_flora(
-	species_id: String,
-	layer_id: String,
-	placement: String,
-	level: int,
-	state,
-	z_bias := 8,
-	modulate := Color.WHITE
-) -> bool:
-	var tex := _plant_tex(species_id)
-	if tex == null:
-		return false
-	var occluder_class := (
-		&"prop"
-		if placement == "ground" and layer_id in ["tree", "decoration"]
-		else &"none"
-	)
-	var block := _render_block(
-		tex,
-		level,
-		modulate,
-		z_bias,
-		Vector2(0, -tex.get_height() / 2.0),
-		occluder_class
-	)
-	block["flora_species_id"] = species_id
-	block["flora_layer"] = layer_id
-	block["flora_placement"] = placement
-	state.add_render_block(block)
-	var species: Dictionary = _plant_species.get(species_id, {})
-	var traits_value: Variant = species.get("traits", {})
-	var traits: Dictionary = traits_value if traits_value is Dictionary else {}
-	var blocks_movement_default := (
-		placement == "ground" and layer_id in ["tree", "decoration"]
-	)
-	state.add_static_object({
-		"id": species_id,
-		"category": "flora",
-		"layer": layer_id,
-		"placement": placement,
-		"blocks_movement": bool(
-			traits.get("blocks_movement", blocks_movement_default)
-		),
-		"blocks_fauna_spawn": bool(traits.get("blocks_fauna_spawn", false)),
-		"tags": species.get("tags", []),
-	})
-	return true
-
-
-## Ambient 是纯表现插件，不占动物格，也不参与移动或地图生成。
-## 候选格与物种完全由生态规则决定；主场景不认识 firefly/butterfly 等具体类型。
-func _spawn_ambient_for_cell(
-	cell: Vector2i,
-	q: int,
-	lf: int,
-	gc: Vector2i,
-	state,
-	host: Node2D
-) -> void:
-	if _ambient_registry == null:
-		return
-	var rules: Array = _community_runtime.ambient_rules_for_cell(
-		state.context,
-		Callable(self, "_ecology_near_tag")
-	)
-	var has_ground_flora := false
-	for object_value in state.static_objects:
-		var object_data: Dictionary = object_value
-		if (
-			String(object_data.get("placement", "")) == "ground"
-			and String(object_data.get("layer", "")) in ["tree", "ground_cover"]
-		):
-			has_ground_flora = true
-			break
-	for rule_value in rules:
-		var rule: Dictionary = rule_value
-		if bool(rule.get("requires_ground_flora", false)) and not has_ground_flora:
-			continue
-		var placement_seed := int(rule.get("placement_seed", 0))
-		var chance := _ecology_chance(rule.get("chance", 0.0), lf, q)
-		if _cell_rand(cell, placement_seed) >= chance:
-			continue
-		var ambient_id := _pick_species(rule, gc, cell)
-		if (
-			not _ambient_species.has(ambient_id)
-			or not _ambient_registry.has_species(StringName(ambient_id))
-		):
-			continue
-		var ambient: Dictionary = _ambient_species[ambient_id]
-		var cluster_range: Array = ambient.get("cluster_size", [2, 3])
-		var cluster_min := int(cluster_range[0])
-		var cluster_max := int(cluster_range[1])
-		var count_span := cluster_max - cluster_min + 1
-		var count := clampi(
-			cluster_min + int(_cell_rand(cell, placement_seed + 1) * count_span),
-			cluster_min,
-			cluster_max
-		)
-		var deterministic_seed := _hash_u32(
-			cell.x * 0x8da6b343
-			^ cell.y * 0xd8163841
-			^ (_current_seed + placement_seed)
-		)
-		var local_surface_position := Vector2(cell)
-		_ambient_registry.add_cluster(
-			StringName(ambient_id),
-			cell,
-			host,
-			local_surface_position,
-			count,
-			deterministic_seed
-		)
-		break
 
 
 # ---------- 动物群落 / 移动物体 ----------
-
-## fauna 的 chance 是“每个稀疏领地是否存在一个社会单元”，不再逐地块掷概率。
-## 这样既能降低全局密度，也能把狼、猪和青蛙组织成真正的群体。
+## 动物群落生成主体已迁移至 scripts/world/fauna_streamer.gd（行为不变，确定性盐保留）。
 func _spawn_fauna_for_stream() -> void:
-	for source_value in _community_runtime.fauna_sources():
-		var source: Dictionary = source_value
-		var ecosystem_id := String(source.get("source_biome_id", ""))
-		var rule: Dictionary = source.get("rule", {})
-		if ecosystem_id.is_empty() or rule.is_empty():
-			continue
-		var distribution: Dictionary = rule.get("distribution", {})
-		var spacing := maxi(1, int(distribution.get("anchor_spacing", 1)))
-		var radius := maxi(0, int(distribution.get("radius", 0)))
-		var minimum_bucket := Vector2i(
-			floori(float(_stream_center.x - stream_extent - radius) / spacing),
-			floori(float(_stream_center.y - stream_extent - radius) / spacing)
-		)
-		var maximum_bucket := Vector2i(
-			floori(float(_stream_center.x + stream_extent + radius) / spacing),
-			floori(float(_stream_center.y + stream_extent + radius) / spacing)
-		)
-		for bucket_y in range(minimum_bucket.y, maximum_bucket.y + 1):
-			for bucket_x in range(minimum_bucket.x, maximum_bucket.x + 1):
-				var bucket := Vector2i(bucket_x, bucket_y)
-				var generic_spawner := _fauna_source_uses_generic_spawner(source)
-				var anchor := (
-					_community_anchor_for_source(source, bucket)
-					if generic_spawner
-					else _fauna_anchor_for_bucket(rule, bucket)
-				)
-				var group_id := _animal_group_id(ecosystem_id, rule, bucket)
-				if _animal_groups.has(group_id):
-					_restore_animal_group(group_id)
-					continue
-				# 首次发现必须等完整出生半径进入视窗，避免从不同方向接近时
-				# 因边缘裁切得到不同的群成员位置或把 8 只狼永久截成 7 只。
-				var anchor_search_radius := int(distribution.get("anchor_search_radius", 0))
-				if (
-					not _fauna_anchor_fully_loaded(anchor, radius + anchor_search_radius)
-					or not _cells.has(anchor)
-				):
-					continue
-				if generic_spawner:
-					_create_first_class_animal_group(group_id, source, bucket)
-					continue
-				var anchor_context = _cell_context_for_query(anchor)
-				var anchor_q: int = anchor_context.height
-				var anchor_landform := int(LANDFORM_ID_TO_TYPE.get(
-					String(anchor_context.landform_id),
-					Landform.PLAINS
-				))
-				if not _community_runtime.fauna_source_matches_context(
-					source,
-					anchor_context,
-					Callable(self, "_ecology_near_tag")
-				):
-					continue
-				var placement_seed := int(rule.get("placement_seed", 0))
-				var chance := _ecology_chance(
-					rule.get("chance", 0.0), anchor_landform, anchor_q
-				)
-				if _cell_rand(bucket, placement_seed + 3) >= chance:
-					continue
-				var water_radius := int(distribution.get("requires_water_within", 0))
-				if water_radius > 0 and not _has_water_within(anchor, water_radius):
-					continue
-				_create_animal_group(
-					group_id,
-					ecosystem_id,
-					rule,
-					distribution,
-					bucket,
-					anchor,
-					anchor_q,
-					source
-				)
+	_fauna.spawn_fauna_for_stream(_stream_center, stream_extent, _player_cell)
 
 
 func _fauna_anchor_fully_loaded(anchor: Vector2i, radius: int) -> bool:
-	var safe_extent := stream_extent - maxi(0, radius)
-	return (
-		safe_extent >= 0
-		and absi(anchor.x - _stream_center.x) <= safe_extent
-		and absi(anchor.y - _stream_center.y) <= safe_extent
-	)
+	_fauna.sync_stream_frame(_stream_center, stream_extent, _player_cell)
+	return _fauna.fauna_anchor_fully_loaded(anchor, radius)
 
 
 func _fauna_anchor_for_bucket(rule: Dictionary, bucket: Vector2i) -> Vector2i:
-	var distribution: Dictionary = rule.get("distribution", {})
-	var spacing := maxi(1, int(distribution.get("anchor_spacing", 1)))
-	var jitter := clampf(float(distribution.get("anchor_jitter", 1.0)), 0.0, 1.0)
-	var inset := floori(spacing * (1.0 - jitter) * 0.5)
-	var usable := maxi(1, spacing - inset * 2)
-	var placement_seed := int(rule.get("placement_seed", 0))
-	var offset_x := inset + mini(
-		usable - 1,
-		int(_cell_rand(bucket, placement_seed + 1) * usable)
-	)
-	var offset_y := inset + mini(
-		usable - 1,
-		int(_cell_rand(bucket, placement_seed + 2) * usable)
-	)
-	return bucket * spacing + Vector2i(offset_x, offset_y)
+	return _fauna.fauna_anchor_for_bucket(rule, bucket)
 
 
-func _animal_group_id(ecosystem_id: String, rule: Dictionary, bucket: Vector2i) -> String:
-	return "%s/%s/%d/%d" % [
-		ecosystem_id,
-		String(rule.get("pool_id", "fauna")),
-		bucket.x,
-		bucket.y,
-	]
-
-
+## 确定性契约核心：stream_key 流（勿改语义；flora/fauna 模块经 Callable 注入引用本函数）。
 func _community_rand01(position: Vector2i, stream_key: String) -> float:
 	return _world_rng.cell_float(position, StringName(stream_key))
-
-
-## 已迁移的内置群落继续走 legacy salt 适配器，确保现有世界与调好的密度不漂移；
-## 没有 legacy seed 的新定义自动使用通用 CommunitySpawner。
-func _fauna_source_uses_generic_spawner(source: Dictionary) -> bool:
-	if not bool(source.get("first_class", false)):
-		return false
-	var definition: Dictionary = source.get("definition", {})
-	var metadata_value: Variant = definition.get("metadata", {})
-	var metadata: Dictionary = metadata_value if metadata_value is Dictionary else {}
-	return not metadata.has("legacy_placement_seed")
-
-
-func _community_anchor_for_source(source: Dictionary, bucket: Vector2i) -> Vector2i:
-	var definition: Dictionary = source.get("definition", {})
-	var distribution: Dictionary = definition.get("distribution", {})
-	var spacing := maxi(1, int(distribution.get("anchor_spacing", 1)))
-	var jitter := clampf(
-		float(distribution.get("anchor_jitter", distribution.get("jitter", 1.0))),
-		0.0,
-		1.0
-	)
-	var stream_prefix := String(
-		definition.get("stream_key", definition.get("id", "community"))
-	)
-	return CommunitySpawnerScript.anchor_for_bucket(
-		bucket,
-		spacing,
-		jitter,
-		Callable(self, "_community_rand01"),
-		stream_prefix + "/anchor"
-	)
-
-
-func _create_first_class_animal_group(
-	group_id: String,
-	source: Dictionary,
-	bucket: Vector2i
-) -> void:
-	var definition: Dictionary = source.get("definition", {})
-	if definition.is_empty():
-		return
-	var rule: Dictionary = source.get("rule", {})
-	var distribution: Dictionary = definition.get("distribution", {})
-	var same_ecosystem := bool(distribution.get(
-		"same_ecosystem",
-		distribution.get(
-			"same_biome",
-			(definition.get("habitat", {}) as Dictionary).get("same_biome", true)
-		)
-	))
-	var only_if_flora_missed := bool(rule.get("only_if_flora_missed", true))
-	var habitat: Dictionary = definition.get("habitat", {})
-	var required_tags: Array = habitat.get("required_tags", [])
-	var allow_water := bool(
-		(definition.get("metadata", {}) as Dictionary).get(
-			"allow_water",
-			"water" in required_tags and "land" not in required_tags
-		)
-	)
-	var habitat_valid: Callable = func(candidate: Vector2i) -> bool:
-		var candidate_context = _cell_context_for_query(candidate)
-		return _community_runtime.fauna_source_matches_context(
-			source,
-			candidate_context,
-			Callable(self, "_ecology_near_tag")
-		) and _community_water_clearance_valid(definition, candidate_context)
-	var anchor_result := CommunitySpawnerScript.resolve_anchor(
-		definition,
-		bucket,
-		Callable(self, "_community_rand01"),
-		habitat_valid
-	)
-	if not bool(anchor_result.get("valid", false)):
-		_cache_inactive_animal_group(group_id, source, anchor_result["anchor"], "invalid_habitat")
-		return
-	var anchor: Vector2i = anchor_result["anchor"]
-	var anchor_context = _cell_context_for_query(anchor)
-	var anchor_q: int = anchor_context.height
-	var cell_valid: Callable = func(candidate: Vector2i) -> bool:
-		if not _cells.has(candidate) or not _cell_states.has(candidate):
-			return false
-		var candidate_context = _cell_context_for_query(candidate)
-		if absi(_stand_level(candidate_context.height) - _stand_level(anchor_q)) > 1:
-			return false
-		if same_ecosystem and not _community_runtime.fauna_source_matches_context(
-			source,
-			candidate_context,
-			Callable(self, "_ecology_near_tag")
-		):
-			return false
-		if not _community_water_clearance_valid(definition, candidate_context):
-			return false
-		return _cell_states[candidate].can_spawn_fauna(
-			allow_water,
-			only_if_flora_missed
-		)
-	var plan: Dictionary = CommunitySpawnerScript.plan_community(
-		definition,
-		bucket,
-		Callable(self, "_community_rand01"),
-		habitat_valid,
-		cell_valid
-	)
-	if not bool(plan.get("complete", false)):
-		_cache_inactive_animal_group(
-			group_id,
-			source,
-			anchor,
-			String(plan.get("reason", "incomplete_plan"))
-		)
-		return
-	var members: Array[Dictionary] = []
-	for member_value in plan.get("members", []):
-		var member: Dictionary = member_value
-		members.append({
-			"origin": member.get("cell", Vector2i.ZERO),
-			"species": String(member.get("species", member.get("species_id", ""))),
-			"role": String(member.get("role", "")),
-		})
-	if members.is_empty():
-		_cache_inactive_animal_group(group_id, source, anchor, "empty_members")
-		return
-	_animal_groups.set_or_put(group_id, {
-		"anchor": anchor,
-		"ecosystem_id": String(source.get("source_biome_id", "")),
-		"community_id": String(source.get("community_id", "")),
-		"social_radius": float(distribution.get("social_radius", distribution.get("radius", 0.0))),
-		"members": members,
-	}, true)
-	_restore_animal_group(group_id)
-	_animal_groups.unpin(group_id)
-
-
-func _cache_inactive_animal_group(
-	group_id: String,
-	source: Dictionary,
-	anchor: Vector2i,
-	reason: String
-) -> void:
-	# Fully loaded group territories are deterministic. Caching an empty result
-	# prevents every one-cell streaming update from repeating habitat searches
-	# for the same dry/invalid bucket. CommunityStateStore keeps this negative
-	# cache bounded and evicts it before active groups.
-	_animal_groups.set_or_put(group_id, {
-		"anchor": anchor,
-		"ecosystem_id": String(source.get("source_biome_id", "")),
-		"community_id": String(source.get("community_id", "")),
-		"social_radius": 0.0,
-		"members": [],
-		"inactive_reason": reason,
-	})
 
 
 func _create_animal_group(
@@ -2316,57 +1182,17 @@ func _create_animal_group(
 	anchor_q: int,
 	source: Dictionary = {}
 ) -> void:
-	var count_range: Array = distribution.get("count", [1, 1])
-	var minimum_count := int(count_range[0])
-	var maximum_count := int(count_range[1])
-	var count_span := maximum_count - minimum_count + 1
-	var placement_seed := int(rule.get("placement_seed", 0))
-	var desired_count := minimum_count + int(
-		_cell_rand(bucket, placement_seed + 4) * count_span
-	) % count_span
-	var spawn_cells := _animal_group_spawn_cells(
+	_fauna.sync_stream_frame(_stream_center, stream_extent, _player_cell)
+	_fauna.create_animal_group(
+		group_id,
+		ecosystem_id,
+		rule,
+		distribution,
+		bucket,
 		anchor,
 		anchor_q,
-		ecosystem_id,
-		distribution,
-		desired_count,
-		placement_seed,
-		bool(rule.get("only_if_flora_missed", true)),
 		source
 	)
-	if spawn_cells.size() < minimum_count:
-		return
-	var primary_species := _pick_species(rule, bucket, anchor)
-	if primary_species.is_empty():
-		return
-	var members: Array[Dictionary] = []
-	for spawn_cell in spawn_cells:
-		members.append({"origin": spawn_cell, "species": primary_species})
-
-	# substitution 替换群内成员而不是额外添加，狼群总数始终保持 7–8。
-	var substitution: Dictionary = distribution.get("substitution", {})
-	if not substitution.is_empty():
-		var substitute_chance := float(substitution.get("chance", 0.0))
-		if _cell_rand(bucket, placement_seed + 5) < substitute_chance:
-			var substitute_count := mini(
-				int(substitution.get("max_count", 1)),
-				members.size()
-			)
-			var start_index := int(
-				_cell_rand(bucket, placement_seed + 6) * members.size()
-			) % members.size()
-			for offset in substitute_count:
-				var member_index := (start_index + offset) % members.size()
-				members[member_index]["species"] = String(substitution.get("species", ""))
-
-	_animal_groups.set_or_put(group_id, {
-		"anchor": anchor,
-		"ecosystem_id": ecosystem_id,
-		"social_radius": float(distribution.get("social_radius", 0.0)),
-		"members": members,
-	}, true)
-	_restore_animal_group(group_id)
-	_animal_groups.unpin(group_id)
 
 
 func _animal_group_spawn_cells(
@@ -2379,738 +1205,121 @@ func _animal_group_spawn_cells(
 	only_if_flora_missed := true,
 	source: Dictionary = {}
 ) -> Array[Vector2i]:
-	var candidates: Array[Dictionary] = []
-	var radius := maxi(0, int(distribution.get("radius", 0)))
-	var same_ecosystem := bool(distribution.get("same_ecosystem", true))
-	for offset_y in range(-radius, radius + 1):
-		var row_radius := radius - absi(offset_y)
-		for offset_x in range(-row_radius, row_radius + 1):
-			var cell := anchor + Vector2i(offset_x, offset_y)
-			if not _animal_group_cell_is_valid(
-				cell,
-				anchor_q,
-				ecosystem_id,
-				same_ecosystem,
-				only_if_flora_missed,
-				source
-			):
-				continue
-			candidates.append({
-				"cell": cell,
-				"anchor_first": 0 if cell == anchor else 1,
-				"rank": _cell_rand(cell, placement_seed + 101),
-			})
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if int(a["anchor_first"]) != int(b["anchor_first"]):
-			return int(a["anchor_first"]) < int(b["anchor_first"])
-		if not is_equal_approx(float(a["rank"]), float(b["rank"])):
-			return float(a["rank"]) < float(b["rank"])
-		var a_cell: Vector2i = a["cell"]
-		var b_cell: Vector2i = b["cell"]
-		return a_cell.y < b_cell.y or (a_cell.y == b_cell.y and a_cell.x < b_cell.x)
+	_fauna.sync_stream_frame(_stream_center, stream_extent, _player_cell)
+	return _fauna.animal_group_spawn_cells(
+		anchor,
+		anchor_q,
+		ecosystem_id,
+		distribution,
+		desired_count,
+		placement_seed,
+		only_if_flora_missed,
+		source
 	)
-	var result: Array[Vector2i] = []
-	for candidate in candidates:
-		if result.size() >= desired_count:
-			break
-		result.append(candidate["cell"])
-	return result
-
-
-func _animal_group_cell_is_valid(
-	cell: Vector2i,
-	anchor_q: int,
-	ecosystem_id: String,
-	same_ecosystem: bool,
-	only_if_flora_missed := true,
-	source: Dictionary = {}
-) -> bool:
-	if (
-		not _in_stream(cell, _stream_center)
-		or not _cells.has(cell)
-		or not _cell_states.has(cell)
-	):
-		return false
-	var q := _quantize(cell.x, cell.y)
-	if q <= WATER_MAX or absi(_stand_level(q) - _stand_level(anchor_q)) > 1:
-		return false
-	if same_ecosystem:
-		var context = _cell_context_for_query(cell)
-		if not source.is_empty():
-			if not _community_runtime.fauna_source_matches_context(
-				source,
-				context,
-				Callable(self, "_ecology_near_tag")
-			):
-				return false
-		elif _community_runtime.legacy_ecosystem_id(context) != ecosystem_id:
-			return false
-	var state = _cell_states[cell]
-	return state.can_spawn_fauna(false, only_if_flora_missed)
 
 
 func _has_water_within(center: Vector2i, radius: int) -> bool:
-	for offset_y in range(-radius, radius + 1):
-		var row_radius := radius - absi(offset_y)
-		for offset_x in range(-row_radius, row_radius + 1):
-			if _quantize(center.x + offset_x, center.y + offset_y) <= WATER_MAX:
-				return true
-	return false
+	return _fauna.has_water_within(center, radius)
 
 
 func _restore_animal_group(group_id: String) -> void:
-	if not _animal_groups.has(group_id):
-		return
-	var group: Dictionary = _animal_groups[group_id]
-	var members: Array = group.get("members", [])
-	var social_group_id := group_id if members.size() > 1 else ""
-	for member_value in members:
-		var member: Dictionary = member_value
-		var origin: Vector2i = member["origin"]
-		if _animals.has(origin) or not _in_stream(origin, _stream_center):
-			continue
-		if (
-			origin == _player_cell
-			or not _cells.has(origin)
-			or _animal_cell_reserved(origin)
-		):
-			continue
-		var animal := _spawn_animal(
-			String(member["species"]),
-			origin,
-			_quantize(origin.x, origin.y)
-		)
-		if animal == null:
-			continue
-		animal.community_group_id = group_id
-		animal.social_group_id = social_group_id
-		animal.social_radius = float(group.get("social_radius", 0.0))
-	_animal_groups.set_active_member_count(
-		group_id,
-		_active_animal_count_for_group(group_id)
-	)
+	_fauna.sync_stream_frame(_stream_center, stream_extent, _player_cell)
+	_fauna.restore_animal_group(group_id)
 
 
 func _active_animal_count_for_group(group_id: String) -> int:
-	var count := 0
-	for animal_value in _animals.values():
-		var animal: AnimatedSprite3D = animal_value
-		if (
-			is_instance_valid(animal)
-			and String(animal.community_group_id) == group_id
-		):
-			count += 1
-	return count
+	return _fauna.active_animal_count_for_group(group_id)
 
 
 func _release_animal_group_member(animal: AnimatedSprite3D) -> void:
-	var group_id := String(animal.community_group_id)
-	if group_id.is_empty() or not _animal_groups.has(group_id):
-		return
-	_animal_groups.decrement_active_members(group_id)
+	_fauna.release_animal_group_member(animal)
 
 
-func _spawn_animal(species_id: String, cell: Vector2i, _level: int) -> AnimatedSprite3D:
-	if _animals.has(cell) or _animal_cell_reserved(cell):
-		return null
-	if not _animal_species.has(species_id):
-		push_error("生态配置引用了未知动物: " + species_id)
-		return null
-	var species: Dictionary = _animal_species[species_id]
-	var terrain_level := _quantize(cell.x, cell.y)
-	var surface_id := &"water" if terrain_level <= WATER_MAX else &"land"
-	if not _animal_species_allows_surface(species, surface_id):
-		return null
-	var spawn_stack_value: Variant = _animal_behavior_stacks.get(species_id, [])
-	var spawn_stack: Array[Dictionary] = []
-	if spawn_stack_value is Array:
-		for behavior_value in spawn_stack_value:
-			if behavior_value is Dictionary:
-				spawn_stack.append((behavior_value as Dictionary).duplicate(true))
-	var spawn_cell_data := _animal_behavior_cell_data(cell)
-	var spawn_decision := _animal_behavior_registry.evaluate_stack(
-		spawn_stack,
-		spawn_cell_data,
-		{
-			"current": spawn_cell_data,
-			"player_cell": _player_cell,
-			"distance_to_tag": Callable(self, "_animal_behavior_distance_to_tag"),
-		}
+
+## 动物个体运行时（簇9）已迁 scripts/world/animal_runtime.gd；以下为兼容委托。
+func _sync_animal_frame() -> void:
+	_animal_runtime.sync_frame(
+		_stream_center, stream_extent, _player_cell, _animal_behavior_tag_scan_radius
 	)
-	if not bool(spawn_decision.get("allowed", false)):
-		return null
-	var animal: AnimatedSprite3D = WanderingAnimalScript.new()
-	_animals[cell] = animal
-	add_child(animal)
-	animal.configure(
-		species_id,
-		cell,
-		_animal_frames_for(species_id),
-		_cell_feet_pos(cell),
-		_column_sort_y(cell) + ANIMAL_SORT_BIAS,
-		_animal_wait(cell, 0),
-		StringName(species.get("behavior", &"wander")),
-		species.get("movement", {}),
-		float(species.get("foot_offset_y", 0.0)),
-		_stand_level(terrain_level)
-	)
-	var metadata: Dictionary = species.get("metadata", {})
-	if bool(metadata.get("aquatic", false)):
-		# 地块批绘制器会把湖底和水面合为一个 CanvasItem，移动鱼无法真正插入
-		# 两次 draw call 之间；水下材质在鱼身上重建前景水层，形成被透明水体
-		# 遮住的感觉，同时不额外创建成千上万个水面节点。
-		animal.material = _underwater_animal_material_for_depth(
-			WATER_SURFACE_LEVEL - terrain_level
-		)
-	return animal
+
+
+func _spawn_animal(
+	species_id: String, cell: Vector2i, _level: int
+) -> AnimatedSprite3D:
+	_sync_animal_frame()
+	return _animal_runtime.spawn_animal(species_id, cell, _level)
 
 
 func _underwater_animal_material_for_depth(water_depth: int) -> ShaderMaterial:
-	var depth_key := clampi(water_depth, 1, WATER_SURFACE_LEVEL)
-	if _underwater_animal_material_cache.has(depth_key):
-		return _underwater_animal_material_cache[depth_key]
-	var material := ShaderMaterial.new()
-	material.shader = UnderwaterAnimalShader
-	material.set_shader_parameter("water_colour", WATER_COLOR)
-	material.set_shader_parameter("fin_coverage", 0.08)
-	material.set_shader_parameter(
-		"body_coverage",
-		clampf(0.58 + float(depth_key - 1) * 0.05, 0.58, 0.74)
-	)
-	material.set_shader_parameter("waterline", 0.29)
-	material.set_shader_parameter(
-		"submerged_visibility",
-		clampf(0.80 - float(depth_key - 1) * 0.05, 0.62, 0.80)
-	)
-	_underwater_animal_material_cache[depth_key] = material
-	return material
+	return _animal_runtime.underwater_animal_material_for_depth(water_depth)
 
 
 func _animal_species_allows_surface(
 	species: Dictionary,
 	surface_id: StringName
 ) -> bool:
-	var movement_value: Variant = species.get("movement", {})
-	var movement: Dictionary = movement_value if movement_value is Dictionary else {}
-	var surfaces_value: Variant = species.get(
-		"allowed_surfaces",
-		movement.get("allowed_surfaces", ["land"])
-	)
-	if not surfaces_value is Array:
-		return false
-	for allowed_surface in surfaces_value:
-		if StringName(allowed_surface) == surface_id:
-			return true
-	return false
-
-
-func _animal_frames_for(species_id: String) -> SpriteFrames:
-	if _animal_frames_cache.has(species_id):
-		return _animal_frames_cache[species_id]
-	var species: Dictionary = _animal_species[species_id]
-	var directory := String(species.get("directory", ""))
-	var actions: Dictionary = species.get("actions", {})
-	var frames := SpriteFrames.new()
-	if frames.has_animation(&"default"):
-		frames.remove_animation(&"default")
-	for action_id in actions:
-		var action: Dictionary = actions[action_id]
-		var animation_name := StringName(action_id)
-		var texture: Texture2D = load(directory.path_join(String(action.get("file", ""))))
-		if action.has("frame_size"):
-			var frame_size_value: Array = action["frame_size"]
-			_add_sheet_animation(
-				frames,
-				animation_name,
-				texture,
-				Vector2i(int(frame_size_value[0]), int(frame_size_value[1])),
-				int(action.get("columns", 1)),
-				int(action.get("frames", 1)),
-				float(action.get("fps", 1.0)),
-				bool(action.get("loop", true))
-			)
-		else:
-			frames.add_animation(animation_name)
-			frames.set_animation_speed(animation_name, float(action.get("fps", 1.0)))
-			frames.set_animation_loop(animation_name, bool(action.get("loop", true)))
-			frames.add_frame(animation_name, texture)
-	_animal_frames_cache[species_id] = frames
-	return frames
-
-
-func _add_sheet_animation(
-	frames: SpriteFrames,
-	animation_name: StringName,
-	sheet: Texture2D,
-	frame_size: Vector2i,
-	columns: int,
-	frame_count: int,
-	fps: float,
-	loop: bool
-) -> void:
-	frames.add_animation(animation_name)
-	frames.set_animation_speed(animation_name, fps)
-	frames.set_animation_loop(animation_name, loop)
-	for i in frame_count:
-		var atlas := AtlasTexture.new()
-		atlas.atlas = sheet
-		atlas.region = Rect2(
-			(i % columns) * frame_size.x,
-			(i / columns) * frame_size.y,
-			frame_size.x,
-			frame_size.y
-		)
-		frames.add_frame(animation_name, atlas)
+	return _animal_runtime.animal_species_allows_surface(species, surface_id)
 
 
 func _clear_animals() -> void:
-	for animal_value in _animals.values():
-		var animal: Node = animal_value
-		if is_instance_valid(animal):
-			remove_child(animal)
-			animal.queue_free()
-	_animals.clear()
-	_animal_groups.clear()
+	_animal_runtime.clear_animals()
 
 
 func _cleanup_streamed_animals() -> void:
-	for origin_value in _animals.keys():
-		var origin: Vector2i = origin_value
-		var animal: AnimatedSprite3D = _animals[origin]
-		if not is_instance_valid(animal):
-			_animals.erase(origin)
-			continue
-		var active := _animal_in_active_stream(animal)
-		animal.visible = active
-		var retained := (
-			_in_stream(origin, _stream_center)
-			or active
-		)
-		if retained:
-			continue
-		_release_animal_group_member(animal)
-		_animals.erase(origin)
-		remove_child(animal)
-		animal.queue_free()
+	_sync_animal_frame()
+	_animal_runtime.cleanup_streamed_animals()
 
 
 func _update_animals(delta: float) -> void:
-	for animal_value in _animals.values():
-		var animal: AnimatedSprite3D = animal_value
-		if not is_instance_valid(animal):
-			continue
-		var active := _animal_in_active_stream(animal)
-		animal.visible = active
-		if not active:
-			continue
-		# 玩家进入警戒范围时打断静止等待；已经起步的动作完成后再重新选逃跑方向。
-		var should_flee := _animal_should_flee(animal)
-		if not animal.moving and should_flee and not animal.fleeing:
-			animal.wait_remaining = 0.0
-		animal.fleeing = should_flee
-		if animal.tick(delta):
-			animal.consume_move_bout_step()
-			animal.fleeing = _animal_should_flee(animal)
-			var continue_bout: bool = (
-				animal.move_action_loops()
-				and (animal.fleeing or animal.move_steps_remaining > 0)
-			)
-			if continue_bout:
-				animal.wait_remaining = (
-					ANIMAL_FLEE_WAIT
-					if animal.fleeing
-					else _animal_step_pause(animal)
-				)
-			else:
-				animal.finish_move_bout()
-				animal.wait_remaining = (
-					ANIMAL_FLEE_WAIT
-					if animal.fleeing
-					else _animal_wait(animal.origin_cell, animal.step_index)
-				)
-		elif animal.ready_to_move():
-			_begin_animal_move(animal)
-
-
-func _animal_in_active_stream(animal: AnimatedSprite3D) -> bool:
-	return (
-		_in_stream(animal.grid_cell, _stream_center)
-		or (animal.moving and _in_stream(animal.target_cell, _stream_center))
-	)
+	_sync_animal_frame()
+	_animal_runtime.update_animals(delta)
 
 
 func _begin_animal_move(animal: AnimatedSprite3D) -> void:
-	var current_cell: Vector2i = animal.grid_cell
-	var fleeing := _animal_should_flee(animal)
-	_animal_behavior_distance_cache.clear()
-	if not animal.move_bout_active:
-		animal.start_move_bout(_animal_bout_steps(animal))
-	var direction_offset := int(_cell_rand(
-		animal.origin_cell,
-		9000 + animal.step_index * 97
-	) * ANIMAL_DIRECTIONS.size()) % ANIMAL_DIRECTIONS.size()
-	animal.step_index += 1
-	var best_target := current_cell
-	var best_score := _animal_move_score(animal, current_cell, current_cell)
-	for i in ANIMAL_DIRECTIONS.size():
-		var target: Vector2i = current_cell + ANIMAL_DIRECTIONS[(direction_offset + i) % ANIMAL_DIRECTIONS.size()]
-		if not _can_animal_enter(animal, target):
-			continue
-		var score := _animal_move_score(animal, target, current_cell)
-		# 平分时保留由 deterministic direction_offset 决定的第一个方向。
-		if score > best_score:
-			best_score = score
-			best_target = target
-	if best_target == current_cell:
-		animal.finish_move_bout()
-		animal.wait_remaining = (
-			ANIMAL_BLOCKED_RETRY
-			if fleeing
-			else _animal_wait(animal.origin_cell, animal.step_index)
-		)
-		return
-	var movement_decision := _animal_behavior_decision(animal, best_target, current_cell)
-	var movement_speed := maxf(0.01, float(movement_decision.get("speed_multiplier", 1.0)))
-	var from_stand_level := _stand_level(_quantize(current_cell.x, current_cell.y))
-	var to_stand_level := _stand_level(_quantize(best_target.x, best_target.y))
-	# 网格方向不等于屏幕方向；同一相机状态下投影起终点，供动物素材定向。
-	var screen_horizontal_delta := (
-		_grid_to_screen(best_target, to_stand_level).x
-		- _grid_to_screen(current_cell, from_stand_level).x
-	)
-	animal.begin_move(
-		best_target,
-		_cell_feet_pos(current_cell),
-		_cell_feet_pos(best_target),
-		_column_sort_y(current_cell) + ANIMAL_SORT_BIAS,
-		_column_sort_y(best_target) + ANIMAL_SORT_BIAS,
-		animal.move_duration / movement_speed,
-		movement_speed,
-		from_stand_level,
-		to_stand_level,
-		screen_horizontal_delta
-	)
+	_sync_animal_frame()
+	_animal_runtime.begin_animal_move(animal)
 
 
 func _can_animal_enter(animal: AnimatedSprite3D, target: Vector2i) -> bool:
-	if not _in_stream(target, _stream_center):
-		return false
-	var current_cell: Vector2i = animal.grid_cell
-	var decision := _animal_behavior_decision(animal, target, current_cell)
-	if not bool(decision.get("allowed", false)):
-		return false
-	if target == _player_cell:
-		return false
-	if _cell_states.has(target) and _cell_states[target].blocks_movement():
-		return false
-	if _animal_cell_reserved(target, animal):
-		return false
-	return true
+	_sync_animal_frame()
+	return _animal_runtime.can_animal_enter(animal, target)
 
 
-func _animal_cell_reserved(cell: Vector2i, except_animal: AnimatedSprite3D = null) -> bool:
-	for other_value in _animals.values():
-		var other: AnimatedSprite3D = other_value
-		if other == except_animal or not is_instance_valid(other):
-			continue
-		if other.grid_cell == cell or (other.moving and other.target_cell == cell):
-			return true
-	return false
+func _animal_cell_reserved(
+	cell: Vector2i, except_animal: AnimatedSprite3D = null
+) -> bool:
+	return _animal_runtime.animal_cell_reserved(cell, except_animal)
 
-
-func _animal_should_flee(animal: AnimatedSprite3D) -> bool:
-	var current_decision := _animal_behavior_decision(
-		animal,
-		animal.grid_cell,
-		animal.grid_cell
-	)
-	if bool((current_decision.get("state", {}) as Dictionary).get("fleeing", false)):
-		return true
-	if animal.moving:
-		var target_decision := _animal_behavior_decision(
-			animal,
-			animal.target_cell,
-			animal.grid_cell
-		)
-		return bool((target_decision.get("state", {}) as Dictionary).get("fleeing", false))
-	return false
-
-
-func _animal_move_score(
-	animal: AnimatedSprite3D,
-	candidate: Vector2i,
-	current_cell: Vector2i
-) -> float:
-	var score := 1.0 if candidate != current_cell else 0.0
-	# 兼容热更新前已经误入水中的单位：水格仍不可作为新目标，但相邻陆格
-	# 获得最高优先级，使遗留单位能够自行回到岸上而不是困在原地。
-	if (
-		_quantize(current_cell.x, current_cell.y) <= WATER_MAX
-		and _quantize(candidate.x, candidate.y) > WATER_MAX
-	):
-		score += ANIMAL_LEAVE_WATER_BONUS
-	var decision := _animal_behavior_decision(animal, candidate, current_cell)
-	if not bool(decision.get("allowed", false)):
-		return -INF
-	return (
-		score
-		+ float(decision.get("score", 0.0))
-		+ animal.direction_persistence_score(candidate, current_cell)
-	)
-
-
-func _animal_behavior_decision(
-	animal: AnimatedSprite3D,
-	candidate: Vector2i,
-	current_cell: Vector2i
-) -> Dictionary:
-	var stack_value: Variant = _animal_behavior_stacks.get(animal.species_id, [])
-	var stack: Array[Dictionary] = []
-	if stack_value is Array:
-		for behavior_value in stack_value:
-			if behavior_value is Dictionary:
-				stack.append((behavior_value as Dictionary).duplicate(true))
-	if not String(animal.social_group_id).is_empty():
-		stack.append({
-			"type": "pack_cohesion",
-			"radius": float(animal.social_radius),
-			"weight": ANIMAL_GROUP_COHESION_WEIGHT,
-		})
-	var current := _animal_behavior_cell_data(current_cell)
-	var candidate_data := _animal_behavior_cell_data(candidate)
-	return _animal_behavior_registry.evaluate_stack(stack, candidate_data, {
-		"current": current,
-		"player_cell": _player_cell,
-		"pack_center": (
-			_animal_social_center(animal)
-			if not String(animal.social_group_id).is_empty()
-			else null
-		),
-		"distance_to_tag": Callable(self, "_animal_behavior_distance_to_tag"),
-	})
-
-
-func _animal_behavior_cell_data(cell: Vector2i) -> Dictionary:
-	var context = _cell_context_for_query(cell)
-	return {
-		"cell": cell,
-		"height": _stand_level(context.height),
-		"water_depth": context.water_depth,
-		"water_clearance": _water_clearance(cell, 1),
-		# 通行约束使用 surface class；材质与 biome 细节都保留在 tags 中。
-		"surface_id": &"water" if context.is_water else &"land",
-		"surface_kind": context.surface_id,
-		"tags": context.tag_list(),
-	}
 
 
 func _cell_context_for_query(cell: Vector2i):
-	if _cell_states.has(cell):
-		return _cell_states[cell].context
-	return _sample_cell_context(cell)
+	return _world_query.cell_context_for_query(cell)
 
 
-## 水中格到最近陆地的曼哈顿安全层数。clearance=1 表示四个正交邻格
-## 也全部是水，因此鱼的 32px 动画不会贴着岸线或半个身体压到泥地上。
 func _water_clearance(cell: Vector2i, maximum_radius: int) -> int:
-	var center_context = _cell_context_for_query(cell)
-	if center_context == null or not center_context.is_water:
-		return 0
-	var scan_radius := maxi(0, maximum_radius)
-	for distance in range(1, scan_radius + 1):
-		for offset_y in range(-distance, distance + 1):
-			var offset_x_abs := distance - absi(offset_y)
-			var x_offsets := (
-				[0]
-				if offset_x_abs == 0
-				else [-offset_x_abs, offset_x_abs]
-			)
-			for offset_x in x_offsets:
-				var nearby = _cell_context_for_query(
-					cell + Vector2i(offset_x, offset_y)
-				)
-				if nearby == null or not nearby.is_water:
-					return distance - 1
-	return scan_radius
+	return _world_query.water_clearance(cell, maximum_radius)
 
 
 func _community_water_clearance_valid(
 	definition: Dictionary,
 	context
 ) -> bool:
-	var habitat_value: Variant = definition.get("habitat", {})
-	if not habitat_value is Dictionary:
-		return true
-	var habitat: Dictionary = habitat_value
-	var required_clearance := maxi(
-		0,
-		int(habitat.get("minimum_water_clearance", 0))
-	)
-	return (
-		required_clearance <= 0
-		or _water_clearance(context.cell, required_clearance) >= required_clearance
-	)
+	return _world_query.community_water_clearance_valid(definition, context)
 
 
-## Community habitat 的统一空间查询。它只读取 CellContext，不依赖已生成节点，
-## 因而结果与流式生成顺序无关，火山/冰原等新模块也能直接查询自己的 tag。
+## Community habitat 的统一空间查询（缓存随模块，_update_streaming 批次内清空）。
 func _ecology_near_tag(context, tag: StringName, radius: float) -> bool:
-	if context == null:
-		return false
-	var center: Vector2i = context.cell
-	var scan_radius := maxi(0, ceili(radius))
-	var cache_key := "%d/%d/%s/%d" % [
-		center.x,
-		center.y,
-		tag,
-		scan_radius,
-	]
-	if _ecology_near_tag_cache.has(cache_key):
-		return bool(_ecology_near_tag_cache[cache_key])
-	for offset_y in range(-scan_radius, scan_radius + 1):
-		var row_radius := scan_radius - absi(offset_y)
-		for offset_x in range(-row_radius, row_radius + 1):
-			var nearby = _cell_context_for_query(
-				center + Vector2i(offset_x, offset_y)
-			)
-			if nearby.has_tag(tag):
-				_ecology_near_tag_cache[cache_key] = true
-				return true
-	_ecology_near_tag_cache[cache_key] = false
-	return false
+	return _world_query.ecology_near_tag(context, tag, radius)
 
 
-func _animal_behavior_distance_to_tag(
-	candidate: Dictionary,
-	tag: StringName
-) -> float:
-	var center: Vector2i = candidate.get("cell", Vector2i.ZERO)
-	var cache_key := "%d/%d/%s" % [center.x, center.y, tag]
-	if _animal_behavior_distance_cache.has(cache_key):
-		return float(_animal_behavior_distance_cache[cache_key])
-	var nearest := INF
-	var scan_radius := _animal_behavior_tag_scan_radius
-	for offset_y in range(-scan_radius, scan_radius + 1):
-		var row_radius := scan_radius - absi(offset_y)
-		for offset_x in range(-row_radius, row_radius + 1):
-			var distance := absi(offset_x) + absi(offset_y)
-			if float(distance) >= nearest:
-				continue
-			var context = _cell_context_for_query(
-				center + Vector2i(offset_x, offset_y)
-			)
-			if context.has_tag(tag):
-				nearest = float(distance)
-	_animal_behavior_distance_cache[cache_key] = nearest
-	return nearest
 
-
-func _animal_social_center(animal: AnimatedSprite3D) -> Vector2:
-	var total := Vector2.ZERO
-	var count := 0
-	for other_value in _animals.values():
-		var other: AnimatedSprite3D = other_value
-		if (
-			not is_instance_valid(other)
-			or not other.visible
-			or other.social_group_id != animal.social_group_id
-		):
-			continue
-		total += Vector2(other.grid_cell)
-		count += 1
-	return total / count if count > 0 else Vector2(animal.grid_cell)
-
-
-func _animal_wait(origin: Vector2i, step_index: int) -> float:
-	return ANIMAL_WAIT_MIN + _cell_rand(origin, 8200 + step_index * 53) * ANIMAL_WAIT_SPAN
-
-
-func _animal_bout_steps(animal: AnimatedSprite3D) -> int:
-	var step_count: int = int(animal.move_steps_max) - int(animal.move_steps_min) + 1
-	if step_count <= 1:
-		return int(animal.move_steps_min)
-	return int(animal.move_steps_min) + int(
-		_cell_rand(animal.origin_cell, 8300 + animal.bout_index * 67) * step_count
-	) % step_count
-
-
-func _animal_step_pause(animal: AnimatedSprite3D) -> float:
-	return lerpf(
-		animal.step_pause_min,
-		animal.step_pause_max,
-		_cell_rand(animal.origin_cell, 8400 + animal.step_index * 71)
-	)
-
-
-## 生成互不重叠的水面/侧壁 mask。顶面在所有水格只绘制一次；侧壁只用于岸线外轮廓。
-func _make_water_face_texture(face: StringName) -> ImageTexture:
-	var img := Image.create(TILE_W, TILE_W, false, Image.FORMAT_RGBA8)
-	for y in TILE_W:
-		for x in TILE_W:
-			var px := float(x) + 0.5
-			var py := float(y) + 0.5
-			var dx := absf(px - TILE_W * 0.5)
-			var top_y := 6.0 + dx * 0.5
-			var seam_y := 22.0 - dx * 0.5
-			var inside_top := py >= top_y and py < seam_y
-			var inside_left := px < TILE_W * 0.5 and py >= seam_y and py < 24.0 + px * 0.5
-			var inside_right := px >= TILE_W * 0.5 and py >= seam_y and py < 32.0 - (px - 16.0) * 0.5
-			var inside := (
-				(face == &"surface" and inside_top)
-				or (face == &"left" and inside_left)
-				or (face == &"right" and inside_right)
-			)
-			if inside:
-				img.set_pixel(x, y, WATER_COLOR)
-	return ImageTexture.create_from_image(img)
-
-
-## 湖底从所属生态的基础方块取色，但随水深向统一深蓝收敛：浅水保留细节，深水不露网格。
-func _make_underwater_ground_texture(
-	water_depth: int,
-	base_texture: Texture2D
-) -> ImageTexture:
-	var source := base_texture.get_image()
-	var detail_visibility := clampf(0.48 - (water_depth - 1) * 0.18, 0.0, 0.48)
-	var depth_blend := 1.0 - detail_visibility
-	var image := Image.create(source.get_width(), source.get_height(), false, Image.FORMAT_RGBA8)
-	for y in source.get_height():
-		for x in source.get_width():
-			var pixel := source.get_pixel(x, y)
-			if pixel.a <= 0.0:
-				continue
-			var underwater_pixel := Color(pixel.r, pixel.g, pixel.b, 1.0).lerp(
-				WATER_DEPTH_COLOR,
-				depth_blend
-			)
-			underwater_pixel.a = pixel.a
-			image.set_pixel(x, y, underwater_pixel)
-	return ImageTexture.create_from_image(image)
-
-
-func _underwater_flora_modulate(water_depth: int) -> Color:
-	var visibility := 0.78 if water_depth <= 1 else 0.48
-	return Color(0.72, 0.88, 0.94, visibility)
-
-
-## 把非 32x32 的方块贴图底部对齐补到 32x32（顶面菱形中心与其他 tile 一致）
 func _process_terrain_material_texture(
 	texture: Texture2D,
 	_texture_path: String
 ) -> Texture2D:
-	return _pad_texture_to_32(texture)
+	return TerrainTextureCatalogScript.pad_texture_to_32(texture)
 
 
-func _pad_texture_to_32(tex: Texture2D) -> ImageTexture:
-	var src := tex.get_image()
-	if src.get_width() == TILE_W and src.get_height() == TILE_W:
-		return ImageTexture.create_from_image(src)
-	var img := Image.create(TILE_W, TILE_W, false, Image.FORMAT_RGBA8)
-	img.blit_rect(src, Rect2i(0, 0, src.get_width(), src.get_height()), Vector2i(0, TILE_W - src.get_height()))
-	return ImageTexture.create_from_image(img)
-
-
-# ---------- 角色 ----------
 
 func _setup_terrain() -> void:
 	_terrain = IsometricTerrain3DScript.new()
@@ -3198,151 +1407,19 @@ func _player_current_stand_level() -> float:
 	)
 
 
-func _player_occlusion_needs_rebuild() -> bool:
-	var stand_level := _player_current_stand_level()
-	var moved := (
-		not _player_occlusion_last_visual_position.is_equal_approx(_player_visual_position)
-		or not is_equal_approx(_player_occlusion_last_stand_level, stand_level)
-	)
-	if not moved and is_instance_valid(_cam):
-		# 相机绕焦点旋转时人物可能停在屏幕同一位置，但其他物体的投影全部移动，
-		# 所以门控必须包含视角与缩放。
-		moved = (
-			not is_equal_approx(_player_occlusion_last_yaw, _cam.yaw_radians)
-			or not is_equal_approx(_player_occlusion_last_zoom, _cam.zoom)
-		)
-	return _player_occlusion_dirty or moved
-
-
 func _update_player_occlusion(delta: float) -> void:
-	# 静止时也周期性重算：相机/流式稳定期若发生过检测抖动（重建瞬间遮挡判定翻转），
-	# 靠定期 rebuild 自愈，避免"已记录遮挡但淡化状态被恢复"的卡死局面。
-	_player_occlusion_refresh_elapsed += delta
-	if _player_occlusion_refresh_elapsed >= PLAYER_OCCLUSION_REFRESH_INTERVAL:
-		_player_occlusion_refresh_elapsed = 0.0
-		_player_occlusion_dirty = true
-	if _player_occlusion_needs_rebuild():
-		_rebuild_player_prop_occlusion()
-	if is_instance_valid(_terrain):
-		_terrain.advance_prop_fades(delta)
-		_player_occlusion_fading_cells = {}
-		for cell_value in _terrain.get_active_prop_fade_cells():
-			_player_occlusion_fading_cells[cell_value] = true
-
-
-## 收集真正挡住人物的植物格：锚点必须位于镜头与人物之间（更近），
-## billboard 投影与人物包围盒相交，且贴图像素在相交区内确实有 alpha。
-func _collect_player_prop_occluders() -> Dictionary:
-	var result := {}
-	if (
-		_player == null
-		or _player.texture == null
-		or not is_instance_valid(_cam)
-		or not is_instance_valid(_terrain)
-	):
-		return result
-	var viewport_height := maxf(get_viewport_rect().size.y, 1.0)
-	var px_per_world := viewport_height / maxf(_cam.size, 0.0001)
-	# 精灵图画布含大量透明留白，遮挡包围盒按内容尺寸计算，避免误淡化周围植物。
-	var sprite_size := (
-		PLAYER_SHEET_CONTENT_SIZE * _player.pixel_size
-		if _player_uses_sheet
-		else _player.texture.get_size() * _player.pixel_size
+	_player_occlusion.update(
+		delta,
+		get_viewport_rect().size.y,
+		_player_visual_position,
+		_player_current_stand_level(),
+		_player_uses_sheet
 	)
-	var center_world := _player.global_position + Vector3.UP * (sprite_size.y * 0.5)
-	var center_screen := _cam.unproject_position(center_world)
-	var core := Rect2(
-		center_screen - sprite_size * 0.5 * px_per_world,
-		sprite_size * px_per_world
-	).grow_individual(
-		PLAYER_OCCLUSION_SCREEN_MARGIN.x,
-		PLAYER_OCCLUSION_SCREEN_MARGIN.y,
-		PLAYER_OCCLUSION_SCREEN_MARGIN.x,
-		PLAYER_OCCLUSION_SCREEN_MARGIN.y
-	)
-	var camera_back := _cam.global_transform.basis.z
-	var player_depth := camera_back.dot(center_world)
-	for cell_value in _terrain.get_prop_cells():
-		var cell: Vector2i = cell_value
-		for block_value in _terrain.get_prop_block_occlusion_data(cell):
-			var block: Dictionary = block_value
-			# camera_back（镜头 +Z）指向观察者：点积越小越远离镜头。
-			# 锚点比人物更远离镜头 → 不可能遮挡（深度测试已保证它画在人物后面）。
-			if camera_back.dot(block["anchor"]) < player_depth - PLAYER_PROP_OCCLUSION_DEPTH_MARGIN:
-				continue
-			var block_half := (block["size_px"] as Vector2) / IsoProjection.TILE_PIXELS * 0.5 * px_per_world
-			var block_rect := Rect2(
-				_cam.unproject_position(block["center"]) - block_half,
-				block_half * 2.0
-			)
-			if not block_rect.intersects(core):
-				continue
-			if _prop_block_covers_player(block, block_rect, core):
-				result[cell] = true
-				break
-	return result
-
-
-func _prop_block_covers_player(block: Dictionary, block_rect: Rect2, core: Rect2) -> bool:
-	var overlap := block_rect.intersection(core)
-	if overlap.size.x <= 0.0 or overlap.size.y <= 0.0:
-		return false
-	var image := _prop_texture_image(block["texture"])
-	if image == null or image.is_empty():
-		return true
-	var origin: Vector2 = block.get("origin_px", Vector2.ZERO)
-	var size_px: Vector2 = block["size_px"]
-	var max_x := mini(image.get_width() - 1, maxi(0, ceili(
-		(overlap.end.x - block_rect.position.x) / block_rect.size.x * size_px.x + origin.x
-	)))
-	var max_y := mini(image.get_height() - 1, maxi(0, ceili(
-		(overlap.end.y - block_rect.position.y) / block_rect.size.y * size_px.y + origin.y
-	)))
-	for pixel_y in range(maxi(0, floori(
-		(overlap.position.y - block_rect.position.y) / block_rect.size.y * size_px.y + origin.y
-	)), max_y + 1):
-		for pixel_x in range(maxi(0, floori(
-			(overlap.position.x - block_rect.position.x) / block_rect.size.x * size_px.x + origin.x
-		)), max_x + 1):
-			if image.get_pixel(pixel_x, pixel_y).a > PROP_TEXTURE_ALPHA_HIT_THRESHOLD:
-				return true
-	return false
-
-
-func _prop_texture_image(texture: Texture2D) -> Image:
-	var key := texture.get_instance_id()
-	if not _prop_texture_image_cache.has(key):
-		_prop_texture_image_cache[key] = texture.get_image()
-	return _prop_texture_image_cache[key]
-
-
-func _rebuild_player_prop_occlusion() -> void:
-	_player_occlusion_dirty = false
-	_player_occlusion_last_visual_position = _player_visual_position
-	_player_occlusion_last_stand_level = _player_current_stand_level()
-	if is_instance_valid(_cam):
-		_player_occlusion_last_yaw = _cam.yaw_radians
-		_player_occlusion_last_zoom = _cam.zoom
-	var occluders := _collect_player_prop_occluders()
-	if is_instance_valid(_terrain):
-		for cell_value in _player_occluder_cells.keys():
-			if not occluders.has(cell_value):
-				_terrain.set_prop_fade_target(cell_value, 1.0)
-		for cell_value in occluders.keys():
-			# 幂等重设：chunk 重建可能已清掉该格的淡化状态，重设目标可让
-			# set_prop_fade_target 重新建代理（仅靠集合 diff 无法发现这种状态丢失）。
-			_terrain.set_prop_fade_target(cell_value, PLAYER_OCCLUSION_BLOCK_ALPHA)
-	_player_occluder_cells = occluders
 
 
 func get_player_occluder_cells() -> Array[Vector2i]:
-	var result: Array[Vector2i] = []
-	for cell_value in _player_occluder_cells.keys():
-		result.append(cell_value)
-	result.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		return a.y < b.y or (a.y == b.y and a.x < b.x)
-	)
-	return result
+	return _player_occlusion.get_occluder_cells()
+
 
 
 ## 角色站立的层号：陆地为柱顶，水面为水位线
@@ -3461,77 +1538,28 @@ func _process(delta: float) -> void:
 # ---------- 小地图 ----------
 
 func _setup_minimap() -> void:
-	_minimap_img = Image.create(MINIMAP_SIZE, MINIMAP_SIZE, false, Image.FORMAT_RGBA8)
-	_minimap_img.fill(Color.BLACK)
-	_minimap_tex = ImageTexture.create_from_image(_minimap_img)
-	var layer := CanvasLayer.new()
-	layer.layer = 100
-	var bg := ColorRect.new()
-	bg.color = Color(0.08, 0.08, 0.1, 0.9)
-	bg.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	# 舞台右上角 = 窗口右上角让出右侧侧栏列（小地图等游戏 UI 不压到面板下方）
-	bg.offset_left = -MINIMAP_SIZE - 12 - GameHudScript.SIDE_PANEL_WIDTH
-	bg.offset_top = 8
-	bg.offset_right = -8 - GameHudScript.SIDE_PANEL_WIDTH
-	bg.offset_bottom = MINIMAP_SIZE + 12
-	var rect := TextureRect.new()
-	rect.texture = _minimap_tex
-	rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	rect.position = Vector2(2, 2)
-	bg.add_child(rect)
-	layer.add_child(bg)
-	add_child(layer)
+	_minimap.configure(_terrain_materials, _terrain_sampler, WATER_MAX)
+	_minimap.setup_ui(self, GameHudScript.SIDE_PANEL_WIDTH)
 
 
 ## 角色周围 sight_radius 范围变为已探索（永久保留）
 func _reveal() -> void:
-	for dy in range(-sight_radius, sight_radius + 1):
-		for dx in range(-sight_radius, sight_radius + 1):
-			var cell := _player_cell + Vector2i(dx, dy)
-			if not _explored.has(cell):
-				var context = _sample_cell_context(cell)
-				_explored[cell] = _map_color_for_context(context)
+	_minimap.reveal(
+		_player_cell,
+		sight_radius,
+		_explored,
+		Callable(self, "_sample_cell_context")
+	)
 
 
 func _update_minimap() -> void:
-	var half := MINIMAP_SIZE / 2
-	for py in MINIMAP_SIZE:
-		for px in MINIMAP_SIZE:
-			var cell := _player_cell + Vector2i(px - half, py - half)
-			var c: Color = _explored.get(cell, Color.BLACK)
-			_minimap_img.set_pixel(px, py, c)
-	_minimap_img.set_pixel(half, half, Color(1.0, 0.2, 0.2))  # 角色标记
-	_minimap_tex.update(_minimap_img)
+	_minimap.update(_player_cell, _explored)
 
 
 func _minimap_color(_q: int, _biome: int, cell: Vector2i) -> Color:
 	var context = _sample_cell_context(cell)
-	return _map_color_for_context(context)
+	return _minimap.map_color_for_context(context)
 
-
-func _map_color_for_context(context, sampler = null) -> Color:
-	var color_sampler = sampler if sampler != null else _terrain_sampler
-	if int(context.height) <= WATER_MAX:
-		return Color(0.08, 0.2, 0.5).lerp(
-			Color(0.3, 0.6, 0.95),
-			float(context.height) / float(WATER_MAX)
-		)
-	if context.is_shore or context.surface_id in [&"rock", &"mossy_rock"]:
-		return _terrain_materials.get_minimap_color(
-			context.surface_id,
-			context.biome_id
-		)
-	var module_color: Color = color_sampler.biome_registry.minimap_color(
-		context.cell,
-		context.height,
-		context.biome_id
-	)
-	if module_color.a > 0.0:
-		return module_color
-	return _terrain_materials.get_minimap_color(
-		context.surface_id,
-		context.biome_id
-	)
 
 
 # ---------- 相机 / HUD / 输入 ----------
@@ -3708,46 +1736,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _setup_day_night() -> void:
-	_day_night = DayNightSystemScript.new()
-	_day_night.name = "DayNightSystem"
-	add_child(_day_night)
-	_sunlight = SunlightSystemScript.new()
-	_sunlight.name = "SunlightSystem"
-	add_child(_sunlight)
-	_sunlight.bind(_day_night)
-	var args := OS.get_cmdline_user_args()
-	var time_arg := args.find("--time")
-	if time_arg == -1 or time_arg + 1 >= args.size():
-		return
-	var requested := String(args[time_arg + 1]).to_lower()
-	match requested:
-		"day":
-			_day_night.set_manual_night(false)
-		"night":
-			_day_night.set_manual_night(true)
-		"auto":
-			_day_night.set_auto_mode()
-		_:
-			push_warning("--time 只接受 day / night / auto")
-			return
-	_day_night.snap_transition()
+	var built := PresentationStageScript.build_day_night(self)
+	_day_night = built["day_night"]
+	_sunlight = built["sunlight"]
 
 
 func _setup_depth_of_field() -> void:
-	_depth_of_field = DepthOfFieldSystemScript.new()
-	_depth_of_field.name = "DepthOfFieldSystem"
-	add_child(_depth_of_field)
-	var args := OS.get_cmdline_user_args()
-	var depth_arg := args.find("--dof")
-	if depth_arg == -1 or depth_arg + 1 >= args.size():
-		return
-	var requested := String(args[depth_arg + 1]).to_lower()
-	if requested in ["on", "true", "1"]:
-		_depth_of_field.set_enabled(true)
-	elif requested in ["off", "false", "0"]:
-		_depth_of_field.set_enabled(false)
-	else:
-		push_warning("--dof 只接受 on / off")
+	_depth_of_field = PresentationStageScript.build_depth_of_field(self)
+
 
 
 func _sync_depth_of_field_focus() -> void:
@@ -3759,57 +1755,25 @@ func _sync_depth_of_field_focus() -> void:
 
 
 func _setup_audio() -> void:
-	_audio = WorldAudioSystemScript.new()
-	_audio.name = "WorldAudioSystem"
-	var audible_species: Array = []
-	for species_id_value in _animal_species:
-		var species: Dictionary = _animal_species[species_id_value]
-		var metadata: Dictionary = species.get("metadata", {})
-		if not bool(metadata.get("silent", false)):
-			audible_species.append(String(species_id_value))
-	_audio.configure_animal_species(audible_species)
-	add_child(_audio)
-	if not _audio.is_config_valid():
-		push_warning("世界音频未启用：配置或资源无效")
-		return
-	if _day_night != null:
-		_day_night.night_amount_changed.connect(_audio.set_night_amount)
-		_audio.set_night_amount(_day_night.get_night_amount(), true)
+	_audio = PresentationStageScript.build_world_audio(self, _animal_species, _day_night)
 
 
 func _setup_fireflies() -> void:
-	_ambient_registry = AmbientRegistryScript.new()
-	_ambient_registry.name = "AmbientRegistry"
-	add_child(_ambient_registry)
-	if not _ambient_registry.register_species_catalog(_ambient_species):
-		push_error("Ambient registry 配置无效: %s" % [_ambient_registry.get_errors()])
-	_fireflies = _ambient_registry.get_renderer(&"firefly")
-	if _day_night != null:
-		_day_night.night_amount_changed.connect(
-			_ambient_registry.set_all_environment_amount
-		)
-		_ambient_registry.set_all_environment_amount(
-			_day_night.get_night_amount()
-		)
+	var built := PresentationStageScript.build_ambient_registry(
+		self, _ambient_species, _day_night
+	)
+	_ambient_registry = built["registry"]
+	_fireflies = built["fireflies"]
 
 
 func _setup_weather() -> void:
-	_weather = WeatherSystemScript.new()
-	_weather.name = "WeatherSystem"
-	add_child(_weather)
-	_weather.water_impact_requested.connect(_on_weather_water_impact)
-	_weather.status_changed.connect(_sync_weather_audio)
-	var args := OS.get_cmdline_user_args()
-	var weather_arg := args.find("--weather")
-	if weather_arg != -1 and weather_arg + 1 < args.size():
-		var requested := StringName(args[weather_arg + 1].to_lower())
-		if requested == &"auto":
-			_weather.set_auto_mode()
-		elif not _weather.set_manual_weather(requested):
-			push_warning("--weather 只接受 clear / rain / snow / auto")
-		else:
-			_weather.snap_transition()
+	_weather = PresentationStageScript.build_weather(
+		self,
+		Callable(self, "_on_weather_water_impact"),
+		Callable(self, "_sync_weather_audio")
+	)
 	_sync_weather_audio(true)
+
 
 
 func _sync_weather_audio(snap := false) -> void:
