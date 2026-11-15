@@ -155,6 +155,13 @@ var _selection_range := SelectionRangeScript.new()
 var _region_pos2_set := false
 var _selection_popup: PanelContainer = null
 var _mode_option: OptionButton = null
+## 条件替换弹窗：源/目标均为 terrain:<glyph> / asset:<id>；点格只选源，不改模型。
+var _replace_popup: PanelContainer = null
+var _replace_source_opt: OptionButton = null
+var _replace_dest_opt: OptionButton = null
+var _replace_scope_label: Label = null
+var _replace_apply_btn: Button = null
+var _replace_hint: Label = null
 ## pos1/pos2 坐标编辑：{ &"x"/&"y"/&"z": SpinBox }（名称 Pos1X 等，UI 契约用）
 var _pos1_boxes: Dictionary = {}
 var _pos2_boxes: Dictionary = {}
@@ -273,6 +280,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			# 移动工具开启时：Esc 先关掉移动工具（同步工具栏开关），不关菜单也不返回世界
 			if _move_tool_active:
 				_set_move_tool(false)
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
+			# 条件替换弹窗打开时：Esc 只收起弹窗，不返回世界。
+			if _replace_popup != null and _replace_popup.visible:
+				_replace_popup.hide()
 				if get_viewport() != null:
 					get_viewport().set_input_as_handled()
 				return
@@ -402,6 +415,8 @@ func _build_ui() -> void:
 
 	# ---- 选择模式菜单（点「选择」/「填充」图标弹出的悬浮窗，默认隐藏） ----
 	_build_selection_popup()
+	# ---- 条件替换菜单（替换工具激活时显示，位于工具条右侧，不进入侧栏） ----
+	_build_replace_popup()
 
 	# ---- 状态栏（贴面板底部，自动换行） ----
 	_status_label = UIFactoryScript.label("就绪 — 左键操作画布；同种子+同尺寸生成结果确定", 11, TEXT_DIM)
@@ -584,6 +599,151 @@ func _build_tool_bar() -> Control:
 	if pick_btn.icon == null:
 		pick_btn.text = "吸"
 	return bar
+
+
+## 条件替换弹窗：双下拉编码 terrain:<glyph> / asset:<id>；只有执行按钮写模型。
+func _build_replace_popup() -> void:
+	var popup := PanelContainer.new()
+	popup.name = "ReplacePopup"
+	popup.visible = false
+	popup.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	popup.offset_left = 52
+	popup.offset_top = 8
+	popup.offset_right = 352
+	popup.offset_bottom = 310
+	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
+	_replace_popup = popup
+	add_child(popup)
+	var box := VBoxContainer.new()
+	box.name = "ReplacePopupBox"
+	box.add_theme_constant_override("separation", 6)
+	popup.add_child(box)
+	box.add_child(UIFactoryScript.label("替换方块", 13, ACCENT))
+	box.add_child(UIFactoryScript.label("被替换方块", 10, TEXT_DIM))
+	_replace_source_opt = UIFactoryScript.option_button()
+	_replace_source_opt.name = "ReplaceSourceOpt"
+	_replace_source_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(_replace_source_opt)
+	box.add_child(UIFactoryScript.label("替换为", 10, TEXT_DIM))
+	_replace_dest_opt = UIFactoryScript.option_button()
+	_replace_dest_opt.name = "ReplaceDestOpt"
+	_replace_dest_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(_replace_dest_opt)
+	_replace_scope_label = UIFactoryScript.label("当前范围：全图 0 格", 11, TEXT_MAIN)
+	_replace_scope_label.name = "ReplaceScopeLabel"
+	box.add_child(_replace_scope_label)
+	_replace_apply_btn = UIFactoryScript.button("执行替换", _apply_replace, "replace")
+	_replace_apply_btn.name = "ReplaceApplyBtn"
+	_replace_apply_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(_replace_apply_btn)
+	_replace_hint = UIFactoryScript.label("点地图格子可快速设为被替换方块", 10, TEXT_DIM)
+	_replace_hint.name = "ReplaceHint"
+	_replace_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_replace_hint)
+	_populate_replace_options()
+	_select_replace_option(_replace_source_opt, "terrain:.")
+	_select_replace_option(_replace_dest_opt, _replace_code_for_block(_block_fg))
+	_refresh_replace_scope()
+
+
+## 候选与方块选择器一致：全部内置地形 + 素材库中 kind=terrain 且 saved=true 的素材。
+func _populate_replace_options() -> void:
+	if _replace_source_opt == null or _replace_dest_opt == null:
+		return
+	var source_code := String(_replace_source_opt.get_selected_metadata()) \
+		if _replace_source_opt.selected >= 0 else "terrain:."
+	var dest_code := String(_replace_dest_opt.get_selected_metadata()) \
+		if _replace_dest_opt.selected >= 0 else _replace_code_for_block(_block_fg)
+	_replace_source_opt.clear()
+	_replace_dest_opt.clear()
+	for terrain: StringName in BattlefieldDocScript.TERRAIN_GLYPH:
+		var label := "地形 · %s" % String(BattlefieldDocScript.TERRAIN_CN.get(terrain, String(terrain)))
+		var code := "terrain:%s" % String(BattlefieldDocScript.TERRAIN_GLYPH[terrain])
+		_replace_source_opt.add_item(label)
+		_replace_source_opt.set_item_metadata(_replace_source_opt.item_count - 1, code)
+		_replace_dest_opt.add_item(label)
+		_replace_dest_opt.set_item_metadata(_replace_dest_opt.item_count - 1, code)
+	if _asset_service != null:
+		var assets: Array = _asset_service.list_assets()
+		assets.sort_custom(func(a, b):
+			return String((a as Dictionary).get("id", "")) < String((b as Dictionary).get("id", "")))
+		for raw in assets:
+			var d := raw as Dictionary
+			if String(d.get("kind", "")) != UserAssetCatalogScript.KIND_TERRAIN \
+					or not bool(d.get("saved", false)):
+				continue
+			var aid := String(d.get("id", ""))
+			var label := "素材 · %s" % String(d.get("name", aid))
+			var code := "asset:%s" % aid
+			_replace_source_opt.add_item(label)
+			_replace_source_opt.set_item_metadata(_replace_source_opt.item_count - 1, code)
+			_replace_dest_opt.add_item(label)
+			_replace_dest_opt.set_item_metadata(_replace_dest_opt.item_count - 1, code)
+	_select_replace_option(_replace_source_opt, source_code)
+	_select_replace_option(_replace_dest_opt, dest_code)
+
+
+func _replace_code_for_block(block: Dictionary) -> String:
+	if String(block.get("kind", "terrain")) == "asset" and not String(block.get("id", "")).is_empty():
+		return "asset:%s" % String(block.get("id", ""))
+	var terrain := StringName(String(block.get("id", "plain")))
+	return "terrain:%s" % String(BattlefieldDocScript.TERRAIN_GLYPH.get(terrain, "."))
+
+
+func _replace_code_at(cell: Vector2i) -> String:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return ""
+	var aid := BattlefieldDocScript.tile_override_at(model, cell)
+	if not aid.is_empty():
+		return "asset:%s" % aid
+	return "terrain:%s" % String((model.rows[cell.y] as String).substr(cell.x, 1))
+
+
+## 选中编码项；地图里吸到但不在已保存素材库的 id 也允许作为源/目标。
+func _select_replace_option(opt: OptionButton, code: String) -> bool:
+	if opt == null or code.is_empty():
+		return false
+	for i in range(opt.item_count):
+		if String(opt.get_item_metadata(i)) == code:
+			opt.select(i)
+			return true
+	if code.begins_with("asset:") and code.length() > 6:
+		opt.add_item("素材 · %s" % code.substr(6))
+		opt.set_item_metadata(opt.item_count - 1, code)
+		opt.select(opt.item_count - 1)
+		return true
+	return false
+
+
+func _reset_replace_popup() -> void:
+	_populate_replace_options()
+	var source_code := "terrain:."
+	if _canvas != null:
+		var hover_code := _replace_code_at(_canvas.hover_cell)
+		if not hover_code.is_empty():
+			source_code = hover_code
+	_select_replace_option(_replace_source_opt, source_code)
+	_select_replace_option(_replace_dest_opt, _replace_code_for_block(_block_fg))
+	_refresh_replace_scope()
+
+
+func _set_replace_source_from_cell(cell: Vector2i) -> void:
+	var code := _replace_code_at(cell)
+	if code.is_empty():
+		_status("替换失败：坐标越界", true)
+		return
+	_select_replace_option(_replace_source_opt, code)
+	_refresh_replace_scope()
+	_status("被替换方块：%s" % _replace_source_opt.get_item_text(_replace_source_opt.selected))
+	print("[editor] 替换源 cell=%s code=%s" % [str(cell), code])  # L1 埋点
+
+
+func _refresh_replace_scope() -> void:
+	if _replace_scope_label == null:
+		return
+	var is_region := _selection_mode == &"region" and _region_pos2_set and _selection_range.is_active()
+	var count := _selection_range.cells_2d().size() if is_region else int(model.width) * int(model.height)
+	_replace_scope_label.text = "当前范围：%s %d 格" % ["选区内" if is_region else "全图", count]
 
 
 func _build_cell_info() -> Control:
@@ -1138,6 +1298,7 @@ func _clear_asset_selection() -> void:
 ## 选中素材已不存在则清空选中；画布烘焙缓存已随库失效，整图刷新
 func _on_asset_library_changed() -> void:
 	_rebuild_block_asset_grid()
+	_populate_replace_options()
 	if _selected_asset.is_empty():
 		_refresh_canvas()
 		return
@@ -1319,6 +1480,9 @@ func _on_cell_pressed(cell: Vector2i, alt_pressed: bool = false) -> void:
 	if tool == Tool.PICK:
 		_pick_block(cell, alt_pressed or Input.is_key_pressed(KEY_ALT))
 		return  # 吸管只改前景/背景槽，不进入文档历史。
+	if tool == Tool.REPLACE:
+		_set_replace_source_from_cell(cell)
+		return  # 条件替换：点格只选源；写模型统一走 ReplaceApplyBtn。
 	# 区域内按下（完整区域+SELECT+区域模式）→ 待移动：不落点、不设端点；
 	# 原地松开=纯点击，由 _on_cell_released 补走原 _apply_region_click 逻辑
 	if tool == Tool.SELECT and _selection_mode == &"region" and _region_pos2_set \
@@ -1460,15 +1624,15 @@ func _apply_tool(cell: Vector2i) -> void:
 	if tool == Tool.PICK:
 		_pick_block(cell)
 		return  # 吸管不是文档编辑，不进入历史。
+	if tool == Tool.REPLACE:
+		_set_replace_source_from_cell(cell)
+		return  # 防御直接调用：替换工具点击同样只选源。
 	var names := {
 		Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮", Tool.UNIT: "角色",
 		Tool.PLANT: "植物", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
 		Tool.ASSET: "素材", Tool.REPLACE: "替换方块", Tool.PICK: "吸管",
 	}
 	var undo_label: String = names[tool]
-	if tool == Tool.REPLACE and _selection_mode == &"region" and _region_pos2_set \
-			and _selection_range.is_active():
-		undo_label = "替换区域"
 	_push_undo(undo_label)  # 按下一次=一步；后续拖动不再入栈（整笔一笔撤销）
 	match tool:
 		Tool.PAINT:
@@ -1490,8 +1654,6 @@ func _apply_tool(cell: Vector2i) -> void:
 			_set_prop(cell, current_prop)
 		Tool.ASSET:
 			_apply_asset_tool(cell)
-		Tool.REPLACE:
-			_apply_replace(cell)
 		Tool.HEIGHT_UP, Tool.HEIGHT_DOWN:
 			_apply_height_brush(cell, tool)
 
@@ -1849,6 +2011,7 @@ func _apply_region_click(cell: Vector2i) -> void:
 ## range.changed（端点变化 / clamp_to 缩框）→ 画布虚线框 + 坐标 SpinBox 回显
 func _on_selection_range_changed() -> void:
 	_sync_region_marker()
+	_refresh_replace_scope()
 
 
 func _sync_region_marker() -> void:
@@ -1928,13 +2091,23 @@ func _apply_fill(cell: Vector2i) -> void:
 			fill_cell(cell, StringName(_block_fg.get("id", "plain")))
 
 
-## 覆盖替换：完整区域优先于点击格；素材只写 tile_overrides，内置地形写 rows 并清覆盖。
-## 异高选区沿用区域填充语义：整片 footprint 找平至两端点较高的 z；单格/同高选区不改高度。
-func _apply_replace(cell: Vector2i) -> void:
+## 条件替换：完整选区优先，否则全图；仅命中源类型的格子写目标，高度一律不动。
+## terrain 源只匹配无 tile_override 且 rows 图例相同的格；asset 源只匹配覆盖 id。
+func _apply_replace() -> void:
+	if _replace_source_opt == null or _replace_dest_opt == null \
+			or _replace_source_opt.selected < 0 or _replace_dest_opt.selected < 0:
+		_status("替换失败：请选择源方块与目标方块", true)
+		return
+	var source_code := String(_replace_source_opt.get_selected_metadata())
+	var dest_code := String(_replace_dest_opt.get_selected_metadata())
+	if source_code.is_empty() or dest_code.is_empty():
+		_status("替换失败：源方块或目标方块无效", true)
+		return
+	if source_code == dest_code:
+		_status("替换失败：源方块与目标方块相同", true)
+		return
 	var is_region := _selection_mode == &"region" and _region_pos2_set and _selection_range.is_active()
 	var cells: Array = []
-	var volume := false
-	var z_hi := 0
 	if is_region:
 		var mn := _selection_range.min_corner()
 		var mx := _selection_range.max_corner()
@@ -1944,39 +2117,42 @@ func _apply_replace(cell: Vector2i) -> void:
 			_status("替换失败：%s" % err, true)
 			return
 		cells = _selection_range.cells_2d()
-		volume = mn.z != mx.z
-		z_hi = maxi(mn.z, mx.z)
 	else:
-		if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
-			_status("替换失败：坐标越界", true)
-			return
-		cells.append(cell)
+		for y in range(int(model.height)):
+			for x in range(int(model.width)):
+				cells.append(Vector2i(x, y))
 	if cells.is_empty():
 		_status("替换失败：选区为空", true)
 		return
-	var kind := StringName(_block_fg.get("kind", "terrain"))
-	var id := String(_block_fg.get("id", "plain"))
-	if id.is_empty():
-		kind = &"terrain"
-		id = "plain"
+	var source_kind := "asset" if source_code.begins_with("asset:") else "terrain"
+	var source_value := source_code.substr(6) if source_kind == "asset" else source_code.substr(8)
 	var rows: Array = model.rows
-	var glyph := String(BattlefieldDocScript.TERRAIN_GLYPH.get(StringName(id), "."))
-	for c in cells:
-		if volume:
-			BattlefieldDocScript.set_cell_z(model, c, z_hi)
-		if kind == &"asset":
-			BattlefieldDocScript.set_tile_override(model, c, id)
+	var matched: Array = []
+	for c: Vector2i in cells:
+		var override_id := BattlefieldDocScript.tile_override_at(model, c)
+		if source_kind == "asset":
+			if override_id == source_value:
+				matched.append(c)
+		elif override_id.is_empty() and String((rows[c.y] as String).substr(c.x, 1)) == source_value:
+			matched.append(c)
+	if matched.is_empty():
+		_status("匹配 0 格：未替换", true)
+		return
+	var action := "替换区域" if is_region else "替换全图"
+	_push_undo(action)
+	var dest_kind := "asset" if dest_code.begins_with("asset:") else "terrain"
+	var dest_value := dest_code.substr(6) if dest_kind == "asset" else dest_code.substr(8)
+	for c: Vector2i in matched:
+		if dest_kind == "asset":
+			BattlefieldDocScript.set_tile_override(model, c, dest_value)
 		else:
 			var row: String = rows[c.y]
-			rows[c.y] = row.substr(0, c.x) + glyph + row.substr(c.x + 1)
+			rows[c.y] = row.substr(0, c.x) + dest_value + row.substr(c.x + 1)
 			BattlefieldDocScript.set_tile_override(model, c, "")
+	_seal_pending()  # 按钮动作立即落一条历史，不等下一次画布交互
 	_refresh_canvas()
-	var label := id if kind == &"asset" else String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id))
-	var action := "替换区域" if is_region else "替换方块"
-	_status("%s %s ×%d 格%s" % [action, label, cells.size(),
-		"（找平至 z%d）" % z_hi if volume else ""])
-	print("[editor] %s kind=%s id=%s cells=%d volume=%s z_hi=%d"
-		% [action, String(kind), id, cells.size(), str(volume), z_hi])  # L1 埋点
+	_status("%s：%d 格（高度不变）" % [action, matched.size()])
+	print("[editor] %s source=%s dest=%s cells=%d" % [action, source_code, dest_code, matched.size()])  # L1 埋点
 
 
 ## 区域填充：区域内每格应用选择器内容——内置地形写 rows 并清素材覆盖；
@@ -2567,11 +2743,16 @@ func _refresh_canvas() -> void:
 	_canvas.model = model
 	_canvas.queue_redraw()
 	_sync_selection_after_model_change()
+	_refresh_replace_scope()
 
 
 func _on_tool_changed() -> void:
 	if _place_mode:
 		_cancel_place_mode()  # 切工具退出放置模式
+	if _replace_popup != null:
+		_replace_popup.visible = current_tool == Tool.REPLACE
+		if _replace_popup.visible:
+			_reset_replace_popup()
 	var names := {
 		Tool.SELECT: "选择", Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮",
 		Tool.UNIT: "角色", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",

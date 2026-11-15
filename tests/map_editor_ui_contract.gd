@@ -125,6 +125,14 @@ func _run() -> void:
 		and editor._tool_buttons[editor.Tool.PICK].toggle_mode
 		and editor._tool_buttons[editor.Tool.PICK].custom_minimum_size == Vector2(34, 34),
 		"工具条含第 10 钮吸管（34×34 toggle）")
+	var replace_popup: PanelContainer = editor.get_node_or_null("ReplacePopup")
+	_expect(replace_popup != null and not replace_popup.visible
+		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceSourceOpt") is OptionButton
+		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceDestOpt") is OptionButton
+		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceScopeLabel") is Label
+		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceApplyBtn") is Button
+		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceHint") is Label,
+		"替换弹窗默认隐藏，源/目标下拉、范围、执行按钮与提示齐全")
 	if toolbar != null:
 		var bar: Control = toolbar.get_parent()
 		_expect(bar.get_index() == 1 and editor._canvas.get_index() == 0,

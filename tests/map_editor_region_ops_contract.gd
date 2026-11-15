@@ -45,6 +45,9 @@ func _run() -> void:
 	var toolbar: Node = editor.get_node_or_null("EditorRoot/CanvasHolder/ToolBar/ToolBox")
 	_expect(toolbar != null and toolbar.get_child_count() == 10,
 		"A 工具条为 10 个按钮（9 工具 + 移动开关）")
+	var a_replace_popup := editor.get_node_or_null("ReplacePopup") as PanelContainer
+	_expect(a_replace_popup != null and not a_replace_popup.visible,
+		"A ReplacePopup 初始存在且默认隐藏")
 	_expect(editor._block_fg == {"kind": "terrain", "id": "plain", "z": 0}
 		and editor._block_bg == {"kind": "terrain", "id": "plain", "z": 0},
 		"A 前景/背景方块槽默认均为 plain z0")
@@ -660,7 +663,7 @@ func _run() -> void:
 		l_dir.remove("test_editor_presets_ui")
 
 
-	# ---- N. 替换方块：选区优先、单格/区域各一步历史、越界零写入 ----
+	# ---- N. 替换工具：点击只选择源方块，不再直接改模型或写历史 ----
 	editor.apply_generate("replace_ops", 6, 5)
 	await process_frame
 	var n_replace_btn := editor._tool_buttons.get(editor.Tool.REPLACE) as BaseButton
@@ -674,63 +677,22 @@ func _run() -> void:
 	editor._on_selection_mode_item(0)
 	editor._selection_range.clear()
 	editor._region_pos2_set = false
-	_expect(editor._fill_selector.select_terrain(&"water"), "N 替换源取通用方块选择器 water")
-	editor._set_glyph(Vector2i(1, 1), "g")
-	editor._set_glyph(Vector2i(2, 1), "g")
-	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(1, 1), 2)
 	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(1, 1), "old_asset")
 	editor._push_undo("布景N")
 	editor._seal_pending()
-	var n_single_before: Dictionary = editor.model.duplicate(true)
-	var n_single_h0: int = editor._history.size()
-	var n_single_c0: int = editor._history_cursor
+	var n_before: Dictionary = editor.model.duplicate(true)
+	var n_h0: int = editor._history.size()
+	var n_c0: int = editor._history_cursor
 	editor._on_cell_pressed(Vector2i(1, 1))
 	editor._seal_pending()
-	_expect((editor.model.rows[1] as String).substr(1, 1) == "w"
-		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(1, 1)) == ""
-		and BattlefieldDocScript.cell_z(editor.model, Vector2i(1, 1)) == 2
-		and (editor.model.rows[1] as String).substr(2, 1) == "g"
-		and editor._history_cursor == n_single_c0 + 1
-		and editor._history.size() == n_single_h0 + 1
-		and String(editor._history[editor._history_cursor]["label"]) == "替换方块",
-		"N 无选区点击只替换单格：rows 写入/覆盖清空/高度不变，恰好一步「替换方块」")
-	editor._undo()
-	_expect(editor.model == n_single_before, "N 单格替换一次 undo 完整回滚")
-	# 完整异高选区优先：点击选区外仍替换整个 footprint，并沿用填充的 z_hi 找平语义。
-	editor._on_selection_mode_item(1)
-	editor._selection_range.begin(Vector3i(2, 1, 0))
-	editor._selection_range.update_focus(Vector3i(3, 2, 1))
-	editor._region_pos2_set = true
-	var n_region_before: Dictionary = editor.model.duplicate(true)
-	var n_region_outside: String = editor.model.rows[0]
-	var n_region_c0: int = editor._history_cursor
-	editor._on_cell_pressed(Vector2i(0, 0))
-	editor._seal_pending()
-	var n_region_ok := true
-	for y in range(1, 3):
-		for x in range(2, 4):
-			if (editor.model.rows[y] as String).substr(x, 1) != "w" \
-					or BattlefieldDocScript.cell_z(editor.model, Vector2i(x, y)) != 1:
-				n_region_ok = false
-	_expect(n_region_ok and editor.model.rows[0] == n_region_outside
-		and editor._history_cursor == n_region_c0 + 1
-		and editor._history.size() == editor._history_cursor + 1
-		and String(editor._history[editor._history_cursor]["label"]) == "替换区域",
-		"N 有完整选区优先覆盖 2×2（点击外部不改），异高找平 z=1，恰好一步「替换区域」")
-	editor._undo()
-	_expect(editor.model == n_region_before, "N 区域替换一次 undo 原子回滚 rows 与高度")
-	editor._on_selection_mode_item(0)
-	editor._selection_range.clear()
-	editor._region_pos2_set = false
-	var n_bad_before: Dictionary = editor.model.duplicate(true)
-	var n_bad_h0: int = editor._history.size()
-	var n_bad_c0: int = editor._history_cursor
+	_expect(String(editor._replace_source_opt.get_selected_metadata()) == "asset:old_asset"
+		and editor.model == n_before and editor._history.size() == n_h0
+		and editor._history_cursor == n_c0,
+		"N 替换工具点格只设置 ReplaceSourceOpt，模型与历史零变化")
 	editor._on_cell_pressed(Vector2i(-1, 0))
-	editor._seal_pending()
-	_expect(editor.model == n_bad_before and editor._history.size() == n_bad_h0
-		and editor._history_cursor == n_bad_c0
-		and String(editor._status_label.text).contains("越界"),
-		"N 越界替换中文拒绝：模型/历史游标/历史条数零变化")
+	_expect(editor.model == n_before and editor._history.size() == n_h0
+		and editor._history_cursor == n_c0 and String(editor._status_label.text).contains("越界"),
+		"N 越界点格中文拒绝，仍不写模型或历史")
 
 	# ---- O. 吸管 + 前景/背景交换：只读模型、不写历史，画笔消费交换后的前景 ----
 	editor.apply_generate("pick_ops", 6, 5)
@@ -873,6 +835,124 @@ func _run() -> void:
 	if p_dir != null and p_dir.dir_exists("test_editor_presets_ghost"):
 		p_dir.remove("test_editor_presets_ghost/presets.json")
 		p_dir.remove("test_editor_presets_ghost")
+
+	# ---- Q. 条件替换弹窗：双下拉、全图/选区命中、零写入与原子撤销 ----
+	editor.apply_generate("replace_popup", 6, 5)
+	await process_frame
+	editor._tool_buttons[editor.Tool.PAINT].button_pressed = true
+	editor._on_selection_mode_item(0)
+	editor._selection_range.clear()
+	editor._region_pos2_set = false
+	var q_popup := editor.get_node_or_null("ReplacePopup") as PanelContainer
+	var q_source := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceSourceOpt") as OptionButton
+	var q_dest := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceDestOpt") as OptionButton
+	var q_scope := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceScopeLabel") as Label
+	var q_apply := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceApplyBtn") as Button
+	var q_hint := editor.get_node_or_null("ReplacePopup/ReplacePopupBox/ReplaceHint") as Label
+	_expect(q_popup != null and not q_popup.visible and q_source != null and q_dest != null
+		and q_scope != null and q_apply != null and q_hint != null
+		and q_apply.text == "执行替换" and q_hint.text == "点地图格子可快速设为被替换方块",
+		"Q ReplacePopup 默认隐藏，双下拉/范围/执行/提示节点齐全")
+	editor._set_glyph(Vector2i(1, 1), "g")
+	editor._set_glyph(Vector2i(2, 1), "g")
+	editor._set_glyph(Vector2i(3, 1), "w")
+	editor._set_glyph(Vector2i(4, 1), "g")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(1, 1), 3)
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 1), 4)
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(3, 1), 2)
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(4, 1), 5)
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(1, 1), "old_asset")
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(2, 1), "old_asset")
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(3, 1), "")
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(4, 1), "cover_asset")
+	editor._push_undo("布景Q")
+	editor._seal_pending()
+	editor._canvas.hover_cell = Vector2i(3, 1)
+	editor._set_block_slot("fg", {"kind": &"asset", "id": "target_asset", "z": 0})
+	editor._tool_buttons[editor.Tool.REPLACE].button_pressed = true
+	_expect(q_popup.visible and String(q_source.get_selected_metadata()) == "terrain:w"
+		and String(q_dest.get_selected_metadata()) == "asset:target_asset"
+		and q_scope.text == "当前范围：全图 30 格",
+		"Q 选替换工具显示弹窗：源取悬停格、目标取前景、无选区计全图")
+	editor._on_cell_pressed(Vector2i(1, 1))
+	var q_has_asset := false
+	for i in range(q_source.item_count):
+		if String(q_source.get_item_metadata(i)) == "asset:old_asset":
+			q_has_asset = true
+	_expect(q_has_asset and String(q_source.get_selected_metadata()) == "asset:old_asset",
+		"Q 下拉编码含 terrain:/asset:，点格可把素材设为源")
+	editor._select_replace_option(q_dest, "terrain:w")
+	var q_full_before: Dictionary = editor.model.duplicate(true)
+	var q_full_c0: int = editor._history_cursor
+	q_apply.emit_signal("pressed")
+	_expect((editor.model.rows[1] as String).substr(1, 1) == "w"
+		and (editor.model.rows[1] as String).substr(2, 1) == "w"
+		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(1, 1)) == ""
+		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(2, 1)) == ""
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(1, 1)) == 3
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(2, 1)) == 4
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(3, 1)) == 2
+		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(4, 1)) == "cover_asset"
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(4, 1)) == 5
+		and editor._history_cursor == q_full_c0 + 1
+		and editor._history.size() == editor._history_cursor + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "替换全图"
+		and String(editor._status_label.text).contains("2 格"),
+		"Q 全图按类型只替换 2 个命中格，高度/不命中格不变，恰好一步「替换全图」")
+	editor._undo()
+	_expect(editor.model == q_full_before, "Q 全图条件替换一次 undo 完整回滚")
+	editor._select_replace_option(q_source, "asset:old_asset")
+	editor._select_replace_option(q_dest, "asset:old_asset")
+	var q_same_before: Dictionary = editor.model.duplicate(true)
+	var q_same_h0: int = editor._history.size()
+	var q_same_c0: int = editor._history_cursor
+	q_apply.emit_signal("pressed")
+	_expect(editor.model == q_same_before and editor._history.size() == q_same_h0
+		and editor._history_cursor == q_same_c0
+		and String(editor._status_label.text).contains("相同"),
+		"Q 源==目标拒绝：模型/历史游标/条数零变化")
+	editor._on_selection_mode_item(1)
+	editor._selection_range.begin(Vector3i(4, 1, 5))
+	editor._selection_range.update_focus(Vector3i(4, 1, 5))
+	editor._region_pos2_set = true
+	editor._select_replace_option(q_source, "terrain:g")
+	editor._select_replace_option(q_dest, "terrain:w")
+	q_apply.emit_signal("pressed")
+	_expect(editor.model == q_same_before and editor._history.size() == q_same_h0
+		and editor._history_cursor == q_same_c0
+		and String(editor._status_label.text).contains("0 格"),
+		"Q terrain 源不命中带覆盖格：0 匹配提示且零历史")
+	editor._selection_range.begin(Vector3i(1, 1, 0))
+	editor._selection_range.update_focus(Vector3i(2, 2, 4))
+	editor._region_pos2_set = true
+	editor._select_replace_option(q_source, "asset:old_asset")
+	editor._select_replace_option(q_dest, "terrain:g")
+	var q_region_before: Dictionary = editor.model.duplicate(true)
+	var q_region_c0: int = editor._history_cursor
+	_expect(q_scope.text == "当前范围：选区内 4 格", "Q 完整选区范围计数为 2×2=4 格")
+	q_apply.emit_signal("pressed")
+	_expect(BattlefieldDocScript.tile_override_at(editor.model, Vector2i(1, 1)) == ""
+		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(2, 1)) == ""
+		and (editor.model.rows[1] as String).substr(1, 1) == "g"
+		and (editor.model.rows[1] as String).substr(2, 1) == "g"
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(1, 1)) == 3
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(2, 1)) == 4
+		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(4, 1)) == "cover_asset"
+		and editor._history_cursor == q_region_c0 + 1
+		and editor._history.size() == editor._history_cursor + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "替换区域",
+		"Q 选区优先只命中 2 格，高度不动，恰好一步「替换区域」")
+	editor._undo()
+	_expect(editor.model == q_region_before, "Q 选区条件替换一次 undo 原子回滚")
+	editor._tool_buttons[editor.Tool.PAINT].button_pressed = true
+	_expect(not q_popup.visible, "Q 切到其他工具隐藏弹窗")
+	editor._tool_buttons[editor.Tool.REPLACE].button_pressed = true
+	var q_esc_before: Dictionary = editor.model.duplicate(true)
+	var q_esc_h0: int = editor._history.size()
+	_send_key(editor, KEY_ESCAPE)
+	_expect(not q_popup.visible and editor.model == q_esc_before
+		and editor._history.size() == q_esc_h0,
+		"Q Esc 只收起替换弹窗，不改模型或历史")
 
 	_finish(editor)
 
