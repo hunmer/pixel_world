@@ -262,6 +262,12 @@ func _input(e):
 				hide()
 
 func _process(delta: float) -> void:
+	# self-heal: recover from non-finite geometry instead of feeding NaN into
+	# Control.set_size()/set_position() every frame (which spams engine errors).
+	if !size.is_finite():
+		size = custom_minimum_size if custom_minimum_size.is_finite() and custom_minimum_size.x > 1.0 and custom_minimum_size.y > 1.0 else Vector2(413.0, 305.0)
+	if !position.is_finite():
+		position = Vector2.ZERO
 	if !no_move and _is_dragging:
 		var tp := position + get_local_mouse_position() - _drag_start_position
 		position = PankuUtils.interp(position, tp, transform_interp_speed, delta)
@@ -278,6 +284,8 @@ func _process(delta: float) -> void:
 		var screen_rect := get_viewport_rect()
 		var target_position := window_rect.position
 		var target_size := window_rect.size.clamp(Vector2.ZERO, screen_rect.size)
+		if !target_size.is_finite():
+			target_size = size
 		if window_rect.position.y < 0:
 			target_position.y = 0
 		if window_rect.end.y > screen_rect.end.y:
@@ -288,11 +296,21 @@ func _process(delta: float) -> void:
 			target_position.x = 0
 		if window_rect.end.x > screen_rect.end.x:
 			target_position.x = screen_rect.end.x - window_rect.size.x
+		if !target_position.is_finite():
+			target_position = position
 		var current_position = window_rect.position
 		current_position = PankuUtils.interp(current_position, target_position, bounds_interp_speed, delta)
-		size = PankuUtils.interp(size, target_size, bounds_interp_speed, delta)
-		position = current_position
+		var target_interped_size: Vector2 = PankuUtils.interp(size, target_size, bounds_interp_speed, delta)
+		if target_interped_size.is_finite():
+			size = target_interped_size
+		if current_position.is_finite():
+			position = current_position
 	if _size_animation:
+		if !_target_size.is_finite():
+			_target_size = size
+			_size_animation = false
 		if _target_size.is_equal_approx(size):
 			_size_animation = false
-		size = PankuUtils.interp(size, _target_size, anim_interp_speed, delta)
+		var folded_size: Vector2 = PankuUtils.interp(size, _target_size, anim_interp_speed, delta)
+		if folded_size.is_finite():
+			size = folded_size

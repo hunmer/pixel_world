@@ -68,8 +68,14 @@ func save_window_data(window:PankuLynxWindow):
 
 
 func _save_window_geometry(window:PankuLynxWindow):
-	save_module_data("window_position", window.position)
-	save_module_data("window_size", window.get_normal_window_size())
+	# never persist non-finite geometry — a NaN here poisons every later launch
+	# (lynx_window_2.gd would then feed NaN into Control.set_size() every frame)
+	var window_position: Vector2 = window.position
+	if window_position.is_finite():
+		save_module_data("window_position", window_position)
+	var window_size: Vector2 = window.get_normal_window_size()
+	if window_size.is_finite():
+		save_module_data("window_size", window_size)
 
 
 # Add hook to window to auto save its geometry on close.
