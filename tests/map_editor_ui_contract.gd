@@ -133,6 +133,17 @@ func _run() -> void:
 		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceApplyBtn") is Button
 		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceHint") is Label,
 		"替换弹窗默认隐藏，源/目标下拉、范围、执行按钮与提示齐全")
+	var recent_bar := editor.get_node_or_null("EditorRoot/CanvasHolder/RecentPicksBar") as PanelContainer
+	var recent_list := editor.get_node_or_null(
+		"EditorRoot/CanvasHolder/RecentPicksBar/RecentPicksVBox/RecentPickScroll/RecentPickList") as VBoxContainer
+	_expect(recent_bar != null and recent_list != null and recent_list.get_child_count() == 0
+		and recent_bar.get_node_or_null("RecentPicksVBox/RecentPicksTitle") is Label
+		and String((recent_bar.get_node("RecentPicksVBox/RecentPicksTitle") as Label).text) == "最近吸取"
+		and is_equal_approx(recent_bar.anchor_left, 1.0)
+		and is_equal_approx(recent_bar.anchor_right, 1.0)
+		and recent_bar.offset_right - recent_bar.offset_left == 96
+		and recent_bar.offset_top >= 44,
+		"最近吸取栏位于 CanvasHolder 右侧，宽 96px、顶部留白且初始列表为空")
 	if toolbar != null:
 		var bar: Control = toolbar.get_parent()
 		_expect(bar.get_index() == 1 and editor._canvas.get_index() == 0,

@@ -954,6 +954,74 @@ func _run() -> void:
 		and editor._history.size() == q_esc_h0,
 		"Q Esc 只收起替换弹窗，不改模型或历史")
 
+	# ---- R. 最近吸取：会话内保留、(kind,id) 去重置顶、8 条封顶、条目取前景/背景 ----
+	var r_before_generate: Array[Dictionary] = editor._recent_picks_info()
+	editor.apply_generate("recent_picks", 10, 3)
+	await process_frame
+	_expect(r_before_generate.size() == 2 and editor._recent_picks_info() == r_before_generate,
+		"R O 段两次吸取跨生成保留，最近吸取属于会话历史")
+	# 独立场景从空列表开始；清空只是测试布景，不走生成/读档/resize 的产品路径。
+	editor._recent_picks.clear()
+	editor._refresh_recent_picks()
+	editor._tool_buttons[editor.Tool.PICK].button_pressed = true
+	editor._set_glyph(Vector2i(0, 0), "w")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(0, 0), 1)
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(1, 0), "recent_asset")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(1, 0), 2)
+	editor._set_glyph(Vector2i(2, 0), "g")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 0), 3)
+	for x in range(10):
+		BattlefieldDocScript.set_tile_override(editor.model, Vector2i(x, 1), "recent_cap_%02d" % x)
+		BattlefieldDocScript.set_cell_z(editor.model, Vector2i(x, 1), x)
+	editor._push_undo("布景R")
+	editor._seal_pending()
+	var r_model0: Dictionary = editor.model.duplicate(true)
+	var r_h0: int = editor._history.size()
+	var r_c0: int = editor._history_cursor
+	editor._on_cell_pressed(Vector2i(0, 0))
+	editor._on_cell_pressed(Vector2i(1, 0), true)
+	editor._on_cell_pressed(Vector2i(2, 0))
+	var r_info: Array[Dictionary] = editor._recent_picks_info()
+	var r_list := editor.get_node_or_null(
+		"EditorRoot/CanvasHolder/RecentPicksBar/RecentPicksVBox/RecentPickScroll/RecentPickList") as VBoxContainer
+	_expect(r_info.size() == 3 and r_info[0] == {"kind": "terrain", "id": "grass", "z": 3}
+		and r_info[1] == {"kind": "asset", "id": "recent_asset", "z": 2}
+		and r_info[2] == {"kind": "terrain", "id": "water", "z": 1}
+		and r_list != null and r_list.get_child_count() == 3
+		and editor.model == r_model0 and editor._history.size() == r_h0
+		and editor._history_cursor == r_c0,
+		"R 连续吸取 3 种方块：最新在最上、前景/背景都记录，模型/历史不变")
+	editor._on_cell_pressed(Vector2i(0, 0), true)
+	r_info = editor._recent_picks_info()
+	_expect(r_info.size() == 3 and String(r_info[0].id) == "water" and int(r_info[0].z) == 1
+		and String(r_info[1].id) == "grass" and String(r_info[2].id) == "recent_asset"
+		and editor.model == r_model0 and editor._history.size() == r_h0,
+		"R 重复吸取按 (kind,id) 去重并把已有项移到顶部")
+	var r_order_before: Array[Dictionary] = editor._recent_picks_info()
+	(r_list.get_child(2) as Button).pressed.emit()  # recent_asset → 前景
+	editor._on_recent_pick_pressed(1, true)  # Alt 的确定性入口：grass → 背景
+	_expect(editor._block_fg == {"kind": "asset", "id": "recent_asset", "z": 2}
+		and editor._block_bg == {"kind": "terrain", "id": "grass", "z": 3}
+		and editor._recent_picks_info() == r_order_before
+		and editor.model == r_model0 and editor._history.size() == r_h0,
+		"R 点条目写前景、Alt+点击写背景，取用不重排且零模型/历史变化")
+	var r_mutable_snapshot: Array[Dictionary] = editor._recent_picks_info()
+	r_mutable_snapshot[0]["id"] = "external_mutation"
+	_expect(String(editor._recent_picks_info()[0].id) == "water",
+		"R _recent_picks_info 返回深拷贝，外部修改不污染内部列表")
+	for x in range(10):
+		editor._on_cell_pressed(Vector2i(x, 1))
+	r_info = editor._recent_picks_info()
+	_expect(r_info.size() == 8 and String(r_info[0].id) == "recent_cap_09"
+		and String(r_info[7].id) == "recent_cap_02"
+		and editor.model == r_model0 and editor._history.size() == r_h0
+		and editor._history_cursor == r_c0,
+		"R 再吸 10 种不同方块后封顶 8 条，丢弃最旧 cap00/cap01，仍零历史")
+	_expect(r_list.get_child_count() == 8
+		and String((r_list.get_child(0) as Button).tooltip_text).contains("recent_cap_09")
+		and (r_list.get_child(0) as Button).custom_minimum_size.y == 34,
+		"R RecentPickList 同步为 8 个 34px 窄条按钮，首项 tooltip 保留全名")
+
 	_finish(editor)
 
 

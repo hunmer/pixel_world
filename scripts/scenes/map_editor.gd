@@ -97,6 +97,10 @@ var _block_fg: Dictionary = {"kind": "terrain", "id": "plain", "z": 0}
 var _block_bg: Dictionary = {"kind": "terrain", "id": "plain", "z": 0}
 var _fg_swatch: Button = null
 var _bg_swatch: Button = null
+## 最近吸取：会话内按 (kind,id) 去重，最新在首，最多 8 条；不随生成/读档/改尺寸清空。
+var _recent_picks: Array[Dictionary] = []
+var _recent_picks_bar: PanelContainer = null
+var _recent_pick_list: VBoxContainer = null
 ## 当前选中的具体植物贴图（非空=地形 Tab 画笔改为放置植物，写模型 props 层）
 var current_prop := ""
 ## 植物素材枚举 { 组名: [res://路径] }（_ready 里扫描，_build_terrain_tab 用）
@@ -363,6 +367,8 @@ func _build_ui() -> void:
 	holder.add_child(_build_cell_info())
 	# ---- 底部操作提示条（复用 hint_bar.gd 组件，与世界 HUD 同一套 keycap 提示） ----
 	holder.add_child(_build_hint_bar())
+	# ---- 画布右侧最近吸取栏（限制在 CanvasHolder 内，不占 SidePanel 宽度） ----
+	_build_recent_picks_bar(holder)
 
 	# ---- 右侧面板：标题 / 5 个 Tab / 状态栏（固定宽，不吃画布空间） ----
 	var side := PanelContainer.new()
@@ -644,6 +650,44 @@ func _build_replace_popup() -> void:
 	_select_replace_option(_replace_source_opt, "terrain:.")
 	_select_replace_option(_replace_dest_opt, _replace_code_for_block(_block_fg))
 	_refresh_replace_scope()
+
+
+## 画布右侧最近吸取栏：独立于右侧 SidePanel，最多 8 个 34px 窄条按钮，超出后滚动。
+func _build_recent_picks_bar(holder: Control) -> void:
+	var bar := PanelContainer.new()
+	bar.name = "RecentPicksBar"
+	bar.anchor_left = 1.0
+	bar.anchor_top = 0.0
+	bar.anchor_right = 1.0
+	bar.anchor_bottom = 1.0
+	bar.offset_left = -104
+	bar.offset_top = 52
+	bar.offset_right = -8
+	bar.offset_bottom = -44
+	bar.custom_minimum_size = Vector2(96, 0)
+	bar.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
+	holder.add_child(bar)
+	_recent_picks_bar = bar
+	var box := VBoxContainer.new()
+	box.name = "RecentPicksVBox"
+	box.add_theme_constant_override("separation", 4)
+	bar.add_child(box)
+	var title := UIFactoryScript.label("最近吸取", 12, ACCENT)
+	title.name = "RecentPicksTitle"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.name = "RecentPickScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(scroll)
+	_recent_pick_list = VBoxContainer.new()
+	_recent_pick_list.name = "RecentPickList"
+	_recent_pick_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_recent_pick_list.add_theme_constant_override("separation", 2)
+	scroll.add_child(_recent_pick_list)
+	_refresh_recent_picks()
 
 
 ## 候选与方块选择器一致：全部内置地形 + 素材库中 kind=terrain 且 saved=true 的素材。
@@ -943,6 +987,67 @@ func _refresh_block_slot_ui() -> void:
 		_bg_swatch.tooltip_text = "背景：%s" % _block_label(_block_bg)
 
 
+## 只读快照供契约/调试使用；外部修改返回值不会污染会话内最近吸取列表。
+func _recent_picks_info() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for block in _recent_picks:
+		out.append(block.duplicate(true))
+	return out
+
+
+## 仅吸管成功时调用：按 (kind,id) 去重并置顶，z 取最近一次，最多保留 8 条。
+func _remember_recent_pick(block: Dictionary) -> void:
+	var kind := String(block.get("kind", "terrain"))
+	var id := String(block.get("id", "plain"))
+	for i in range(_recent_picks.size()):
+		var old := _recent_picks[i]
+		if String(old.get("kind", "terrain")) == kind and String(old.get("id", "plain")) == id:
+			_recent_picks.remove_at(i)
+			break
+	_recent_picks.insert(0, {"kind": kind, "id": id, "z": int(block.get("z", 0))})
+	if _recent_picks.size() > 8:
+		_recent_picks.resize(8)
+	_refresh_recent_picks()
+
+
+func _recent_pick_short_label(block: Dictionary) -> String:
+	var id := String(block.get("id", "plain"))
+	if String(block.get("kind", "terrain")) == "terrain":
+		return String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id)).left(2)
+	return id.left(8) + ("…" if id.length() > 8 else "")
+
+
+func _refresh_recent_picks() -> void:
+	if _recent_pick_list == null:
+		return
+	for child in _recent_pick_list.get_children():
+		_recent_pick_list.remove_child(child)
+		child.queue_free()
+	for i in range(_recent_picks.size()):
+		var block := _recent_picks[i]
+		var button := _pixel_btn()
+		button.name = "RecentPick%d" % i
+		button.text = _recent_pick_short_label(block)
+		button.tooltip_text = _block_label(block)
+		button.custom_minimum_size = Vector2(0, 34)
+		button.clip_text = true
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(_on_recent_pick_pressed.bind(i))
+		_recent_pick_list.add_child(button)
+
+
+## 点击取为前景，Alt+点击取为背景；取用本身不改变最近列表顺序。
+func _on_recent_pick_pressed(index: int, alt_pressed: bool = false) -> void:
+	if index < 0 or index >= _recent_picks.size():
+		return
+	var block := _recent_picks[index].duplicate(true)
+	var to_background := alt_pressed or Input.is_key_pressed(KEY_ALT)
+	_set_block_slot("bg" if to_background else "fg", block)
+	_status("已取用最近吸取：%s（%s）" % [_block_label(block), "背景" if to_background else "前景"])
+	print("[editor] 最近吸取取用 index=%d slot=%s kind=%s id=%s z=%d"
+		% [index, "bg" if to_background else "fg", String(block.kind), String(block.id), int(block.z)])  # L1 埋点
+
+
 ## 画笔统一消费前景槽：素材写覆盖层，内置地形写 rows 并清覆盖。
 func _apply_paint_block(cell: Vector2i) -> void:
 	if String(_block_fg.get("kind", "terrain")) == "asset":
@@ -969,6 +1074,7 @@ func _pick_block(cell: Vector2i, to_background: bool = false) -> void:
 		var terrain := BattlefieldDocScript.glyph_to_terrain(row.substr(cell.x, 1))
 		block = {"kind": "terrain", "id": String(terrain), "z": BattlefieldDocScript.cell_z(model, cell)}
 	_set_block_slot("bg" if to_background else "fg", block)
+	_remember_recent_pick(block)
 	_status("已吸取：%s（%s）" % [_block_label(block), "背景" if to_background else "前景"])
 	print("[editor] 吸取方块 cell=%s slot=%s kind=%s id=%s z=%d"
 		% [str(cell), "bg" if to_background else "fg", String(block.kind), String(block.id), int(block.z)])  # L1 埋点
