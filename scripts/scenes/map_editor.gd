@@ -59,7 +59,7 @@ const RegionPresetStoreScript = preload("res://scripts/editor/region_preset_stor
 
 const Tool = {
 	PAINT = 0, FILL = 1, ERASE = 2, UNIT = 3, PLANT = 4, SELECT = 5,
-	HEIGHT_UP = 6, HEIGHT_DOWN = 7, ASSET = 8,
+	HEIGHT_UP = 6, HEIGHT_DOWN = 7, ASSET = 8, REPLACE = 9,
 }
 const TAB_BLOCK := 3
 
@@ -557,6 +557,14 @@ func _build_tool_bar() -> Control:
 	move_toggle.toggled.connect(_on_move_tool_toggled)
 	box.add_child(move_toggle)
 	_move_tool_toggle = move_toggle
+	# 替换方块：ToolBox 第 9 钮，保持在移动开关之后以稳定既有按钮索引。
+	_add_tool_btn(box, tool_group, Tool.REPLACE, "替换方块", "replace")
+	var replace_btn := _tool_buttons[Tool.REPLACE] as Button
+	replace_btn.name = "ReplaceToolBtn"
+	replace_btn.custom_minimum_size = Vector2(34, 34)
+	if replace_btn.icon == null:
+		replace_btn.text = "替"
+		replace_btn.tooltip_text = "替换方块工具"
 	return bar
 
 
@@ -1146,10 +1154,10 @@ func _class_btn(cid: String, group: ButtonGroup) -> Button:
 # 编辑操作（canvas 信号 + 可测方法；生效工具由激活 Tab 决定）
 # ============================================================
 
-## 当前生效工具：高度升降始终遵循工具条；地形 Tab = 画笔/植物；角色 Tab = 放置单位。
+## 当前生效工具：高度升降/替换始终遵循工具条；地形 Tab = 画笔/植物；角色 Tab = 放置单位。
 ## 避免在角色页选好职业点画布，却沿用工具条遗留的填充/橡皮。
 func _active_tool() -> int:
-	if current_tool == Tool.HEIGHT_UP or current_tool == Tool.HEIGHT_DOWN:
+	if current_tool == Tool.HEIGHT_UP or current_tool == Tool.HEIGHT_DOWN or current_tool == Tool.REPLACE:
 		return current_tool
 	if _tabs == null:
 		return current_tool
@@ -1326,9 +1334,13 @@ func _apply_tool(cell: Vector2i) -> void:
 	var names := {
 		Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮", Tool.UNIT: "角色",
 		Tool.PLANT: "植物", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
-		Tool.ASSET: "素材",
+		Tool.ASSET: "素材", Tool.REPLACE: "替换方块",
 	}
-	_push_undo(names[tool])  # 按下一次=一步；后续拖动不再入栈（整笔一笔撤销）
+	var undo_label: String = names[tool]
+	if tool == Tool.REPLACE and _selection_mode == &"region" and _region_pos2_set \
+			and _selection_range.is_active():
+		undo_label = "替换区域"
+	_push_undo(undo_label)  # 按下一次=一步；后续拖动不再入栈（整笔一笔撤销）
 	match tool:
 		Tool.PAINT:
 			_set_glyph(cell, BattlefieldDocScript.TERRAIN_GLYPH[current_terrain])
@@ -1350,6 +1362,8 @@ func _apply_tool(cell: Vector2i) -> void:
 			_set_prop(cell, current_prop)
 		Tool.ASSET:
 			_apply_asset_tool(cell)
+		Tool.REPLACE:
+			_apply_replace(cell)
 		Tool.HEIGHT_UP, Tool.HEIGHT_DOWN:
 			_apply_height_brush(cell, tool)
 
@@ -1783,6 +1797,58 @@ func _apply_fill(cell: Vector2i) -> void:
 			fill_cell(cell, StringName(sel.get("id", "")))
 		_:
 			fill_cell(cell, current_terrain)
+
+
+## 覆盖替换：完整区域优先于点击格；素材只写 tile_overrides，内置地形写 rows 并清覆盖。
+## 异高选区沿用区域填充语义：整片 footprint 找平至两端点较高的 z；单格/同高选区不改高度。
+func _apply_replace(cell: Vector2i) -> void:
+	var is_region := _selection_mode == &"region" and _region_pos2_set and _selection_range.is_active()
+	var cells: Array = []
+	var volume := false
+	var z_hi := 0
+	if is_region:
+		var mn := _selection_range.min_corner()
+		var mx := _selection_range.max_corner()
+		var err := RegionClipboardScript.bounds_error(model,
+			Vector2i(mn.x, mn.y), Vector2i(mx.x, mx.y))
+		if not err.is_empty():
+			_status("替换失败：%s" % err, true)
+			return
+		cells = _selection_range.cells_2d()
+		volume = mn.z != mx.z
+		z_hi = maxi(mn.z, mx.z)
+	else:
+		if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+			_status("替换失败：坐标越界", true)
+			return
+		cells.append(cell)
+	if cells.is_empty():
+		_status("替换失败：选区为空", true)
+		return
+	var sel := _fill_selector.selected() if _fill_selector != null else {}
+	var kind := StringName(sel.get("kind", ""))
+	var id := String(sel.get("id", ""))
+	if kind == &"" or id.is_empty():
+		kind = &"terrain"
+		id = String(current_terrain)
+	var rows: Array = model.rows
+	var glyph := String(BattlefieldDocScript.TERRAIN_GLYPH.get(StringName(id), "."))
+	for c in cells:
+		if volume:
+			BattlefieldDocScript.set_cell_z(model, c, z_hi)
+		if kind == &"asset":
+			BattlefieldDocScript.set_tile_override(model, c, id)
+		else:
+			var row: String = rows[c.y]
+			rows[c.y] = row.substr(0, c.x) + glyph + row.substr(c.x + 1)
+			BattlefieldDocScript.set_tile_override(model, c, "")
+	_refresh_canvas()
+	var label := id if kind == &"asset" else String(BattlefieldDocScript.TERRAIN_CN.get(StringName(id), id))
+	var action := "替换区域" if is_region else "替换方块"
+	_status("%s %s ×%d 格%s" % [action, label, cells.size(),
+		"（找平至 z%d）" % z_hi if volume else ""])
+	print("[editor] %s kind=%s id=%s cells=%d volume=%s z_hi=%d"
+		% [action, String(kind), id, cells.size(), str(volume), z_hi])  # L1 埋点
 
 
 ## 区域填充：区域内每格应用选择器内容——内置地形写 rows 并清素材覆盖；
@@ -2356,6 +2422,7 @@ func _on_tool_changed() -> void:
 	var names := {
 		Tool.SELECT: "选择", Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮",
 		Tool.UNIT: "角色", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",
+		Tool.REPLACE: "替换方块",
 	}
 	_status("工具：%s" % names[current_tool])
 

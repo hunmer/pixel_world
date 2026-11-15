@@ -10,7 +10,7 @@
 ##       拖动不设区域端点（既有契约）；原地松开仍走第三次点击重置 pos1（既有契约）；
 ##       越界粘贴拒绝（模型 / 历史不动）；ESC 取消粘贴预览；
 ##       Ctrl+C/X/V 快捷键派发；剪切一步历史；生成清空剪贴板；
-##       region_clipboard_info() 只读快照；工具条 8 钮（7 工具+移动开关）、ModeOption 仍 2 项。
+##       region_clipboard_info() 只读快照；工具条 9 钮（8 工具+移动开关）、ModeOption 仍 2 项。
 ##       左侧工具栏移动工具（MoveToolToggle，ToolBox 第 8 钮）：无完整选区中文拒绝；开启后拖拽平移选区
 ##       （选区跟随、恰好一步历史、可回滚）；原地松开=纯点击不触发区域选择；
 ##       关闭后回到区域内拖动/两次点击语义（第三次点击重置 pos1 不回退）。
@@ -43,8 +43,8 @@ func _run() -> void:
 
 	# ---- A. 既有契约不回退 + 区域操作按钮存在 ----
 	var toolbar: Node = editor.get_node_or_null("EditorRoot/CanvasHolder/ToolBar/ToolBox")
-	_expect(toolbar != null and toolbar.get_child_count() == 8,
-		"A 工具条为 8 个按钮（7 工具 + 移动开关，用户已取消 7 钮契约）")
+	_expect(toolbar != null and toolbar.get_child_count() == 9,
+		"A 工具条为 9 个按钮（8 工具 + 移动开关）")
 	var popup: Control = editor.get_node_or_null("SelectionPopup")
 	_expect(popup != null and not popup.visible, "A 选择菜单存在且默认隐藏")
 	if popup == null:
@@ -656,6 +656,78 @@ func _run() -> void:
 		l_dir.remove("test_editor_presets_ui/presets.json")
 		l_dir.remove("test_editor_presets_ui")
 
+
+	# ---- N. 替换方块：选区优先、单格/区域各一步历史、越界零写入 ----
+	editor.apply_generate("replace_ops", 6, 5)
+	await process_frame
+	var n_replace_btn := editor._tool_buttons.get(editor.Tool.REPLACE) as BaseButton
+	_expect(editor.Tool.REPLACE == 9 and n_replace_btn != null
+		and n_replace_btn.name == "ReplaceToolBtn" and n_replace_btn.get_index() == 8
+		and int(n_replace_btn.get_meta("tool", -1)) == editor.Tool.REPLACE,
+		"N Tool.REPLACE=9，ReplaceToolBtn 是 ToolBox 第 9 钮")
+	n_replace_btn.button_pressed = true
+	_expect(editor.current_tool == editor.Tool.REPLACE and editor._active_tool() == editor.Tool.REPLACE,
+		"N 替换工具可激活且不被当前 Tab 覆盖")
+	editor._on_selection_mode_item(0)
+	editor._selection_range.clear()
+	editor._region_pos2_set = false
+	_expect(editor._fill_selector.select_terrain(&"water"), "N 替换源取通用方块选择器 water")
+	editor._set_glyph(Vector2i(1, 1), "g")
+	editor._set_glyph(Vector2i(2, 1), "g")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(1, 1), 2)
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(1, 1), "old_asset")
+	editor._push_undo("布景N")
+	editor._seal_pending()
+	var n_single_before: Dictionary = editor.model.duplicate(true)
+	var n_single_h0: int = editor._history.size()
+	var n_single_c0: int = editor._history_cursor
+	editor._on_cell_pressed(Vector2i(1, 1))
+	editor._seal_pending()
+	_expect((editor.model.rows[1] as String).substr(1, 1) == "w"
+		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(1, 1)) == ""
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(1, 1)) == 2
+		and (editor.model.rows[1] as String).substr(2, 1) == "g"
+		and editor._history_cursor == n_single_c0 + 1
+		and editor._history.size() == n_single_h0 + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "替换方块",
+		"N 无选区点击只替换单格：rows 写入/覆盖清空/高度不变，恰好一步「替换方块」")
+	editor._undo()
+	_expect(editor.model == n_single_before, "N 单格替换一次 undo 完整回滚")
+	# 完整异高选区优先：点击选区外仍替换整个 footprint，并沿用填充的 z_hi 找平语义。
+	editor._on_selection_mode_item(1)
+	editor._selection_range.begin(Vector3i(2, 1, 0))
+	editor._selection_range.update_focus(Vector3i(3, 2, 1))
+	editor._region_pos2_set = true
+	var n_region_before: Dictionary = editor.model.duplicate(true)
+	var n_region_outside: String = editor.model.rows[0]
+	var n_region_c0: int = editor._history_cursor
+	editor._on_cell_pressed(Vector2i(0, 0))
+	editor._seal_pending()
+	var n_region_ok := true
+	for y in range(1, 3):
+		for x in range(2, 4):
+			if (editor.model.rows[y] as String).substr(x, 1) != "w" \
+					or BattlefieldDocScript.cell_z(editor.model, Vector2i(x, y)) != 1:
+				n_region_ok = false
+	_expect(n_region_ok and editor.model.rows[0] == n_region_outside
+		and editor._history_cursor == n_region_c0 + 1
+		and editor._history.size() == editor._history_cursor + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "替换区域",
+		"N 有完整选区优先覆盖 2×2（点击外部不改），异高找平 z=1，恰好一步「替换区域」")
+	editor._undo()
+	_expect(editor.model == n_region_before, "N 区域替换一次 undo 原子回滚 rows 与高度")
+	editor._on_selection_mode_item(0)
+	editor._selection_range.clear()
+	editor._region_pos2_set = false
+	var n_bad_before: Dictionary = editor.model.duplicate(true)
+	var n_bad_h0: int = editor._history.size()
+	var n_bad_c0: int = editor._history_cursor
+	editor._on_cell_pressed(Vector2i(-1, 0))
+	editor._seal_pending()
+	_expect(editor.model == n_bad_before and editor._history.size() == n_bad_h0
+		and editor._history_cursor == n_bad_c0
+		and String(editor._status_label.text).contains("越界"),
+		"N 越界替换中文拒绝：模型/历史游标/历史条数零变化")
 
 	_finish(editor)
 

@@ -104,15 +104,21 @@ func _run() -> void:
 		_expect(_count_type(gen_tab, SpinBox) == 2, "生成 Tab：宽+高 SpinBox")
 		_expect(_count_type(gen_tab, LineEdit, SpinBox) == 1,
 			"生成 Tab：种子输入框（排除 SpinBox 内部 LineEdit）")
-	# 工具条：左上角悬浮（CanvasHolder/ToolBar/ToolBox），8 个垂直图标按钮（7 工具 + 移动开关）
+	# 工具条：左上角悬浮（CanvasHolder/ToolBar/ToolBox），9 个垂直图标按钮（8 工具 + 移动开关）
 	var toolbar: Node = editor.get_node_or_null("EditorRoot/CanvasHolder/ToolBar/ToolBox")
-	_expect(toolbar != null and toolbar.get_child_count() == 8,
-		"左上角工具条存在且含 8 个按钮（7 工具 + 移动开关）")
+	_expect(toolbar != null and toolbar.get_child_count() == 9,
+		"左上角工具条存在且含 9 个按钮（8 工具 + 移动开关）")
 	_expect(editor._tool_buttons.has(editor.Tool.HEIGHT_UP)
 		and editor._tool_buttons[editor.Tool.HEIGHT_UP].tooltip_text == "地形上升工具"
 		and editor._tool_buttons.has(editor.Tool.HEIGHT_DOWN)
 		and editor._tool_buttons[editor.Tool.HEIGHT_DOWN].tooltip_text == "地形下降工具",
 		"工具条含地形上升/地形下降按钮及可访问名称")
+	_expect(editor._tool_buttons.has(editor.Tool.REPLACE)
+		and editor._tool_buttons[editor.Tool.REPLACE].name == "ReplaceToolBtn"
+		and editor._tool_buttons[editor.Tool.REPLACE].toggle_mode
+		and editor._tool_buttons[editor.Tool.REPLACE].custom_minimum_size == Vector2(34, 34)
+		and editor._tool_buttons[editor.Tool.REPLACE].tooltip_text == "替换方块工具",
+		"工具条含第 9 钮替换方块（34×34 toggle 及可访问名称）")
 	if toolbar != null:
 		var bar: Control = toolbar.get_parent()
 		_expect(bar.get_index() == 1 and editor._canvas.get_index() == 0,
