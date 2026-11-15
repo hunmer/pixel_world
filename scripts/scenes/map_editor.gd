@@ -28,7 +28,8 @@
 ## 跟随悬停格（绿=合法/红=越界），点击提交；区域内按下拖动=移动区域。
 ## 内核全部走 scripts/editor/region_clipboard.gd 纯函数；每次提交恰好一步历史，
 ## 越界拒绝且不改模型；生成/读取/调尺寸清空剪贴板并取消预览。
-## 移动工具（侧栏 MoveToolToggle）：开启后画布拖拽=平移当前选区（选区跟随），
+## 移动工具（侧栏 MoveToolToggle，独立开关）：与 current_tool/_selection_mode 解耦，
+## 任意工具下开启后画布拖拽=平移当前选区（选区跟随、全程不重置端点），
 ## 原地松开=纯点击；关闭后回到区域内拖动/两次点击语义。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
 ## 按钮一律由 ui/components 像素组件创建（UIFactory / PixelButton 预加载），
@@ -345,6 +346,10 @@ func _build_ui() -> void:
 	var move_toggle := CheckButton.new()
 	move_toggle.name = "MoveToolToggle"
 	move_toggle.text = "移动工具"
+	# 与工具条一致走 at-icons control/ 色系（加载失败时退回纯文字，不报错）
+	var move_icon: Texture2D = UIThemeScript.icon("move")
+	if move_icon != null:
+		move_toggle.icon = move_icon
 	move_toggle.focus_mode = Control.FOCUS_NONE
 	move_toggle.toggled.connect(_on_move_tool_toggled)
 	move_row.add_child(move_toggle)
@@ -1063,10 +1068,10 @@ func _on_cell_pressed(cell: Vector2i) -> void:
 	if _paste_mode:
 		_commit_paste(cell)  # 粘贴模式：点击=提交落点
 		return
-	# 移动工具开启：任意格按下=抓取选区（不落点、不设端点、绝不触发区域选择，
-	# 否则第三次点击会重置 pos1）
+	# 移动工具开启（独立开关，与 current_tool/_selection_mode 解耦）：任意格按下
+	# =抓取选区（不落点、不设端点、不进任何工具动作，绝不触发 _apply_region_click）
 	if _move_tool_active:
-		var mt_bounds := _region_2d_bounds()
+		var mt_bounds := _move_tool_bounds()
 		if mt_bounds.is_empty():
 			_status("移动工具：请先框选一个区域", true)
 			return
@@ -1133,15 +1138,16 @@ func _on_cell_released(cell: Vector2i) -> void:
 	_move_preview = Vector2i(-1, -1)
 	if _canvas != null:
 		_canvas.clear_paste_preview()
-	var bounds := _region_2d_bounds()
 	if via_tool:
-		if bounds.is_empty():
+		var mt_bounds := _move_tool_bounds()
+		if mt_bounds.is_empty():
 			return
-		var delta: Vector2i = cell - grab - (bounds[0] as Vector2i)  # grab=抓取偏移（按下格-选区 min）
+		var delta: Vector2i = cell - grab - (mt_bounds[0] as Vector2i)  # grab=抓取偏移（按下格-选区 min）
 		if delta == Vector2i.ZERO:
-			return  # 原地松开：不改模型、不入历史、不触发区域选择
-		_commit_region_move(bounds, delta, true)
+			return  # 原地松开：不改模型、不入历史、不改选区、不触发区域选择
+		_commit_region_move(mt_bounds, delta, true)
 		return
+	var bounds := _region_2d_bounds()
 	if cell == grab:
 		_apply_region_click(cell)
 		return
@@ -1176,10 +1182,10 @@ func _commit_region_move(bounds: Array, delta: Vector2i, translate_selection: bo
 ## 区域内拖动 _move_grab=按下格（delta=悬停格-按下格）
 func _move_delta_for(cell: Vector2i) -> Vector2i:
 	if _move_tool_active:
-		var bounds := _region_2d_bounds()
+		var bounds := _move_tool_bounds()
 		if bounds.is_empty():
 			return Vector2i.ZERO
-		return cell - _move_grab - bounds[0]
+		return cell - _move_grab - (bounds[0] as Vector2i)
 	return cell - _move_grab
 
 
@@ -1187,7 +1193,7 @@ func _move_delta_for(cell: Vector2i) -> Vector2i:
 func _update_move_preview(hover: Vector2i) -> void:
 	if _canvas == null or not _move_armed:
 		return
-	var bounds := _region_2d_bounds()
+	var bounds := _move_tool_bounds() if _move_tool_active else _region_2d_bounds()
 	if bounds.is_empty():
 		return
 	var delta := _move_delta_for(hover)
@@ -1774,6 +1780,17 @@ func _region_2d_bounds() -> Array:
 		Vector2i(maxi(mn.x, mx.x), maxi(mn.y, mx.y))]
 
 
+## 移动工具专用角点 [min, max]（与 current_tool/_selection_mode 解耦）：
+## 只要求区域完整（两击设好 pos1/pos2 且选区激活）
+func _move_tool_bounds() -> Array:
+	if not _region_pos2_set or not _selection_range.is_active():
+		return []
+	var mn := _selection_range.min_corner()
+	var mx := _selection_range.max_corner()
+	return [Vector2i(mini(mn.x, mx.x), mini(mn.y, mx.y)),
+		Vector2i(maxi(mn.x, mx.x), maxi(mn.y, mx.y))]
+
+
 ## 复制区域：extract 入剪贴板，不入历史（模型不变）
 func _on_region_copy_pressed() -> void:
 	var bounds := _region_2d_bounds()
@@ -2004,8 +2021,6 @@ func _refresh_canvas() -> void:
 
 
 func _on_tool_changed() -> void:
-	if _move_tool_active:
-		_set_move_tool(false)  # 切换画布工具时收起移动工具
 	var names := {
 		Tool.SELECT: "选择", Tool.PAINT: "画笔", Tool.FILL: "填充", Tool.ERASE: "橡皮",
 		Tool.UNIT: "角色", Tool.HEIGHT_UP: "地形上升", Tool.HEIGHT_DOWN: "地形下降",

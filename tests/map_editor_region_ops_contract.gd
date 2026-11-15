@@ -240,6 +240,8 @@ func _run() -> void:
 	# ---- I. 侧栏移动工具：开关 + 拖拽平移选区 + 原地松开不触发区域选择 ----
 	var mt_row: Node = editor.find_child("MoveToolRow", true, false)
 	var mt_toggle := editor.find_child("MoveToolToggle", true, false) as CheckButton
+	_expect(mt_toggle != null and mt_toggle.icon != null,
+		"移动工具开关是带图标的按钮（control/move 图标）")
 	_expect(mt_row is HBoxContainer and mt_toggle != null
 		and not mt_toggle.button_pressed,
 		"I 侧栏存在移动工具行（MoveToolRow/MoveToolToggle），默认关闭")
@@ -333,6 +335,115 @@ func _run() -> void:
 	_expect(not editor._region_pos2_set
 		and editor._selection_range.min_corner() == editor._selection_range.max_corner(),
 		"I 关闭后原地松开仍走第三次点击重置 pos1（旧契约）")
+
+	# ---- J. 移动工具独立化：任意工具（画笔）下可拖、全程绝不重置选区 ----
+	editor.apply_generate("region_ops_t5", 8, 8)
+	await process_frame
+	editor.current_tool = editor.Tool.PAINT
+	editor._on_tool_changed()  # 与工具条按下同一入口（不弹选择面板）
+	_expect(editor.current_tool == editor.Tool.PAINT,
+		"J 切到画笔工具（_on_tool_changed 同步）")
+	var j_toggle := editor.find_child("MoveToolToggle", true, false) as CheckButton
+	j_toggle.button_pressed = true
+	_expect(bool(editor.region_clipboard_info()["move_tool"]),
+		"J 画笔下仍可开启移动工具（不因工具切换被收起）")
+	# 直接构造完整选区 (1,1)-(4,3)：与入口状态无关（点击语义已由 C/E/I 段覆盖）
+	editor._selection_range.begin(Vector3i(1, 1, 0))
+	editor._selection_range.update_focus(Vector3i(4, 3, 0))
+	editor._region_pos2_set = true
+	editor._set_glyph(Vector2i(1, 1), "g")
+	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 3)
+	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(3, 2), "asset_grass_block")
+	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "tree")
+	(editor.model.units as Array).append({
+		"class": "warrior", "name": "契约探员", "level": 3,
+		"x": 1, "y": 1, "faction": "player",
+	})
+	editor._seal_pending()
+	editor._push_undo("布景五层J")
+	editor._seal_pending()
+	var j_cursor0: int = editor._history_cursor
+	var j_before: Dictionary = editor.model.duplicate(true)
+	var j_min0: Vector3i = editor._selection_range.min_corner()
+	var j_max0: Vector3i = editor._selection_range.max_corner()
+	# J-② 画笔下按下：移动优先于画笔，不画一笔、端点/模型不变
+	editor._on_cell_pressed(Vector2i(2, 2))
+	_expect(bool(editor.region_clipboard_info()["move_armed"])
+		and editor._selection_range.min_corner() == j_min0
+		and editor._selection_range.max_corner() == j_max0
+		and editor._region_pos2_set
+		and editor.model == j_before,
+		"J 画笔+移动工具按下：进入待移动，不画一笔、端点/pos2/模型全不变")
+	editor._on_cell_dragged(Vector2i(3, 3))
+	_expect(editor._canvas.has_paste_preview()
+		and editor._selection_range.min_corner() == j_min0
+		and editor._selection_range.max_corner() == j_max0
+		and editor._region_pos2_set,
+		"J 拖动出预览，端点仍原值（提交前 min/max 逐次比对）")
+	editor._on_cell_released(Vector2i(3, 3))
+	_expect(editor._selection_range.is_active() and editor._region_pos2_set,
+		"J 提交后选区保持完整（is_active 与 pos2_set 均仍真，可继续拖拽）")
+	editor._seal_pending()
+	_expect(editor._history_cursor == j_cursor0 + 1
+		and editor._history.size() == editor._history_cursor + 1
+		and String(editor._history[editor._history_cursor]["label"]) == "移动区域",
+		"J 第一次拖拽提交：恰好一步历史「移动区域」")
+	_expect((editor.model.rows[2] as String).substr(2, 1) == "g"
+		and BattlefieldDocScript.cell_z(editor.model, Vector2i(3, 3)) == 3
+		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(4, 3)) == "asset_grass_block"
+		and BattlefieldDocScript.prop_at(editor.model, Vector2i(3, 2)) == "tree",
+		"J 五层内容 (+1,+1) 平移到位（画笔未画任何一笔）")
+	var j_unit: Dictionary = {}
+	for u in editor.model.units:
+		if int(u.x) == 2 and int(u.y) == 2:
+			j_unit = u
+	_expect(not j_unit.is_empty() and String(j_unit.get("name", "")) == "契约探员",
+		"J 单位层平移到 (2,2)")
+	var j_min1: Vector3i = editor._selection_range.min_corner()
+	var j_max1: Vector3i = editor._selection_range.max_corner()
+	_expect(Vector2i(j_min1.x, j_min1.y) == Vector2i(2, 2)
+		and Vector2i(j_max1.x, j_max1.y) == Vector2i(5, 4),
+		"J 选区随内容平移到 (2,2)-(5,4)")
+	# J-③ 连续再拖一次（仍画笔下）：再 +1 历史、选区再平移
+	editor._on_cell_pressed(Vector2i(3, 3))
+	editor._on_cell_dragged(Vector2i(4, 4))
+	editor._on_cell_released(Vector2i(4, 4))
+	editor._seal_pending()
+	_expect(editor._history_cursor == j_cursor0 + 2
+		and editor._selection_range.is_active() and editor._region_pos2_set,
+		"J 连续第二次拖拽：再 +1 历史，选区仍完整")
+	var j_min2: Vector3i = editor._selection_range.min_corner()
+	var j_max2: Vector3i = editor._selection_range.max_corner()
+	_expect(Vector2i(j_min2.x, j_min2.y) == Vector2i(3, 3)
+		and Vector2i(j_max2.x, j_max2.y) == Vector2i(6, 5)
+		and (editor.model.rows[3] as String).substr(3, 1) == "g",
+		"J 选区再平移到 (3,3)-(6,5)，地形层累计 (+2,+2)")
+	# J-④ 原地按下松开：端点/历史/模型零变化
+	editor._seal_pending()
+	var j_h4: int = editor._history.size()
+	var j_m4: Dictionary = editor.model.duplicate(true)
+	var j_min4: Vector3i = editor._selection_range.min_corner()
+	editor._on_cell_pressed(Vector2i(5, 5))
+	editor._on_cell_released(Vector2i(5, 5))
+	_expect(editor._history.size() == j_h4 and editor.model == j_m4
+		and editor._selection_range.min_corner() == j_min4
+		and editor._region_pos2_set
+		and not bool(editor.region_clipboard_info()["move_armed"]),
+		"J 原地按下松开：端点/pos2/历史/模型全不变（不补区域点击）")
+	# J-⑤ 关闭开关 → 旧逻辑回归（切回选择工具后纯点击重置 pos1）
+	j_toggle.button_pressed = false
+	_expect(not bool(editor.region_clipboard_info()["move_tool"]),
+		"J 关闭后 move_tool=false")
+	editor.current_tool = editor.Tool.SELECT
+	editor._on_tool_changed()
+	_expect(editor.current_tool == editor.Tool.SELECT, "J 切回选择工具")
+	editor._on_cell_pressed(Vector2i(4, 4))
+	_expect(bool(editor.region_clipboard_info()["move_armed"]),
+		"J 关闭后区域内按下回到旧待移动语义")
+	editor._on_cell_released(Vector2i(4, 4))
+	_expect(not editor._region_pos2_set
+		and editor._selection_range.min_corner() == editor._selection_range.max_corner(),
+		"J 关闭后原地松开仍走第三次点击重置 pos1（旧契约）")
 
 	_finish(editor)
 
