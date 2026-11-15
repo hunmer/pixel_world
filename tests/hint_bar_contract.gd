@@ -63,7 +63,7 @@ func _run() -> void:
 	bar.queue_free()
 	await process_frame
 
-	# ---- 2. map_editor 集成 ----
+	# ---- 2. map_editor 集成：右下键盘按钮 + 点击后的完整键帽弹窗 ----
 	var editor = load("res://scenes/MapEditor.tscn").instantiate()
 	root.add_child(editor)
 	await process_frame
@@ -71,27 +71,63 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var holder: Control = editor.get_node_or_null("EditorRoot/CanvasHolder")
-	var hint_bar: Control = editor.get_node_or_null("EditorRoot/CanvasHolder/EditorHintBar")
-	_expect(hint_bar != null, "编辑器底部有 EditorHintBar（复用 hint_bar 组件）")
-	if hint_bar != null and holder != null:
-		var eflow := hint_bar.get_node_or_null("HelpFlow") as HFlowContainer
-		_expect(eflow != null and eflow.get_child_count() >= 6,
-			"编辑器提示 ≥ 标题+5 条（实际 %d）" %
-			(eflow.get_child_count() if eflow != null else -1))
-		_assert_ignore_tree(hint_bar)
+	var hint_button: Button = editor.get_node_or_null("EditorRoot/CanvasHolder/EditorHintBar") as Button
+	_expect(hint_button != null and hint_button.icon is Texture2D
+		and hint_button.custom_minimum_size == Vector2(34, 30)
+		and hint_button.mouse_filter == Control.MOUSE_FILTER_STOP
+		and hint_button.tooltip_text == "操作提示"
+		and hint_button.get_node_or_null("HelpFlow") == null,
+		"EditorHintBar 是 34×30 键盘图标按钮，不再常驻文本提示")
+	var dialog = holder.get_node_or_null("ShortcutHintsDialog") if holder != null else null
+	_expect(dialog != null and not dialog.visible, "ShortcutHintsDialog 挂在 CanvasHolder 且默认隐藏")
+	if hint_button != null and holder != null and dialog != null:
+		var close_events: Array[bool] = []
+		dialog.closed.connect(func(): close_events.append(true))
+		hint_button.pressed.emit()
+		await process_frame
+		var shortcut_flow := dialog.get_node_or_null("ShortcutHintsPanel/ShortcutHintFlow") as HFlowContainer
+		var hint_rows := 0
+		if shortcut_flow != null:
+			for child in shortcut_flow.get_children():
+				if child.get_node_or_null("Keycap/Key") != null \
+						and child.get_node_or_null("Action") != null:
+					hint_rows += 1
+		_expect(dialog.visible and shortcut_flow != null and hint_rows == editor.HINT_ITEMS.size()
+			and hint_rows >= 6, "点击图标打开弹窗，ShortcutHintFlow 复用键帽行并展示全部 13 条提示")
+		var esc := InputEventKey.new()
+		esc.keycode = KEY_ESCAPE
+		esc.physical_keycode = KEY_ESCAPE
+		esc.pressed = true
+		editor._unhandled_input(esc)
+		_expect(not dialog.visible and close_events.size() == 1,
+			"Esc 最优先只关闭操作提示弹窗并 emit closed")
+		dialog.open(editor.HINT_ITEMS)
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		var shade: Control = dialog.get_node_or_null("ShortcutHintsShade")
+		if shade != null:
+			shade.gui_input.emit(click)
+		_expect(not dialog.visible and close_events.size() == 2, "点遮罩关闭并 emit closed")
+		hint_button.pressed.emit()
+		var close_btn: Button = dialog.get_node_or_null(
+			"ShortcutHintsPanel/ShortcutHintFlow/ShortcutHintsCloseBtn") as Button
+		if close_btn != null:
+			close_btn.pressed.emit()
+		_expect(not dialog.visible and close_events.size() == 3, "关闭按钮关闭并 emit closed")
 		var info: Control = holder.get_node_or_null("CellInfoPanel")
 		if info != null:
-			_expect(hint_bar.get_global_rect().position.x >= info.get_global_rect().end.x - 1.0,
-				"提示条横向让位 CellInfoPanel（bar %s vs info %s）" %
-				[hint_bar.get_global_rect(), info.get_global_rect()])
-		var hr := hint_bar.get_global_rect()
+			_expect(hint_button.get_global_rect().position.x >= info.get_global_rect().end.x - 1.0,
+				"键盘按钮横向让位 CellInfoPanel（bar %s vs info %s）" %
+				[hint_button.get_global_rect(), info.get_global_rect()])
+		var hr := hint_button.get_global_rect()
 		var cr := holder.get_global_rect()
 		_expect(hr.position.x >= cr.position.x - 1.0 and hr.position.y >= cr.position.y - 1.0
 			and hr.end.x <= cr.end.x + 1.0 and hr.end.y <= cr.end.y + 1.0,
-			"提示条完整位于画布内（%s ⊄ %s）" % [hr, cr])
+			"键盘按钮完整位于画布右下（%s ⊄ %s）" % [hr, cr])
 	var eroot: Control = editor.get_node_or_null("EditorRoot")
 	if eroot != null:
-		_expect(eroot.get_child_count() == 2, "EditorRoot 仍恰好 2 子（提示条挂在 CanvasHolder 内）")
+		_expect(eroot.get_child_count() == 2, "EditorRoot 仍恰好 2 子（按钮/弹窗挂在 CanvasHolder 内）")
 	if holder != null:
 		var canvas: Control = holder.get_node_or_null("EditorCanvas")
 		var toolbar: Control = holder.get_node_or_null("ToolBar")

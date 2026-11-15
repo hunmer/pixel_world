@@ -48,7 +48,7 @@ const TilePreviewScript = preload("res://scripts/editor/tile_preview.gd")
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const ProfessionDataScript = preload("res://scripts/core/professions.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
-const HintBarScript = preload("res://scripts/hint_bar.gd")
+const ShortcutHintsDialogScript = preload("res://scripts/editor/shortcut_hints_dialog.gd")
 const AssetLibraryPanelScript = preload("res://scripts/editor/asset_library_panel.gd")
 const UserAssetServiceScript = preload("res://scripts/assets/user_asset_service.gd")
 const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
@@ -65,6 +65,22 @@ const Tool = {
 	HEIGHT_UP = 6, HEIGHT_DOWN = 7, ASSET = 8, REPLACE = 9, PICK = 10,
 }
 const TAB_BLOCK := 3
+## 操作提示只常驻键盘图标；完整 13 条键帽说明在点击后的弹窗内展示。
+const HINT_ITEMS := [
+	{"key": "左键", "action": "使用工具"},
+	{"key": "SPACE+左键 / 右键拖", "action": "平移"},
+	{"key": "滚轮 / 双指捏合", "action": "缩放"},
+	{"key": "Q E / Z X", "action": "转向 90°"},
+	{"key": "R", "action": "视角复位"},
+	{"key": "CTRL+Z / Y", "action": "撤销 / 重做"},
+	{"key": "CTRL+C / X / V", "action": "复制 / 剪切 / 粘贴区域"},
+	{"key": "SHIFT+X", "action": "交换前景 / 背景方块"},
+	{"key": "ALT（按住）", "action": "临时吸管；SHIFT+左键取背景"},
+	{"key": "最近吸取", "action": "点击取前景；SHIFT+点击取背景"},
+	{"key": "区域内拖动", "action": "移动区域"},
+	{"key": "移动工具", "action": "左栏第 8 钮，拖拽/方向键移动选区"},
+	{"key": "ESC", "action": "返回世界"},
+]
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
@@ -116,6 +132,7 @@ var selected_class: String = "swordsman"
 var selected_faction: String = "player"
 
 var _canvas: EditorCanvasScript
+var _shortcut_hints_dialog = null
 var _tabs: TabContainer
 ## 历史时间线：_history[k] = 第 k 步动作完成后的快照（含 label）；
 ## _history[0] = 「初始地图」；_history_cursor 指向当前状态
@@ -320,6 +337,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				KEY_LEFT: _nudge_region(Vector2i(-1, 0))
 				KEY_RIGHT: _nudge_region(Vector2i(1, 0))
 		elif key.physical_keycode == KEY_ESCAPE or key.keycode == KEY_ESCAPE:
+			# 操作提示最优先：只关弹窗，不取消地图模式、更不返回世界。
+			if _shortcut_hints_dialog != null and _shortcut_hints_dialog.visible:
+				_shortcut_hints_dialog.close()
+				if get_viewport() != null:
+					get_viewport().set_input_as_handled()
+				return
 			# 方块选择器优先于 ReplacePopup/地图模式：取消只关选择器且不回填。
 			if _replace_picker_dialog != null and _replace_picker_dialog.visible:
 				_replace_picker_dialog.cancel()
@@ -422,8 +445,10 @@ func _build_ui() -> void:
 	# ---- 左上角垂直工具条（悬浮在画布上，取代旧「工具」Tab） ----
 	holder.add_child(_build_tool_bar())
 	holder.add_child(_build_cell_info())
-	# ---- 底部操作提示条（复用 hint_bar.gd 组件，与世界 HUD 同一套 keycap 提示） ----
+	# ---- 右下角只留键盘图标；完整提示由 CanvasHolder 内遮罩弹窗展示 ----
 	holder.add_child(_build_hint_bar())
+	_shortcut_hints_dialog = ShortcutHintsDialogScript.new()
+	holder.add_child(_shortcut_hints_dialog)
 	# ---- 画布右侧最近吸取栏（限制在 CanvasHolder 内，不占 SidePanel 宽度） ----
 	_build_recent_picks_bar(holder)
 
@@ -913,35 +938,28 @@ func _build_cell_info() -> Control:
 	return panel
 
 
-## 底部右侧操作提示条：快捷键/鼠标操作 keycap（复用 hint_bar.gd，同 game_hud）。
-## 锚定右下角、向左/向上生长（HFlow 过窄自动换行）；横向避开左下 CellInfoPanel
-## （其右缘固定 250px，最窄 1024 视口下画布宽约 680，提示条左缘 ≥268 不重叠）。
+## 右下角 34×30 键盘图标；节点名保留 EditorHintBar，点击打开完整键帽弹窗。
 func _build_hint_bar() -> Control:
-	var bar := HintBarScript.new()
-	bar.name = "EditorHintBar"
-	bar.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	bar.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bar.custom_minimum_size = Vector2(360.0, 30.0)
-	bar.offset_left = -412.0
-	bar.offset_top = -86.0
-	bar.offset_right = -12.0
-	bar.offset_bottom = -10.0
-	bar.set_title("操作")
-	bar.add_hint("左键", "使用工具")
-	bar.add_hint("SPACE+左键 / 右键拖", "平移")
-	bar.add_hint("滚轮 / 双指捏合", "缩放")
-	bar.add_hint("Q E / Z X", "转向 90°")
-	bar.add_hint("R", "视角复位")
-	bar.add_hint("CTRL+Z / Y", "撤销 / 重做")
-	bar.add_hint("CTRL+C / X / V", "复制 / 剪切 / 粘贴区域")
-	bar.add_hint("SHIFT+X", "交换前景 / 背景方块")
-	bar.add_hint("ALT（按住）", "临时吸管；SHIFT+左键取背景")
-	bar.add_hint("最近吸取", "点击取前景；SHIFT+点击取背景")
-	bar.add_hint("区域内拖动", "移动区域")
-	bar.add_hint("移动工具", "左栏第 8 钮，拖拽/方向键移动选区")
-	bar.add_hint("ESC", "返回世界")
-	return bar
+	var button := Button.new()
+	button.name = "EditorHintBar"
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.tooltip_text = "操作提示"
+	button.custom_minimum_size = Vector2(34, 30)
+	button.icon = UIThemeScript.icon("keyboard")
+	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.add_theme_constant_override("icon_max_width", 20)
+	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	button.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	button.offset_left = -46.0
+	button.offset_top = -42.0
+	button.offset_right = -12.0
+	button.offset_bottom = -12.0
+	button.pressed.connect(func():
+		if _shortcut_hints_dialog != null:
+			_shortcut_hints_dialog.open(HINT_ITEMS))
+	return button
 
 
 ## Tab【地形】：地形 / 植物 分组调色板。
