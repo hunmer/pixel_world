@@ -2,7 +2,7 @@
   "project": "Pixel World",
   "description": "功能 → 文件依赖图谱：哪些功能用到哪些代码/场景/着色器/配置文件，多层级分类。文件可归属多个功能（shared）。数据来自 2026-11-15 增量扫描 + 每个文件头部『## file.gd — 职责』注释。",
   "generated": "2026-11-16",
-  "head_commit": "3795d3d",
+  "head_commit": "dc0b9eb",
   "legend": {
     "types": {
       "gd": "GDScript 源码",
@@ -166,12 +166,12 @@
         {
           "id": "world.assembly",
           "name": "世界引擎装配（main.gd）",
-          "desc": "单体世界引擎（4319 行/176 函数）：配置编译、流式生成、Voronoi 群落分区、HUD/侧栏、以及战斗与编辑器入口（P 就地战斗 / O JSON 战场 / E 编辑器）。规则：不往 main.gd 加内容分支，一律走 biome 模块 + config/ecology。",
+          "desc": "世界引擎装配层 main.gd（2026-11-16 拆分后 2283 行/128 函数）：流式生成主循环与模块装配；能力已拆入 scripts/world/ 12 个 RefCounted 模块（Callable 注入、无反向依赖）",
           "files": [
             {
               "path": "main.gd",
               "type": "gd",
-              "lines": 2283,
+              "lines": 2174,
               "role": "世界引擎单体：流式生成/群落分区/HUD/B1 战斗与编辑器入口"
             },
             {
@@ -185,6 +185,12 @@
               "type": "gd",
               "lines": 99,
               "role": "与流式生成顺序无关的世界空间查询。"
+            },
+            {
+              "path": "scripts/world/ecology_config_compiler.gd",
+              "type": "gd",
+              "lines": 313,
+              "role": "生态/生成配置纯静态编译器（main.gd _compile_ecosystem_config 拆出）"
             }
           ],
           "tests": [
@@ -232,7 +238,7 @@
             {
               "path": "scripts/world/terrain_material_registry.gd",
               "type": "gd",
-              "lines": 1047,
+              "lines": 472,
               "role": "配置驱动的地形表面/材质目录"
             },
             {
@@ -339,7 +345,7 @@
             {
               "path": "scripts/ecology/ecology_registry.gd",
               "type": "gd",
-              "lines": 1150,
+              "lines": 984,
               "role": "模块化生态配置纯数据装载器"
             },
             {
@@ -395,6 +401,12 @@
               "type": "gd",
               "lines": 551,
               "role": "植被与 ambient 的候选产生、冲突消解与放置。"
+            },
+            {
+              "path": "scripts/ecology/ecology_legacy_codec.gd",
+              "type": "gd",
+              "lines": 240,
+              "role": "legacy 生态包解码与校验（自 ecology_registry 外迁，报错文案逐字保留）"
             }
           ],
           "tests": [
@@ -552,7 +564,7 @@
             {
               "path": "scripts/isometric_column_batch.gd",
               "type": "gd",
-              "lines": 1323,
+              "lines": 742,
               "role": "一地图格一 CanvasItem 的柱批渲染"
             },
             {
@@ -596,6 +608,30 @@
               "type": "gd",
               "lines": 220,
               "role": "玩家植被遮挡：重建门控、billboard 相交收集、像素 alpha 精测。"
+            },
+            {
+              "path": "scripts/world/terrain_material_parser.gd",
+              "type": "gd",
+              "lines": 809,
+              "role": "地形材质定义解析/规范化（自 terrain_material_registry 拆出，回调注入）"
+            },
+            {
+              "path": "scripts/iso/isometric_column_texture_batch.gd",
+              "type": "gd",
+              "lines": 148,
+              "role": "柱体贴图 UV 常量与投影批次内类（拆出）"
+            },
+            {
+              "path": "scripts/iso/isometric_column_terrain_draw.gd",
+              "type": "gd",
+              "lines": 377,
+              "role": "普通柱体/贴图/投影网格绘制（拆出）"
+            },
+            {
+              "path": "scripts/iso/isometric_column_shoreline.gd",
+              "type": "gd",
+              "lines": 341,
+              "role": "岸线泡沫与水波纹绘制（确定性 RNG hash 迁移，拆出）"
             }
           ],
           "tests": [
@@ -1091,6 +1127,12 @@
               "type": "gd",
               "lines": 233,
               "role": "战棋存档的磁盘读写（user://battle_saves/）"
+            },
+            {
+              "path": "scripts/battle/battle_save.gd",
+              "type": "gd",
+              "lines": 85,
+              "role": "战旗持久化（完整行动边界提交；演出中退出回退上一完整快照）"
             }
           ],
           "tests": [
@@ -1103,12 +1145,12 @@
         {
           "id": "battle.scene",
           "name": "战斗场景编排（battle.gd）",
-          "desc": "核心战场场景编排器（1934 行）：回合流转、单位管理、增援刷入挂接（敌方回合开始先于 AI）、结算调用演出、B1/B2 双模式适配。Battle.tscn 不能直启（依赖 SceneArgs.battle_args）。",
+          "desc": "核心战场场景编排器（2026-11-16 拆分后 1444 行）：回合流转、单位管理、增援刷入挂接；演出/存档/音效/特效已拆入 scripts/battle/ 专项模块",
           "files": [
             {
               "path": "scripts/scenes/battle.gd",
               "type": "gd",
-              "lines": 1934,
+              "lines": 1557,
               "role": "核心战场（场景编排器）"
             },
             {
@@ -1194,8 +1236,8 @@
             {
               "path": "scripts/battle/battle_ui.gd",
               "type": "gd",
-              "lines": 1211,
-              "role": "战场屏幕空间 UI（从 scenes/battle.gd 抽出）"
+              "lines": 467,
+              "role": "战场屏幕空间 UI 装配层（从 scenes/battle.gd 抽出，2026-11 再拆分）"
             },
             {
               "path": "scripts/battle/range_overlay.gd",
@@ -1230,7 +1272,7 @@
             {
               "path": "scripts/ui/ui_factory.gd",
               "type": "gd",
-              "lines": 153,
+              "lines": 156,
               "role": "统一控件工厂：按钮 / 输入框 / 下拉 / Tab / 日志 / 通用行"
             },
             {
@@ -1238,6 +1280,36 @@
               "type": "gd",
               "lines": 186,
               "role": "统一 UI 主题：配色常量 + StyleBox / 按钮 / Tab 样式工厂"
+            },
+            {
+              "path": "scripts/battle/battle_pref_panel.gd",
+              "type": "gd",
+              "lines": 147,
+              "role": "托管偏好面板（每单位配：优先目标 + 策略）"
+            },
+            {
+              "path": "scripts/battle/battle_ui_hud.gd",
+              "type": "gd",
+              "lines": 347,
+              "role": "战场 HUD 侧栏（从 battle_ui.gd 拆出）"
+            },
+            {
+              "path": "scripts/battle/battle_ui_unit_menu.gd",
+              "type": "gd",
+              "lines": 418,
+              "role": "单位行动菜单与目标选择器（从 battle_ui.gd 拆出）"
+            },
+            {
+              "path": "scripts/battle/battle_ui_unit_detail.gd",
+              "type": "gd",
+              "lines": 160,
+              "role": "单位详情面板（从 battle_ui.gd 拆出）"
+            },
+            {
+              "path": "scripts/battle/battle_ui_banner.gd",
+              "type": "gd",
+              "lines": 37,
+              "role": "结果横幅（从 battle_ui.gd 拆出）"
             }
           ],
           "tests": [
@@ -1303,6 +1375,30 @@
               "type": "shader",
               "role": "遭遇转场扭曲",
               "lines": 34
+            },
+            {
+              "path": "scripts/battle/battle_camera_kick.gd",
+              "type": "gd",
+              "lines": 124,
+              "role": "行动演出镜头踢击（ActionAnim 相位驱动的附加位移）"
+            },
+            {
+              "path": "scripts/battle/battle_fx.gd",
+              "type": "gd",
+              "lines": 219,
+              "role": "战斗演出特效（伤害数字 / 血条受击 / 飘字 / 抖动）+ PixelFx 预热"
+            },
+            {
+              "path": "scripts/battle/battle_result_stage.gd",
+              "type": "gd",
+              "lines": 137,
+              "role": "结算演出视觉（欢呼/倒地/死亡淡出 + 姿态捕获与恢复）"
+            },
+            {
+              "path": "scripts/battle/battle_sfx.gd",
+              "type": "gd",
+              "lines": 154,
+              "role": "战斗音效（出手/受击 + 结算演出 cue + 程序化回退波形）"
             }
           ],
           "tests": [
@@ -1374,6 +1470,18 @@
               "type": "gd",
               "lines": 149,
               "role": "声明式战场命令行入口（SceneTree --script 模式）"
+            },
+            {
+              "path": "tools/autosim_battle_adapter.gd",
+              "type": "gd",
+              "lines": 100,
+              "role": "godot-autosim 最小接入适配器：把 BattleRunner 战斗桥接为单动作博弈"
+            },
+            {
+              "path": "tools/autosim_first_action_bot.gd",
+              "type": "gd",
+              "lines": 15,
+              "role": "最简 bot 策略：永远选第一个可用动作（试点用）"
             }
           ],
           "tests": [
@@ -1398,12 +1506,12 @@
         {
           "id": "editor.main",
           "name": "编辑器主场景（map_editor.gd）",
-          "desc": "编辑器单体主文件（3285 行/150 函数）：工具面板、模式切换、快捷键、保存流程。⚠️ 已知契约红：三处直建控件（Button.new@943/CheckButton.new@1410/OptionButton.new@2124）+ 侧栏宽度/z 重建断言待修（roadmap P0-3）。",
+          "desc": "编辑器主文件（2026-11-16 拆分后 1031 行）：工具面板、模式切换、保存流程编排；快捷键/生成/剪贴板/预设等已拆入 scripts/editor/map_editor_* 模块。⚠️ 已知契约红见 testing 文档",
           "files": [
             {
               "path": "scripts/scenes/map_editor.gd",
               "type": "gd",
-              "lines": 2295,
+              "lines": 1028,
               "role": "战场地图编辑器（JSON 战场调试工具）"
             },
             {
@@ -1421,7 +1529,7 @@
             {
               "path": "scripts/editor/map_editor_file_io.gd",
               "type": "gd",
-              "lines": 66,
+              "lines": 123,
               "role": "战场 JSON 读取候选/存档素材快照/读取列表"
             },
             {
@@ -1433,7 +1541,7 @@
             {
               "path": "scripts/editor/map_editor_overlays.gd",
               "type": "gd",
-              "lines": 378,
+              "lines": 389,
               "role": "地图编辑器画布悬浮层与替换/选择弹窗构建器"
             },
             {
@@ -1447,6 +1555,18 @@
               "type": "gd",
               "lines": 470,
               "role": "地图编辑器右侧面板 8 个 Tab 的内容构建器与按钮工厂"
+            },
+            {
+              "path": "scripts/editor/map_editor_generate.gd",
+              "type": "gd",
+              "lines": 84,
+              "role": "地图编辑器种子生成 / 调尺寸 / 工具切换"
+            },
+            {
+              "path": "scripts/editor/map_editor_shortcuts.gd",
+              "type": "gd",
+              "lines": 165,
+              "role": "地图编辑器全局快捷键与临时吸管状态机"
             }
           ],
           "tests": [
@@ -1486,8 +1606,26 @@
             {
               "path": "scripts/editor/block_selector.gd",
               "type": "gd",
-              "lines": 331,
+              "lines": 323,
               "role": "通用方块选择器（内置地形 + 已保存地块素材，统一选中信号）"
+            },
+            {
+              "path": "scripts/editor/map_editor_cell_tools.gd",
+              "type": "gd",
+              "lines": 280,
+              "role": "地图编辑器画布交互路由与格子面板同步"
+            },
+            {
+              "path": "scripts/editor/map_editor_model_ops.gd",
+              "type": "gd",
+              "lines": 211,
+              "role": "地图编辑器模型写操作原语"
+            },
+            {
+              "path": "scripts/editor/map_editor_replace.gd",
+              "type": "gd",
+              "lines": 156,
+              "role": "地图编辑器条件替换（替换方块工具）"
             }
           ],
           "tests": []
@@ -1514,6 +1652,24 @@
               "type": "gd",
               "lines": 176,
               "role": "可复用选择范围模型（框选/体选状态内核）"
+            },
+            {
+              "path": "scripts/editor/map_editor_clipboard.gd",
+              "type": "gd",
+              "lines": 199,
+              "role": "地图编辑器区域剪贴板与区域移动"
+            },
+            {
+              "path": "scripts/editor/map_editor_presets.gd",
+              "type": "gd",
+              "lines": 216,
+              "role": "地图编辑器区域预设库（预设 Tab）"
+            },
+            {
+              "path": "scripts/editor/map_editor_region_select.gd",
+              "type": "gd",
+              "lines": 160,
+              "role": "地图编辑器区域选择与区域填充入口"
             }
           ],
           "tests": [
@@ -1576,6 +1732,12 @@
               "type": "gd",
               "lines": 919,
               "role": "用户素材库面板（地图编辑器「素材」Tab）"
+            },
+            {
+              "path": "scripts/editor/map_editor_assets.gd",
+              "type": "gd",
+              "lines": 164,
+              "role": "地图编辑器用户素材选择与方块素材网格"
             }
           ],
           "tests": [
@@ -2062,7 +2224,7 @@
               "path": "tools/run_contract_baseline.sh",
               "type": "sh",
               "role": "全量契约基线跑批（超时 900s/个）",
-              "lines": 35
+              "lines": 24
             },
             {
               "path": "tests/fixtures/volcanic_biome.gd",
@@ -2111,9 +2273,65 @@
               "type": "md",
               "role": "全量基线报告（62/72）",
               "lines": 74
+            },
+            {
+              "path": "tools/run_contracts.py",
+              "type": "py",
+              "lines": 794,
+              "role": "统一契约测试运行器（manifest 驱动、可并发、可复现；仅标准库）"
+            },
+            {
+              "path": "tools/test_run_contracts.py",
+              "type": "py",
+              "lines": 505,
+              "role": "run_contracts.py 自身单测（27 test，node 口径用 python unittest）"
+            },
+            {
+              "path": "tools/run_simulations.gd",
+              "type": "gd",
+              "lines": 133,
+              "role": "批量战斗模拟命令行入口（SceneTree --script 模式）"
+            },
+            {
+              "path": "tools/simulation_batch.gd",
+              "type": "gd",
+              "lines": 272,
+              "role": "批量战斗模拟核心（RefCounted，可被 CLI 与契约共同 preload）"
+            },
+            {
+              "path": "tests/benches/ecology_logic_bench.gd",
+              "type": "gd",
+              "lines": 101,
+              "role": "生态解析纯逻辑基准（不依赖场景/帧/渲染）"
             }
           ],
-          "tests": []
+          "tests": [
+            {
+              "path": "tests/simulation_contract.gd",
+              "type": "gd",
+              "note": "批量模拟入口契约：fixtures schema、指标形态、不变量、RNG 隔离"
+            },
+            {
+              "path": "tests/ecology_logic_bench_contract.gd",
+              "type": "gd",
+              "note": "生态基准契约：可运行、命中数、吞吐上限"
+            },
+            {
+              "path": "tests/gdtest/test_animal_behavior_registry.gd",
+              "type": "gd",
+              "note": "gdtest 试点：动物行为注册表断言镜像"
+            },
+            {
+              "path": "tests/gdtest/test_cell_state.gd",
+              "type": "gd",
+              "note": "gdtest 试点：cell_state 契约等价断言（legacy salt + 逻辑占用）"
+            },
+            {
+              "path": "tests/gdtest/test_ecology_resolver.gd",
+              "type": "gd",
+              "note": "gdtest 试点：ecology_resolver 契约等价断言"
+            }
+          ]
         }
       ]
     }
@@ -2146,6 +2364,20 @@
       "version": "v1.6.0",
       "files": 0,
       "role": "SVG 图标库（未启用，仅编辑器可用 control/ 色系）"
+    },
+    {
+      "path": "addons/gdtest/",
+      "name": "gdtest",
+      "version": "2026-11 vendored",
+      "files": 14,
+      "role": "gdtest Rust CLI 运行时侧：worker + Gdt 断言/mock/快照 helper + gdUnit4 兼容层（tests/gdtest/ 试点）"
+    },
+    {
+      "path": "addons/godot_autosim/",
+      "name": "godot_autosim",
+      "version": "2026-11 vendored",
+      "files": 23,
+      "role": "通用对局模拟/平衡框架（adapter+bot+runner+report）；项目接入 tools/autosim_*.gd"
     }
   ],
   "unmapped": [

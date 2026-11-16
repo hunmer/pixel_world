@@ -43,6 +43,9 @@ const AnimalBehaviorRegistryScript = preload(
 const EcologyConfigValidatorScript = preload(
 	"res://scripts/world/ecology_config_validator.gd"
 )
+const EcologyConfigCompilerScript = preload(
+	"res://scripts/world/ecology_config_compiler.gd"
+)
 const TerrainTextureCatalogScript = preload(
 	"res://scripts/world/terrain_texture_catalog.gd"
 )
@@ -283,189 +286,77 @@ func _load_ecosystem_config() -> bool:
 	return true
 
 
+## 生态配置编译已拆至 scripts/world/ecology_config_compiler.gd（按配置域拆分的
+## 纯静态函数集）。这里保持原函数名与调用顺序：先编译 generation/species 域并
+## 回填成员，再编译动物行为栈，最后编译 ecosystems/pool_selection 域并做整体校验。
 func _compile_ecosystem_config() -> bool:
-	if int(_ecosystem_config.get("version", 0)) != 1:
-		push_error("不支持的生态配置版本: %s" % _ecosystem_config.get("version", null))
+	var defaults := {
+		"rock_level": rock_level,
+		"peak_max": peak_max,
+		"sea_threshold": _sea_threshold,
+		"mountain_threshold": _mountain_threshold,
+		"terrace_period": _terrace_period,
+		"noise_octaves": _noise_octaves,
+		"flora_conflict_seed": _flora_conflict_seed,
+		"region_cell_size": _region_cell_size,
+		"region_jitter": _region_jitter,
+		"region_blend_width": _region_blend_width,
+		"snow_base_level": _snow_base_level,
+		"snow_temperature_level_scale": _snow_temperature_level_scale,
+	}
+	var generation_result: Dictionary = EcologyConfigCompilerScript.compile_generation(
+		_ecosystem_config, defaults, FLORA_LAYER_IDS, LANDFORM_ID_TO_TYPE
+	)
+	if not generation_result.get("ok", false):
+		push_error(String(generation_result.get("error", "")))
 		return false
-	var generation: Dictionary = _ecosystem_config.get("generation", {})
-	var height: Dictionary = generation.get("height", {})
-	rock_level = int(height.get("rock_level", rock_level))
-	peak_max = int(height.get("peak_extra_levels", peak_max))
-	_sea_threshold = float(height.get("sea_threshold", _sea_threshold))
-	_mountain_threshold = float(height.get("mountain_threshold", _mountain_threshold))
-	_terrace_period = float(height.get("terrace_period", _terrace_period))
-	if (
-		rock_level < 0
-		or peak_max < 0
-		or _sea_threshold <= 0.0
-		or _sea_threshold >= 1.0
-		or _mountain_threshold <= _sea_threshold
-		or _mountain_threshold >= 1.0
-		or _terrace_period <= 0.0
-	):
-		push_error("generation.height 的范围无效")
-		return false
-
-	var noise: Dictionary = generation.get("noise", {})
-	var noise_type_name := String(noise.get("type", "perlin")).to_lower()
-	if noise_type_name not in ["perlin", "simplex", "simplex_smooth", "value", "value_cubic"]:
-		push_error("未知 noise type: " + noise_type_name)
-		return false
-	var fractal_type_name := String(noise.get("fractal", "fbm")).to_lower()
-	if fractal_type_name not in ["fbm", "ridged", "ping_pong"]:
-		push_error("未知 fractal type: " + fractal_type_name)
-		return false
-	_noise_type = _noise_type_from_name(noise_type_name)
-	_fractal_type = _fractal_type_from_name(fractal_type_name)
-	_noise_octaves = int(noise.get("octaves", _noise_octaves))
-	if _noise_octaves <= 0:
-		push_error("noise.octaves 必须大于 0")
-		return false
-	_noise_fields = noise.get("fields", {})
-	for field_id in _noise_fields:
-		var field: Dictionary = _noise_fields[field_id]
-		if float(field.get("frequency", 0.0)) <= 0.0:
-			push_error("noise field frequency 必须大于 0: " + field_id)
-			return false
-		if int(field.get("octaves", _noise_octaves)) <= 0:
-			push_error("noise field octaves 必须大于 0: " + field_id)
-			return false
-
-	var flora_generation_value: Variant = generation.get("flora", {})
-	if not flora_generation_value is Dictionary:
-		push_error("generation.flora 必须是 Dictionary")
-		return false
-	var flora_generation: Dictionary = flora_generation_value
-	_flora_conflict_seed = int(flora_generation.get("conflict_seed", _flora_conflict_seed))
-	var flora_layers_value: Variant = flora_generation.get("layers", {})
-	if not flora_layers_value is Dictionary:
-		push_error("generation.flora.layers 必须是 Dictionary")
-		return false
-	_flora_layer_configs = flora_layers_value
-	for configured_layer_id in _flora_layer_configs:
-		if String(configured_layer_id) not in FLORA_LAYER_IDS:
-			push_error("generation.flora.layers 包含未知层: " + String(configured_layer_id))
-			return false
-	for layer_id in FLORA_LAYER_IDS:
-		if not _flora_layer_configs.has(layer_id):
-			push_error("generation.flora.layers 缺少层: " + layer_id)
-			return false
-		var layer_value: Variant = _flora_layer_configs[layer_id]
-		if not layer_value is Dictionary:
-			push_error("flora layer 必须是 Dictionary: " + layer_id)
-			return false
-		var layer: Dictionary = layer_value
-		var noise_field_id := String(layer.get("noise_field", ""))
-		if (
-			noise_field_id.is_empty()
-			or not _noise_fields.has(noise_field_id)
-		):
-			push_error("flora layer 引用了未知 noise field [%s]: %s" % [layer_id, noise_field_id])
-			return false
-		var default_noise_above := float(layer.get("default_noise_above", 0.0))
-		if default_noise_above < -1.0 or default_noise_above > 1.0:
-			push_error("flora layer default_noise_above 必须在 -1..1: " + layer_id)
-			return false
-		var layer_dominant_chance := float(layer.get("dominant_chance", 0.8))
-		if layer_dominant_chance < 0.0 or layer_dominant_chance > 1.0:
-			push_error("flora layer dominant_chance 必须在 0..1: " + layer_id)
-			return false
-
-	var regions: Dictionary = generation.get("regions", {})
-	_region_cell_size = float(regions.get("cell_size", _region_cell_size))
-	_region_jitter = float(regions.get("jitter", _region_jitter))
-	_region_blend_width = float(regions.get("blend_width", _region_blend_width))
-	if _region_cell_size <= 0.0 or _region_blend_width <= 0.0 or _region_jitter < 0.0:
-		push_error("generation.regions 的范围无效")
-		return false
-	_landform_configs.clear()
-	_landform_configs.resize(LANDFORM_ID_TO_TYPE.size())
-	_landform_ids.clear()
-	_landform_ids.resize(LANDFORM_ID_TO_TYPE.size())
-	_landform_names.clear()
-	_landform_names.resize(LANDFORM_ID_TO_TYPE.size())
-	for i in _landform_configs.size():
-		_landform_configs[i] = {}
-		_landform_ids[i] = ""
-		_landform_names[i] = ""
-	_landform_order.clear()
-	_landform_total_weight = 0.0
-	var seen_landforms := {}
-	var landforms: Array = regions.get("landforms", [])
-	for profile_value in landforms:
-		var profile: Dictionary = profile_value
-		var profile_id := String(profile.get("id", ""))
-		if profile_id.is_empty():
-			push_error("landform id 不能为空")
-			return false
-		if seen_landforms.has(profile_id):
-			push_error("重复的 landform id: " + profile_id)
-			return false
-		seen_landforms[profile_id] = true
-		var terrain: Dictionary = profile.get("terrain", {})
-		var profile_weight := float(profile.get("weight", 0.0))
-		if profile_weight <= 0.0:
-			push_error("landform weight 必须大于 0: " + profile_id)
-			return false
-		var compiled := {
-			"offset": float(terrain.get("offset", 0.0)),
-			"amp": float(terrain.get("amplitude", 1.0)),
-			"ridge": float(terrain.get("ridge", 0.0)),
-			"steep": float(terrain.get("underwater_steepness", 1.0)),
-			"peak": float(terrain.get("peak", 0.0)),
-			"terrace": float(terrain.get("terrace", 0.0)),
-			"weight": profile_weight,
-		}
-		_landform_total_weight += float(compiled["weight"])
-		# 旧 enum 只作为现有规则/测试的适配边界；新 ID 完整保留在 TerrainSampler。
-		if LANDFORM_ID_TO_TYPE.has(profile_id):
-			var landform_type: int = LANDFORM_ID_TO_TYPE[profile_id]
-			_landform_configs[landform_type] = compiled
-			_landform_ids[landform_type] = profile_id
-			_landform_names[landform_type] = String(profile.get("name_zh", profile_id))
-			_landform_order.append(landform_type)
-	for required_landform_id in LANDFORM_ID_TO_TYPE:
-		if not seen_landforms.has(required_landform_id):
-			push_error("生态配置缺少 legacy landform: " + String(required_landform_id))
-			return false
-	if _landform_total_weight <= 0.0:
-		push_error("landform 总权重必须大于 0")
-		return false
-
-	var climate: Dictionary = generation.get("climate", {})
-	var snow: Dictionary = climate.get("snow", {})
-	_snow_base_level = int(snow.get("base_level", _snow_base_level))
-	_snow_temperature_level_scale = float(snow.get("temperature_level_scale", _snow_temperature_level_scale))
-	var species: Dictionary = _ecosystem_config.get("species", {})
-	_plant_species = species.get("plants", {})
-	_animal_species = species.get("animals", {})
-	_ambient_species = species.get("ambient", {})
+	_apply_generation_compiled(generation_result.get("values", {}))
 	if not _compile_animal_behavior_stacks():
 		return false
-	_ecosystems_by_id.clear()
-	_ecosystem_order.clear()
-	for ecosystem_value in _ecosystem_config.get("ecosystems", []):
-		var ecosystem: Dictionary = ecosystem_value
-		var ecosystem_id := String(ecosystem.get("id", ""))
-		if ecosystem_id.is_empty() or _ecosystems_by_id.has(ecosystem_id):
-			push_error("生态 id 为空或重复: " + ecosystem_id)
-			return false
-		_ecosystems_by_id[ecosystem_id] = ecosystem
-		_ecosystem_order.append(ecosystem)
-	if _ecosystem_order.is_empty():
-		push_error("生态配置至少需要一个 ecosystem")
-		return false
-	_default_ecosystem_id = String(_ecosystem_config.get("default_ecosystem", ""))
-	if _default_ecosystem_id.is_empty() or not _ecosystems_by_id.has(_default_ecosystem_id):
-		push_error("default_ecosystem 必须引用已定义的生态: " + _default_ecosystem_id)
-		return false
-	_dominant_species_chance = float(
-		(_ecosystem_config.get("pool_selection", {}) as Dictionary).get("dominant_chance", 0.8)
+	var ecosystems_result: Dictionary = EcologyConfigCompilerScript.compile_ecosystems(
+		_ecosystem_config
 	)
-	if _dominant_species_chance < 0.0 or _dominant_species_chance > 1.0:
-		push_error("pool_selection.dominant_chance 必须在 0..1")
+	if not ecosystems_result.get("ok", false):
+		push_error(String(ecosystems_result.get("error", "")))
 		return false
+	_apply_ecosystems_compiled(ecosystems_result.get("values", {}))
 	return _validate_ecosystem_config()
+
+
+## 回填 generation/species 域编译结果（赋值顺序与原内联实现一致；容器保持原引用）。
+func _apply_generation_compiled(values: Dictionary) -> void:
+	rock_level = int(values["rock_level"])
+	peak_max = int(values["peak_max"])
+	_sea_threshold = float(values["sea_threshold"])
+	_mountain_threshold = float(values["mountain_threshold"])
+	_terrace_period = float(values["terrace_period"])
+	_noise_type = int(values["noise_type"])
+	_fractal_type = int(values["fractal_type"])
+	_noise_octaves = int(values["noise_octaves"])
+	_noise_fields = values["noise_fields"]
+	_flora_conflict_seed = int(values["flora_conflict_seed"])
+	_flora_layer_configs = values["flora_layer_configs"]
+	_region_cell_size = float(values["region_cell_size"])
+	_region_jitter = float(values["region_jitter"])
+	_region_blend_width = float(values["region_blend_width"])
+	_landform_configs = values["landform_configs"]
+	_landform_ids = values["landform_ids"]
+	_landform_names = values["landform_names"]
+	_landform_order = values["landform_order"]
+	_landform_total_weight = float(values["landform_total_weight"])
+	_snow_base_level = int(values["snow_base_level"])
+	_snow_temperature_level_scale = float(values["snow_temperature_level_scale"])
+	_plant_species = values["plant_species"]
+	_animal_species = values["animal_species"]
+	_ambient_species = values["ambient_species"]
+
+
+## 回填 ecosystems/pool_selection 域编译结果。
+func _apply_ecosystems_compiled(values: Dictionary) -> void:
+	_ecosystems_by_id = values["ecosystems_by_id"]
+	_ecosystem_order = values["ecosystem_order"]
+	_default_ecosystem_id = String(values["default_ecosystem_id"])
+	_dominant_species_chance = float(values["dominant_species_chance"])
 
 
 func _compile_animal_behavior_stacks() -> bool:

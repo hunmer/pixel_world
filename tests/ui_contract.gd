@@ -177,12 +177,18 @@ func _run() -> void:
 	tabs.queue_free()
 
 	# ---- 5. 迁移接线（静态源检查） ----
+	# map_editor：按钮一律经 UIFactory 工厂创建（_pixel_btn 门面内部同），
+	# 组件 preload/new 只允许存在于 ui_factory.gd 与组件展示廊。
 	_check_source("res://scripts/scenes/map_editor.gd",
 		["UIFactoryScript.add_tab(", "UIThemeScript.overlay_panel_style(",
 			"UIFactoryScript.button(", "UIFactoryScript.check_button(",
-			"UIFactoryScript.option_button(", "PixelButtonScript.new("],
+			"UIFactoryScript.option_button("],
 		["func _new_tab(", "func _btn_styles(", "func _panel_style(",
-			"func _action_btn(", "Button.new(", "CheckButton.new(", "OptionButton.new("])
+			"func _action_btn(", "Button.new(", "CheckButton.new(", "OptionButton.new(",
+			"preload(\"res://ui/components/pixel_button.gd\")"])
+	_check_source("res://scripts/editor/block_selector.gd",
+		["UIFactoryScript.button("],
+		["preload(\"res://ui/components/pixel_button.gd\")"])
 	_check_source("res://scripts/ui/ui_factory.gd",
 		["PixelButtonScript.new()", "PixelOptionButtonScript.new()",
 			"PixelCheckButtonScript.new()"],
@@ -223,6 +229,7 @@ func _run() -> void:
 		"res://scripts/scenes/pixelfx_gallery.gd",
 		"res://scripts/scenes/ui_component_gallery.gd",
 		"res://scripts/editor/asset_library_panel.gd",
+		"res://scripts/editor/block_selector.gd",
 		"res://scripts/battle/battle_ui.gd",
 		"res://scripts/battle/battle_settings_tab.gd",
 		"res://scripts/battle/battle_fx.gd",

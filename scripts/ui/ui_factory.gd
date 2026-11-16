@@ -27,14 +27,17 @@ const PixelCheckButtonScript = preload("res://ui/components/pixel_check_button.g
 ## 主题三态按钮；cb 非空时接 pressed 信号，icon_name 非空时设置图标。
 ## 由 ui/components PixelButton 创建（统一样式组件）；组件自带音效禁用，
 ## 交给全局 Sfx autoload 挂接；style_button override 叠加维持既有观感。
+## styled=false 时不叠加 style_button 逐控件 override，保持 PixelButton
+## 组件自身主题原观感（编辑器 tile/工具条等按组件变体主题直用的调用方）。
 static func button(
-	text := "", cb := Callable(), icon_name := ""
+	text := "", cb := Callable(), icon_name := "", styled := true
 ) -> Button:
 	var b := PixelButtonScript.new()
 	b.hover_sfx_enabled = false
 	b.click_sfx_enabled = false
 	b.text = text
-	UIThemeScript.style_button(b)
+	if styled:
+		UIThemeScript.style_button(b)
 	if cb.is_valid():
 		b.pressed.connect(cb)
 	var tex: Texture2D = UIThemeScript.icon(icon_name)

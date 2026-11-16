@@ -8,15 +8,18 @@
   - **本机（macOS）**：`/Applications/Godot.app/Contents/MacOS/Godot`。Windows 历史路径 `D:/Godot/Godot_v4.7.2-stable_win64.exe`（console 版 `..._console.exe`，stdout 全缓冲：管道下无输出 ≠ 没输出）。
   - 项目历史路径 G:/ → E:/ → 当前 `/Users/Zhuanz/Documents/pixel_world`。
 - **Node.js（仅工具链，非游戏运行时）**：`tools/build_blocks_manifest.mjs`（用户素材清单生成）+ 其 node:test 契约；任何 ≥18 LTS 均可。
-- **Python（仅素材工具）**：`tools/slice_class_sheets.py` / `slice_ui_sheet.py` / `tools/art` / `tools/audio` 生成脚本。
+- **Python（素材工具 + 测试 runner）**：`tools/slice_class_sheets.py` / `slice_ui_sheet.py` / `tools/art` / `tools/audio` 生成脚本；**`tools/run_contracts.py` 统一契约 runner（仅标准库，2026-11-16 起）**，自身单测 `python3 -m unittest tools/test_run_contracts.py`（27 test）。
+- **gdtest CLI（可选后端，外部可执行文件不在仓库内）**：`tests/gdtest/` 试点需要与 addons/gdtest 版本匹配的 gdtest Rust CLI（Godot 4.5+，实测 4.6/4.7）；无 CLI 时走契约口径不受影响。
 - **无第三方 GDScript / npm / cargo 游戏依赖**：战棋代码是项目内纯 GDScript（逻辑层迁移自外部 phaserjs 项目的 TS，本仓库**不含 TS/JS 源码**）。
-- **vendored 第三方组件 4 个**（`addons/`）：
+- **vendored 第三方组件 6 个**（`addons/`）：
   | 组件 | 版本 | 用途 | 插件启用 |
   | --- | --- | --- | --- |
   | `breakpoint_mcp` | **v1.23.0** | 编辑器/运行时 MCP 调试桥（loopback 9080/9081） | ✅ |
   | `panku_console` | **v1.7.9** | 游戏内 `~` 表达式 REPL 控制台 | ✅ |
   | `at-icons` | **v1.6.0** | 700+ SVG 图标库（MIT；编辑器 UI 只用 `control/` 色系） | ❌（纯资源） |
   | `pixelfx` | **v0.3.0** | 244 个代码绘制像素特效（24 类；`PixelFx2D`/`PixelFxAct2D`；战斗演出消费） | ❌（脚本库，preload 即用） |
+  | `gdtest` | 运行时侧（2026-11-16 新增） | gdtest Rust CLI 的 worker/断言 helper/gdUnit4 迁移兼容；试点 `tests/gdtest/` | ❌（被 CLI harness 调用） |
+  | `godot_autosim` | 4.6+（2026-11-16 新增） | 通用对局模拟/平衡框架（adapter+bot+runner+report）；接入 `tools/autosim_*.gd` | ❌（脚本库，preload 即用） |
 - **物理**：`[physics] 3d/physics_engine = "Jolt Physics"`。3D 正交迁移后为真实使用。
 
 ## 配置文件总览

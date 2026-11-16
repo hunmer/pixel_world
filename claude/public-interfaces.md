@@ -1,6 +1,6 @@
 # 对外接口
 
-> 更新：2026-11-15（新增 3 个表现层 autoload、用户素材服务、UI 组件库、战斗自动化 CLI、演出信号）。本项目是**单机游戏**，除调试桥与素材清单源外不暴露 REST API / WebSocket / SDK；本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**自动化 CLI**、**调试通道**。
+> 更新：2026-11-16（新增统一契约 runner CLI、批量模拟 CLI、autosim 接入、gdtest 试点；拆分后模块 API 形态）。上一轮：表现层 autoload、用户素材服务、UI 组件库、战斗自动化 CLI。本项目是**单机游戏**，除调试桥与素材清单源外不暴露 REST API / WebSocket / SDK；本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**自动化 CLI**、**调试通道**。
 
 ## 玩家输入映射（`project.godot [input]` + `main.gd._unhandled_input` @ 3608）
 
@@ -136,6 +136,26 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 - 产物：`events.jsonl`（逐事件流）/ `result.json`（终局+断言）/ `summary.txt`。
 - **退出码契约**：`0` 正常且断言通过；`1` 断言失败；`2` 输入/非法操作；`3` 步数上限（僵持保护）；`4` 输出/运行失败。
 - 内核 API：`BattleScenarioLoader.load_from_file(path, seed_override)` / `load_from_dict(d, fallback_id, seed_override)` → scenario；`BattleRunner.run(scenario)`（static）→ result；`battle_action_resolver.gd` 是 **battle.gd 与自动化共享的行动结算内核**（无表现回放路径）。
+
+## 统一契约测试 runner（`tools/run_contracts.py`，2026-11-16 起默认入口）
+
+manifest 驱动（`tests/contract_manifest.json`：80 契约 + 2 探针），仅 Python 标准库；详见 `docs/test_automation.md` 与 `claude/testing-and-quality.md`。
+
+```bash
+python3 tools/run_contracts.py --test terrain_generation --no-warmup   # 单契约
+python3 tools/run_contracts.py --group ecology --jobs 3               # 组/标签 + 并发
+python3 tools/run_contracts.py --changed --dry-run                    # 只跑受影响（git 变更 → 影响闭包）
+python3 tools/run_contracts.py --all --run-env-skip --junit            # 全量 + JUnit
+```
+
+## 批量战斗模拟 CLI（`tools/run_simulations.gd` + `tools/simulation_batch.gd`，2026-11-16 新增）
+
+按 batch 夹具批量跑 BattleRunner 对局，输出逐次 JSON 指标与汇总（`--runs 1000` 容量模式实测 3.6s）；核心 `simulation_batch.gd` 为 RefCounted，被 CLI / autosim adapter / `tests/simulation_contract.gd` 三方共用。配套 `addons/godot_autosim/` 最小接入（`tools/autosim_battle_adapter.gd` + `autosim_first_action_bot.gd`）。
+
+```bash
+"$GODOT" --headless --path . --script res://tools/run_simulations.gd -- \
+  --batch res://tests/fixtures/simulations/battle_determinism_fixed.json --runs 100 --out user://tmp/sim_out
+```
 
 ## 世界 → 战棋适配契约（`scripts/core/world_to_chapter.gd`）
 

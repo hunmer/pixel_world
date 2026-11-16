@@ -1,6 +1,6 @@
 # 入口与启动
 
-> 更新：2026-11-15（第二轮增量：编辑器能力扩充——区域操作/预设/取色器；autoload 与场景数不变 8/11）。
+> 更新：2026-11-16（三单体拆分后行号勘误：main.gd _ready@549、battle.gd 1444 行；autoload 8 / 场景 11 不变）。上一轮：编辑器区域操作/预设/取色器。
 
 ## 引擎入口
 
@@ -55,7 +55,7 @@
 
 > 注意：`main.tscn` 极简（Node2D + main.gd + DebugConsoleCommands），几乎所有子节点由 `main.gd._ready()` **程序化创建**。`Battle.tscn` 依赖 `SceneArgs.battle_args`，**不能直接运行**。
 
-## main.gd 启动流程（`_ready` @ 975）
+## main.gd 启动流程（`_ready` @ 549；2026-11-16 拆分后 2283 行装配层）
 
 ```
 _ready()
@@ -80,7 +80,7 @@ _ready()
 - 从战斗退出（⏏ 按钮 / 胜负返回）回 `Game.tscn` 时因 `GameSession.in_session` 停在战场列表：继续最近 / 选择战场 / 重置 / 战场编辑器 / 生态世界。
 - `main.gd._unhandled_input`：`KEY_P` → `_enter_battle()`（B1/B2 由 Settings 分流；先经 `GameSession.prepare_world_entry` —— 同身份（种子+起点）有档案则恢复进度，无则新开并 `open_battle` 登记）；`KEY_O` → HUD 战场列表面板（`battlefield_picked` → `_enter_battlefield(path)`，固定 B2）；`KEY_E`（非战斗时）→ `_open_map_editor()`。
 - 编辑器保存的 JSON 进入 `res://data/battlefields/` 或 `user://battlefields/`，立即出现在 O 列表与 Game 列表。
-- **战斗内演出**：战斗设置页（`battle/battle_settings_tab.gd`）可开沉浸相机等表现开关；沉浸运镜预热时先弹 `LoadingScreen`（`battle.gd` @1238 一带）。
+- **战斗内演出**：战斗设置页（`battle/battle_settings_tab.gd`）可开沉浸相机等表现开关；沉浸运镜预热时先弹 `LoadingScreen`（`battle.gd` 沉浸相机装配段一带，拆分后 1444 行）。
 
 ## 构建与导出
 

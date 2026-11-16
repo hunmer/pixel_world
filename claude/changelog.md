@@ -2,6 +2,31 @@
 
 > 本文件记录 `CLAUDE.md` 索引本身的生成 / 更新，**不是产品 Changelog**。仅保留最近 5 条（倒序）。
 
+## 2026-11-16（深夜） — report.md 违例并行优化轮（dsh team / glm-5.3 max ×4）
+
+- **触发**：用户指令「使用 dsh team 创建 team，用 glm 5.3 max 针对 report 的报告并行做优化」；4 成员（battle / ecology / terrain-render / editor-ui）文件域互斥并行行为等价重构，Lead 统一验收。
+- **代码变化**（净 −1816 行，全 `RefCounted`+注入、嵌套≤3、`## file.gd — 职责` 头注释）：
+  - **battle**：battle_ui.gd 1211→**467** 装配层 + 拆出 battle_ui_hud(347)/unit_menu(418)/unit_detail(160)/banner(37)；battle.gd `_ready` 拆 7 个 `_configure_*`、`_unhandled_input` 键位路由表化（1444→1557，+注释）。
+  - **ecology**：ecology_registry.gd 1150→**984**（legacy 外迁 `ecology_legacy_codec.gd` 240 行，报错文案逐字保留）；main.gd `_compile_ecosystem_config` 185→71 薄委托，编译入 `scripts/world/ecology_config_compiler.gd`（313）；main.gd 2283→**2174**。
+  - **terrain-render**：terrain_material_registry.gd 1047→**472**（解析入 `terrain_material_parser.gd` 809）；isometric_column_batch.gd 1323→**742**（按绘制通道拆 scripts/iso/ texture_batch(148)/terrain_draw(377)/shoreline(341)，RNG hash 逐字迁移）。
+  - **editor-ui**：map_editor / map_editor_overlays / block_selector 三处 PixelButton 直建改 `UIFactory.button()`（第 4 参 `styled=false` 留 bare 观感）；`tests/ui_contract.gd` 反转为禁直预加载 + 断言工厂用法。
+- **验收**：全量 80 契约 **70 pass / 5 known-fail / 5 env-skip，0 新增红**；terrain_generation SHA-256 逐字节一致（`0c3f713b…` samples=16641）；`user_asset_editor` 经 worktree 在改动前 HEAD 复现同 7 失败 → 判定**既有红**（预设 Tab 落地后契约未跟上），manifest 登记 known-fail，Tab 数断言修正 7→8 后余 6 条待核对（断言陈旧 vs 预设功能回归，见 manifest evidence）。
+- **文档**：report.md 覆盖更新（违例标注 ✅/仍开放：main.gd `_unhandled_input`≥4、game_hud 多面板）；file-map（scripts 154→164）、CLAUDE.md（行数/口径 70/5/5/mermaid）、feature_map 收编 10 新文件 + 刷新 7 处行数（scan 新增/消失=0、check 全过、html 已重渲）；changelog 本条。
+- **坑（成员实测）**：GDScript 4.7 调用点不支持命名参数；untyped 宿主上 `:=` 推断会 Parse Error；`run_contracts.py` 并行期必须显式 `--out`。
+
+## 2026-11-16 — 增量更新（三单体拆分 + 测试自动化 + 代码自检 report.md + 图谱刷新）
+
+- **触发**：/init-project 增量更新（上次 2026-11-15 二轮，HEAD=3ba4cf5 → 本轮 dc0b9eb）；用户新增自检项，随后扩展为四组规则并落到 **`claude/report.md`**（init-project skill 已同步加「代码自检」硬性交付物节）。
+- **重大变化**：
+  - **三单体拆分落地**（docs/plans/split_report_2026-11-15.md，SHA-256 零漂移）：main.gd 4319→2283 行/176→128 函数（+11 模块入 scripts/world/，全 RefCounted/静态 + Callable 注入，`_configure_generation_services()@594` 装配）；map_editor.gd 3285→1031 行（+15 个 map_editor_* 模块入 scripts/editor/）；battle.gd 1934→1444 行（+6 模块入 scripts/battle/：camera_kick/fx/pref_panel/result_stage/save/sfx）。
+  - **测试自动化**：`tools/run_contracts.py` 统一契约 runner（manifest 80 契约+2 探针，pass 71/known-fail 4/env-skip 5，自带 27 单测）；`tools/run_simulations.gd`+`simulation_batch.gd` 批量模拟（1000 局 3.6s）；`tests/gdtest/` 试点 3 文件 8 test；`tests/benches/ecology_logic_bench.gd`；手册 `docs/test_automation.md`。
+  - **vendored 4→6**：+`addons/gdtest`（Rust CLI 运行时侧）、+`addons/godot_autosim`（adapter+bot+runner+report 模拟框架）。
+  - **规模**：scripts/ 122→154 .gd（world 12→23 / editor 11→26 / battle 10→16）、tests 80→86 .gd、addons 4→6。
+- **自检交付物 `claude/report.md`**（四组，替代同日早先的 reusability.md——内容已并入 §4）：§1 结构与职责（⚠ isometric_column_batch 1323 / battle_ui 1211 / ecology_registry 1150 / terrain_material_registry 1047 / _compile_ecosystem_config 185 行等违例表）；§2 重复（⚠ ecology legacy 双轨、PixelButton 直用 2 处）；§3 可读性（⚠ _validate_legacy_rules 嵌套≥7、battle._unhandled_input ≥6 等实测清单）；§4 可复用资产 A–F（UI 三层链 17 业务文件 / 共享内核 6 件 / world 11 模块 14 测试直 preload / 编辑器组件 / 测试基础设施 / autoload 8 个）+ 复用守则 6 条。
+- **更新文件**：`claude/` overview / module-responsibilities / public-interfaces / dependencies-and-config / file-map / faq / report（新建，合并并取代 reusability.md〔已删〕）/ entrypoints（行号勘误：_ready@549、battle.gd 1444）/ changelog + 根 `CLAUDE.md`；conventions 与 testing-and-quality 已由前次会话更新，本轮复核未动；data-model 抽查无陈旧引用，未改。
+- **图谱**：`docs/feature_map.json` 收编 27 个新增文件、修正 3 处过期 desc、vendored 补录 gdtest/godot_autosim（4→6）；`feature_map.py all` 复核 **311/311 = 100% 覆盖**，check 全过，html 已重渲（~564KB）。
+- **缺口 / 下一步建议**：① entrypoints.md / data-model.md 本轮仅抽查（无陈旧行号命中，未全文重写）；② `AGENTS.md` 仍写「世界引擎集中在 main.gd / 78 契约」属用户指令文件未动；③ known-fail 4 契约（ui / map_editor_ui 等）修复仍在 roadmap P0。
+
 ## 2026-11-15（二轮） — 增量更新（胜利/增援/交换 + 编辑器区域操作 + DESIGN.md/22 组件 + 全量基线）
 
 - **触发**：/init-project 增量更新；上次扫描提交 386508c 之后 ~25 commits（HEAD=3ba4cf5），外加补记 4 张上次未入账的前置卡（game_hud 修复 e8fda38、trade 2a501c7、victory 2ec8acb、素材源 3a08327）。
@@ -55,13 +80,3 @@
   3. `cell_context_to_terrain` 对 11 地形的覆盖度未复核。
   4. `meowa_tiles/heroes/` 职业映射待办未动。
   （以上 1–4 已被 2026-11-15 条目吸收进 `docs/roadmap.md`。）
-
-## 2026-07-28 — 初始化（首次生成）
-
-- **范围**：全仓库根目录 + 1 个 vendored 模块（`addons/breakpoint_mcp`）。
-- **生成**：
-  - 根 `CLAUDE.md`（轻量索引）+ `claude/` 下 10 个详情文件。
-  - `addons/breakpoint_mcp/CLAUDE.md` + 其 `claude/`。
-- **识别的"模块"判定**：仓库为单体 Godot 游戏；`scripts/` 各子目录是同应用内的源码子域，统一描述，避免过度碎片化。唯一带独立 `plugin.cfg` 的 `addons/breakpoint_mcp` 单列。
-- **覆盖率**：源码层 104 个 `.gd` 全部纳入结构归纳；22 个 `.json` 配置逐文件结构化；4 个 `.tscn`、7 个 `.md`、4 个 `.gdshader` 已覆盖。未深度读取二进制素材与引擎生成物。
-- **缺口 / 下一步建议**：契约测试通过状态未执行验证；战棋 `core/`/`systems/` 函数签名未逐行展开；shaders 参数未记录；外部 `phaserjs/` 源不在本仓库。

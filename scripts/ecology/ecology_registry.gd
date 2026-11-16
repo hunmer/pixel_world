@@ -6,6 +6,7 @@ extends RefCounted
 ## A manifest declares one or more JSON modules. Modules are merged by stable IDs
 ## into a catalog before any cross-reference is validated, so definitions may be
 ## split across files without becoming order-dependent.
+## Legacy 单文件双轨（load_legacy 解码 + 内嵌规则校验）在 ecology_legacy_codec.gd。
 
 const SCHEMA_VERSION := 1
 const MODULE_KINDS := ["world", "species", "communities", "biomes"]
@@ -149,46 +150,7 @@ const BIOME_MATCH_FIELDS := [
 	"minimum_level",
 	"maximum_level",
 ]
-const LEGACY_ROOT_FIELDS := [
-	"version",
-	"default_ecosystem",
-	"generation",
-	"species",
-	"pool_selection",
-	"ecosystems",
-]
-const LEGACY_ECOSYSTEM_FIELDS := ["id", "match", "flora", "fauna", "ambient"]
-const FLORA_RULE_FIELDS := [
-	"layer",
-	"pool_id",
-	"selection_seed_key",
-	"species",
-	"chance",
-	"placement_seed",
-	"max_water_depth",
-	"placement",
-	"render_priority",
-	"noise_above",
-	"conflict_weight",
-]
-const FAUNA_RULE_FIELDS := [
-	"pool_id",
-	"selection_seed_key",
-	"species",
-	"chance",
-	"placement_seed",
-	"only_if_flora_missed",
-	"distribution",
-]
-const AMBIENT_RULE_FIELDS := [
-	"pool_id",
-	"selection_seed_key",
-	"species",
-	"chance",
-	"placement_seed",
-	"requires_ground_flora",
-]
-const FAUNA_SUBSTITUTION_FIELDS := ["species", "chance", "max_count"]
+const EcologyLegacyCodecScript = preload("res://scripts/ecology/ecology_legacy_codec.gd")
 
 var _catalog: Dictionary = {}
 var _errors: Array[String] = []
@@ -257,80 +219,9 @@ func load_manifest(manifest_path: String) -> bool:
 
 ## Compatibility entry point for the current monolithic ecosystems.json.
 ## It adapts every legacy ecosystem to a biome plus a `legacy_bundle` community.
+## 解码/回写逻辑已拆至 ecology_legacy_codec.gd；这里只保留兼容入口。
 func load_legacy(config_path: String) -> bool:
-	_reset()
-	var legacy := _read_json_object(config_path, "legacy ecosystem config")
-	if legacy.is_empty() and not _errors.is_empty():
-		return false
-	if not _validate_version(legacy, config_path):
-		return false
-	if not _reject_unknown_fields(legacy, LEGACY_ROOT_FIELDS, config_path, "legacy root"):
-		return false
-
-	var default_biome_id := String(legacy.get("default_ecosystem", ""))
-	_catalog["world"] = {
-		"default_biome_id": default_biome_id,
-		"generation": _deep_copy(legacy.get("generation", {})),
-		"pool_selection": _deep_copy(legacy.get("pool_selection", {})),
-	}
-	_catalog["default_biome_id"] = default_biome_id
-	_catalog["source_paths"]["manifest"] = config_path
-	_catalog["source_paths"]["world"] = config_path
-	_loaded_kinds["world"] = true
-
-	var species_value: Variant = legacy.get("species", null)
-	if not species_value is Dictionary:
-		_add_error(config_path, "legacy species must be a Dictionary")
-	else:
-		_merge_species_payload(species_value, config_path)
-	_loaded_kinds["species"] = true
-
-	var ecosystems_value: Variant = legacy.get("ecosystems", null)
-	if not ecosystems_value is Array:
-		_add_error(config_path, "legacy ecosystems must be an Array")
-	else:
-		for index in ecosystems_value.size():
-			var ecosystem_value: Variant = ecosystems_value[index]
-			if not ecosystem_value is Dictionary:
-				_add_error(config_path, "legacy ecosystems[%d] must be a Dictionary" % index)
-				continue
-			var ecosystem: Dictionary = ecosystem_value
-			if not _reject_unknown_fields(
-				ecosystem,
-				LEGACY_ECOSYSTEM_FIELDS,
-				config_path,
-				"legacy ecosystems[%d]" % index
-			):
-				continue
-			var ecosystem_id := String(ecosystem.get("id", ""))
-			if ecosystem_id.is_empty():
-				_add_error(config_path, "legacy ecosystems[%d].id is empty" % index)
-				continue
-			var community := {
-				"id": ecosystem_id,
-				"kind": "legacy_bundle",
-				"flora": _deep_copy(ecosystem.get("flora", [])),
-				"fauna": _deep_copy(ecosystem.get("fauna", [])),
-				"ambient": _deep_copy(ecosystem.get("ambient", [])),
-			}
-			_merge_community(community, config_path)
-			var biome := {
-				"id": ecosystem_id,
-				"match": _deep_copy(ecosystem.get("match", {})),
-				"community_refs": [ecosystem_id],
-				"attachments": [],
-			}
-			_merge_biome(biome, config_path)
-	_loaded_kinds["communities"] = true
-	_loaded_kinds["biomes"] = true
-
-	if not _errors.is_empty():
-		return false
-	_validate_catalog(config_path)
-	_loaded = _errors.is_empty()
-	if _loaded:
-		_legacy_original = _deep_copy(legacy)
-	return _loaded
+	return EcologyLegacyCodecScript.load_into(self, config_path)
 
 
 func is_loaded() -> bool:
@@ -792,65 +683,8 @@ func _validate_community(community: Dictionary, source_path: String) -> void:
 		for ref_value in nested_refs_value:
 			_validate_community_reference(String(ref_value), source_path, "community %s" % community_id)
 
-	_validate_legacy_rules(community, source_path, community_id)
-
-
-func _validate_legacy_rules(
-	community: Dictionary,
-	source_path: String,
-	community_id: String
-) -> void:
-	var rule_specs := {
-		"flora": {"fields": FLORA_RULE_FIELDS, "category": "plants"},
-		"fauna": {"fields": FAUNA_RULE_FIELDS, "category": "animals"},
-		"ambient": {"fields": AMBIENT_RULE_FIELDS, "category": "ambient"},
-	}
-	for rule_kind in rule_specs:
-		var rules_value: Variant = community.get(rule_kind, [])
-		if not rules_value is Array:
-			continue
-		for index in rules_value.size():
-			var rule_value: Variant = rules_value[index]
-			if not rule_value is Dictionary:
-				_add_error(source_path, "community %s.%s[%d] must be a Dictionary" % [community_id, rule_kind, index])
-				continue
-			var rule: Dictionary = rule_value
-			if not _reject_unknown_fields(
-				rule,
-				rule_specs[rule_kind]["fields"],
-				source_path,
-				"community %s.%s[%d]" % [community_id, rule_kind, index]
-			):
-				continue
-			var species_pool: Variant = rule.get("species", null)
-			if not species_pool is Array or species_pool.is_empty():
-				_add_error(source_path, "community %s.%s[%d].species must be a non-empty Array" % [community_id, rule_kind, index])
-				continue
-			for species_id_value in species_pool:
-				_validate_species_reference(
-					String(species_id_value),
-					String(rule_specs[rule_kind]["category"]),
-					source_path,
-					"community %s.%s[%d]" % [community_id, rule_kind, index]
-				)
-			if rule_kind == "fauna" and rule.get("distribution", {}) is Dictionary:
-				var distribution: Dictionary = rule.get("distribution", {})
-				var substitution_value: Variant = distribution.get("substitution", {})
-				if substitution_value is Dictionary and not substitution_value.is_empty():
-					var substitution: Dictionary = substitution_value
-					if _reject_unknown_fields(
-						substitution,
-						FAUNA_SUBSTITUTION_FIELDS,
-						source_path,
-						"community %s.%s[%d].distribution.substitution"
-						% [community_id, rule_kind, index]
-					):
-						_validate_species_reference(
-							String(substitution.get("species", "")),
-							"animals",
-							source_path,
-							"community %s fauna substitution" % community_id
-						)
+	# legacy 形状的内嵌规则校验已拆至 ecology_legacy_codec.gd（manifest 与 legacy 共用）。
+	EcologyLegacyCodecScript.validate_community_rules(self, community, source_path, community_id)
 
 
 func _validate_biome(biome: Dictionary, source_path: String) -> void:

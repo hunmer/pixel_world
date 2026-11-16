@@ -1,11 +1,11 @@
 class_name TerrainMaterialRegistry
 extends RefCounted
 
-## Configuration-driven terrain surface/material catalog.
+## terrain_material_registry.gd — 配置驱动的地形表面/材质目录（装配层）。
 ##
-## The registry owns validation, biome overrides, fallback resolution, and
-## texture caching. It deliberately has no biome name branches and does not use
-## Main's preload or texture-padding helpers.
+## 注册表拥有校验、biome override、fallback 解析与贴图缓存；纯解析/规范化逻辑拆至
+## terrain_material_parser.gd（经 reporter / texture_loader 回调注入，错误码与顺序不变）。
+## 它刻意不包含 biome 名称分支，也不使用 Main 的 preload 或贴图 padding helper。
 ##
 ## Supported material shape:
 ##
@@ -26,36 +26,11 @@ extends RefCounted
 ## also accepts a standalone material container, keyed definitions, an array of
 ## definitions, or one definition containing `surface_id`.
 
-const CONTAINER_FIELDS := [
-	"fallback_surface_id",
-	"surfaces",
-	"definitions",
-]
-const MATERIAL_FIELDS := [
-	"surface_id",
-	"top_texture",
-	"top_texture_path",
-	"column_texture",
-	"column_texture_path",
-	"underwater_texture",
-	"underwater_texture_path",
-	"minimap_color",
-	"tags",
-	"traits",
-	"biome_overrides",
-	"biome_override",
-]
-const OVERRIDE_FIELDS := [
-	"top_texture",
-	"top_texture_path",
-	"column_texture",
-	"column_texture_path",
-	"underwater_texture",
-	"underwater_texture_path",
-	"minimap_color",
-	"tags",
-	"traits",
-]
+const MaterialParser = preload("res://scripts/world/terrain_material_parser.gd")
+
+const CONTAINER_FIELDS: Array = MaterialParser.CONTAINER_FIELDS
+const MATERIAL_FIELDS: Array = MaterialParser.MATERIAL_FIELDS
+const OVERRIDE_FIELDS: Array = MaterialParser.OVERRIDE_FIELDS
 const TEXTURE_ROLES: Array[StringName] = [&"top", &"column", &"underwater"]
 
 var _materials: Dictionary = {}
@@ -65,6 +40,13 @@ var _reported_error_keys: Dictionary = {}
 var _raw_texture_cache: Dictionary = {}
 var _processed_texture_cache: Dictionary = {}
 var _texture_processor := Callable()
+var _parser_reporter := Callable()
+var _parser_texture_loader := Callable()
+
+
+func _init() -> void:
+	_parser_reporter = Callable(self, "_report")
+	_parser_texture_loader = Callable(self, "_load_texture")
 
 
 ## Loads the `materials` section without validating unrelated generation keys.
@@ -138,88 +120,39 @@ func load_materials(
 	source_name := "materials"
 ) -> bool:
 	var error_count_before := _errors.size()
-	var entries: Array[Dictionary] = []
-	var requested_fallback := &""
-	if materials_config is Array:
-		for index in (materials_config as Array).size():
-			var value: Variant = materials_config[index]
-			if not value is Dictionary:
-				_report(
-					&"invalid_material_definition",
-					&"",
-					"[%d]" % index,
-					source_name,
-					"material entry must be a Dictionary"
-				)
-				continue
-			entries.append({"declared_id": &"", "definition": value})
-	elif materials_config is Dictionary:
-		var config: Dictionary = materials_config
-		if config.has("surface_id"):
-			entries.append({"declared_id": &"", "definition": config})
-		else:
-			var definitions_value: Variant
-			var is_container := config.has("surfaces") or config.has("definitions")
-			if is_container:
-				if not _reject_unknown_fields(
-					config,
-					CONTAINER_FIELDS,
-					&"",
-					source_name
-				):
-					return false
-				if config.has("surfaces") and config.has("definitions"):
-					_report(
-						&"ambiguous_material_container",
-						&"",
-						"surfaces",
-						source_name,
-						"use either surfaces or definitions, not both"
-					)
-					return false
-				definitions_value = config.get("surfaces", config.get("definitions", {}))
-				var fallback_value: Variant = config.get("fallback_surface_id", "")
-				if not _fallback_value_is_valid(fallback_value, source_name):
-					return false
-				requested_fallback = StringName(fallback_value)
-			else:
-				var direct_definitions := config.duplicate(true)
-				var fallback_value: Variant = direct_definitions.get("fallback_surface_id", "")
-				if not _fallback_value_is_valid(fallback_value, source_name):
-					return false
-				requested_fallback = StringName(fallback_value)
-				direct_definitions.erase("fallback_surface_id")
-				definitions_value = direct_definitions
-			if not _collect_entries(definitions_value, entries, source_name):
-				return false
-	else:
-		_report(
-			&"invalid_materials_config",
-			&"",
-			"materials",
-			source_name,
-			"materials must be a Dictionary or Array"
-		)
+	var collected := MaterialParser.collect_material_entries(
+		materials_config,
+		source_name,
+		_parser_reporter
+	)
+	if not bool(collected["ok"]):
 		return false
-
-	for entry: Dictionary in entries:
+	for entry: Dictionary in collected["entries"]:
 		register_surface(
 			entry["definition"],
 			entry["declared_id"],
 			source_name
 		)
-	if not requested_fallback.is_empty():
-		if not _materials.has(requested_fallback):
-			_report(
-				&"unknown_fallback_surface",
-				requested_fallback,
-				"fallback_surface_id",
-				source_name,
-				"fallback surface is not registered"
-			)
-		else:
-			_fallback_surface_id = requested_fallback
+	_apply_requested_fallback(collected["fallback"], source_name)
 	return _errors.size() == error_count_before
+
+
+func _apply_requested_fallback(
+	requested_fallback: StringName,
+	source_name: String
+) -> void:
+	if requested_fallback.is_empty():
+		return
+	if not _materials.has(requested_fallback):
+		_report(
+			&"unknown_fallback_surface",
+			requested_fallback,
+			"fallback_surface_id",
+			source_name,
+			"fallback surface is not registered"
+		)
+		return
+	_fallback_surface_id = requested_fallback
 
 
 func register_surface(
@@ -276,11 +209,13 @@ func register_surface(
 	):
 		return false
 
-	var canonical := _canonicalize_definition(
+	var canonical := MaterialParser.canonicalize_definition(
 		definition,
 		surface_id,
 		source_name,
-		false
+		false,
+		_parser_reporter,
+		_parser_texture_loader
 	)
 	if canonical.is_empty():
 		return false
@@ -348,18 +283,18 @@ func resolve(
 	var material := base.duplicate(true)
 	var overrides: Dictionary = base.get("biome_overrides", {})
 	if not biome_id.is_empty() and overrides.has(biome_id):
-		material = _merge_override(material, overrides[biome_id])
+		material = MaterialParser.merge_override(material, overrides[biome_id])
 	material.erase("biome_overrides")
 	material["surface_id"] = resolved_id
 	material["requested_surface_id"] = surface_id
 	material["biome_id"] = biome_id
 	material["used_fallback"] = used_fallback
-	material["column_texture_path"] = _resolve_texture_spec(
+	material["column_texture_path"] = MaterialParser.resolve_texture_spec(
 		material.get("column_texture_spec", {"mode": "top"}),
 		String(material.get("top_texture_path", "")),
 		""
 	)
-	material["underwater_texture_path"] = _resolve_texture_spec(
+	material["underwater_texture_path"] = MaterialParser.resolve_texture_spec(
 		material.get("underwater_texture_spec", {"mode": "none"}),
 		String(material.get("top_texture_path", "")),
 		String(material.get("column_texture_path", ""))
@@ -463,491 +398,15 @@ func is_valid() -> bool:
 	return _errors.is_empty()
 
 
-func _collect_entries(
-	definitions_value: Variant,
-	entries: Array[Dictionary],
+func _reject_unknown_fields(
+	value: Dictionary,
+	allowed_fields: Array,
+	surface_id: StringName,
 	source_name: String
 ) -> bool:
-	if definitions_value is Dictionary:
-		for surface_id_value in definitions_value:
-			if (
-				not surface_id_value is String
-				and not surface_id_value is StringName
-			):
-				_report(
-					&"invalid_surface_id",
-					&"",
-					String(surface_id_value),
-					source_name,
-					"surface dictionary keys must be non-empty strings"
-				)
-				continue
-			var definition_value: Variant = definitions_value[surface_id_value]
-			if not definition_value is Dictionary:
-				_report(
-					&"invalid_material_definition",
-					StringName(surface_id_value),
-					String(surface_id_value),
-					source_name,
-					"material definition must be a Dictionary"
-				)
-				continue
-			entries.append({
-				"declared_id": StringName(surface_id_value),
-				"definition": definition_value,
-			})
-		return true
-	if definitions_value is Array:
-		for index in (definitions_value as Array).size():
-			var definition_value: Variant = definitions_value[index]
-			if not definition_value is Dictionary:
-				_report(
-					&"invalid_material_definition",
-					&"",
-					"[%d]" % index,
-					source_name,
-					"material definition must be a Dictionary"
-				)
-				continue
-			entries.append({"declared_id": &"", "definition": definition_value})
-		return true
-	_report(
-		&"invalid_material_definitions",
-		&"",
-		"surfaces",
-		source_name,
-		"surface definitions must be a Dictionary or Array"
+	return MaterialParser.reject_unknown_fields(
+		value, allowed_fields, surface_id, source_name, _parser_reporter
 	)
-	return false
-
-
-func _canonicalize_definition(
-	definition: Dictionary,
-	surface_id: StringName,
-	source_name: String,
-	is_override: bool
-) -> Dictionary:
-	var allowed_fields := OVERRIDE_FIELDS if is_override else MATERIAL_FIELDS
-	if not _reject_unknown_fields(
-		definition,
-		allowed_fields,
-		surface_id,
-		source_name
-	):
-		return {}
-	var canonical := {}
-
-	var top_result := _texture_field(
-		definition,
-		"top_texture",
-		"top_texture_path",
-		surface_id,
-		source_name,
-		is_override,
-		["path"]
-	)
-	if not bool(top_result["valid"]):
-		return {}
-	if bool(top_result["present"]):
-		canonical["top_texture_path"] = top_result["path"]
-	elif not is_override:
-		_report(
-			&"missing_top_texture",
-			surface_id,
-			"top_texture",
-			source_name,
-			"top_texture is required"
-		)
-		return {}
-
-	var column_result := _texture_field(
-		definition,
-		"column_texture",
-		"column_texture_path",
-		surface_id,
-		source_name,
-		true,
-		["path", "top"]
-	)
-	if not bool(column_result["valid"]):
-		return {}
-	if bool(column_result["present"]):
-		canonical["column_texture_spec"] = column_result["spec"]
-	elif not is_override:
-		canonical["column_texture_spec"] = {"mode": "top"}
-
-	var underwater_result := _texture_field(
-		definition,
-		"underwater_texture",
-		"underwater_texture_path",
-		surface_id,
-		source_name,
-		true,
-		["path", "top", "column", "none"]
-	)
-	if not bool(underwater_result["valid"]):
-		return {}
-	if bool(underwater_result["present"]):
-		canonical["underwater_texture_spec"] = underwater_result["spec"]
-	elif not is_override:
-		canonical["underwater_texture_spec"] = {"mode": "none"}
-
-	if definition.has("minimap_color"):
-		var color_value: Variant = _parse_color(
-			definition["minimap_color"],
-			surface_id,
-			source_name
-		)
-		if color_value == null:
-			return {}
-		canonical["minimap_color"] = color_value
-	elif not is_override:
-		_report(
-			&"missing_minimap_color",
-			surface_id,
-			"minimap_color",
-			source_name,
-			"minimap_color is required"
-		)
-		return {}
-
-	if definition.has("tags"):
-		var tags_value: Variant = _parse_tags(
-			definition["tags"],
-			surface_id,
-			source_name
-		)
-		if tags_value == null:
-			return {}
-		canonical["tags"] = tags_value
-	elif not is_override:
-		canonical["tags"] = []
-
-	if definition.has("traits"):
-		if not definition["traits"] is Dictionary:
-			_report(
-				&"invalid_material_traits",
-				surface_id,
-				"traits",
-				source_name,
-				"traits must be a Dictionary"
-			)
-			return {}
-		canonical["traits"] = (definition["traits"] as Dictionary).duplicate(true)
-	elif not is_override:
-		canonical["traits"] = {}
-
-	if not is_override:
-		if definition.has("biome_overrides") and definition.has("biome_override"):
-			_report(
-				&"ambiguous_biome_overrides",
-				surface_id,
-				"biome_overrides",
-				source_name,
-				"use biome_overrides or biome_override, not both"
-			)
-			return {}
-		var overrides_value: Variant = definition.get(
-			"biome_overrides",
-			definition.get("biome_override", {})
-		)
-		if not overrides_value is Dictionary:
-			_report(
-				&"invalid_biome_overrides",
-				surface_id,
-				"biome_overrides",
-				source_name,
-				"biome overrides must be a Dictionary"
-			)
-			return {}
-		var overrides := {}
-		for biome_id_value in overrides_value:
-			if (
-				not biome_id_value is String
-				and not biome_id_value is StringName
-			):
-				_report(
-					&"invalid_biome_override",
-					surface_id,
-					"biome_overrides",
-					source_name,
-					"biome override ids must be non-empty strings"
-				)
-				return {}
-			var biome_id := StringName(biome_id_value)
-			var override_value: Variant = overrides_value[biome_id_value]
-			if biome_id.is_empty() or not override_value is Dictionary:
-				_report(
-					&"invalid_biome_override",
-					surface_id,
-					"biome_overrides.%s" % biome_id,
-					source_name,
-					"biome override requires a non-empty id and Dictionary"
-				)
-				return {}
-			var canonical_override := _canonicalize_definition(
-				override_value,
-				surface_id,
-				"%s[%s]" % [source_name, biome_id],
-				true
-			)
-			if canonical_override.is_empty() and not override_value.is_empty():
-				return {}
-			overrides[biome_id] = canonical_override
-		canonical["biome_overrides"] = overrides
-	return canonical
-
-
-func _texture_field(
-	definition: Dictionary,
-	field_name: String,
-	path_alias: String,
-	surface_id: StringName,
-	source_name: String,
-	_optional: bool,
-	allowed_modes: Array[String]
-) -> Dictionary:
-	if definition.has(field_name) and definition.has(path_alias):
-		_report(
-			&"ambiguous_texture_field",
-			surface_id,
-			field_name,
-			source_name,
-			"use %s or %s, not both" % [field_name, path_alias]
-		)
-		return {"valid": false, "present": true}
-	if not definition.has(field_name) and not definition.has(path_alias):
-		return {"valid": true, "present": false}
-	var value: Variant = definition.get(field_name, definition.get(path_alias))
-	var spec := _parse_texture_spec(
-		value,
-		allowed_modes,
-		surface_id,
-		field_name,
-		source_name
-	)
-	if spec.is_empty():
-		return {"valid": false, "present": true}
-	return {
-		"valid": true,
-		"present": true,
-		"path": spec.get("path", ""),
-		"spec": spec,
-	}
-
-
-func _parse_texture_spec(
-	value: Variant,
-	allowed_modes: Array[String],
-	surface_id: StringName,
-	field_name: String,
-	source_name: String
-) -> Dictionary:
-	var mode := ""
-	var texture_path := ""
-	if value is String or value is StringName:
-		var text := String(value).strip_edges()
-		match text:
-			"reuse_top", "top", "@top":
-				mode = "top"
-			"reuse_column", "column", "@column":
-				mode = "column"
-			"none", "":
-				mode = "none"
-			_:
-				mode = "path"
-				texture_path = text
-	elif value is Dictionary:
-		var dictionary: Dictionary = value
-		var dictionary_fields_valid := true
-		for key_value in dictionary:
-			if String(key_value) not in ["path", "reuse"]:
-				dictionary_fields_valid = false
-				break
-		if not dictionary_fields_valid:
-			mode = "invalid"
-		elif dictionary.has("path") and dictionary.has("reuse"):
-			mode = "invalid"
-		elif dictionary.has("path"):
-			if dictionary["path"] is String or dictionary["path"] is StringName:
-				mode = "path"
-				texture_path = String(dictionary["path"])
-			else:
-				mode = "invalid"
-		elif dictionary.has("reuse"):
-			if dictionary["reuse"] is String or dictionary["reuse"] is StringName:
-				match String(dictionary["reuse"]):
-					"reuse_top", "top", "@top":
-						mode = "top"
-					"reuse_column", "column", "@column":
-						mode = "column"
-					"none":
-						mode = "none"
-					_:
-						mode = "invalid"
-			else:
-				mode = "invalid"
-		else:
-			mode = "invalid"
-	else:
-		mode = "invalid"
-	if mode not in allowed_modes:
-		_report(
-			&"invalid_texture_spec",
-			surface_id,
-			field_name,
-			source_name,
-			"texture must be a path or one of: %s" % ", ".join(allowed_modes)
-		)
-		return {}
-	if mode == "path":
-		if texture_path.is_empty():
-			_report(
-				&"invalid_texture_path",
-				surface_id,
-				field_name,
-				source_name,
-				"texture path cannot be empty"
-			)
-			return {}
-		if _load_texture(texture_path, surface_id, field_name, source_name) == null:
-			return {}
-		return {"mode": "path", "path": texture_path}
-	return {"mode": mode}
-
-
-func _parse_color(
-	value: Variant,
-	surface_id: StringName,
-	source_name: String
-) -> Variant:
-	var color: Color
-	if value is Color:
-		color = value
-	elif value is String and Color.html_is_valid(value):
-		color = Color.from_string(value, Color.MAGENTA)
-	elif value is Array and value.size() in [3, 4]:
-		for component in value:
-			if not component is float and not component is int:
-				_report(
-					&"invalid_minimap_color",
-					surface_id,
-					"minimap_color",
-					source_name,
-					"color components must be numeric"
-				)
-				return null
-		color = Color(
-			float(value[0]),
-			float(value[1]),
-			float(value[2]),
-			float(value[3]) if value.size() == 4 else 1.0
-		)
-	else:
-		_report(
-			&"invalid_minimap_color",
-			surface_id,
-			"minimap_color",
-			source_name,
-			"minimap_color must be Color, HTML string, or RGB/RGBA array"
-		)
-		return null
-	if (
-		color.r < 0.0 or color.r > 1.0
-		or color.g < 0.0 or color.g > 1.0
-		or color.b < 0.0 or color.b > 1.0
-		or color.a < 0.0 or color.a > 1.0
-	):
-		_report(
-			&"invalid_minimap_color",
-			surface_id,
-			"minimap_color",
-			source_name,
-			"minimap_color components must be in 0..1"
-		)
-		return null
-	return color
-
-
-func _parse_tags(
-	value: Variant,
-	surface_id: StringName,
-	source_name: String
-) -> Variant:
-	if not value is Array and not value is PackedStringArray:
-		_report(
-			&"invalid_material_tags",
-			surface_id,
-			"tags",
-			source_name,
-			"tags must be an Array of non-empty strings"
-		)
-		return null
-	var tags: Array[StringName] = []
-	for item in value:
-		if not item is String and not item is StringName:
-			_report(
-				&"invalid_material_tags",
-				surface_id,
-				"tags",
-				source_name,
-				"tags must contain only strings"
-			)
-			return null
-		var tag := StringName(item)
-		if tag.is_empty():
-			_report(
-				&"invalid_material_tags",
-				surface_id,
-				"tags",
-				source_name,
-				"tags cannot contain empty values"
-			)
-			return null
-		if tag not in tags:
-			tags.append(tag)
-	return tags
-
-
-func _merge_override(base: Dictionary, override: Dictionary) -> Dictionary:
-	var result := base.duplicate(true)
-	for field in [
-		"top_texture_path",
-		"column_texture_spec",
-		"underwater_texture_spec",
-		"minimap_color",
-	]:
-		if override.has(field):
-			result[field] = override[field]
-	if override.has("traits"):
-		var merged_traits: Dictionary = result.get("traits", {}).duplicate(true)
-		merged_traits.merge(override["traits"], true)
-		result["traits"] = merged_traits
-	if override.has("tags"):
-		var merged_tags: Array = result.get("tags", []).duplicate()
-		for tag in override["tags"]:
-			if tag not in merged_tags:
-				merged_tags.append(tag)
-		result["tags"] = merged_tags
-	return result
-
-
-func _resolve_texture_spec(
-	spec_value: Variant,
-	top_path: String,
-	column_path: String
-) -> String:
-	if not spec_value is Dictionary:
-		return ""
-	var spec: Dictionary = spec_value
-	match String(spec.get("mode", "none")):
-		"path":
-			return String(spec.get("path", ""))
-		"top":
-			return top_path
-		"column":
-			return column_path
-	return ""
 
 
 func _load_texture(
@@ -981,40 +440,6 @@ func _load_texture(
 		return null
 	_raw_texture_cache[texture_path] = resource
 	return resource
-
-
-func _reject_unknown_fields(
-	value: Dictionary,
-	allowed_fields: Array,
-	surface_id: StringName,
-	source_name: String
-) -> bool:
-	var success := true
-	for field_value in value:
-		var field := String(field_value)
-		if field not in allowed_fields:
-			_report(
-				&"unknown_material_field",
-				surface_id,
-				field,
-				source_name,
-				"unknown material field: %s" % field
-			)
-			success = false
-	return success
-
-
-func _fallback_value_is_valid(value: Variant, source_name: String) -> bool:
-	if value is String or value is StringName:
-		return true
-	_report(
-		&"invalid_fallback_surface",
-		&"",
-		"fallback_surface_id",
-		source_name,
-		"fallback_surface_id must be a String"
-	)
-	return false
 
 
 func _report(

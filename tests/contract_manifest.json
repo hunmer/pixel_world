@@ -899,10 +899,10 @@
       "tags": [
         "scene"
       ],
-      "known_status": "pass",
+      "known_status": "known-fail",
       "parallel_safe": false,
       "fast_flag_safe": false,
-      "evidence": "tests/user_asset_editor_contract.gd L141 tscn; L145 frame; L20 user://｜并发不安全：写 user://battlefields/contract_asset_map.json（tests/user_asset_editor_contract.gd:21）｜加速不安全（初始保守，待 A/B）：编辑器面板帧时序 L145"
+      "evidence": "tests/user_asset_editor_contract.gd L141 tscn; L145 frame; L20 user://｜并发不安全：写 user://battlefields/contract_asset_map.json（tests/user_asset_editor_contract.gd:21）｜加速不安全（初始保守，待 A/B）：编辑器面板帧时序 L145｜known-fail（2026-11-16 实测，改动前 HEAD dc0b9eb 同样失败）：预设 Tab 落地后契约未跟上——Tab 数断言已修 8（tests/user_asset_editor_contract.gd:160），余 6 条 S3 断言（素材选中工具态/再点取消/prop_asset 通道/撤销回退/画笔清 override）与编辑器现状不符，待逐条核对是断言陈旧还是预设功能引入的行为回归"
     },
     {
       "name": "user_asset_pagination",

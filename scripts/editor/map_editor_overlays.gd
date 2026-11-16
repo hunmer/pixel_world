@@ -3,7 +3,9 @@
 ## 左上工具条 / 条件替换弹窗 / 最近吸取栏 / 左下格子信息条 / 选择模式弹窗 /
 ## 区域端点行 + 替换候选项枚举与编码解析。全部 static，ed=map_editor 实例；
 ## 节点属性与加树顺序与原 map_editor.gd 内联实现逐行一致。
-## 直建控件（Button/OptionButton.new）按 §2.2 决策留在门面，经参数传入。
+## 按钮一律经 UIFactory.button 创建（PixelButton 组件、音效已关；
+## 工具条/键帽条等走 styled=false 保持组件主题原观感）；
+## OptionButton 等其余控件按 §2.2 决策留在门面，经参数传入。
 
 class_name MapEditorOverlays
 extends RefCounted
@@ -48,7 +50,7 @@ static func build_tool_bar(ed) -> Control:
 	ed._tool_buttons[ed.Tool.PAINT].button_pressed = true
 	# 移动工具开关：ToolBox 第 8 钮（用户已取消 7 钮契约）。独立开关，
 	# 不入 tool_group（不与 7 个画布工具互斥，可任意工具下叠加开启）
-	var move_toggle: Button = ed._pixel_btn()
+	var move_toggle: Button = UIFactoryScript.button("", Callable(), "", false)
 	move_toggle.name = "MoveToolToggle"
 	move_toggle.toggle_mode = true
 	var move_icon: Texture2D = UIThemeScript.icon("move")
@@ -232,9 +234,10 @@ static func build_cell_info(ed) -> Control:
 	return panel
 
 
-## 工具条按钮（toggle + ButtonGroup；有图标只显图标，无图标回退文字）
+## 工具条按钮（toggle + ButtonGroup；有图标只显图标，无图标回退文字；
+## 工厂默认叠 style_button，等价原先建后手动 UIThemeScript.style_button）
 static func add_tool_btn(ed, parent: Node, group: ButtonGroup, tool: int, text: String, icon_name := "") -> void:
-	var b: Button = ed._pixel_btn()
+	var b: Button = UIFactoryScript.button()
 	b.toggle_mode = true
 	b.button_group = group
 	var icon: Texture2D = null
@@ -255,7 +258,6 @@ static func add_tool_btn(ed, parent: Node, group: ButtonGroup, tool: int, text: 
 		b.text = text
 		b.tooltip_text = text
 	b.set_meta("tool", tool)
-	UIThemeScript.style_button(b)
 	parent.add_child(b)
 	ed._tool_buttons[tool] = b
 
@@ -308,23 +310,14 @@ static func build_selection_popup(ed, mode_option: OptionButton) -> void:
 	var btns := HBoxContainer.new()
 	btns.name = "RegionBtnRow"
 	btns.add_theme_constant_override("separation", 4)
-	var fill_btn: Button = ed._pixel_btn()
+	var fill_btn: Button = UIFactoryScript.button("填充区域", ed._on_region_fill_pressed)
 	fill_btn.name = "RegionFillBtn"
-	fill_btn.text = "填充区域"
-	fill_btn.pressed.connect(ed._on_region_fill_pressed)
-	UIThemeScript.style_button(fill_btn)
 	btns.add_child(fill_btn)
-	var clear_btn: Button = ed._pixel_btn()
+	var clear_btn: Button = UIFactoryScript.button("清除区域", ed._on_region_clear_pressed)
 	clear_btn.name = "RegionClearBtn"
-	clear_btn.text = "清除区域"
-	clear_btn.pressed.connect(ed._on_region_clear_pressed)
-	UIThemeScript.style_button(clear_btn)
 	btns.add_child(clear_btn)
-	var close_btn: Button = ed._pixel_btn()
+	var close_btn: Button = UIFactoryScript.button("关闭", ed._close_selection_popup)
 	close_btn.name = "CloseBtn"
-	close_btn.text = "关闭"
-	close_btn.pressed.connect(ed._close_selection_popup)
-	UIThemeScript.style_button(close_btn)
 	btns.add_child(close_btn)
 	box.add_child(btns)
 
@@ -332,23 +325,14 @@ static func build_selection_popup(ed, mode_option: OptionButton) -> void:
 	var ops := HBoxContainer.new()
 	ops.name = "RegionOpRow"
 	ops.add_theme_constant_override("separation", 4)
-	var copy_btn: Button = ed._pixel_btn()
+	var copy_btn: Button = UIFactoryScript.button("复制区域", ed._on_region_copy_pressed)
 	copy_btn.name = "CopyRegionBtn"
-	copy_btn.text = "复制区域"
-	copy_btn.pressed.connect(ed._on_region_copy_pressed)
-	UIThemeScript.style_button(copy_btn)
 	ops.add_child(copy_btn)
-	var cut_btn: Button = ed._pixel_btn()
+	var cut_btn: Button = UIFactoryScript.button("剪切区域", ed._on_region_cut_pressed)
 	cut_btn.name = "CutRegionBtn"
-	cut_btn.text = "剪切区域"
-	cut_btn.pressed.connect(ed._on_region_cut_pressed)
-	UIThemeScript.style_button(cut_btn)
 	ops.add_child(cut_btn)
-	var paste_btn: Button = ed._pixel_btn()
+	var paste_btn: Button = UIFactoryScript.button("粘贴区域", ed._on_region_paste_pressed)
 	paste_btn.name = "PasteRegionBtn"
-	paste_btn.text = "粘贴区域"
-	paste_btn.pressed.connect(ed._on_region_paste_pressed)
-	UIThemeScript.style_button(paste_btn)
 	ops.add_child(paste_btn)
 	box.add_child(ops)
 	var op_hint := UIFactoryScript.label("CTRL+C/X/V 复制/剪切/粘贴 · 区域内拖动=移动 · ESC 取消", 9, TEXT_DIM)
@@ -379,10 +363,11 @@ static func build_region_endpoint_row(ed, which: String, store: Dictionary) -> H
 
 
 ## 右下角 34×30 键盘图标；节点名保留 EditorHintBar，点击打开完整键帽弹窗。
-## 原门面 Button.new() 直建控件改经 ed._pixel_btn()（PixelButton 组件，
-## 音效已关）——属性与加树顺序与原实现逐行一致。
+## 原直建控件已收敛至 UIFactory.button(styled=false)（PixelButton 组件、
+## 音效已关、不叠 style_button override 保持组件主题）——属性与加树顺序
+## 与原实现逐行一致。
 static func build_hint_bar(ed) -> Button:
-	var button: Button = ed._pixel_btn()
+	var button: Button = UIFactoryScript.button("", Callable(), "", false)
 	button.name = "EditorHintBar"
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.tooltip_text = "操作提示"

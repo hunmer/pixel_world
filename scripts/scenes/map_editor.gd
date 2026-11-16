@@ -34,7 +34,7 @@
 ## 方向键（上/下/左/右=y-/y+/x-/x+）逐格平移，每键一步历史，越界仅报错；
 ## 原地松开=纯点击；关闭后回到区域内拖动/两次点击语义。
 ## UI 样式/控件统一走 scripts/ui（ui_theme.gd 主题 + ui_factory.gd 工厂），
-## 按钮一律由 ui/components 像素组件创建（UIFactory / PixelButton 预加载），
+## 按钮一律经 UIFactory 工厂创建（ui/components 像素组件，组件预加载只在工厂内），
 ## 本文件不再自带样式 helper；领域按钮工厂与悬浮层/弹窗构建在
 ## scripts/editor/map_editor_overlays.gd 等模块，本门面只保留总装与接线。
 ##
@@ -97,8 +97,6 @@ const HINT_ITEMS := [
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
-## 统一按钮组件（ui/components）：tile/工具条等领域 toggle 按钮直接创建用。
-const PixelButtonScript = preload("res://ui/components/pixel_button.gd")
 
 ## 配色常量统一取自 ui_theme.gd（本文件别名保持既有引用不变）。
 const BG := UIThemeScript.BG
@@ -609,14 +607,13 @@ func _on_tab_changed(_idx: int) -> void:
 # ============================================================
 # UI 构建辅助（统一样式系统 + 控件工厂）
 # ============================================================
-## 统一按钮组件入口：PixelButton + 禁用自带音效。
+## 统一按钮组件入口：原 PixelButtonScript.new() 直建已收敛至 UIFactory.button
+## （styled=false：不叠加 style_button 逐控件 override，保持组件自身主题与
+## 编辑器 tile/工具条原观感）。
 ## 编辑器内按钮音效由全局 Sfx autoload（game_sfx.gd）对 BaseButton 统一挂接，
-## 组件自带 HoverSfx/ClickSfx 会叠加双声，故一律关闭、只留全局钩子。
+## 组件自带 HoverSfx/ClickSfx 会叠加双声，故一律关闭、只留全局钩子（工厂已禁）。
 func _pixel_btn() -> Button:
-	var b := PixelButtonScript.new()
-	b.hover_sfx_enabled = false
-	b.click_sfx_enabled = false
-	return b
+	return UIFactoryScript.button("", Callable(), "", false)
 
 
 # ============================================================

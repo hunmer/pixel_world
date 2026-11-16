@@ -1,6 +1,6 @@
 # 架构总览
 
-> 更新：2026-11-15（第二轮增量：胜利条件/增援/交换框架、编辑器区域操作与预设、UI 设计规范 DESIGN.md + 布局容器、全量测试基线）。
+> 更新：2026-11-16（三单体拆分落地：main/map_editor/battle → 模块化装配层；新增 gdtest 与 godot-autosim 两个 vendored 测试插件；统一契约 runner `tools/run_contracts.py`；上一轮：胜利条件/增援/交换、编辑器区域操作、DESIGN.md 组件库、全量基线）。
 
 ## 一句话定位
 
@@ -33,7 +33,11 @@ Game.tscn (game_entry.gd — 战旗会话入口)
 main.tscn (Node2D "Main" + "DebugConsoleCommands" 子节点)
         │
         ▼
-main.gd (4319 行 / 176 函数)  ← 世界引擎中枢
+main.gd (2283 行 / 128 函数)  ← 世界引擎装配层（2026-11-16 拆分后）
+   │  ├─ 能力模块：scripts/world/ 23 .gd（植被 flora_spawner / 动物 fauna_streamer+animal_runtime /
+   │  │     生态匹配 ecosystem_match / 物种 species_picker / 校验 ecology_config_validator /
+   │  │     小地图 minimap_renderer / 遮挡 player_occlusion_controller / 表现装配 presentation_stage 等，
+   │  │     全部 RefCounted + Callable 注入、无反向依赖；_configure_generation_services() 统一装配）
    │  ├─ 流式生成：stream_extent 窗口内按需 _spawn_cell / _free_cell（网格坐标不变，渲染走 3D）
    │  ├─ 生态：TerrainSampler → CellContext → EcologyResolver → CellState → 渲染
    │  ├─ 动物：CommunitySpawner + WanderingAnimal（AnimatedSprite3D，行为栈）
@@ -48,20 +52,21 @@ main.gd (4319 行 / 176 函数)  ← 世界引擎中枢
         └─ E                      → MapEditor.tscn（种子生成/地形编辑/阵营角色放置/区域复制-移动-预设/取色器/保存 JSON）
                                    └─ AssetLibraryPanel：用户素材库（user://custom_assets）
 
-战斗侧（Battle.tscn / battle.gd）
+战斗侧（Battle.tscn / battle.gd，2026-11-16 拆分后 1444 行装配层）
    ├─ 共享结算内核 battle_action_resolver.gd ──→ automation/ 无表现回放复用（CLI）
    ├─ 玩法框架：turn_manager.check_victory（rout/defend_turns/seize 注入式胜利判定）
    │            + core/reinforcement_spawner.gd（按回合波次增援，演出/无头两链路共用）
    │            + systems/trade_system.gd（相邻友军物品传递）
    ├─ 演出层：battle_presentation + turn_director + action_anim + immersive_camera
    │          + result_presentation + encounter_transition（LoadingScreen 预热）
-   ├─ battle_ui（沉浸开关/快进/交换菜单）+ Sfx 音效接线 + range_overlay
+   │          + battle_camera_kick / battle_fx / battle_result_stage / battle_sfx（拆分新增专项模块）
+   ├─ battle_save.gd（行动边界快照）+ battle_pref_panel.gd（托管偏好）+ battle_ui + Sfx + range_overlay
    └─ GameSession.commit() 行动边界落盘 user://battle_saves/
 ```
 
 ### 两条并行子系统 + 一份设计 bible
 
-1. **世界 / 生态子系统（原 pixel_world）**：`main.gd` 是事实中枢；`scripts/world/`、`scripts/ecology/`、`scripts/animals/` 是它调用的能力模块。设计原则是"**新增内容走配置/模块，不要往 main.gd 里加分支**"（见 `config/ecology/README.md`）。
+1. **世界 / 生态子系统（原 pixel_world）**：`main.gd` 是**装配层与主循环**（2026-11-16 拆分后 2283 行）；`scripts/world/`（23 .gd）、`scripts/ecology/`、`scripts/animals/` 是它装配的能力模块（RefCounted、Callable 注入、无反向依赖）。设计原则是"**新增内容走配置/模块，不要往 main.gd 里加分支**"（见 `config/ecology/README.md`）；继续拆分的规则见 `docs/plans/main_split_plan.md`。
 2. **战棋战斗子系统（从 phaserjs 迁移）**：`scripts/core/`（纯逻辑 + 存档 codec/store + 增援刷入）+ `scripts/systems/`（战斗结算 + AI 难度 + 交换）+ `scripts/iso/`（等距/3D 渲染层）+ `scripts/battle/`（演出/UI/自动化）+ `scripts/editor/`（战场编辑器模型/画布/区域剪贴板/预设存储/素材面板）。与世界的唯一耦合点是 `scripts/core/world_to_chapter.gd`。
 3. **`story/`（19 个 .md）**：完整的"古代魔法 + 多国争霸"战旗**设计 bible**（世界観/4 国/13 职业/8 角色/15 章/27 技能/25 道具/UI/音频/成就/新手引导）。注意它是**目标态设计**——当前 `data/` 只实现 8 职业/8 技能/8 物品/4 预制战场，扩张时以 story 文档为准绳（差距清单见 `docs/roadmap.md`）。
 
@@ -73,6 +78,7 @@ main.gd (4319 行 / 176 函数)  ← 世界引擎中枢
 - **配置分层（双轨）**：`config/ecosystems.json`（旧版，运行时实际读取入口）与 `config/ecology/manifest.json` + 模块化 biome/species/communities（新版，逐步迁移）并存，由 `_compile_ecosystem_config` 编译。`legacy_bundles.json` 仅为旧布局兼容，**新内容禁止使用**。
 - **战场渲染统一**：B2 战场与编辑器画布共用 `BattlefieldRenderer`（等距方块柱），地形高度规则：water h1 / plain・forest・village h2 / fort h3 / wall h4 / mountain h5。世界就地战斗的地形映射 `cell_context_to_terrain` 覆盖 11 种中的 **7 种**（water/mountain/snow/sand/rocky/grass/plain；forest/village/fort/wall 无世界数据源不映射，roadmap P1-4）。
 - **批量绘制优先**：水、岸浪、天气、飞鸟等高密度元素走批量绘制/受限呈现槽位，避免每格一个 `_process` 节点。
+- **三单体拆分（2026-11-16）**：main.gd（4319→2283 行，−47.1%）、map_editor.gd（3285→1031 行，−68.6%）、battle.gd（1934→1444 行）从"功能全塞主文件"改为"**装配层 + RefCounted 能力模块**"（模块 Callable 注入、无反向依赖；main.gd 保留测试直调所需的同名薄委托）。行为护栏：拆分期间 `terrain_generation` SHA-256 每批零漂移、`map_editor_region_ops` L1 埋点序列逐行一致；终验 67/74 契约无新增红（`docs/plans/split_report_2026-11-15.md`）。三个装配层仍可按同法继续抽（roadmap P3-13 剩余项）。
 - **结算内核与表现分离（2026-11）**：`battle_action_resolver.gd` 是 battle.gd 与无头自动化（`battle/automation/` + `tools/battle_cli.gd`）**共享的行动结算内核**——同一套规则既跑有人玩的演出局，也跑 CLI 事件流回放，保证自动化断言与真机行为一致。增援刷入同样双链路共用 `reinforcement_spawner.gd`（敌方回合开始同点位接线）。
 - **演出可选可跳**：沉浸演出（开场/行动/结算）是**表现层增强**，非战斗逻辑依赖；battle 设置页可开关，播放中可快进（`*_finished(skipped)` 信号贯穿）；关演出不影响结算正确性。
 - **胜利/增援走声明式 JSON**：chapter 可选 `victory`（rout / defend_turns / seize）与 `reinforcements`（按回合波次）字段，`battlefield_loader` 静态严校验、非法整卡拒绝；`check_victory(enemies, ctx)` 注入式判定 + 歼灭兜底，未到点增援并入敌存活集合防提前判胜。
@@ -84,5 +90,5 @@ main.gd (4319 行 / 176 函数)  ← 世界引擎中枢
 
 - **项目位置**：`/Users/Zhuanz/Documents/pixel_world`（macOS；历史路径 G:/ → E:/ → 本机）。Godot 可执行文件 `/Applications/Godot.app/Contents/MacOS/Godot`（Windows 历史路径 `D:/Godot/Godot_v4.7.2-stable_win64.exe`）。
 - **源项目引用**：战棋代码迁移自外部 phaserjs 项目（不在本仓库）。
-- **文档分区**：`claude/`（本索引详情）、`rules/`（agent 规则 4 篇）、`story/`（目标态设计 bible）、`handoff/`（专题交接存档 3 篇）、`docs/`（运维与进度：battle_automation / startup_config / user_assets / gameplay_gap / roadmap / testing_baseline_2026-11-15）、`plans/`（开发计划存档）、根 `DESIGN.md`（UI 设计规范唯一事实来源）。
+- **文档分区**：`claude/`（本索引详情）、`rules/`（agent 规则 4 篇）、`story/`（目标态设计 bible）、`handoff/`（专题交接存档 3 篇）、`docs/`（运维与进度：battle_automation / startup_config / user_assets / gameplay_gap / roadmap / test_automation(+results) / testing_baseline_2026-11-15 / plans/{main,map_editor}_split_plan + split_report）、`plans/`（开发计划存档）、根 `DESIGN.md`（UI 设计规范唯一事实来源）。
 - **不属于本仓库的内容**：`.godot/`（引擎生成物）、`/builds/`、`/exports/`、`/android/`。

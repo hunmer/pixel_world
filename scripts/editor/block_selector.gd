@@ -23,7 +23,7 @@ extends VBoxContainer
 const BattlefieldDocScript := preload("res://scripts/editor/battlefield_doc.gd")
 const TilePreviewScript := preload("res://scripts/editor/tile_preview.gd")
 const UIThemeScript := preload("res://scripts/ui/ui_theme.gd")
-const PixelButtonScript := preload("res://ui/components/pixel_button.gd")
+const UIFactoryScript := preload("res://scripts/ui/ui_factory.gd")
 
 ## 选中项类别常量（selection_changed 的 kind / selected() 的 kind）。
 const KIND_TERRAIN := &"terrain"
@@ -125,17 +125,11 @@ func _section_label(text: String) -> Label:
 	return l
 
 
-## 统一按钮组件入口（与 map_editor._pixel_btn 同策略：关组件自带音效，留全局钩子）。
-func _pixel_btn() -> Button:
-	var b := PixelButtonScript.new()
-	b.hover_sfx_enabled = false
-	b.click_sfx_enabled = false
-	return b
-
-
 ## 内置地形按钮：tile 缩略图（无文字，悬停提示地形名），meta=terrain。
+## 按钮经 UIFactory.button 创建（PixelButton 组件、音效已关、默认叠
+## style_button，等价原 _pixel_btn 直建 + 手动样式两步）。
 func _terrain_btn(t: StringName) -> Button:
-	var tb := _pixel_btn()
+	var tb := UIFactoryScript.button()
 	tb.toggle_mode = true
 	tb.button_group = _group
 	tb.custom_minimum_size = Vector2(46, 96)
@@ -144,7 +138,6 @@ func _terrain_btn(t: StringName) -> Button:
 		String(BattlefieldDocScript.TERRAIN_GLYPH[t]),
 	]
 	tb.set_meta("terrain", t)
-	UIThemeScript.style_button(tb)
 	var prev := TilePreviewScript.new(t, false)
 	tb.add_child(prev)
 	tb.pressed.connect(_on_tile_pressed.bind(tb))
@@ -154,13 +147,12 @@ func _terrain_btn(t: StringName) -> Button:
 ## 素材方块按钮：与地形按钮同风格；visual 由 resolve_many 批量传入，
 ## 缺省才回退单条 resolve（避免整库 JSON 反复解析）。
 func _asset_btn(asset_id: String, d: Dictionary, visual: Dictionary = {}) -> Button:
-	var tb := _pixel_btn()
+	var tb := UIFactoryScript.button()
 	tb.toggle_mode = true
 	tb.button_group = _group
 	tb.custom_minimum_size = Vector2(46, 96)
 	tb.tooltip_text = "%s（%s）" % [String(d.get("name", asset_id)), asset_id]
 	tb.set_meta("block_asset", asset_id)
-	UIThemeScript.style_button(tb)
 	var prev := TilePreviewScript.new(&"plain", false)
 	if not visual.is_empty():
 		prev.asset_visual = visual

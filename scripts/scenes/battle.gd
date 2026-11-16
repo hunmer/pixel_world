@@ -7,7 +7,8 @@
 ## 已按职责拆出的助手模块（scripts/battle/，均通过 setup()+Callable 注入，不持有本场景引用）：
 ##   - RangeOverlay (Node2D)      地形回退铺底 + 移动/攻击范围菱形描边 + 光标金色呼吸框
 ##   - TurnDirector (Node)        敌方 AI 回合 + 玩家方托管编排 + 偏好数据
-##   - BattleUI    (CanvasLayer)  HUD + 单位菜单/选择器/预览面板/结果横幅
+##   - BattleUI    (CanvasLayer)  屏幕空间 UI 装配层（信号/注入面/共用容器/预览面板/演出包装；
+##     HUD/单位菜单/单位详情/结果横幅再拆为 battle_ui_{hud,unit_menu,unit_detail,banner}.gd 子模块）
 ##   - BattleFx    (Node)         伤害数字/血条受击/飘字/抖动 + PixelFx 预热
 ##   - BattleSfx   (Node)         出手/受击/结算演出音效（含程序化回退波形）
 ##   - BattleResultStage (Node)   结算演出视觉（欢呼/倒地/死亡淡出 + 姿态捕获恢复）
@@ -103,10 +104,40 @@ var turn_director: TurnDirector = null
 
 # ---- 战旗持久化（GameSession 自动存档；逻辑在 BattleSave 模块）----
 # _save.identity 非空 → 本场战斗在完整行动边界自动提交；pending_state 非空 → 恢复进度。
+# SceneArgs 读出的记录参数暂存为成员，供 _ready 拆分件之间传递（原 _ready 局部变量）。
+var _save_identity := ""
+var _save_state: Dictionary = {}
+var _save_notice := ""
 
 
+## _ready 装配序列（各拆分件内部顺序与拆分前逐句一致，勿调整调用顺序）：
+## ① SceneArgs 参数 → ② 核心（网格/回合/编排器/存档/托管）→ ③ 渲染层+音效/结算
+## → ④ UI 层+单位 sprite → ⑤ 演出模块 → 帧边界 → ⑥ 回合信号 → 开场 → ⑦ 首回合。
 func _ready() -> void:
-	# 从 SceneArgs 读战斗参数（由 main.gd._enter_battle 设置）
+	_configure_scene_args()
+	_configure_battle_core()
+	_configure_render_layer()
+	_configure_ui_layer()
+	_configure_action_modules()
+	await get_tree().process_frame
+	_debug_print_unit_alignment()
+	_configure_turn_signals()
+	# 开场期间锁住所有输入；演出完成前不启动首个玩家回合。
+	mode = Mode.ANIMATING
+	set_process_input(false)
+	set_process_unhandled_input(false)
+	await _play_encounter_opening()
+	if not is_inside_tree() or _battle_ended:
+		return
+	range_overlay.create_cursor_particles()
+	set_process_input(true)
+	set_process_unhandled_input(true)
+	print("[Battle] BattleReady units=%d" % _unit_sprites.size())
+	_start_first_turn_or_resume()
+
+
+## _ready 拆分件①：从 SceneArgs 读战斗参数（由 main.gd._enter_battle 设置）。
+func _configure_scene_args() -> void:
 	if SceneArgs.battle_args.has("chapter"):
 		chapter = SceneArgs.battle_args["chapter"]
 		return_to_scene = SceneArgs.battle_args.get("return_to", "res://main.tscn")
@@ -114,12 +145,16 @@ func _ready() -> void:
 	# B1 就地模式：main.gd 通过 SceneArgs.battle_args["world"] 注入自身引用
 	_world = SceneArgs.battle_args.get("world", null)
 	_b1_mode = _world != null
-	# 战旗记录参数：save_identity 非空开启自动存档；save_state 非空表示恢复进度
-	var save_identity := String(SceneArgs.battle_args.get("save_identity", ""))
-	var save_state: Dictionary = SceneArgs.battle_args.get("save_state", {})
-	var _save_notice := String(SceneArgs.battle_args.get("save_notice", ""))
 	if _b1_mode:
 		_world_origin = chapter.get("world_origin", Vector2i.ZERO)
+	# 战旗记录参数：save_identity 非空开启自动存档；save_state 非空表示恢复进度
+	_save_identity = String(SceneArgs.battle_args.get("save_identity", ""))
+	_save_state = SceneArgs.battle_args.get("save_state", {})
+	_save_notice = String(SceneArgs.battle_args.get("save_notice", ""))
+
+
+## _ready 拆分件②：网格 + 单位 + 回合 + 回合编排器 + 战旗持久化 + 托管接管。
+func _configure_battle_core() -> void:
 	# 1. 网格 + 单位 + 回合（与模式无关）；死亡单位只在恢复局出现——不放入 grid
 	grid = GridSystem.new(chapter.width, chapter.height, chapter.map)
 	for u in chapter.playerUnits + chapter.enemyUnits:
@@ -137,8 +172,8 @@ func _ready() -> void:
 	# 1a. 战旗持久化模块（完整行动边界提交；toast 经 battle_ui 回交，调用时才求值）
 	_save = BattleSaveScript.new()
 	_save.setup(
-		save_identity,
-		save_state,
+		_save_identity,
+		_save_state,
 		turn,
 		turn_director,
 		func(msg: String) -> void: battle_ui.show_toast(msg)
@@ -147,6 +182,10 @@ func _ready() -> void:
 	add_child(turn_director)
 	if SceneArgs.battle_args.get("hosting", false):
 		turn_director.set_hosting(true)
+
+
+## _ready 拆分件③：渲染层（B1/B2 分支）+ 演出音效/结算视觉模块（别名同步）。
+func _configure_render_layer() -> void:
 	# 2. 渲染层（B1/B2 分支）
 	if _b1_mode:
 		_setup_b1_render()
@@ -164,6 +203,10 @@ func _ready() -> void:
 	add_child(_result_stage)
 	_result_stage.setup(_unit_sprites)
 	_result_visual_states = _result_stage.states
+
+
+## _ready 拆分件④：UI 层 + 托管偏好面板 + 退出按钮/续玩提示 + 单位 sprite。
+func _configure_ui_layer() -> void:
 	# 3. UI 层（屏幕空间，两种模式共用）
 	_build_ui()
 	# 托管偏好面板模块（容器由 battle_ui 提供；数据面读写走 turn_director）
@@ -173,13 +216,17 @@ func _ready() -> void:
 	_pref_panel.setup(grid, turn_director, battle_ui.get_pref_panel_container())
 	turn_director.update_host_btn_text()
 	# 有存档身份的 B2 战斗提供「退出战斗」按钮（B1 由 main.gd 自己接管）
-	if not save_identity.is_empty() and not _b1_mode:
+	if not _save_identity.is_empty() and not _b1_mode:
 		battle_ui.set_exit_callback(_on_exit_to_list)
 	if _save_notice != "":
 		battle_ui.show_toast(_save_notice)
 	# 4. 单位
 	for u in grid.units.values():
 		_spawn_unit_sprite(u)
+
+
+## _ready 拆分件⑤：沉浸相机 + 演出特效/镜头踢击/行动演出模块。
+func _configure_action_modules() -> void:
 	# 沉浸演出相机（先建：特效预热的 LoadingScreen 遮罩门控用它）
 	_immersive_camera = ImmersiveCameraScript.new()
 	_immersive_camera.name = "ImmersiveCamera"
@@ -226,8 +273,10 @@ func _ready() -> void:
 	action_anim.finished.connect(_camera_kick.on_anim_finished)
 	# 受伤特效：impacts 带 hp_before/hp_after，比 float_text 回调信息全。
 	action_anim.impact_presented.connect(_on_impact_presented)
-	await get_tree().process_frame
-	_debug_print_unit_alignment()
+
+
+## _ready 拆分件⑥：回合信号 + viewport resize（仅 B2 需要重居中）。
+func _configure_turn_signals() -> void:
 	# 5. 输入 + 回合
 	turn.phase_player.connect(_on_player_phase)
 	turn.phase_enemy.connect(_on_enemy_phase)
@@ -235,25 +284,18 @@ func _ready() -> void:
 		# B2 才需要 viewport resize 重居中（B1 由 main.gd 管相机）
 		get_viewport().size_changed.connect(_on_viewport_resized)
 
-	# 开场期间锁住所有输入；演出完成前不启动首个玩家回合。
-	mode = Mode.ANIMATING
-	set_process_input(false)
-	set_process_unhandled_input(false)
-	await _play_encounter_opening()
-	if not is_inside_tree() or _battle_ended:
-		return
-	range_overlay.create_cursor_particles()
-	set_process_input(true)
-	set_process_unhandled_input(true)
-	print("[Battle] BattleReady units=%d" % _unit_sprites.size())
+
+## _ready 拆分件⑦：恢复进度或启动首个玩家回合，最后发出 battle_ready
+## （battle_ready 语义 = 完全就绪，含首回合复位/冷却/buff tick）。
+func _start_first_turn_or_resume() -> void:
 	var resume_state := _save.consume_pending_state()
 	if not resume_state.is_empty():
 		# 恢复进度：不复位列标志/不重跑开局 tick，直接进保存时的阶段
 		_apply_resume_state(resume_state)
 	else:
-		# 首个玩家回合必须在 battle_ready 之前启动：battle_ready 语义 = 完全就绪
-		# （含首回合复位/冷却/buff tick）。监听方恢复后会立即行动结算，
-		# 若 start_player_phase 仍在其后执行，复位 hasActed 会覆盖已落地的结算置位。
+		# 首个玩家回合必须在 battle_ready 之前启动：
+		# 监听方恢复后会立即行动结算，若 start_player_phase 仍在其后执行，
+		# 复位 hasActed 会覆盖已落地的结算置位。
 		turn.start_player_phase()
 	battle_ready.emit()
 
@@ -718,99 +760,170 @@ func _input(event: InputEvent) -> void:
 		return
 
 
+# ============================================================
+# 输入路由（演出期拦截 / 键盘路由表 / 鼠标分发；B1 也由 main.gd 直接调用）
+# ============================================================
+## 键盘路由表（keycode → handler Callable；Q/X/R 的 B1 guard 在 handler 内）。
+## 惰性构建：首次按键时填充一次。
+var _key_handlers: Dictionary = {}
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	# 遭遇演出期间禁用移动/菜单等全部战斗输入（B1 也由 main.gd 直接调用此函数）。
 	if mode == Mode.ANIMATING:
-		if battle_ui != null and battle_ui.is_presentation_active() and _is_presentation_skip_event(event):
-			battle_ui.skip_presentation()
-		elif _is_presentation_skip_event(event):
-			_skip_action_presentation()
-		get_viewport().set_input_as_handled()
+		_handle_input_while_animating(event)
 		return
 	if event is InputEventKey:
-		var k := event as InputEventKey
-		if k.pressed:
-			match k.keycode:
-				KEY_ESCAPE: _on_cancel()
-				KEY_ENTER, KEY_Z: _on_confirm()
-				KEY_E: _on_end_turn()
-				KEY_Q:
-					if not _b1_mode:
-						board.camera.rotate_step(-1)
-				KEY_X:
-					if not _b1_mode:
-						board.camera.rotate_step(1)
-				KEY_R:
-					if not _b1_mode:
-						board.camera.reset_rotation()
-				KEY_UP: _move_cursor(0, -1)
-				KEY_DOWN: _move_cursor(0, 1)
-				KEY_LEFT: _move_cursor(-1, 0)
-				KEY_RIGHT: _move_cursor(1, 0)
+		_handle_key_input(event as InputEventKey)
 	elif event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed and not _b1_mode:
-			board.zoom_by(0.9, mb.position, get_viewport().get_visible_rect().size)
-		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed and not _b1_mode:
-			board.zoom_by(1.1, mb.position, get_viewport().get_visible_rect().size)
-		elif mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed:
-				if not _b1_mode:
-					_panning = true
-					_pan_last = mb.position
-			else:
-				# 左键释放：非平移、非拖拽时视为选格点击
-				if not _space_pan_active and not _dragged:
-					_on_tile_click_at_screen(mb.position)
-				_panning = false
-				_dragged = false
-		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
-			# 右键：查看单位详情面板（任意阵营，不干扰左键的选中/攻击）
-			if battle_ui.is_over_ui(mb.position):
-				return
-			var detail_cell: Vector2i
-			if _b1_mode:
-				detail_cell = _screen_to_battle_cell(mb.position)
-			else:
-				detail_cell = _pick_battle_cell(mb.position)
-			if detail_cell.x >= 0 and detail_cell.x < grid.width \
-					and detail_cell.y >= 0 and detail_cell.y < grid.height:
-				var du := grid.unit_at(detail_cell.x, detail_cell.y)
-				if not du.is_empty():
-					battle_ui.open_unit_detail(du)
-
-		elif mb.button_index == MOUSE_BUTTON_MIDDLE and not _b1_mode:
-			if mb.pressed:
-				_panning = true
-				_pan_last = mb.position
-			else:
-				_panning = false
+		_handle_mouse_button_input(event as InputEventMouseButton)
 	elif event is InputEventMouseMotion:
-		var mm := event as InputEventMouseMotion
-		if _panning and not _b1_mode:
-			if mm.ctrl_pressed:
-				board.camera.drag_by(Vector2(mm.position.x - _pan_last.x, 0.0))
-			else:
-				board.pan(mm.position.x - _pan_last.x, mm.position.y - _pan_last.y)
-			_pan_last = mm.position
-			if mm.relative.length() > 3:
-				_dragged = true
-		elif not _panning:
-			# hover 移动光标（B1 用 main.gd.screen_to_cell，B2 用 board.pick_cell）
-			if not turn_director.is_hosting() and mode != Mode.ENEMY_TURN and mode != Mode.ANIMATING \
-					and not battle_ui.has_open_menu() and not battle_ui.is_over_ui(mm.position):
-				var hover_cell: Vector2i
-				if _b1_mode:
-					hover_cell = _screen_to_battle_cell_unbounded(mm.position)
-				else:
-					hover_cell = _pick_battle_cell(mm.position)
-				if hover_cell != cursor_pos:
-					cursor_pos = hover_cell
-					cursor_visible = true
-					range_overlay.update_cursor_particles(hover_cell.x, hover_cell.y, true)
-					if grid.in_bounds(hover_cell.x, hover_cell.y):
-						battle_ui.show_info_at(hover_cell.x, hover_cell.y)
-						_update_hover_path(hover_cell)
+		_handle_mouse_motion_input(event as InputEventMouseMotion)
+
+
+## 演出期间只保留「跳过」语义，其余输入一律吞掉。
+func _handle_input_while_animating(event: InputEvent) -> void:
+	if battle_ui != null and battle_ui.is_presentation_active() and _is_presentation_skip_event(event):
+		battle_ui.skip_presentation()
+	elif _is_presentation_skip_event(event):
+		_skip_action_presentation()
+	get_viewport().set_input_as_handled()
+
+
+func _handle_key_input(k: InputEventKey) -> void:
+	if not k.pressed:
+		return
+	var handler: Callable = _key_route().get(k.keycode)
+	if handler.is_valid():
+		handler.call()
+
+
+func _key_route() -> Dictionary:
+	if _key_handlers.is_empty():
+		_key_handlers = {
+			KEY_ESCAPE: Callable(self, "_on_cancel"),
+			KEY_ENTER: Callable(self, "_on_confirm"),
+			KEY_Z: Callable(self, "_on_confirm"),
+			KEY_E: Callable(self, "_on_end_turn"),
+			KEY_Q: Callable(self, "_rotate_camera").bind(-1),
+			KEY_X: Callable(self, "_rotate_camera").bind(1),
+			KEY_R: Callable(self, "_reset_camera_rotation"),
+			KEY_UP: Callable(self, "_move_cursor").bind(0, -1),
+			KEY_DOWN: Callable(self, "_move_cursor").bind(0, 1),
+			KEY_LEFT: Callable(self, "_move_cursor").bind(-1, 0),
+			KEY_RIGHT: Callable(self, "_move_cursor").bind(1, 0),
+		}
+	return _key_handlers
+
+
+## B2 专属视角操作（B1 就地模式下视角归世界相机管，不响应）。
+func _rotate_camera(step: int) -> void:
+	if not _b1_mode:
+		board.camera.rotate_step(step)
+
+
+func _reset_camera_rotation() -> void:
+	if not _b1_mode:
+		board.camera.reset_rotation()
+
+
+func _handle_mouse_button_input(mb: InputEventMouseButton) -> void:
+	match mb.button_index:
+		MOUSE_BUTTON_WHEEL_UP:
+			_handle_wheel_zoom(mb, 0.9)
+		MOUSE_BUTTON_WHEEL_DOWN:
+			_handle_wheel_zoom(mb, 1.1)
+		MOUSE_BUTTON_LEFT:
+			_handle_left_click(mb)
+		MOUSE_BUTTON_RIGHT:
+			_handle_right_click(mb)
+		MOUSE_BUTTON_MIDDLE:
+			_handle_middle_click(mb)
+
+
+func _handle_wheel_zoom(mb: InputEventMouseButton, factor: float) -> void:
+	if mb.pressed and not _b1_mode:
+		board.zoom_by(factor, mb.position, get_viewport().get_visible_rect().size)
+
+
+## 左键：按下（B2）进入平移；释放时非空格平移/非拖拽视为选格点击。
+func _handle_left_click(mb: InputEventMouseButton) -> void:
+	if mb.pressed:
+		if not _b1_mode:
+			_panning = true
+			_pan_last = mb.position
+	else:
+		# 左键释放：非平移、非拖拽时视为选格点击
+		if not _space_pan_active and not _dragged:
+			_on_tile_click_at_screen(mb.position)
+		_panning = false
+		_dragged = false
+
+
+## 右键：查看单位详情面板（任意阵营，不干扰左键的选中/攻击）。
+func _handle_right_click(mb: InputEventMouseButton) -> void:
+	if not mb.pressed:
+		return
+	if battle_ui.is_over_ui(mb.position):
+		return
+	var detail_cell: Vector2i
+	if _b1_mode:
+		detail_cell = _screen_to_battle_cell(mb.position)
+	else:
+		detail_cell = _pick_battle_cell(mb.position)
+	if detail_cell.x >= 0 and detail_cell.x < grid.width \
+			and detail_cell.y >= 0 and detail_cell.y < grid.height:
+		var du := grid.unit_at(detail_cell.x, detail_cell.y)
+		if not du.is_empty():
+			battle_ui.open_unit_detail(du)
+
+
+## 中键：B2 平移拖拽（按下/释放）。
+func _handle_middle_click(mb: InputEventMouseButton) -> void:
+	if _b1_mode:
+		return
+	if mb.pressed:
+		_panning = true
+		_pan_last = mb.position
+	else:
+		_panning = false
+
+
+func _handle_mouse_motion_input(mm: InputEventMouseMotion) -> void:
+	if _panning and not _b1_mode:
+		_handle_pan_motion(mm)
+	elif not _panning:
+		_handle_hover_motion(mm)
+
+
+## 平移拖拽：Ctrl 只水平转视角，否则平移棋盘；位移超阈值记为拖拽（抑制释放点击）。
+func _handle_pan_motion(mm: InputEventMouseMotion) -> void:
+	if mm.ctrl_pressed:
+		board.camera.drag_by(Vector2(mm.position.x - _pan_last.x, 0.0))
+	else:
+		board.pan(mm.position.x - _pan_last.x, mm.position.y - _pan_last.y)
+	_pan_last = mm.position
+	if mm.relative.length() > 3:
+		_dragged = true
+
+
+## hover 移动光标（B1 用 main.gd.screen_to_cell，B2 用 board.pick_cell）。
+func _handle_hover_motion(mm: InputEventMouseMotion) -> void:
+	if turn_director.is_hosting() or mode == Mode.ENEMY_TURN or mode == Mode.ANIMATING \
+			or battle_ui.has_open_menu() or battle_ui.is_over_ui(mm.position):
+		return
+	var hover_cell: Vector2i
+	if _b1_mode:
+		hover_cell = _screen_to_battle_cell_unbounded(mm.position)
+	else:
+		hover_cell = _pick_battle_cell(mm.position)
+	if hover_cell != cursor_pos:
+		cursor_pos = hover_cell
+		cursor_visible = true
+		range_overlay.update_cursor_particles(hover_cell.x, hover_cell.y, true)
+		if grid.in_bounds(hover_cell.x, hover_cell.y):
+			battle_ui.show_info_at(hover_cell.x, hover_cell.y)
+			_update_hover_path(hover_cell)
 
 
 ## B1 模式：屏幕坐标 → 战场局部 cell（经 main.gd.screen_to_cell 拿世界 cell，再减 origin）

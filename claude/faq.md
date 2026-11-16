@@ -5,8 +5,8 @@
 ### Q1：项目到底是做什么的？两个子系统什么关系？
 一个 Godot 4.7 等距像素**生态世界**（无限确定性流式生成 + 动植物/天气/昼夜/3D 阳光阴影），其中**嵌入了回合制战棋战斗**（从 phaserjs 迁移），按 P 在真实地形上战斗，或从 JSON 战场文件开战。两子系统唯一耦合是 `scripts/core/world_to_chapter.gd`；JSON 战场入口是 `battlefield_loader.gd`（产出同构 chapter）。详见 `overview.md` 与 `module-responsibilities.md`。
 
-### Q2：为什么 `main.gd` 这么大（4319 行）？要不要拆？
-世界引擎的逻辑高度集中在此单文件。**项目约定明确反对继续往里加分支**（新 biome/noise/surface/community 都走配置/模块）。函数簇分区见 `module-responsibilities.md` 的 main.gd 分区表。拆分建议（按函数簇渐进抽出）见 `docs/roadmap.md`；任何拆分需保持流式生成与确定性的调用顺序。
+### Q2：`main.gd` / `map_editor.gd` / `battle.gd` 还能继续拆吗？
+**2026-11-16 已完成第一轮拆分**：main.gd 4319→2283 行（能力拆入 `scripts/world/` 11 个 RefCounted 模块，`_configure_generation_services()` 装配）、map_editor.gd 3285→1031 行（拆入 `scripts/editor/` 15 个 `map_editor_*` 模块）、battle.gd 1934→1444 行（演出/存档拆入 `scripts/battle/` 6 模块）。三者现在是"装配层 + 能力模块"形态，仍可按同法继续抽（roadmap P3-13 剩余项）。**约定不变：新能力先进模块再挂装配层，主文件里只留测试直调所需的同名薄委托**；任何拆分需保持流式生成与确定性的调用顺序（拆分护栏：terrain_generation SHA-256 零漂移 + L1 埋点序列一致，见 `docs/plans/split_report_2026-11-15.md`）。哪些模块能直接复用、以及结构/重复/可读性自检见 `report.md`。
 
 ### Q3：世界是怎么"无限"生成的？会卡吗？
 固定 seed + 流式窗口（`stream_extent` 默认 32）：只生成玩家附近的格，移动时增量生成/释放（`_update_streaming`）。永不预生成整个世界。同 seed+同 cell 永远同结果。chunk 化 3D 地形 + 批量绘制避免每格/每鸟一个节点。详见 `overview.md` + `data-model.md`。

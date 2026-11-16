@@ -157,7 +157,7 @@ func _run() -> void:
 	_expect(editor._asset_panel.service == ed_svc and editor._asset_panel.adapter == ed_adapter, "S3 面板 setup 应换源成功")
 
 	var tabs: TabContainer = editor.find_child("ToolTabs", true, false)
-	_expect(tabs != null and tabs.get_tab_count() == 7, "S3 应有 7 个 Tab")
+	_expect(tabs != null and tabs.get_tab_count() == 8, "S3 应有 8 个 Tab（含预设页）")
 	tabs.current_tab = 2  # 地形
 	await process_frame
 	_expect(editor._active_tool() == editor.Tool.PAINT, "S3 地形页无选中素材时应为 PAINT")
