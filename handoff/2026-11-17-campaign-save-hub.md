@@ -4,7 +4,7 @@
 
 ## 当前状态与下一会话目标
 
-本轮实施已经完成并向用户交付，当前请求仅为保存交接文档。没有尚未完成的功能项或已知阻塞；不要把本文件当作要求重新实施的计划。下一会话的具体新增目标尚未指定。
+本轮实现已经完成并向用户交付。后续用户实际体验发现世界地图关卡列表不可见，本次已修复并增加布局回归契约；当前没有尚未完成的功能项或已知阻塞。不要把本文件当作要求重新实施的计划。下一会话的具体新增目标尚未指定。
 
 用户最初通过 `/grill-me` 澄清产品边界，随后确认实施，明确要求使用 DSH Team 尽量并行，执行成员模型为 **glm-5.3 / max**。这些产品决策已整理到 [docs/campaign_loop.md](../docs/campaign_loop.md)，请直接以该文档为规则与范围索引，不重复访谈或自行扩展商店、招募、配装等范围。
 
@@ -35,6 +35,9 @@
 详细结果和重跑命令见 [docs/campaign_loop.md 的验证入口](../docs/campaign_loop.md#验证入口)。本轮最后一次验证结果为：
 
 - 数据契约 22 组通过；UI 契约全部通过，退出无脚本错误、音频资源残留报错。
+- 地图列表问题已由运行时尺寸测量定位：`Screens/Levels` 原尺寸为 `(0,0)`，其下 `LevelScroll` 高度为 0；多个代码创建的 `Control` 使用 `set_anchors_preset(FULL_RECT)` 会保留初始 rect 并补偿 offsets，导致锚点看似正确但尺寸归零。修复 Campaign 屏幕树、三屏和弹层用 `set_anchors_and_offsets_preset(FULL_RECT)`，三屏的 `PageMargin` 也明确铺满；Hub 的 `InventoryPanel` 增加纵向 `SIZE_EXPAND_FILL`，避免库存滚动区被压成零高度。
+- 新增 UI 契约第 ⑲ 组覆盖 1024×640 / 1280×800 / 1920×1080，逐层检查根、Screens、各屏和 PageMargin 尺寸，断言列表/Hub队伍与库存/关卡 scroll 高度为正，并验证首卡可见、滚动后末卡可见。完整 UI 契约 exit 0，输出 `campaign_ui_contract: ALL PASS`。
+- 上述 UI 契约运行期间独立分配 `BREAKPOINT_RUNTIME_PORT`，没有占用现有会话端口；之后尝试 runtime log 时 9081 已不可达，因此本次最终确认以完整 headless UI 契约为准，未声称重新检查运行态日志。
 - 最新生产代码的真实场景 probe 30 项断言通过，运行日志 `error/warning` 为空。曾在真实结算处下断点确认 `result=win`、冒险令牌有效、旧 `save_identity` 为空，随后已清除断点与 watch。
 - 默认玩家入口另行启动验证：三屏节点完整，初始存档选择屏可见，错误／警告日志为空。
 - 相关旧契约通过；没有运行全量测试，也没有把契约通过描述成全部玩法或视觉效果均已人工验收。

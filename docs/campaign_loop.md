@@ -35,12 +35,12 @@
 ## 验证入口
 
 - `tests/campaign_contract.gd`：纯数据与持久化契约，使用独立临时存档目录。
-- `tests/campaign_ui_contract.gd`：存档、营地、关卡、详情/确认弹层、焦点与三档分辨率交互契约。
+- `tests/campaign_ui_contract.gd`：存档、营地、关卡、详情/确认弹层、焦点与三档分辨率交互契约；逐层断言页面尺寸和滚动区，并验证首末关卡可见。
 - `res://tests/campaign_battle_integration_contract.tscn`：经 MCP `dbg_launch` 运行，断言根节点 `/root/CampaignBattleIntegration` 的 `finished=true`、`passed=true`。覆盖真实战斗结算、旧战场存档隔离、重复回调、失败回退，以及 Campaign → Battle → Campaign 的实际切换；测试存档与玩家档隔离。
 
 真实场景探针已通过 30 项检查，运行日志 error/warning 为空；结算处断点确认本次令牌有效、`result=win`、旧 `save_identity` 为空。探针作为 `tests/contract_manifest.json` 的 probe 登记，不能用 `--script` 当普通 `SceneTree` 契约启动。
 
-数据契约 22 组全部通过（`CAMPAIGN_CONTRACT_OK`），界面契约全部通过（`campaign_ui_contract: ALL PASS`，含三档分辨率与链式弹窗），均 exit 0，无脚本错误；界面测试隔离自动按钮音效后退出无资源残留。两项已登记为 `campaign` 分组，可分别运行：
+数据契约 22 组全部通过（`CAMPAIGN_CONTRACT_OK`），界面契约全部通过（`campaign_ui_contract: ALL PASS`，含三档分辨率、逐层满屏布局、六关首末卡可见及链式弹窗），均 exit 0，无脚本错误；界面测试隔离自动按钮音效后退出无资源残留。两项已登记为 `campaign` 分组，可分别运行：
 
 ```sh
 python3 tools/run_contracts.py --test campaign --no-warmup
