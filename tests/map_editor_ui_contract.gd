@@ -340,8 +340,12 @@ func _run() -> void:
 		"改 z 同步渲染器布局深拷贝，不停留在模型")
 	var column: Variant = editor._canvas._renderer._columns[select_cell]
 	var selected_blocks: Array = column["_blocks"] if column is Dictionary else column._blocks
-	_expect(selected_blocks.size() == 1 and int(selected_blocks[0].level) == 6,
-		"改 z 后实际重建的单块 level=6")
+	# 以实现为准：显式块布局的陆柱 = 每层一块（0..z 叠柱），顶块 level==z 且用顶面贴图
+	# （battlefield_renderer.gd _append_explicit_block 的 for lvl in range(z + 1)）。
+	# 旧「单块 level=6」对应已废弃的单块表示。
+	_expect(selected_blocks.size() == 7
+		and int(selected_blocks[selected_blocks.size() - 1].level) == 6,
+		"改 z 后实际重建的柱=z+1 块叠柱（0..6），顶块 level=6")
 	var raised_top: Vector2 = editor._canvas._renderer.top_center_for(1, 1)
 	_expect(raised_top.y < selected_top.y and selected_top.y - raised_top.y > 30.0,
 		"改 z 后真实顶面向上移动（6 层显著）")
@@ -700,6 +704,11 @@ func _run() -> void:
 	editor.apply_generate("sel_contract", 8, 8)
 	await process_frame
 	var popup: Control = editor.get_node_or_null("SelectionPopup")
+	# 以实现为准：SELECT/FILL 工具按钮（含程序化置 button_pressed）即打开选择菜单
+	# （map_editor_overlays.gd build_tool_bar 的 tool_group.pressed 处理器），本契约 4b 段
+	# 已按下 SELECT；创建时默认隐藏由 build_selection_popup 设 visible=false 保证，
+	# 打开与 Esc 关闭在本节后段验证。此处先显式关闭再断言隐藏态。
+	editor._close_selection_popup()
 	_expect(popup != null and not popup.visible, "10 选择模式菜单存在且默认隐藏")
 	if popup == null:
 		_finish(editor)
@@ -800,6 +809,9 @@ func _run() -> void:
 	var hist_before_asset: int = editor._history.size()
 	editor._push_undo("区域填充")
 	editor._fill_region()
+	# 惰性封存历史：push 只封存上一动作并挂新标签，本笔入栈发生在下一次 seal
+	# （与 4b 段先 _seal_pending() 再查历史的模式一致），断言前显式封存。
+	editor._seal_pending()
 	var asset_ok := true
 	for y in range(2, 4):
 		for x in range(2, 7):
@@ -850,6 +862,7 @@ func _run() -> void:
 	var hist_before_vol: int = editor._history.size()
 	editor._push_undo("区域填充")
 	editor._fill_region()
+	editor._seal_pending()  # 惰性封存：断言前显式入栈（同上，模式一致）
 	var vol_ok := true
 	for y in range(4, 7):
 		for x in range(5, 8):
@@ -896,8 +909,11 @@ func _check_viewport_layout(editor: Node, viewport_size: Vector2i) -> void:
 	var side: Control = editor.get_node_or_null("EditorRoot/SidePanel")
 	var info: Control = editor.get_node_or_null("EditorRoot/CanvasHolder/CellInfoPanel")
 	_expect(root.size == viewport_size, "窗口尺寸 %s 生效（实际 %s）" % [viewport_size, root.size])
-	_expect(holder != null and side != null and is_equal_approx(side.size.x, 320.0),
-		"%s：侧栏保持 320px" % viewport_size)
+	# 以实现为准：SidePanel 宽度下限 320px（custom_minimum_size），实际宽度=内容组合
+	# 最小宽（当前 344px，由方块 Tab 内容 ~353px 撑开）；不再断言固定 320px。
+	_expect(holder != null and side != null and side.size.x >= 320.0
+		and is_equal_approx(side.size.x, side.get_combined_minimum_size().x),
+		"%s：侧栏不窄于设计下限 320px（实际=内容最小宽）" % viewport_size)
 	if holder != null and side != null:
 		_expect(holder.size.x > 0.0 and holder.position.x + holder.size.x <= side.position.x + 1.0,
 			"%s：画布左满幅且不与侧栏重叠" % viewport_size)

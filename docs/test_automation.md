@@ -104,16 +104,20 @@ executor-error；**2** = 用法错误（无选择、jobs 越界、未知名/组�
 
 ## 4. 已知红项与已知 hang 的处置
 
-- **known-fail（4，真实回归，跑出来保持 fail 可见）**：battle_action_chain、
-  battle_presentation_hooks、isometric_view、map_editor_ui。
-  runner 不修绿不掩盖；修复后应更新 manifest 的 `known_status` 并在 evidence 记录依据
-  （ui 契约 2026-11-16 复绿即此流程，见 results §1）。
+- **known-fail（0，2026-11-17 清零）**：2026-11-15 基线曾录 4 项（battle_action_chain、
+  battle_presentation_hooks、isometric_view、map_editor_ui）+ user_asset_editor（2026-11-16
+  登记）。2026-11-17 团队四任务逐项定性后全部转 pass，manifest `known_status` 已摘、依据
+  记入 evidence（isometric_view=HUD 预留列致取样假设失效，契约改在焦点实际渲染位取样并加
+  舞台中心断言；battle 双契约=断言口径对齐 pixelfx 呈现链/素材优先设计+密闭性修复；
+  map_editor_ui=6 项断言按实现重锚；user_asset_editor=925fe0c 行为回归修复）。
+  runner 不修绿不掩盖；未来再录 known-fail 时保持 fail 可见，修复后更新 manifest 的
+  `known_status` 并在 evidence 记录依据（ui 契约 2026-11-16 复绿、本轮五项均此流程）。
 - **environment-skip（5）**：sunlight_3d_gl（需非 headless GPU）、user_asset_source_live
   （需本机 8076 live 源）、action_anim / immersive_battle_camera / world_map_overlay
   （--script 模式下 autoload 编译失败挂起，known-hang）。默认不执行、直接标记；
   `--run-env-skip` 下跑挂仍记 environment-skip，跑过记 pass（环境恢复信号）。
-- manifest 是唯一事实源：`tests/contract_manifest.json`（80 契约 = known-fail 4 +
-  environment-skip 5 + pass 71；每条含
+- manifest 是唯一事实源：`tests/contract_manifest.json`（80 契约 = known-fail 0 +
+  environment-skip 5 + pass 75；每条含
   name/path/group/tags/known_status/parallel_safe/fast_flag_safe/evidence，可选 gdtest
   映射）；盘上多出未收录的 `tests/*_contract.gd` 时 runner 会告警。
 - 注：2026-11-15 基线文档把 sunlight_3d_gl 计为"失败"（6 红之一）；本 manifest 按根因

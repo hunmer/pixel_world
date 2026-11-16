@@ -492,11 +492,16 @@ class RealGodotSmokeTests(unittest.TestCase):
 							 f"logs: {r1.log} / {r2.log}")
 
 	def test_known_fail_contract_reports_fail(self):
+		# 夹具=manifest 里现存的 known-fail 契约（known-fail 保持可见、不吞是 runner 语义）。
+		# 2026-11-17 全部 known-fail 修复清零后无夹具可挑：skip（语义仍由 manifest 校验测试覆盖）。
+		_, contracts = rc.load_manifest()
+		kf = [c for c in contracts if c.known_status == "known-fail"]
+		if not kf:
+			self.skipTest("manifest 无 known-fail 契约（全部修复），无夹具可测")
 		with tempfile.TemporaryDirectory() as td:
 			out = Path(td) / "out"
 			out.mkdir()
-			c = make_contract("isometric_view")
-			c.path = "res://tests/isometric_view_contract.gd"
+			c = kf[0]
 			r = rc.run_contract(c, godot=REAL_GODOT, timeout=180, out_dir=out)
 			self.assertEqual(r.status, "fail")  # known-fail 保持可见，不吞
 

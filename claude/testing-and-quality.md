@@ -1,6 +1,6 @@
 # 测试与质量
 
-> 更新：2026-11-16（统一契约 runner `tools/run_contracts.py` + manifest 80 契约 + gdtest/批量模拟试点；`ui` 复绿。上一轮：2026-11-15 契约 69→78、macOS 全量基线 62/72）。
+> 更新：2026-11-17（**known-fail 清零：pass 75 / known-fail 0 / env-skip 5**——五项 known-fail 团队轮全部修复，定性+依据见台账表与 manifest evidence）。上一轮：2026-11-16（统一契约 runner + manifest 80 契约 + gdtest/批量模拟试点；`ui` 复绿）。
 
 ## 测试机制（契约自测 + 统一 runner）
 
@@ -100,6 +100,7 @@ cell_state / ecology_resolver / animal_behavior_registry 原生契约，经
 | 全量契约基线 | ⚠️ 62/72 通过 | **2026-11-15 macOS 全量基线**（HEAD `3a08327`，`tools/run_contract_baseline.sh`）：6 失败（battle_action_chain / battle_presentation_hooks / isometric_view / map_editor_ui / ui / sunlight_3d_gl[headless 环境限制，非回归]）、4 超时（action_anim / immersive_battle_camera / world_map_overlay 均 autoload 依赖编译失败挂起；user_asset_source_live 依赖本机 8076 源）。详见 [docs/testing_baseline_2026-11-15.md](../docs/testing_baseline_2026-11-15.md)。其后契约总数 72→78 |
 | **`ui` 契约（两行分列台账）** | ✅ 复绿 | 2026-11-15 基线：红（map_editor.gd 直建 `Button.new()` 等）；2026-11-16 实测：**3 连过 exit=0**，根因已在后续修复中消除（现 scripts/scenes/map_editor.gd 无直建 Button/CheckButton/OptionButton），manifest 已更新为 pass |
 | 统一 runner 交付（2026-11-16） | ✅ | `tools/run_contracts.py`（manifest 80 契约；27 单测全绿）+ `run_contract_baseline.sh` 兼容包装 + gdtest 试点 go（A→B→A 稳定）+ 批量模拟（1000 次 3.6s）。台账 `docs/test_automation_results.md`。manifest 现口径：known-fail 4 / environment-skip 5 / pass 71 |
+| **known-fail 清零（2026-11-17）** | ✅ **75/80 全绿** | 团队四任务逐项定性后五项 known-fail 全转 pass：`isometric_view`（根因=HUD 预留列致契约"焦点=窗口中心"假设失效，探针实证投影数学无回归，契约改焦点实际渲染位取样+新增舞台中心断言）、`battle_action_chain`/`battle_presentation_hooks`（断言对齐 pixelfx 呈现链与素材优先设计+密闭性修复〔本机 settings.cfg 泄漏〕+附带修 `game_sfx.gd` Nil→Array 真 bug）、`map_editor_ui`（6 项断言按实现重锚）、`user_asset_editor`（`925fe0c` 吸管功能引入的真行为回归：素材选中被 PAINT 前置检查短路、取消不回退前景槽，已修）。口径 **pass 75 / known-fail 0 / env-skip 5**，manifest evidence 全记录 |
 
 ## Lint / 类型检查
 
@@ -110,12 +111,12 @@ cell_state / ecology_resolver / animal_behavior_registry 原生契约，经
 ## 质量风险（本次扫描 + handoff 待办）
 
 - `main.gd` 单文件 **4319 行 / 176 函数**、`map_editor.gd` **3285 行 / 150 函数** —— 双单体职责高度集中，可维护性风险（拆分均为 roadmap P3 项；map_editor 增长最快）。
-- **红契约待修（更新）**：~~`ui`~~ 已复绿（2026-11-16 实测 3 连过，根因消除）；仍红：`map_editor_ui`（侧栏宽度 / z 重建断言）、`battle_action_chain`、`battle_presentation_hooks`、`isometric_view`（后三个为 2026-11-15 基线既有红项）。
+- ~~**红契约待修（更新）**~~ **已清零（2026-11-17）**：`ui` 2026-11-16 复绿；`map_editor_ui` / `battle_action_chain` / `battle_presentation_hooks` / `isometric_view` / `user_asset_editor` 于 2026-11-17 团队轮全部修复转 pass（定性+依据见上表与 manifest evidence）。
 - `meowa_tiles/heroes/`（24 png）未与 `data/professions.json` 8 职业映射（已知待办）。
 - `story/` 设计 bible（13 职业/27 技能/25 道具）与 `data/` 实际（8/8/8）差距大，实现时勿把目标态当运行时事实（差距清单见 `docs/gameplay_gap.md`）。
 - 80 个契约无 CI：回归靠本地手跑；现已可用统一 runner 一键全量并输出 JUnit
   （`python3 tools/run_contracts.py --all --run-env-skip --junit`），接入 CI 只差
-  runner 前置（manifest 口径 known-fail 4 + environment-skip 5，见
+  runner 前置（manifest 口径 known-fail 0 + environment-skip 5，见
   `docs/test_automation.md` §4）。
 - 用户素材默认源 `http://127.0.0.1:8076/blocks.json` 为本机回环；源已可配置（`asset_source.cfg`）+ 断源降级，但换机器仍需配置或自建源。
 - `data/battlefields/contract_asset_map.json.bak` 脏文件混在战场目录（loader 只扫 `*.json` 不受影响，建议清理）。

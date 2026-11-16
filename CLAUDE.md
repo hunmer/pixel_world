@@ -11,7 +11,7 @@ Pixel World 是一个 **Godot 4.7.2（GL Compatibility）/ Node2D** 单体 2D �
 ## 约定的规则（高优先级）
 
 - **运行**：`godot --path .`。本机（macOS）`/Applications/Godot.app/Contents/MacOS/Godot`（Windows 历史路径 `D:/Godot/Godot_v4.7.2-stable_win64.exe`；console 版 stdout 全缓冲：管道无输出 ≠ 没输出）。主场景 `res://scenes/Game.tscn`（战旗会话入口）；`config/startup.cfg` 可让 F5 直跳最近场景。
-- **测试**：默认入口 `python3 tools/run_contracts.py`（manifest 驱动 80 契约 + 2 探针；当前口径 pass 70 / known-fail 5 / env-skip 5（+user_asset_editor：预设 Tab 落地后契约未跟上，详见 manifest evidence））；单契约直跑 `godot --headless --path . --script res://tests/<name>_contract.gd`；批量模拟 `tools/run_simulations.gd`（详见 `docs/test_automation.md` 与 `claude/testing-and-quality.md`）；战棋自测跑 `scenes/SkillTest.tscn`（44/44）。**地形测试用固化 SHA-256 快照检测回归** —— 改确定性会挂。素材清单生成器用 `node --test`。
+- **测试**：默认入口 `python3 tools/run_contracts.py`（manifest 驱动 80 契约 + 2 探针；当前口径 **pass 75 / known-fail 0 / env-skip 5**——2026-11-17 五项 known-fail 全部修复清零，依据见 manifest evidence）；单契约直跑 `godot --headless --path . --script res://tests/<name>_contract.gd`；批量模拟 `tools/run_simulations.gd`（详见 `docs/test_automation.md` 与 `claude/testing-and-quality.md`）；战棋自测跑 `scenes/SkillTest.tscn`（44/44）。**地形测试用固化 SHA-256 快照检测回归** —— 改确定性会挂。素材清单生成器用 `node --test`。
 - **编辑器缓存坑**：改代码后必须删 `.godot/editor` 目录再重启编辑器，否则跑旧脚本。tab 缩进；文件名 `snake_case.gd`；顶部带 `## file.gd — 职责` 注释。
 - **不要往 `main.gd` 加分支**：新 biome / noise / surface / minimap 色 / weather tag 一律走 biome 模块 + 配置 + community；新内容用 `config/ecology/`，**禁用 `legacy_bundles.json` 与 `metadata.legacy_placement_seed`**。
 - **确定性契约**：内容 ID / `stream_key` / legacy `placement_seed` 是存档/世界契约；文件路径与显示名绝不能当随机种子；重排 manifest / 改稳定 ID 需 world version 迁移。
@@ -98,7 +98,7 @@ graph TD
 
 - **更新时间**：2026-11-16（第三轮增量：**三单体拆分**〔main/map_editor/battle → 装配层+能力模块〕、测试自动化〔run_contracts.py / run_simulations / gdtest / autosim〕、vendored 4→6、代码自检报告〔claude/report.md，四组：结构/重复/可读性/可复用〕、feature_map 图谱刷新 321 文件 100% 覆盖）。
 - **已扫描**：根目录全部源码结构（`main.gd` 拆分后 2280 行、`map_editor.gd` 1028 行、`battle.gd` 1557 行、`scripts/` 文件级 166 `.gd`〔world 25 / editor 26 / battle 20 / iso 14 / ecology 10 / hud 2〕、`tests/` 86 `.gd`〔80 契约 + 2 探针 + gdtest 3 + benches 1〕归类、`config/`+`data/` JSON、16 仓库自有 `.tscn`、6 自有 `.gdshader`、6 addons 全量、automation/assets/ui/editor/world 子系统 API 级、`DESIGN.md`+`story/`+`rules/`+`handoff/`+`docs/` 文档级）。
-- **运行态验证**：拆分护栏 = terrain_generation SHA-256 零漂移（`docs/plans/split_report_2026-11-15.md`）；统一 runner 口径 pass 70 / known-fail 5 / env-skip 5（`docs/test_automation.md`）；批量模拟 1000 局 3.6s。2026-11-16 深夜优化轮（4 成员并行行为等价重构 report.md 违例）后 0 新增红，terrain_generation SHA 逐字节一致。
+- **运行态验证**：拆分护栏 = terrain_generation SHA-256 零漂移（`docs/plans/split_report_2026-11-15.md`）；统一 runner 口径 **pass 75 / known-fail 0 / env-skip 5**（`docs/test_automation.md`，2026-11-17 known-fail 清零）；批量模拟 1000 局 3.6s。2026-11-16 深夜优化轮（4 成员并行行为等价重构 report.md 违例）后 0 新增红，terrain_generation SHA 逐字节一致。
 - **跳过**：`.godot/`（引擎生成，gitignore）；二进制素材 `.png`/`.mp3`；引擎生成物 `.import`/`.uid`。
 - **覆盖率**：源码与配置结构 ~100%（feature_map 321/321 = 100%）；二进制素材内容 0%（仅统计）。
 - **下一步建议**：已全部整理进 [docs/roadmap.md](docs/roadmap.md)（按优先级 P0–P3 + 前置依赖），不再在此重复。

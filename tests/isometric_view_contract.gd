@@ -51,7 +51,7 @@ func _run() -> void:
 	world.set_process(false)
 
 	var sample := Vector2i(1, 1)
-	var viewport_center: Vector2 = world.get_viewport_rect().size * 0.5
+	var viewport_size: Vector2 = world.get_viewport_rect().size
 	world._cam.zoom = 2.0
 	var initial_meshes := _mesh_instance_ids(world._terrain)
 	for angle in [0.0, 37.0, 90.0, 181.0, 275.0]:
@@ -68,10 +68,21 @@ func _run() -> void:
 		_expect(world._player_visual_position.is_equal_approx(world._cell_feet_pos(world._player_cell)),
 			"旋转改变了玩家连续网格状态")
 		world._cam.focus_position = IsoProjection.grid_to_world(sample, level)
-		var picked: Vector2i = world.screen_to_cell(viewport_center)
+		# HUD 侧栏（reserved_left/right_px）把相机光轴对准“舞台中心”而非窗口中心，
+		# 拾取契约必须在焦点实际渲染的屏幕位置取样（2026-11-17 修复known-fail根因）。
+		var stage_center := Vector2(
+			(world._cam.reserved_left_px + (viewport_size.x - world._cam.reserved_right_px)) * 0.5,
+			viewport_size.y * 0.5
+		)
+		var focus_screen: Vector2 = world._cam.unproject_position(
+			IsoProjection.grid_to_world(sample, level)
+		)
+		_expect(focus_screen.distance_to(stage_center) < 0.25,
+			"焦点没有渲染在舞台中心：HUD 预留列平移失效")
+		var picked: Vector2i = world.screen_to_cell(focus_screen)
 		_expect(picked == sample, "角度 %.1f 的鼠标拾取偏移: %s != %s" % [angle, picked, sample])
 		var rect_picked: Vector2i = world.screen_to_cell_in_rect(
-			viewport_center, sample - Vector2i.ONE * 2, Vector2i.ONE * 5
+			focus_screen, sample - Vector2i.ONE * 2, Vector2i.ONE * 5
 		)
 		_expect(rect_picked == sample, "角度 %.1f 的范围拾取偏移" % angle)
 

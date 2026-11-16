@@ -164,10 +164,9 @@
       "tags": [
         "scene"
       ],
-      "known_status": "known-fail",
       "parallel_safe": true,
       "fast_flag_safe": false,
-      "evidence": "tests/battle_action_chain_contract.gd L131 tscn; L138 frame｜基线 2026-11-15：B1 普攻 impact/飘字数量不一致（docs/testing_baseline_2026-11-15.md）；真实回归待修｜加速不安全（初始保守，待 A/B）：演出帧序列 L138"
+      "evidence": "tests/battle_action_chain_contract.gd L131 tscn; L138 frame｜2026-11-17 修复转 pass：断言口径对齐现行呈现链（伤害飘字由 pixelfx 接管——BattleFx.spawn_float_text 跳过 \"-N\" 标签，spawn_damage_fx 每次实际伤害生成 damage-number+health-bar-hit 两节点入同一容器），helper 改为 _expected_float_node_count｜加速不安全（初始保守，待 A/B）：演出帧序列 L138"
     },
     {
       "name": "battle_ai_difficulty",
@@ -237,10 +236,9 @@
         "scene",
         "render"
       ],
-      "known_status": "known-fail",
       "parallel_safe": true,
       "fast_flag_safe": false,
-      "evidence": "tests/battle_presentation_hooks_contract.gd L229 tscn; L194 frame｜基线 2026-11-15：名牌 cue 未生成程序化音频等 3 条（docs/testing_baseline_2026-11-15.md）；真实回归待修｜加速不安全（初始保守，待 A/B）：演出 hook 帧序列 L194"
+      "evidence": "tests/battle_presentation_hooks_contract.gd L229 tscn; L194 frame｜2026-11-17 修复转 pass：①音效断言对齐 battle_sfx 真实素材优先设计（nameplate→ui_select/victory 有素材走 Sfx，未映射 cue 回退程序化波形+缓存，两侧均断言）；②密闭性修复——契约固定关闭 immersive_presentation（本地 user://settings.cfg 开关不再泄入），相机 kick 断言只对传统取景链成立；③附带修 game_sfx.play 未命中 cue 的 Nil→Array 类型化赋值报错｜加速不安全（初始保守，待 A/B）：演出 hook 帧序列 L194"
     },
     {
       "name": "battle_result_presentation",
@@ -680,10 +678,9 @@
         "scene",
         "render"
       ],
-      "known_status": "known-fail",
       "parallel_safe": true,
       "fast_flag_safe": false,
-      "evidence": "tests/isometric_view_contract.gd L45 tscn; L50 frame｜基线 2026-11-15：角度 0 鼠标拾取偏移断言失败（docs/testing_baseline_2026-11-15.md）；真实回归待修｜加速不安全（初始保守，待 A/B）：鼠标拾取投影 L45"
+      "evidence": "tests/isometric_view_contract.gd L45 tscn; L50 frame｜2026-11-17 修复转 pass：根因=HUD 侧栏预留列（reserved_left_px=56/reserved_right_px=360，isometric_camera_3d.gd _reserved_lateral_world 把光轴平移到舞台中心）致焦点渲染偏离窗口中心约 152px，原契约在窗口中心取样必然多格偏移；探针实证 pick(焦点实际渲染位)==pick(舞台中心) 全角度精确，投影/拾取数学无回归。契约改为在 unproject(焦点) 实际渲染位置取样，并新增「焦点渲染在舞台中心 <0.25px」框架断言（强化）｜加速不安全（初始保守，待 A/B）：鼠标拾取投影 L45"
     },
     {
       "name": "loading_screen",
@@ -728,10 +725,9 @@
       "tags": [
         "scene"
       ],
-      "known_status": "known-fail",
       "parallel_safe": false,
       "fast_flag_safe": false,
-      "evidence": "tests/map_editor_ui_contract.gd L41 tscn; L43 frame; L447 user://｜基线 2026-11-15：侧栏 320px / z 重建断言失败（docs/testing_baseline_2026-11-15.md）；真实回归待修，保持 fail 可见｜并发不安全：实例化编辑器会扫描 user://battlefields/（tests/map_editor_ui_contract.gd:41 场景实例化）｜加速不安全（初始保守，待 A/B）：编辑器 UI 帧时序 L41"
+      "evidence": "tests/map_editor_ui_contract.gd L41 tscn; L43 frame; L447 user://｜2026-11-17 修复转 pass：6 项失败全部为断言过时（探针实证），按实现重锚——侧栏改断 >=320 且 ==combined_minimum_size（内容最小宽 344/方块 Tab 353px）；单块改断 0..z 每层一块共 7 块、顶块 level==z（_append_explicit_block range(z+1)）；选择菜单断隐藏前先 _close_selection_popup()（4b 段程序化按 SELECT 已开菜单）；两处填充历史断言前补 _seal_pending()（历史惰性封存，旧断言靠巧合通过）｜并发不安全：实例化编辑器会扫描 user://battlefields/（tests/map_editor_ui_contract.gd:41 场景实例化）｜加速不安全（初始保守，待 A/B）：编辑器 UI 帧时序 L41"
     },
     {
       "name": "module_extension",
@@ -899,10 +895,9 @@
       "tags": [
         "scene"
       ],
-      "known_status": "known-fail",
       "parallel_safe": false,
       "fast_flag_safe": false,
-      "evidence": "tests/user_asset_editor_contract.gd L141 tscn; L145 frame; L20 user://｜并发不安全：写 user://battlefields/contract_asset_map.json（tests/user_asset_editor_contract.gd:21）｜加速不安全（初始保守，待 A/B）：编辑器面板帧时序 L145｜known-fail（2026-11-16 实测，改动前 HEAD dc0b9eb 同样失败）：预设 Tab 落地后契约未跟上——Tab 数断言已修 8（tests/user_asset_editor_contract.gd:160），余 6 条 S3 断言（素材选中工具态/再点取消/prop_asset 通道/撤销回退/画笔清 override）与编辑器现状不符，待逐条核对是断言陈旧还是预设功能引入的行为回归"
+      "evidence": "tests/user_asset_editor_contract.gd L141 tscn; L145 frame; L20 user://｜2026-11-17 修复转 pass（65/65）：定性=925fe0c（吸管/前后景槽）引入的行为回归，非断言陈旧——active_tool 的地形/方块页 PAINT 前置检查短路了素材选中→Tool.ASSET 分支（植物素材完全无法放置、地形素材丢失再点取消语义）；且 clear_asset_selection 取消时不回退前景槽，画笔仍隐形刷素材。修复：素材选中检查移回 PAINT 检查之前（保留吸管特性）、clear_asset_selection 将素材块前景槽回落当前地形、on_block_asset_btn_pressed 先清选中再写前景槽｜并发不安全：写 user://battlefields/contract_asset_map.json（tests/user_asset_editor_contract.gd:21）｜加速不安全（初始保守，待 A/B）：编辑器面板帧时序 L145"
     },
     {
       "name": "user_asset_pagination",

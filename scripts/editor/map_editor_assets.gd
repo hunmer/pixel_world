@@ -71,8 +71,8 @@ static func on_block_asset_btn_pressed(ed, asset_id: String) -> void:
 		ed._selected_block_asset = ""
 	else:
 		ed._selected_block_asset = asset_id
+		ed._clear_asset_selection()  # 与素材 Tab 选中互斥（先清再写前景槽：清空的素材回落不覆盖刚选的方块素材）
 		ed._set_block_slot("fg", {"kind": "asset", "id": asset_id, "z": int(ed._block_fg.z)})
-		ed._clear_asset_selection()  # 与素材 Tab 选中互斥
 	update_asset_preview(ed)
 	if ed._selected_block_asset.is_empty():
 		ed._status("已取消方块素材选择")
@@ -126,11 +126,15 @@ static func flush_asset_thumbs(ed) -> void:
 	rebuild_block_asset_grid(ed)
 
 
-## 选地形/植物调色板时清空素材选中（两组互斥，避免误放置）
+## 选地形/植物调色板时清空素材选中（两组互斥，避免误放置）。
+## 前景槽若仍是选中素材时写入的素材块，一并回落到当前地形：否则取消选择后
+## 画笔仍在"隐形"刷素材，内置画笔/填充无法覆盖素材格（tile_override 清不掉）。
 static func clear_asset_selection(ed) -> void:
 	if ed._selected_asset.is_empty():
 		return
 	ed._selected_asset = {}
+	if String(ed._block_fg.get("kind", "")) == "asset":
+		ed._set_block_slot("fg", {"kind": "terrain", "id": String(ed.current_terrain), "z": int(ed._block_fg.z)})
 	if ed._asset_panel != null:
 		ed._asset_panel.deselect()
 	update_asset_preview(ed)

@@ -2,7 +2,7 @@
   "project": "Pixel World",
   "description": "功能 → 文件依赖图谱：哪些功能用到哪些代码/场景/着色器/配置文件，多层级分类。文件可归属多个功能（shared）。数据来自 2026-11-15 增量扫描 + 每个文件头部『## file.gd — 职责』注释。",
   "generated": "2026-11-17",
-  "head_commit": "b43a194",
+  "head_commit": "0605bad",
   "legend": {
     "types": {
       "gd": "GDScript 源码",
@@ -128,7 +128,7 @@
             {
               "path": "scripts/audio/game_sfx.gd",
               "type": "gd",
-              "lines": 187,
+              "lines": 189,
               "role": "全局音效管理（autoload: Sfx）"
             },
             {
@@ -1624,7 +1624,7 @@
             {
               "path": "scripts/editor/map_editor_cell_tools.gd",
               "type": "gd",
-              "lines": 280,
+              "lines": 285,
               "role": "地图编辑器画布交互路由与格子面板同步"
             },
             {
@@ -1748,7 +1748,7 @@
             {
               "path": "scripts/editor/map_editor_assets.gd",
               "type": "gd",
-              "lines": 164,
+              "lines": 168,
               "role": "地图编辑器用户素材选择与方块素材网格"
             }
           ],
@@ -2295,7 +2295,7 @@
             {
               "path": "tools/test_run_contracts.py",
               "type": "py",
-              "lines": 505,
+              "lines": 510,
               "role": "run_contracts.py 自身单测（27 test，node 口径用 python unittest）"
             },
             {

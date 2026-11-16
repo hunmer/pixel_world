@@ -2,6 +2,14 @@
 
 > 本文件记录 `CLAUDE.md` 索引本身的生成 / 更新，**不是产品 Changelog**。仅保留最近 5 条（倒序）。
 
+## 2026-11-17（known-fail 清零轮：五项全部修复，基线 75/80 全绿）
+
+- **触发**：用户指令「按照优先度和收益，继续派发给团队任务」；按 收益÷风险 排序选定修 5 个 known-fail（基线干净+可能藏真 bug）优先于纯结构拆分，4 成员文件域互斥并行，先定性再修、禁为绿而绿。
+- **定性结论（全部实测取证）**：① `isometric_view`＝HUD 侧栏预留列（reserved 56/360px）把光轴平移到舞台中心，原契约"焦点=窗口中心"取样假设失效——探针实证投影/拾取数学无回归，契约改在 `unproject(焦点)` 实际渲染位取样并**新增**"焦点渲染在舞台中心 <0.25px"断言（强化）；② `battle_action_chain`＝飘字断言陈旧（pixelfx 接管后伤害=damage-number+health-bar-hit 两节点），helper 改 `_expected_float_node_count`；③ `battle_presentation_hooks`＝音效断言按素材优先设计改 either-or + 未映射 cue 探针守护程序化回退 + 密闭性修复（本机 `user://settings.cfg` 的 immersive 开关泄入 headless，`_pin/_restore` 固定），**附带修 `game_sfx.gd:84` Nil→Array 类型化赋值真 bug**；④ `map_editor_ui`＝6 项全部断言过时，按实现重锚（侧栏 ≥320 且=combined_minimum_size、单块 0..z 共 7 块、先关弹窗再断隐藏、历史断言前 `_seal_pending()`）；⑤ `user_asset_editor`＝`925fe0c` 吸管功能引入的**真行为回归**——`active_tool` PAINT 前置检查短路素材选中→`Tool.ASSET` 分支（植物素材完全无法放置）、`clear_asset_selection` 不回退前景槽；修复保留吸管特性。
+- **验收**：全量 **pass 75 / fail 0 / env-skip 5**（80 契约），manifest 五条 `known_status` 摘除、evidence 记录依据；runner 27 单测绿（known-fail 夹具测试改为无夹具 skip）。
+- **Lead 集成修复**：并行成员改同一 manifest 后写互踩（只剩 battle 两条幸存）——Lead 补齐另三条并验证；教训：共享 JSON 文件的并行编辑必须串行或由 Lead 统一收口。
+- 同步：CLAUDE.md、docs/test_automation.md §4、claude/testing-and-quality.md（台账+风险节）、docs/roadmap.md（P0-3 ✅）。
+
 ## 2026-11-16（深夜收尾轮：report.md 违例清零）
 
 - `main.gd` `_unhandled_input` 键位路由表化：主体 24 行守卫链嵌套=1 + `_key_route`/`_entry_key_route` 双路由表（physical 优先、keycode 兜底），2174→2280 行；terrain SHA 不变，6 契约验证。
@@ -49,20 +57,5 @@
 - **覆盖率**：main.gd 函数级复核（4319/176 不变）、map_editor.gd 3285/150、scripts/ 122 .gd 文件级、tests 78 契约归类 + 运行态实测（新 6 + 复跑 6）、config/data 逐文件。二进制素材仅统计。
 - **缺口 / 下一步建议**：① 契约回归红：`ui`（map_editor.gd 三处直建控件）、`map_editor_ui`（侧栏 320px/z 重建断言）→ 已进 roadmap 新 P0；② 基线余项：battle_action_chain/battle_presentation_hooks/isometric_view/sunlight_3d_gl 4 败未复跑 + 4 超时（3 个 autoload 依赖型 + user_asset_source_live）；③ map_editor.gd 单体膨胀（+~900 行）逼近 main.gd，拆分前兆；④ data/battlefields/contract_asset_map.json.bak 脏文件待清。
 
-## 2026-11-15 — 增量更新（会话路由/存档 + 演出/自动化 + 用户素材 + UI 组件库 + macOS 迁移）
 
-- **触发**：/init-project 增量更新；距上次扫描（2026-11-12）三个密集日演进，且项目从 Windows（E:/）迁至 macOS（/Users/Zhuanz/Documents/pixel_world）。
-- **重大变化**：
-  - **主入口变更**：`run/main_scene = res://scenes/Game.tscn`（战旗会话入口：冷启动自动续玩最近战旗）；`GameSession` 战旗会话路由 + `--battlefield` / `--reset-battle` 命令行；战旗逐战场存档（`core/battle_save_codec/store` → `user://battle_saves/`，tmp+bak 原子写）。
-  - **沉浸演出层**：`battle/battle_presentation / turn_director / action_anim / result_presentation / immersive_camera / encounter_transition` + `battle_settings_tab` 沉浸开关 + 可快进（`*_finished(skipped)` 信号）；shared 结算内核 `battle/battle_action_resolver.gd`。
-  - **战斗自动化**：`battle/automation/`（scenario_loader/runner/report）+ `tools/battle_cli.gd` 无头 CLI（events.jsonl/result.json/summary.txt，退出码 0–4）；手册 `docs/battle_automation.md`。
-  - **UI 组件库**：`ui/` 16 个 Pixel* @tool 组件 + `component_theme.gd` + 304 行 README + 画廊 `scenes/UIComponentGallery.tscn`（F6）+ `tests/ui_contract.gd`（735 checks）；业务 UI 未迁移（roadmap）。
-  - **用户素材系统**：`scripts/assets/`（user_asset_service 32KB / catalog / visual_adapter）+ HTTP 清单源（127.0.0.1:8076/blocks.json）+ 编辑器 `asset_library_panel` + `tools/build_blocks_manifest.mjs`（node:test 7 项）；落盘 `user://custom_assets/`。
-  - **表现层 autoload 4→8**：+`GameCursor` / `Sfx`（全局音效池+按钮声自动挂接）/ `LoadingScreen`（幂等遮罩）；`shaders/` 自有 6 个（+encounter_warp）。
-  - **调试启动配置**：`config/startup.cfg` + `scenes/startup_config.gd`（F5 直跳 last_scene；`--battlefield` 优先）；手册 `docs/startup_config.md`。
-  - **对话演示**：`scenes/DialogueDemo.tscn` + `data/dialogue/demo_intro.json`（未接正式流程）。
-  - **规模**：main.gd 4099→4319 行/176 函数；scripts/ 75→113 .gd；tests 37→71 个 .gd（69 契约+2 探针）；scenes 5→11 tscn；addons +pixelfx v0.3.0；新增 `ui/`、`docs/`、`tools/`、`plans/` 目录；根 HANDOFF.md 删除、handoff/ 增至 3 篇；rules/ 减至 4 篇（image-viewing.md 已删，AGENTS.md 引用未清——roadmap）。
-- **更新文件**：`claude/` 全部 10 个详情文件 + 根 `CLAUDE.md` 索引 + 新建 **`docs/roadmap.md`**（第二交付物：后续完善项按优先级/前置依赖排列）。
-- **覆盖率**：`main.gd` 函数级（4319/176）、`scripts/` 113 .gd 文件级、tests 69 契约归类、config/data 逐文件、16 自有 tscn、新子系统（automation/assets/ui）API 级 grep 验证。二进制素材仅统计。
-- **缺口 / 下一步建议**：① macOS 上 69 契约 headless 基线未跑全（game_hud 据旧记录坏，未复验）；② 用户素材源绑死 127.0.0.1:8076（本机需重建）；③ `game_hud_contract.gd` 修复、`cell_context_to_terrain` 11 地形覆盖复核、双轨配置迁移收尾等 —— 全部进 `docs/roadmap.md` 分优先级跟踪。
 

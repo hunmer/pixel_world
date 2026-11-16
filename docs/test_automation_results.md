@@ -1,5 +1,9 @@
 # 测试自动化基线台账（2026-11-16）
 
+> ⚠️ 本文件为当时任务时点记录（历史不改写）。**当前口径以 `docs/test_automation.md` §4 为准**：
+> 2026-11-17 五项 known-fail 全部修复清零，80 契约 = pass 75 / known-fail 0 / env-skip 5；
+> 本文件中的 known-fail 4、79 契约等数字均为历史快照。
+>
 > 任务：契约测试入口「可选择、可并发、可诊断、可复现」+ 小规模验证纯逻辑基准。
 > 交付：`tests/contract_manifest.json`、`tools/run_contracts.py`、`tools/test_run_contracts.py`、
 > `tools/run_contract_baseline.sh`（兼容包装）、`tests/benches/ecology_logic_bench.gd` +

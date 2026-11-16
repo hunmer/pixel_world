@@ -81,7 +81,9 @@ func _exit_tree() -> void:
 
 ## 播放一个 cue；素材缺失或被节流时返回 false（调用方可回退）。
 func play(cue: StringName, throttle_seconds: float = 0.0) -> bool:
-	var entry: Array = CUES.get(cue)
+	# 注意不能写成 `var entry: Array =`：CUES.get 未命中返回 Nil，类型化赋值会先报
+	# SCRIPT ERROR 再中断函数，下面的 null 检查就成了死代码（未映射 cue 的回退路径必踩）。
+	var entry = CUES.get(cue)
 	if entry == null:
 		return false
 	var stream: AudioStream = _get_stream(String(entry[0]))

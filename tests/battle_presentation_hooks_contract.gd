@@ -5,6 +5,23 @@ const WorldToChapter = preload("res://scripts/core/world_to_chapter.gd")
 
 var failures := 0
 
+## 测试密闭性：相机 kick 断言只对传统取景链成立。用户本地 user://settings.cfg 若开启
+## 沉浸式演出（immersive_presentation=true），ImmersiveCamera 会在行动演出期合法接管相机
+## （平移+旋转），kick 断言必然观察到位移来源混杂。契约统一固定关闭后测 kick 通道本身。
+## 直接改内存变量（不走 set_battle_immersive_presentation 的 save()），退出前恢复原值，
+## 不落盘、不污染开发者本地配置。
+var _immersive_saved := false
+
+
+func _pin_immersive_presentation() -> void:
+	var settings: Node = root.get_node("Settings")
+	_immersive_saved = bool(settings.get("battle_immersive_presentation"))
+	settings.set("battle_immersive_presentation", false)
+
+
+func _restore_immersive_presentation() -> void:
+	root.get_node("Settings").set("battle_immersive_presentation", _immersive_saved)
+
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -142,11 +159,38 @@ func _exercise_visual_and_sound_hooks(battle: Node) -> void:
 		battle.battle_ui.presentation_sound_requested.is_connected(battle._on_presentation_sound),
 		"presentation_sound_requested 无消费者"
 	)
+	# 演出 cue 音效按 battle_sfx.gd 设计：先映射为 Sfx 素材名（nameplate→ui_select，victory→victory），
+	# 素材存在走真实素材优先路径（不占用程序化回退通道）；映射/素材缺失才回退程序化波形。
+	# 两侧都断言，不依赖素材库当下缺哪块。
+	var sfx_cues: Dictionary = root.get_node("Sfx").CUES
 	battle.battle_ui.presentation_sound_requested.emit(&"nameplate")
-	_expect(battle._presentation_audio.stream != null, "名牌 cue 未生成程序化音频")
-	_expect(battle._presentation_audio.playing, "名牌 cue 未实际播放")
+	var nameplate_asset: bool = sfx_cues.has(&"ui_select")
+	if nameplate_asset:
+		_expect(
+			not battle._presentation_sound_cache.has(&"nameplate"),
+			"名牌 cue 有真实素材（ui_select）时应走 Sfx 优先路径，不应进入程序化波形缓存"
+		)
+	else:
+		_expect(battle._presentation_audio.stream != null, "名牌 cue 缺真实素材时未生成程序化音频")
+		_expect(battle._presentation_audio.playing, "名牌 cue 缺真实素材时未实际播放")
 	battle.battle_ui.presentation_sound_requested.emit(&"victory")
-	_expect(battle._presentation_sound_cache.size() == 2, "结果 cue 未进入固定波形缓存")
+	if sfx_cues.has(&"victory"):
+		_expect(
+			not battle._presentation_sound_cache.has(&"victory"),
+			"结果 cue 有真实素材（victory）时应走 Sfx 优先路径，不应进入程序化波形缓存"
+		)
+	else:
+		_expect(battle._presentation_sound_cache.has(&"victory"), "结果 cue 缺真实素材时未进入固定波形缓存")
+	# 未映射 cue 必然走程序化回退：固定波形生成 + 实际播放 + 入缓存（守护回退通道本身）。
+	var cache_before: int = battle._presentation_sound_cache.size()
+	battle.battle_ui.presentation_sound_requested.emit(&"contract_probe")
+	_expect(battle._presentation_audio.stream != null, "未映射 cue 未回退生成程序化音频")
+	_expect(battle._presentation_audio.playing, "未映射 cue 未实际播放")
+	_expect(
+		battle._presentation_sound_cache.size() == cache_before + 1
+			and battle._presentation_sound_cache.has(&"contract_probe"),
+		"程序化回退波形未进入固定缓存"
+	)
 
 	var player := _first_unit(battle, &"player")
 	var sprite: UnitSprite3D = battle._unit_sprites[player.id]
@@ -226,9 +270,11 @@ func _reset_chapter(chapter: Dictionary) -> void:
 
 
 func _run() -> void:
+	_pin_immersive_presentation()
 	var world = load("res://main.tscn").instantiate()
 	if world.get_script() == null:
 		_expect(false, "main.gd 编译失败")
+		_restore_immersive_presentation()
 		quit(1)
 		return
 	world.seed = 42
@@ -250,6 +296,7 @@ func _run() -> void:
 	var b2 = load("res://scenes/Battle.tscn").instantiate()
 	if b2.get_script() == null:
 		_expect(false, "battle.gd 编译失败")
+		_restore_immersive_presentation()
 		quit(1)
 		return
 	root.add_child(b2)
@@ -261,4 +308,5 @@ func _run() -> void:
 	await process_frame
 	if failures == 0:
 		print("BATTLE_PRESENTATION_HOOKS_CONTRACT_OK")
+	_restore_immersive_presentation()
 	quit(0 if failures == 0 else 1)

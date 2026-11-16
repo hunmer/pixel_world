@@ -9,7 +9,7 @@
 
 | 层 | 主题 | 条目 |
 | --- | --- | --- |
-| **P0** | 修坏 & 堵漏（小时级） | 1 修 game_hud 契约 ✅ · 2 清理失效引用/调试遗留（半 ✅）· **3 修 ui/map_editor_ui 契约回归（新）** |
+| **P0** | 修坏 & 堵漏（小时级） | 1 修 game_hud 契约 ✅ · 2 清理失效引用/调试遗留（半 ✅）· 3 修 ui/map_editor_ui 契约回归 ✅（ui 2026-11-16 复绿；map_editor_ui 2026-11-17 断言按实现重锚转 pass，known-fail 全清零） |
 | **P1** | 补基线 & 保正确（天级） | 3 macOS 全量测试基线 ✅（余项跟进）· 4 世界战场地形覆盖 ✅ · 5 B2 世界路径验证 · 6 素材源解绑（大半 ✅） |
 | **P2** | 内容扩张（story 目标态） | 7 差距映射表（**关键路径根**）· 8 职业扩 13 · 9 技能/道具扩容 · 10 章节/战场扩 15 · 11 对话接入引导 · 12 素材四向展开 |
 | **P3** | 重构 & 打磨（有余力再做） | 13 main.gd 拆分 · 14 双轨配置收尾 · 15 UI 组件库推广 · 16 CI/lint · 17 导出配置 · 18 世界状态持久化 · 19 音乐扩容 |
@@ -49,9 +49,10 @@ graph LR
   - `data/battlefields/contract_asset_map.json.bak`（契约产物脏文件，6943B，gitignore 或删除）。
 - **验收**：`git grep image-viewing` 仅剩历史文档；根目录无 b1_*.png；无 .bak 脏文件。**规模**：极小。
 
-### 3. 修复 `ui` / `map_editor_ui` 契约回归 ⚡（新，2026-11-15 扫描发现）
+### 3. 修复 `ui` / `map_editor_ui` 契约回归 ⚡（新，2026-11-15 扫描发现；✅ 已完成）
 
-- **做什么**：两契约当前红（实测 exit=1）：
+- **✅ 结果（2026-11-16/17）**：`ui` 契约 2026-11-16 复绿（map_editor 三处直建控件改走 `UIFactory`，契约 needle 反转为禁直预加载 PixelButton）；`map_editor_ui` 2026-11-17 转 pass——定性 6 项失败全部为**断言过时**（侧栏实为 320px 下限+内容最小宽 344/353px；单块陆柱 0..z 每层一块共 7 块；选择菜单断隐藏前需先关程序化打开的弹窗；历史惰性封存需先 `_seal_pending()`），按实现重锚并逐处注释依据。五项 known-fail 同轮清零（含 isometric_view 根因=HUD 预留列、user_asset_editor=925fe0c 真回归），基线 **pass 75 / fail 0 / env-skip 5**。
+- **做什么**（历史记录）：两契约当前红（实测 exit=1）：
   - `tests/ui_contract.gd`：静态扫描抓到 `scripts/editor/map_editor.gd` 三处直建控件 —— `Button.new()`@943、`CheckButton.new()`@1410（`_place_preview_toggle`）、`OptionButton.new()`@2124（`_mode_option`）；且该文件头注释自称"不再自带样式 helper 与裸 Button.new"，名实不符。
   - `tests/map_editor_ui_contract.gd`：三断言失败 —— (1024,640) 与 (1280,800) 下"侧栏保持 320px"；改 z 后实际重建的单块 `level=6`（应为增量更新而非全量重建）。
 - **修法方向**：三处直建换 `ui/` 组件（`PixelButton`/`PixelCheckButton`/`PixelOptionButton`）；侧栏宽度与单块重建逻辑按契约语义修（侧栏宽度用 DESIGN token；z 变更走单块更新路径）。

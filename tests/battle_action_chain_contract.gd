@@ -17,18 +17,26 @@ func _expect(condition: bool, message: String) -> void:
 		assert(condition, message)
 
 
-## 与 ActionAnim._present_float_text 的可见分支一致：无内容 impact 不应生成空飘字。
-func _visible_impact_count(event: Dictionary) -> int:
+## 每个 impact 的飘字容器期望子节点数（与现行呈现链一致，作为断言口径）：
+##   ActionAnim._present_float_text → BattleFx.spawn_float_text：未命中 "MISS" / 治疗 "+N" / 纯 buff 各 1 个
+##     outline 标签；伤害 "-N" 文本标签被 spawn_float_text 跳过（伤害数字已由 pixelfx damage-number 接管）。
+##   battle.gd _on_impact_presented → BattleFx.spawn_damage_from_impact：实际伤害（hit 且 damage>0）再生成
+##     damage-number + health-bar-hit 两个 PixelFx2D 节点（均挂入同一飘字容器，见 battle_fx.gd spawn_damage_fx）。
+func _expected_float_node_count(event: Dictionary) -> int:
 	var count := 0
 	for impact_value in event.get(&"impacts", []):
 		var impact: Dictionary = impact_value
-		if (
-			not bool(impact.get(&"hit", true))
-			or int(impact.get(&"healing", 0)) > 0
-			or int(impact.get(&"damage", 0)) > 0
-			or not (impact.get(&"statuses", []) as Array).is_empty()
-		):
-			count += 1
+		if not bool(impact.get(&"hit", true)):
+			count += 1  # "MISS" 标签
+			continue
+		if int(impact.get(&"healing", 0)) > 0:
+			count += 1  # "+N" 治疗标签
+		elif int(impact.get(&"damage", 0)) > 0:
+			pass  # "-N" 标签跳过，伤害呈现走下方特效两节点
+		elif not (impact.get(&"statuses", []) as Array).is_empty():
+			count += 1  # 纯 buff 标签
+		if int(impact.get(&"damage", 0)) > 0:
+			count += 2  # pixelfx damage-number + health-bar-hit
 	return count
 
 
@@ -85,9 +93,9 @@ func _exercise_actions(battle: Node, label: String) -> void:
 		var event: Dictionary = events[0]["event"]
 		_expect(not (event.get(&"impacts", []) as Array).is_empty(), "%s 普攻 attack_event 无 impact" % label)
 		_expect(
-			float_count[0] == _visible_impact_count(event),
-			"%s 普攻 impact/飘字数量不一致，可能重复或漏播: floats=%d impacts=%d" % [
-				label, float_count[0], _visible_impact_count(event)]
+			float_count[0] == _expected_float_node_count(event),
+			"%s 普攻飘字节点数与 impact 呈现不一致，可能重复或漏播: floats=%d expect=%d" % [
+				label, float_count[0], _expected_float_node_count(event)]
 		)
 	_expect(bool(attacker.get(&"hasActed", false)), "%s 普攻演出后未恢复 hasActed 结算" % label)
 
@@ -105,8 +113,9 @@ func _exercise_actions(battle: Node, label: String) -> void:
 		var event: Dictionary = events[1]["event"]
 		_expect(StringName(event.get(&"skill_id", &"")) == &"fireball", "%s 技能事件 id 错误" % label)
 		_expect(
-			float_count[0] == _visible_impact_count(event),
-			"%s 技能 impact/飘字数量不一致，可能重复或漏播" % label
+			float_count[0] == _expected_float_node_count(event),
+			"%s 技能飘字节点数与 impact 呈现不一致，可能重复或漏播: floats=%d expect=%d" % [
+				label, float_count[0], _expected_float_node_count(event)]
 		)
 
 	# 敌方通过 TurnDirector 注入的同一 async 入口，仍走 execute→event→play。
