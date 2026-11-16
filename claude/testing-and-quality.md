@@ -1,10 +1,14 @@
 # 测试与质量
 
-> 更新：2026-11-15（第二轮增量：契约 69→78 个；建立 macOS 全量基线 62/72；新增增援/地形映射/编辑器区域操作等 6 契约）。
+> 更新：2026-11-16（统一契约 runner `tools/run_contracts.py` + manifest 80 契约 + gdtest/批量模拟试点；`ui` 复绿。上一轮：2026-11-15 契约 69→78、macOS 全量基线 62/72）。
 
-## 测试机制（无第三方框架）
+## 测试机制（契约自测 + 统一 runner）
 
-全仓库**无 GUT / WAT 等测试框架**，测试是 GDScript 自测脚本，三种形态：
+契约本体仍是 GDScript 自测脚本（不依赖 GUT/WAT 等框架，`--script` 单文件可跑），
+但**执行入口已统一**：`tools/run_contracts.py`（默认）按 `tests/contract_manifest.json`
+选择/并发/计时/汇总，legacy 单契约命令保留。状态语义 `pass/fail/timeout/
+environment-skip/executor-error` 与全部参数见 `docs/test_automation.md` §3。
+形态清单：
 
 ### 1. `tests/*_contract.gd`（契约测试，`extends SceneTree`）
 
@@ -15,11 +19,16 @@
 
 运行（headless；macOS 本机 `GODOT=/Applications/Godot.app/Contents/MacOS/Godot`，Windows 历史路径 `D:/Godot/Godot_v4.7.2-stable_win64.exe`）：
 ```bash
+# 默认入口：统一 runner（选择/并发/超时/汇总/影响分析）
+python3 tools/run_contracts.py --test terrain_generation --no-warmup
+
+# legacy 单契约命令（等价于 runner 的 native 后端，调试单文件时最短路径）
 "$GODOT" --headless --path . --script res://tests/terrain_generation_contract.gd
 ```
-> Windows console 版 exe 的 stdout 全缓冲，管道下可能看不到输出 —— 用退出码为准。**首次 headless 运行会先做资源导入，耗时明显偏长属正常。**
+> Windows console 版 exe 的 stdout 全缓冲，管道下可能看不到输出 —— 用退出码为准。**首次 headless 运行会先做资源导入，耗时明显偏长属正常**（runner 默认先 `--import` 预热一次）。
 
-`tests/` 共 **80 个 .gd**（**78 个契约** + 2 个探针 `flat_rotation_probe` / `mesh_draw_probe`），覆盖：
+`tests/*_contract.gd` 共 **80 个**（78 原有 + `ecology_logic_bench` + `simulation`；
+另有 2 个探针 `flat_rotation_probe` / `mesh_draw_probe`，manifest 收录但不默认跑），覆盖：
 
 | 类别 | 脚本（省略 `_contract` 后缀） |
 | --- | --- |
@@ -44,6 +53,12 @@
 | UI 组件库（2） | `ui`（含业务脚本禁直建控件扫描）、`ui_components` |
 | 音效（1） | `game_sfx` |
 | 特效库（1） | `pixelfx` |
+| 基准 / 批量模拟（2） | `ecology_logic_bench`（纯逻辑基准，2026-11-16 新增）、`simulation`（批量模拟契约，2026-11-16 新增） |
+
+另有 `tests/gdtest/`（gdtest 持久 worker 试点：3 文件 8 test，断言镜像
+cell_state / ecology_resolver / animal_behavior_registry 原生契约，经
+`--backend gdtest` 或 gdtest CLI 运行）与 `tests/benches/`（bench harness）、
+`tests/fixtures/simulations/`（批量模拟 batch 夹具）。
 
 `tests/fixtures/`：模块扩展夹具（自定义 scorer / 不完整 ambient renderer / 火山 biome + manifest/world/species/communities/materials）+ `battle_scenarios/`（quick_duel / deterministic_replay / scripted_victory / ai_difficulty_focus）。
 
@@ -61,6 +76,15 @@
 
 `tools/battle_cli.gd`：一份场景 JSON → 确定性对局 → 结构化战报 + 退出码（`docs/battle_automation.md`）。适合 CI 回归、平衡性批量模拟、bug 最小复现。
 
+### 5. 批量模拟 runner（2026-11-16 新增）
+
+`tools/run_simulations.gd -- --batch <json> [--runs N] [--out dir]`：按 batch 夹具
+（`tests/fixtures/simulations/`）批量跑 BattleRunner 对局，输出逐次 JSON 指标与
+不变量判定（确定性摘要 / 停机原因 / 步数上界 / 断言 / 退出码）；默认 5-20 次，
+`--runs 1000` 容量模式显式开启（实测 3.6s）。配套 `godot-autosim` 最小接入
+（`addons/godot_autosim/` + `tools/autosim_battle_adapter.gd`）。手册见
+`docs/test_automation.md` §2。
+
 ## 已知验证状态
 
 | 项 | 状态 | 说明 |
@@ -74,6 +98,8 @@
 | **6 个新契约（2026-11-15 编辑器/增援波）** | ✅ 全过 | `reinforcement`、`world_terrain_mapping`(22 checks)、`editor_block_picker`、`editor_region_clipboard`(116 asserts)、`editor_region_preset_store`(73 asserts)、`map_editor_region_ops`（本次扫描实测） |
 | 基线后受影响复跑（2026-11-15 晚） | ⚠️ 4/6 | ✅ `editor_selection` / `hint_bar` / `battlefield_render` / `ui_components`(1062)；❌ **`ui`**（map_editor.gd 仍有 `Button.new()`@943 / `CheckButton.new()`@1410 / `OptionButton.new()`@2124 直建控件）、❌ **`map_editor_ui`**（1024×640 与 1280×800 侧栏未保持 320px；改 z 后实际重建的单块 level=6）——均待修 |
 | 全量契约基线 | ⚠️ 62/72 通过 | **2026-11-15 macOS 全量基线**（HEAD `3a08327`，`tools/run_contract_baseline.sh`）：6 失败（battle_action_chain / battle_presentation_hooks / isometric_view / map_editor_ui / ui / sunlight_3d_gl[headless 环境限制，非回归]）、4 超时（action_anim / immersive_battle_camera / world_map_overlay 均 autoload 依赖编译失败挂起；user_asset_source_live 依赖本机 8076 源）。详见 [docs/testing_baseline_2026-11-15.md](../docs/testing_baseline_2026-11-15.md)。其后契约总数 72→78 |
+| **`ui` 契约（两行分列台账）** | ✅ 复绿 | 2026-11-15 基线：红（map_editor.gd 直建 `Button.new()` 等）；2026-11-16 实测：**3 连过 exit=0**，根因已在后续修复中消除（现 scripts/scenes/map_editor.gd 无直建 Button/CheckButton/OptionButton），manifest 已更新为 pass |
+| 统一 runner 交付（2026-11-16） | ✅ | `tools/run_contracts.py`（manifest 80 契约；27 单测全绿）+ `run_contract_baseline.sh` 兼容包装 + gdtest 试点 go（A→B→A 稳定）+ 批量模拟（1000 次 3.6s）。台账 `docs/test_automation_results.md`。manifest 现口径：known-fail 4 / environment-skip 5 / pass 71 |
 
 ## Lint / 类型检查
 
@@ -84,10 +110,13 @@
 ## 质量风险（本次扫描 + handoff 待办）
 
 - `main.gd` 单文件 **4319 行 / 176 函数**、`map_editor.gd` **3285 行 / 150 函数** —— 双单体职责高度集中，可维护性风险（拆分均为 roadmap P3 项；map_editor 增长最快）。
-- **两个红契约待修**：`ui`（map_editor.gd 三处直建控件）与 `map_editor_ui`（侧栏宽度 / z 重建断言）——2026-11-15 编辑器波的回归，见上表。
+- **红契约待修（更新）**：~~`ui`~~ 已复绿（2026-11-16 实测 3 连过，根因消除）；仍红：`map_editor_ui`（侧栏宽度 / z 重建断言）、`battle_action_chain`、`battle_presentation_hooks`、`isometric_view`（后三个为 2026-11-15 基线既有红项）。
 - `meowa_tiles/heroes/`（24 png）未与 `data/professions.json` 8 职业映射（已知待办）。
 - `story/` 设计 bible（13 职业/27 技能/25 道具）与 `data/` 实际（8/8/8）差距大，实现时勿把目标态当运行时事实（差距清单见 `docs/gameplay_gap.md`）。
-- 78 个契约无 CI：回归靠本地手跑；macOS 基线已建立（2026-11-15），剩 6 失败 + 4 超时待归零。
+- 80 个契约无 CI：回归靠本地手跑；现已可用统一 runner 一键全量并输出 JUnit
+  （`python3 tools/run_contracts.py --all --run-env-skip --junit`），接入 CI 只差
+  runner 前置（manifest 口径 known-fail 4 + environment-skip 5，见
+  `docs/test_automation.md` §4）。
 - 用户素材默认源 `http://127.0.0.1:8076/blocks.json` 为本机回环；源已可配置（`asset_source.cfg`）+ 断源降级，但换机器仍需配置或自建源。
 - `data/battlefields/contract_asset_map.json.bak` 脏文件混在战场目录（loader 只扫 `*.json` 不受影响，建议清理）。
 
@@ -97,13 +126,19 @@
 GODOT=/Applications/Godot.app/Contents/MacOS/Godot   # macOS 本机
 # GODOT=D:/Godot/Godot_v4.7.2-stable_win64.exe       # Windows 历史路径
 
-# 单个契约
+# === 默认入口：统一 runner（docs/test_automation.md §3） ===
+python3 tools/run_contracts.py --test terrain_generation --no-warmup   # 单契约
+python3 tools/run_contracts.py --group ecology --jobs 3               # 组/标签 + 并发
+python3 tools/run_contracts.py --changed --dry-run                    # 只跑受影响（预览）
+python3 tools/run_contracts.py --all --run-env-skip --junit           # 全量 + JUnit
+tools/run_contract_baseline.sh /tmp/out                               # 旧接口兼容包装
+
+# === legacy 单契约（等价 native 后端，调试单文件时最短路径） ===
 "$GODOT" --headless --path . --script res://tests/terrain_generation_contract.gd
 
-# 跑全部契约（Git Bash / zsh；首次运行含导入耗时）
-for t in tests/*_contract.gd; do
-  "$GODOT" --headless --path . --script "res://$t" >/dev/null 2>&1 || echo "FAIL: $t"
-done
+# 批量模拟（docs/test_automation.md §2）
+"$GODOT" --headless --path . --script res://tools/run_simulations.gd -- \
+  --batch res://tests/fixtures/simulations/battle_determinism_fixed.json
 
 # Node 契约（用户素材清单）
 node --test tools/build_blocks_manifest.test.mjs

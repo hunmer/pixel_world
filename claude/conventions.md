@@ -11,8 +11,13 @@ godot --path .
 /Applications/Godot.app/Contents/MacOS/Godot --path /Users/Zhuanz/Documents/pixel_world
 # Windows 历史路径：D:/Godot/Godot_v4.7.2-stable_win64.exe --path E:/pixel_world
 
-# headless 跑某个契约测试（extends SceneTree 类型，运行后自动退出）
+# headless 跑某个契约测试（extends SceneTree 类型，运行后自动退出；legacy 单契约命令，仍可用）
 godot --headless --path . --script res://tests/terrain_generation_contract.gd
+
+# 统一契约 runner（默认入口；--test/--group/--changed/--jobs/--dry-run 等，
+# 五种状态 pass/fail/timeout/environment-skip/executor-error，详见 docs/test_automation.md §3）
+python3 tools/run_contracts.py --test terrain_generation --no-warmup
+python3 tools/run_contracts.py --changed --dry-run      # 只跑受影响（git 变更 → 影响闭包）
 
 # 从命令行带参运行场景（CmdArgs 解析 --key / --key=value / --no-key）
 godot -d --path . res://main.tscn --seed=42
@@ -38,14 +43,22 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 
 ## 测试
 
-- **无第三方测试框架**。测试形态：
-  1. `tests/*_contract.gd`（**78 个**）：`extends SceneTree`，在 `_initialize` → `call_deferred("_run")` 中跑断言，失败用 `push_error` + `quit(1)`。**地形生成测试用固化的 SHA-256 快照检测回归**（改了确定性会挂）。
+- **契约本体无第三方框架依赖，入口已统一**。默认入口是 `tools/run_contracts.py`
+  （`tests/contract_manifest.json` 驱动：80 契约 = 78 原有 + `ecology_logic_bench` +
+  `simulation`；`--test/--group/--changed/--all/--jobs 1-4/--dry-run/--junit` 等，
+  状态 `pass/fail/timeout/environment-skip/executor-error`，手册见 `docs/test_automation.md` §3）；
+  legacy 单契约命令 `godot --headless --path . --script res://tests/x_contract.gd` 仍保留。
+  测试形态：
+  1. `tests/*_contract.gd`（**80 个**）：`extends SceneTree`，在 `_initialize` → `call_deferred("_run")` 中跑断言，失败用 `push_error` + `quit(1)`。**地形生成测试用固化的 SHA-256 快照检测回归**（改了确定性会挂）。
   2. `scripts/tests/*.gd`：`extends Node`，`_ready` 里自跑 `_ok/_pass/_fail/_print_summary`（仿 `debug_test.gd` 框架）。
-  3. 探针 2 个：`tests/flat_rotation_probe` / `mesh_draw_probe`。
+  3. 探针 2 个：`tests/flat_rotation_probe` / `mesh_draw_probe`（manifest 收录但不默认跑）。
   4. Node `--test`（素材清单生成器 7 项，`tools/build_blocks_manifest.test.mjs`）。
   5. UI 组件库 headless 契约 `tests/ui_contract.gd` + `ui_components_contract.gd`（1062 checks；`ui_contract` 还静态扫描业务脚本禁直建控件）。
-- 已知状态（2026-11-15 macOS 全量基线，`tools/run_contract_baseline.sh`）：62/72 通过；6 失败（详见 `testing-and-quality.md` 状态表，其中 `ui` / `map_editor_ui` 为编辑器波新增回归待修）+ 4 超时（autoload 依赖型挂起，待契约侧修复）。其后契约总数 72→78，新增 6 个全绿。
-- **只跑修改过的测试，不盲目跑全量**（AGENTS.md）；首跑 headless 含资源导入，耗时偏长属正常。
+  6. gdtest 持久 worker 试点（`tests/gdtest/` 3 文件 8 test，`--backend gdtest` 可选后端）与批量模拟（`tools/run_simulations.gd`）。
+- 已知状态（两行分列台账，历史不改写）：
+  - 2026-11-15 全量基线（`tools/run_contract_baseline.sh`）：62/72 通过，`ui` 红于当日的 `map_editor.gd` 直建控件。
+  - 2026-11-16 实测：`ui` 复绿（3 连过 exit=0，根因已在后续修复中消除）；`map_editor_ui` 仍红（当日实测 exit=1）。现 manifest 口径：known-fail 4（`map_editor_ui`/`battle_action_chain`/`battle_presentation_hooks`/`isometric_view`）+ environment-skip 5（`sunlight_3d_gl`/`user_asset_source_live`/`action_anim`/`immersive_battle_camera`/`world_map_overlay`）+ pass 71，详见 `testing-and-quality.md` 状态表。
+- **只跑修改过的测试，不盲目跑全量**（AGENTS.md）：`python3 tools/run_contracts.py --changed`（git 变更 → 引用闭包影响分析，映射不到就保守全选）。首跑 headless 含资源导入，耗时偏长属正常（runner 默认先 `--import` 预热）。
 - **代码测试 > 截图**：调试时优先用断言 / 日志，不擅自截图（历史 HANDOFF 明示约束）。验证等级：L1 日志 / L2 断言 / L3 断点 + `runtime_assert_*` 自动验证，不要 `print` 后肉眼判断（AGENTS.md）。
 
 ## 代码风格

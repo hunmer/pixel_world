@@ -1,0 +1,1035 @@
+{
+  "version": 1,
+  "generated": "2026-11-16",
+  "description": "契约测试清单：由 Lead 任务 S1.1 生成。known_status 依据 docs/testing_baseline_2026-11-15.md（62/72）+ 其后新增 6 契约全绿（claude/testing-and-quality.md）。parallel_safe=false 的契约只串行跑；fast_flag_safe=false 的契约不加 --fixed-fps/--disable-render-loop（初始保守，A/B 证据见 docs/test_automation_results.md）。",
+  "status_values": [
+    "pass",
+    "fail",
+    "timeout",
+    "environment-skip",
+    "executor-error"
+  ],
+  "tag_definitions": {
+    "pure": "不实例化场景、不 await 帧的纯逻辑契约（RefCounted/JSON）",
+    "scene": "实例化 .tscn 场景",
+    "render": "依赖渲染/相机/纹理管线行为",
+    "render-gpu": "需要真实 GPU 上下文（headless 必败）",
+    "live-source": "依赖本机回环素材源(8076)",
+    "known-hang": "已知挂起（基线超时清单）",
+    "autoload-startup": "依赖 autoload 启动（--script headless 模式编译失败挂起）",
+    "bench": "基准/吞吐测量契约（宽松性能包络，非硬性 SLA）",
+    "simulation": "批量模拟入口契约（tools/simulation_batch.gd + run_simulations.gd）"
+  },
+  "groups": {
+    "battle-anim": 1,
+    "ambient": 2,
+    "animals": 4,
+    "battle-logic": 9,
+    "presentation": 7,
+    "battle-3d-editor": 12,
+    "battle-automation": 2,
+    "battle-presentation": 5,
+    "battle-persistence": 2,
+    "biome": 2,
+    "cell": 2,
+    "ecology": 7,
+    "config": 2,
+    "dialogue": 1,
+    "terrain": 5,
+    "sfx": 1,
+    "world-3d": 5,
+    "fx": 1,
+    "ui": 2,
+    "user-assets": 5,
+    "world-camera": 1,
+    "world-battle-bridge": 1,
+    "simulation": 1
+  },
+  "contracts": [
+    {
+      "name": "action_anim",
+      "path": "tests/action_anim_contract.gd",
+      "group": "battle-anim",
+      "tags": [
+        "render",
+        "known-hang",
+        "autoload-startup"
+      ],
+      "known_status": "environment-skip",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/action_anim_contract.gd L114 frame｜--script headless 模式不加载 autoload，依赖 Sfx 的脚本编译失败后契约不退出而挂起（基线超时清单；tests/action_anim_contract.gd:114 帧等待）｜加速不安全（初始保守，待 A/B）：帧等待动画演出 L114"
+    },
+    {
+      "name": "ambient_registry",
+      "path": "tests/ambient_registry_contract.gd",
+      "group": "ambient",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/ambient_registry_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "animal_animation_state",
+      "path": "tests/animal_animation_state_contract.gd",
+      "group": "animals",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/animal_animation_state_contract.gd L235 tscn; L238 frame｜加速不安全（初始保守，待 A/B）：动画状态帧序列 L235"
+    },
+    {
+      "name": "animal_behavior_registry",
+      "path": "tests/animal_behavior_registry_contract.gd",
+      "group": "animals",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/animal_behavior_registry_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）",
+      "gdtest": "tests/gdtest/test_animal_behavior_registry.gd"
+    },
+    {
+      "name": "animal_group_distribution",
+      "path": "tests/animal_group_distribution_contract.gd",
+      "group": "animals",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/animal_group_distribution_contract.gd L173 tscn; L176 frame｜加速不安全（初始保守，待 A/B）：场景帧 L176"
+    },
+    {
+      "name": "aquatic_fauna",
+      "path": "tests/aquatic_fauna_contract.gd",
+      "group": "animals",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/aquatic_fauna_contract.gd L25 tscn; L32 frame｜加速不安全（初始保守，待 A/B）：场景帧 L32"
+    },
+    {
+      "name": "attack_event",
+      "path": "tests/attack_event_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/attack_event_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "audio_system",
+      "path": "tests/audio_system_contract.gd",
+      "group": "presentation",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/audio_system_contract.gd L29 tscn; L32 frame｜加速不安全（初始保守，待 A/B）：音频帧时序 L29"
+    },
+    {
+      "name": "battle_3d",
+      "path": "tests/battle_3d_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/battle_3d_contract.gd L34 tscn; L42 frame｜加速不安全（初始保守，待 A/B）：3D 场景帧 L34"
+    },
+    {
+      "name": "battle_action_chain",
+      "path": "tests/battle_action_chain_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "known-fail",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/battle_action_chain_contract.gd L131 tscn; L138 frame｜基线 2026-11-15：B1 普攻 impact/飘字数量不一致（docs/testing_baseline_2026-11-15.md）；真实回归待修｜加速不安全（初始保守，待 A/B）：演出帧序列 L138"
+    },
+    {
+      "name": "battle_ai_difficulty",
+      "path": "tests/battle_ai_difficulty_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/battle_ai_difficulty_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "battle_automation",
+      "path": "tests/battle_automation_contract.gd",
+      "group": "battle-automation",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/battle_automation_contract.gd L614 user://"
+    },
+    {
+      "name": "battle_cli",
+      "path": "tests/battle_cli_contract.gd",
+      "group": "battle-automation",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/battle_cli_contract.gd L52 user://"
+    },
+    {
+      "name": "battle_movement",
+      "path": "tests/battle_movement_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/battle_movement_contract.gd L74 tscn; L78 frame｜加速不安全（初始保守，待 A/B）：场景帧 L78"
+    },
+    {
+      "name": "battle_occluder",
+      "path": "tests/battle_occluder_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/battle_occluder_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "battle_presentation_hooks",
+      "path": "tests/battle_presentation_hooks_contract.gd",
+      "group": "battle-presentation",
+      "tags": [
+        "scene",
+        "render"
+      ],
+      "known_status": "known-fail",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/battle_presentation_hooks_contract.gd L229 tscn; L194 frame｜基线 2026-11-15：名牌 cue 未生成程序化音频等 3 条（docs/testing_baseline_2026-11-15.md）；真实回归待修｜加速不安全（初始保守，待 A/B）：演出 hook 帧序列 L194"
+    },
+    {
+      "name": "battle_result_presentation",
+      "path": "tests/battle_result_presentation_contract.gd",
+      "group": "battle-presentation",
+      "tags": [],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/battle_result_presentation_contract.gd L32 frame｜加速不安全（初始保守，待 A/B）：结算演出帧 L32"
+    },
+    {
+      "name": "battle_save",
+      "path": "tests/battle_save_contract.gd",
+      "group": "battle-persistence",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/battle_save_contract.gd L12 user://"
+    },
+    {
+      "name": "battle_screen_pick",
+      "path": "tests/battle_screen_pick_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/battle_screen_pick_contract.gd L11 tscn; L14 frame｜加速不安全（初始保守，待 A/B）：拾取帧 L14"
+    },
+    {
+      "name": "battle_trade",
+      "path": "tests/battle_trade_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/battle_trade_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "battle_turn_visibility",
+      "path": "tests/battle_turn_visibility_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/battle_turn_visibility_contract.gd L62 tscn; L66 frame｜加速不安全（初始保守，待 A/B）：场景帧 L66"
+    },
+    {
+      "name": "battlefield_render",
+      "path": "tests/battlefield_render_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/battlefield_render_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "battlefields",
+      "path": "tests/battlefields_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "evidence": "tests/battlefields_contract.gd L9 user://｜并发不安全：loader 双目录扫描受并发写入干扰（tests/battlefields_contract.gd:9）"
+    },
+    {
+      "name": "biome_modules",
+      "path": "tests/biome_modules_contract.gd",
+      "group": "biome",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/biome_modules_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "bird_renderer",
+      "path": "tests/bird_renderer_contract.gd",
+      "group": "ambient",
+      "tags": [
+        "scene",
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/bird_renderer_contract.gd L258 tscn; L253 frame｜加速不安全（初始保守，待 A/B）：renderer 帧序列 L253"
+    },
+    {
+      "name": "cell_state",
+      "path": "tests/cell_state_contract.gd",
+      "group": "cell",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/cell_state_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）",
+      "gdtest": "tests/gdtest/test_cell_state.gd"
+    },
+    {
+      "name": "cell_state_integration",
+      "path": "tests/cell_state_integration_contract.gd",
+      "group": "cell",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/cell_state_integration_contract.gd L16 tscn; L19 frame｜加速不安全（初始保守，待 A/B）：场景帧 L19"
+    },
+    {
+      "name": "character_sheet",
+      "path": "tests/character_sheet_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/character_sheet_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "community_runtime",
+      "path": "tests/community_runtime_contract.gd",
+      "group": "ecology",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/community_runtime_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "community_spawner",
+      "path": "tests/community_spawner_contract.gd",
+      "group": "ecology",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/community_spawner_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "community_state_store",
+      "path": "tests/community_state_store_contract.gd",
+      "group": "ecology",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/community_state_store_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "config_manifest",
+      "path": "tests/config_manifest_contract.gd",
+      "group": "config",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/config_manifest_contract.gd L28 user://"
+    },
+    {
+      "name": "depth_of_field",
+      "path": "tests/depth_of_field_contract.gd",
+      "group": "presentation",
+      "tags": [
+        "scene",
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/depth_of_field_contract.gd L18 tscn; L21 frame｜加速不安全（初始保守，待 A/B）：DoF 表现层 L18"
+    },
+    {
+      "name": "dialogue_demo",
+      "path": "tests/dialogue_demo_contract.gd",
+      "group": "dialogue",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/dialogue_demo_contract.gd L52 tscn; L83 frame｜加速不安全（初始保守，待 A/B）：对话场景帧 L52"
+    },
+    {
+      "name": "dynamic_landform",
+      "path": "tests/dynamic_landform_contract.gd",
+      "group": "terrain",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/dynamic_landform_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "ecology_logic_bench",
+      "path": "tests/ecology_logic_bench_contract.gd",
+      "group": "ecology",
+      "tags": [
+        "pure",
+        "bench"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-16 新增（S3.2）：纯逻辑基准，preload tests/benches/ecology_logic_bench.gd；无 tscn/无帧等待/无 user://（tests/ecology_logic_bench_contract.gd 全文件）；实测 1.9s 通过，checksum 双跑一致（3848705273），us_per_resolve≈107-147"
+    },
+    {
+      "name": "ecology_registry",
+      "path": "tests/ecology_registry_contract.gd",
+      "group": "ecology",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/ecology_registry_contract.gd L4 user://"
+    },
+    {
+      "name": "ecology_resolver",
+      "path": "tests/ecology_resolver_contract.gd",
+      "group": "ecology",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/ecology_resolver_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）",
+      "gdtest": "tests/gdtest/test_ecology_resolver.gd"
+    },
+    {
+      "name": "editor_block_picker",
+      "path": "tests/editor_block_picker_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/editor_block_picker_contract.gd L39 frame｜加速不安全（初始保守，待 A/B）：面板帧时序 L39"
+    },
+    {
+      "name": "editor_region_clipboard",
+      "path": "tests/editor_region_clipboard_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/editor_region_clipboard_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "editor_region_preset_store",
+      "path": "tests/editor_region_preset_store_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/editor_region_preset_store_contract.gd L8 user://"
+    },
+    {
+      "name": "editor_selection",
+      "path": "tests/editor_selection_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/editor_selection_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "encounter_transition",
+      "path": "tests/encounter_transition_contract.gd",
+      "group": "battle-presentation",
+      "tags": [],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/encounter_transition_contract.gd L54 frame｜加速不安全（初始保守，待 A/B）：转场演出帧 L54"
+    },
+    {
+      "name": "flora_layers",
+      "path": "tests/flora_layers_contract.gd",
+      "group": "ecology",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/flora_layers_contract.gd L102 tscn; L105 frame｜加速不安全（初始保守，待 A/B）：场景帧循环 L102"
+    },
+    {
+      "name": "game_hud",
+      "path": "tests/game_hud_contract.gd",
+      "group": "presentation",
+      "tags": [],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/game_hud_contract.gd L37 frame｜加速不安全（初始保守，待 A/B）：HUD 帧时序 L37"
+    },
+    {
+      "name": "game_session",
+      "path": "tests/game_session_contract.gd",
+      "group": "battle-persistence",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "evidence": "tests/game_session_contract.gd L12 user://｜并发不安全：引用/操作 user://battlefields 会话路径（tests/game_session_contract.gd:12）"
+    },
+    {
+      "name": "game_sfx",
+      "path": "tests/game_sfx_contract.gd",
+      "group": "sfx",
+      "tags": [],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/game_sfx_contract.gd L73 frame｜加速不安全（初始保守，待 A/B）：音频总线帧时序 L73"
+    },
+    {
+      "name": "hint_bar",
+      "path": "tests/hint_bar_contract.gd",
+      "group": "presentation",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/hint_bar_contract.gd L67 tscn; L45 frame｜加速不安全（初始保守，待 A/B）：UI 帧时序 L45"
+    },
+    {
+      "name": "immersive_battle_camera",
+      "path": "tests/immersive_battle_camera_contract.gd",
+      "group": "battle-presentation",
+      "tags": [
+        "pure",
+        "known-hang",
+        "autoload-startup"
+      ],
+      "known_status": "environment-skip",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "evidence": "tests/immersive_battle_camera_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）｜--script headless 模式不加载 autoload，依赖 Settings 编译失败挂起（基线超时清单）"
+    },
+    {
+      "name": "immersive_battle_integration",
+      "path": "tests/immersive_battle_integration_contract.gd",
+      "group": "battle-presentation",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/immersive_battle_integration_contract.gd L5 tscn; L22 timing｜并发不安全：含计时敏感断言（tests/immersive_battle_integration_contract.gd:22）｜加速不安全（初始保守，待 A/B）：计时断言 L22"
+    },
+    {
+      "name": "isometric_3d",
+      "path": "tests/isometric_3d_contract.gd",
+      "group": "world-3d",
+      "tags": [
+        "scene",
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/isometric_3d_contract.gd L27 tscn; L29 frame｜加速不安全（初始保守，待 A/B）：相机投影帧依赖 L27"
+    },
+    {
+      "name": "isometric_column_projection",
+      "path": "tests/isometric_column_projection_contract.gd",
+      "group": "world-3d",
+      "tags": [
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/isometric_column_projection_contract.gd L128 frame; L127 render api｜加速不安全（初始保守，待 A/B）：queue_redraw 绘制节奏 L127"
+    },
+    {
+      "name": "isometric_view",
+      "path": "tests/isometric_view_contract.gd",
+      "group": "world-3d",
+      "tags": [
+        "scene",
+        "render"
+      ],
+      "known_status": "known-fail",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/isometric_view_contract.gd L45 tscn; L50 frame｜基线 2026-11-15：角度 0 鼠标拾取偏移断言失败（docs/testing_baseline_2026-11-15.md）；真实回归待修｜加速不安全（初始保守，待 A/B）：鼠标拾取投影 L45"
+    },
+    {
+      "name": "loading_screen",
+      "path": "tests/loading_screen_contract.gd",
+      "group": "presentation",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/loading_screen_contract.gd L80 tscn; L55 frame｜加速不安全（初始保守，待 A/B）：加载演出帧 L55"
+    },
+    {
+      "name": "map_editor",
+      "path": "tests/map_editor_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "evidence": "tests/map_editor_contract.gd L5 user://｜并发不安全：与 map_editor_ui/map_editor_region_ops/user_asset_editor/game_session/battlefields 共享读写 user://battlefields/ 目录（tests/map_editor_contract.gd:5）"
+    },
+    {
+      "name": "map_editor_region_ops",
+      "path": "tests/map_editor_region_ops_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/map_editor_region_ops_contract.gd L37 tscn; L39 frame; L510 user://｜并发不安全：实例化编辑器扫描 user://battlefields/（tests/map_editor_region_ops_contract.gd:37）｜加速不安全（初始保守，待 A/B）：编辑器 UI 帧时序 L37"
+    },
+    {
+      "name": "map_editor_ui",
+      "path": "tests/map_editor_ui_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "known-fail",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/map_editor_ui_contract.gd L41 tscn; L43 frame; L447 user://｜基线 2026-11-15：侧栏 320px / z 重建断言失败（docs/testing_baseline_2026-11-15.md）；真实回归待修，保持 fail 可见｜并发不安全：实例化编辑器会扫描 user://battlefields/（tests/map_editor_ui_contract.gd:41 场景实例化）｜加速不安全（初始保守，待 A/B）：编辑器 UI 帧时序 L41"
+    },
+    {
+      "name": "module_extension",
+      "path": "tests/module_extension_contract.gd",
+      "group": "biome",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/module_extension_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "pixelfx",
+      "path": "tests/pixelfx_contract.gd",
+      "group": "fx",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/pixelfx_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "reinforcement",
+      "path": "tests/reinforcement_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/reinforcement_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "startup_config",
+      "path": "tests/startup_config_contract.gd",
+      "group": "config",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/startup_config_contract.gd L5 user://"
+    },
+    {
+      "name": "streaming_input_latency",
+      "path": "tests/streaming_input_latency_contract.gd",
+      "group": "terrain",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/streaming_input_latency_contract.gd L19 tscn; L24 frame; L35 timing｜并发不安全：延迟计时断言（tests/streaming_input_latency_contract.gd:35），并发会失真｜加速不安全（初始保守，待 A/B）：延迟计时 L35"
+    },
+    {
+      "name": "sunlight_3d",
+      "path": "tests/sunlight_3d_contract.gd",
+      "group": "world-3d",
+      "tags": [
+        "scene",
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/sunlight_3d_contract.gd L23 tscn; L26 frame｜加速不安全（初始保守，待 A/B）：阴影 flags 帧依赖 L23"
+    },
+    {
+      "name": "sunlight_3d_gl",
+      "path": "tests/sunlight_3d_gl_contract.gd",
+      "group": "world-3d",
+      "tags": [
+        "scene",
+        "render",
+        "render-gpu"
+      ],
+      "known_status": "environment-skip",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/sunlight_3d_gl_contract.gd L150 tscn; L84 frame; L107 user://; L34 render api; L127 timing｜契约自身要求非 headless 的 gl_compatibility（tests/sunlight_3d_gl_contract.gd:34 RenderingServer.get_video_adapter_name，headless 下必败）；环境限制非回归｜加速不安全（初始保守，待 A/B）：RenderingServer 帧回读 L84"
+    },
+    {
+      "name": "terrain_generation",
+      "path": "tests/terrain_generation_contract.gd",
+      "group": "terrain",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/terrain_generation_contract.gd L13 tscn; L16 frame｜加速不安全（初始保守，待 A/B）：场景帧 L16"
+    },
+    {
+      "name": "terrain_material_registry",
+      "path": "tests/terrain_material_registry_contract.gd",
+      "group": "terrain",
+      "tags": [
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/terrain_material_registry_contract.gd L117 render api｜加速不安全（初始保守，待 A/B）：纹理管线 L117"
+    },
+    {
+      "name": "terrain_sampler",
+      "path": "tests/terrain_sampler_contract.gd",
+      "group": "terrain",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/terrain_sampler_contract.gd L393 tscn; L396 frame｜加速不安全（初始保守，待 A/B）：场景帧 L396"
+    },
+    {
+      "name": "ui",
+      "path": "tests/ui_contract.gd",
+      "group": "ui",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-16 实测复绿（3 连过 exit=0，tools/run_contracts.py --test ui）；基线 docs/testing_baseline_2026-11-15.md 记 fail 的原因（map_editor.gd L943 直建 Button.new()）已在后续修复中消除，现 scripts/scenes/map_editor.gd 无直建 Button/CheckButton/OptionButton"
+    },
+    {
+      "name": "ui_components",
+      "path": "tests/ui_components_contract.gd",
+      "group": "ui",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/ui_components_contract.gd L27 tscn; L631 frame｜加速不安全（初始保守，待 A/B）：组件帧时序 L631"
+    },
+    {
+      "name": "user_asset_catalog",
+      "path": "tests/user_asset_catalog_contract.gd",
+      "group": "user-assets",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/user_asset_catalog_contract.gd L11 user://"
+    },
+    {
+      "name": "user_asset_editor",
+      "path": "tests/user_asset_editor_contract.gd",
+      "group": "user-assets",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/user_asset_editor_contract.gd L141 tscn; L145 frame; L20 user://｜并发不安全：写 user://battlefields/contract_asset_map.json（tests/user_asset_editor_contract.gd:21）｜加速不安全（初始保守，待 A/B）：编辑器面板帧时序 L145"
+    },
+    {
+      "name": "user_asset_pagination",
+      "path": "tests/user_asset_pagination_contract.gd",
+      "group": "user-assets",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/user_asset_pagination_contract.gd L18 user://"
+    },
+    {
+      "name": "user_asset_runtime",
+      "path": "tests/user_asset_runtime_contract.gd",
+      "group": "user-assets",
+      "tags": [
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/user_asset_runtime_contract.gd L143 frame; L16 user://; L279 render api; L98 timing｜并发不安全：含计时/逐出节奏断言（tests/user_asset_runtime_contract.gd:98）｜加速不安全（初始保守，待 A/B）：计时断言 L98 + 纹理解码 L279"
+    },
+    {
+      "name": "user_asset_source_live",
+      "path": "tests/user_asset_source_live_contract.gd",
+      "group": "user-assets",
+      "tags": [
+        "render",
+        "known-hang",
+        "live-source"
+      ],
+      "known_status": "environment-skip",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/user_asset_source_live_contract.gd L52 frame; L33 user://; L86 render api; L50 timing｜依赖本机回环素材源 http://127.0.0.1:8076/blocks.json（tests/user_asset_source_live_contract.gd:33），断源路径索引越界挂起（基线超时清单）｜加速不安全（初始保守，待 A/B）：计时 L50 + 纹理 L86"
+    },
+    {
+      "name": "victory_conditions",
+      "path": "tests/victory_conditions_contract.gd",
+      "group": "battle-logic",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/victory_conditions_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "weather_performance",
+      "path": "tests/weather_performance_contract.gd",
+      "group": "presentation",
+      "tags": [
+        "scene",
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/weather_performance_contract.gd L18 tscn; L21 frame; L28 timing｜并发不安全：性能计时断言（tests/weather_performance_contract.gd:28），并发 CPU 争用会失真｜加速不安全（初始保守，待 A/B）：性能计时 L28"
+    },
+    {
+      "name": "world_camera_navigation",
+      "path": "tests/world_camera_navigation_contract.gd",
+      "group": "world-camera",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "tests/world_camera_navigation_contract.gd L56 tscn; L60 frame｜加速不安全（初始保守，待 A/B）：相机帧时序 L60"
+    },
+    {
+      "name": "world_map_overlay",
+      "path": "tests/world_map_overlay_contract.gd",
+      "group": "presentation",
+      "tags": [
+        "scene",
+        "render",
+        "known-hang",
+        "autoload-startup"
+      ],
+      "known_status": "environment-skip",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/world_map_overlay_contract.gd L116 tscn; L26 frame; L122 timing｜--script headless 模式不加载 autoload，依赖 Sfx 编译失败挂起（基线超时清单）｜加速不安全（初始保守，待 A/B）：计时 L122"
+    },
+    {
+      "name": "world_terrain_mapping",
+      "path": "tests/world_terrain_mapping_contract.gd",
+      "group": "world-battle-bridge",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "tests/world_terrain_mapping_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
+    },
+    {
+      "name": "simulation",
+      "path": "tests/simulation_contract.gd",
+      "group": "simulation",
+      "tags": [
+        "pure",
+        "simulation"
+      ],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-16 实测直跑 exit=0 0.9s；覆盖 fixtures schema/非法拒绝、fixed 6 次不变量、sequential runs_override、A→B→A 同进程 RNG 隔离（digest A2==A）；CLI --runs 1000 容量模式 3.6s 1000 run 摘要唯一（/tmp/sim_contract/）"
+    }
+  ],
+  "probes": [
+    {
+      "name": "flat_rotation_probe",
+      "path": "tests/flat_rotation_probe.gd",
+      "note": "探针（含 .tscn），非契约，runner 默认不跑"
+    },
+    {
+      "name": "mesh_draw_probe",
+      "path": "tests/mesh_draw_probe.gd",
+      "note": "探针，非契约，runner 默认不跑"
+    }
+  ]
+}

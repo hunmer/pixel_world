@@ -1,0 +1,16 @@
+{
+	"version": 1,
+	"id": "battle_determinism_fixed",
+	"description": "quick_duel 固定 seed=7 复跑：验证同 seed 事件逐字节一致（确定性不变量）+ 断言/步数边界。",
+	"mode": "battle",
+	"scenario": "res://tests/fixtures/battle_scenarios/quick_duel.json",
+	"runs": 6,
+	"seed": { "strategy": "fixed", "base": 7 },
+	"invariants": [
+		{ "type": "assertions_pass" },
+		{ "type": "steps_bound" },
+		{ "type": "stop_reason_in", "allowed": ["victory", "defeat"] },
+		{ "type": "deterministic_events" },
+		{ "type": "exit_code_zero" }
+	]
+}

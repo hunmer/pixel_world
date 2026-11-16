@@ -1,0 +1,14 @@
+{
+	"version": 1,
+	"id": "battle_smoke_sequential",
+	"description": "deterministic_replay 顺序 seed（42,43,…）各一次：小步数冒烟 + 非法 stop_reason 快速发现位。",
+	"mode": "battle",
+	"scenario": "res://tests/fixtures/battle_scenarios/deterministic_replay.json",
+	"runs": 5,
+	"seed": { "strategy": "sequential", "base": 42 },
+	"invariants": [
+		{ "type": "assertions_pass" },
+		{ "type": "steps_bound" },
+		{ "type": "exit_code_zero" }
+	]
+}
