@@ -1,6 +1,6 @@
 # 模块职责
 
-> 更新：2026-11-16（三单体拆分 + 深夜优化轮：main.gd 4319→2174 行（装配层），能力拆入 `scripts/world/` 25 个 RefCounted/静态模块；map_editor.gd 3285→1028 行拆入 `scripts/editor/` 26 .gd；battle.gd 1934→1557 行 + `scripts/battle/` 23 .gd 含 automation（battle_ui 拆出 4 件）；`scripts/iso/` 11→14；scripts 122→164 .gd；vendored 4→6）。
+> 更新：2026-11-16（三单体拆分 + 深夜优化轮：main.gd 4319→2280 行（装配层，输入路由表化后 +106），能力拆入 `scripts/world/` 25 个 RefCounted/静态模块；map_editor.gd 3285→1028 行拆入 `scripts/editor/` 26 .gd；battle.gd 1934→1557 行 + `scripts/battle/` 23 .gd 含 automation（battle_ui 拆出 4 件）；`scripts/iso/` 11→14；game_hud 359→178 + `scripts/hud/` 2 件；scripts 122→166 .gd；vendored 4→6）。
 
 本仓库是**单体 Godot 游戏**。带 `plugin.cfg` 的独立模块只有 `addons/` 下 6 个 vendored 插件（breakpoint_mcp / panku_console / at-icons / pixelfx / **gdtest** / **godot_autosim**，中间两者插件未启用）。下表按**源码子域**划分职责，对应 `scripts/`、`ui/` 下的目录（合计 154 + 23 .gd），全部归属同一个 Godot 项目。
 
@@ -8,7 +8,7 @@
 
 | 子域 | 目录 | 职责一句话 | 关键脚本 |
 | --- | --- | --- | --- |
-| **世界引擎（装配层）** | 根 `main.gd` | 等距世界根节点：流式生成主循环、坐标变换、玩家、HUD、输入分发、战斗与编辑器入口；能力已拆入 `scripts/world/` 模块（**2026-11-16 拆分 4319→2283；深夜优化轮再 2283→2174 行**（生态配置编译外迁），`_configure_generation_services()`@485 统一装配） | `main.gd`（2174 行） |
+| **世界引擎（装配层）** | 根 `main.gd` | 等距世界根节点：流式生成主循环、坐标变换、玩家、HUD、输入分发、战斗与编辑器入口；能力已拆入 `scripts/world/` 模块（**2026-11-16 拆分 4319→2283；深夜优化轮 2283→2174（生态配置编译外迁）→2280 行**（输入路由表化 +106），`_configure_generation_services()`@485 统一装配） | `main.gd`（2280 行） |
 | 世界生成 | `scripts/world/`（23 .gd） | 噪声 / Voronoi / 地形采样 / 群系模块 / cell 上下文与状态 / 确定性 RNG / 材质注册 / 大地图快照 + **拆分新增 11 模块**：植被放置 / 动物流式与逐帧行为 / 生态区匹配 / 物种选择 / 配置校验 / 小地图 / 玩家遮挡 / 表现装配 / 贴图目录 / 世界查询 | 原 12 件 + `flora_spawner.gd`, `fauna_streamer.gd`, `animal_runtime.gd`, `ecosystem_match.gd`, `species_picker.gd`, `ecology_config_validator.gd`, `minimap_renderer.gd`, `player_occlusion_controller.gd`, `presentation_stage.gd`, `terrain_texture_catalog.gd`, `world_query_service.gd` |
 | 生态 | `scripts/ecology/`（9 .gd） | 群落解析、注册表、成员组合、运行时/状态存储、环境生物(鸟/萤火虫) | `ecology_registry.gd`, `ecology_resolver.gd`, `community_runtime.gd`, `community_spawner.gd`, `community_state_store.gd`, `member_composer.gd`, `ambient_registry.gd` |
 | 动物行为 | `scripts/animals/` | 动物行为栈（水域偏好/避雪/嗜雪/群体/避人）的可组合注册表 | `animal_behavior_registry.gd` |
@@ -107,7 +107,7 @@ project.godot main_scene = scenes/Game.tscn (game_entry.gd)
 | 1636–1737 | 输入分发 | `_unhandled_input`@1636（Z/Q/← 与 X/E/→ 旋转、R 复位、Ctrl+R 重生成、F 复位缩放、T/N/B/O/E/P） |
 | 1738–1829 | 表现层系统装配 | `_setup_day_night`@1738, `_setup_depth_of_field`@1744, `_setup_audio`@1757, `_setup_fireflies`@1761, `_setup_weather`@1769（→ `presentation_stage` builder）, `_sync_weather_*` |
 | 1830–1954 | 缩放 / 相机位置 / 截图 | `_zoom_step`@1830, `set_battle_camera_kick`@1886, `_shot_and_quit`@1905 |
-| 1846–2174 | **战棋 / 战场 / 编辑器入口 + B1 相机与拾取** | `_enter_battle`@1846, `_enter_battlefield`@1899, `_open_map_editor`@1952, `_enter_battle_inline`@1962, `_exit_battle`@1998, `cell_stand_level`@2150, `screen_to_cell`@2155 |
+| 1952–2280 | **战棋 / 战场 / 编辑器入口 + B1 相机与拾取** | `_enter_battle`@1952, `_enter_battlefield`@2005, `_open_map_editor`@2058, `_enter_battle_inline`@2068, `_exit_battle`@2104, `cell_stand_level`@2256, `screen_to_cell`@2261 |
 
 ## 战棋子系统的依赖方向
 

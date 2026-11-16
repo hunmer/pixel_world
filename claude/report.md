@@ -7,7 +7,7 @@
 ## 1. 结构与职责
 
 **✓ 好惯例**
-- **三单体已拆成"装配层 + 能力模块"**（2026-11-16）：main.gd 4319→**2174** 行（装配层）、map_editor.gd 3285→1028、battle.gd 1934→1557（+拆分注释，目标是降嵌套非减行）；新模块全 `RefCounted`/静态 + Callable 注入、无反向依赖，装配点 `_configure_generation_services()`@main.gd。
+- **三单体已拆成"装配层 + 能力模块"**（2026-11-16）：main.gd 4319→**2280** 行（装配层；输入路由表化 +106）、map_editor.gd 3285→1028、battle.gd 1934→1557（+拆分注释，目标是降嵌套非减行）；新模块全 `RefCounted`/静态 + Callable 注入、无反向依赖，装配点 `_configure_generation_services()`@main.gd。
 - **战棋业务与 UI 分离彻底**：`scripts/core/` 纯逻辑零渲染依赖；结算内核（battle_action_resolver）与演出层分离，改规则不动 UI。
 - **✅ 战斗 UI 多职责已拆**（本轮）：battle_ui.gd 1211→**467** 行装配层 + `battle_ui_hud`(347) / `battle_ui_unit_menu`(418) / `battle_ui_unit_detail`(160) / `battle_ui_banner`(37) 四模块，对外方法名/信号/测试直戳成员零变化。
 - **✅ 生态双轨与巨型编译函数已拆**（本轮）：ecology_registry.gd 1150→**984**（legacy 整体外迁 `ecology_legacy_codec.gd` 240 行，报错文案逐字保留）；main.gd `_compile_ecosystem_config` 185→**71** 行薄委托，编译入 `scripts/world/ecology_config_compiler.gd`（313 行纯静态，typed 数组返回）。
@@ -17,7 +17,7 @@
 **⚠ 违例（按影响排序，附建议）**
 | 文件 / 函数 | 实测 | 问题 | 建议 |
 | --- | --- | --- | --- |
-| `main.gd` | 2174 行 | 装配层性质但仍偏大：`_unhandled_input` 102 行（嵌套≥4）未路由化 | 键位路由表化（参照 battle.gd 本轮拆法） |
+| `main.gd` | 2280 行 | 装配层性质但仍偏大：`_unhandled_input` 102 行（嵌套≥4）未路由化 | ✅ 已收口（深夜优化轮）：24 行守卫链嵌套=1 + `_key_route`/`_entry_key_route` 双路由表，terrain SHA 不变 |
 | `scripts/game_hud.gd`（scripts 根） | HUD+战场面板+设置 | UI 容器多面板混合，且契约在 HEAD 上红 | 随 ui/map_editor_ui 修复一并拆面板 |
 | `scripts/editor/asset_library_panel.gd` 919 行 / `editor_canvas.gd` 908 行 | 编辑器面板偏大 | 尚可接受，继续观察 | 暂不动 |
 | `scripts/ecology/ecology_registry.gd` 984 行 | 拆后仍近千行（manifest 主轨+校验） | world version 迁移后 legacy codec 可整体删除 | 观察即可 |
@@ -42,7 +42,7 @@
 **⚠ 嵌套超 3 层**
 | 函数 | 最深嵌套 | 状态 |
 | --- | --- | --- |
-| `main.gd::_unhandled_input` | ≥4（102 行） | **仍开放**——本轮无人认领；键位路由表化即可 |
+| `main.gd::_unhandled_input` | ≥4（102 行） | ✅ 已收口（深夜优化轮）：主体 24 行嵌套=1，双路由表保原 elif 语义，6 契约验证 |
 
 **✅ 已清零（本轮，控制流实测 ≤3）**
 - `ecology_registry::_validate_legacy_rules` ≥7 → codec 内拆 `_validate_rule_list`/`_validate_rule`/`_validate_fauna_substitution`。

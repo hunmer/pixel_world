@@ -1,6 +1,6 @@
 # 文件清单与目录地图
 
-> 更新：2026-11-16（三单体拆分 + 深夜优化轮：scripts/world 12→25、scripts/editor 11→26、scripts/battle 10→20（+automation 3）、scripts/iso 11→14、scripts/ecology 9→10；scripts 总 122→164 .gd；tests 80 契约 + gdtest 试点；vendored 4→6）。
+> 更新：2026-11-16（三单体拆分 + 深夜优化轮：scripts/world 12→25、scripts/editor 11→26、scripts/battle 10→20（+automation 3）、scripts/iso 11→14、scripts/ecology 9→10、scripts/hud 新增 2（game_hud 拆分）；scripts 总 122→166 .gd；tests 80 契约 + gdtest 试点；vendored 4→6）。
 
 ## 顶层结构
 
@@ -15,7 +15,7 @@ pixel_world/  (本机 /Users/Zhuanz/Documents/pixel_world；历史路径 G:/ →
 ├── DESIGN.md              ★ UI 设计规范单一事实来源（token 体系 + 六薄容器 + 禁忌 + 验收，2026-11-15 新增）
 ├── ASSET_LICENSE.md / LICENSE / .editorconfig / .gitignore / .gitattributes
 │
-├── scripts/               ★ 全部项目 GDScript（164 个 .gd，见下）
+├── scripts/               ★ 全部项目 GDScript（166 个 .gd，见下）
 ├── ui/                    ★ 共享 UI 组件库（22 个 Pixel* @tool 控件（+6 布局容器）+ ComponentTheme + README）
 ├── scenes/                11 个 .tscn：Battle / DialogueDemo / Game / HomeEntry / Isometric3DTest /
 │                          LoadingScreen / MapEditor / PixelFxGallery / SkillTest / Title / UIComponentGallery
@@ -40,7 +40,7 @@ pixel_world/  (本机 /Users/Zhuanz/Documents/pixel_world；历史路径 G:/ →
 
 > ⚠️ 根目录 `HANDOFF.md` 已删除，交接文档统一在 `handoff/`（3 篇）。`rules/image-viewing.md` 也已移除（rules/ 现存 4 篇）。
 
-## `scripts/` 详细地图（164 .gd）
+## `scripts/` 详细地图（166 .gd）
 
 ```
 scripts/
@@ -224,7 +224,10 @@ scripts/
     ├── wandering_animal.gd        游荡动物（AnimatedSprite3D + 行为栈）
     ├── isometric_column_batch.gd  等距地块批量绘制装配层（742 行；绘制通道已拆 scripts/iso/）
     ├── isometric_depth_sort.gd    等距深度排序
-    ├── game_hud.gd                左侧图标 HUD + 战场面板 + 设置（⚠️ 契约测试在 HEAD 上坏）
+    ├── game_hud.gd                HUD 装配层：窗口分栏/信号接线（178 行）
+    ├── hud/                        game_hud 拆出（2 .gd）
+    │   ├── game_hud_battlefield_panel.gd   战场选择面板（O 键列表）
+    │   └── game_hud_settings_panel.gd      设置面板（战斗模式/AI 难度）
     ├── world_map_overlay.gd       大地图叠加
     ├── side_panel.gd              侧栏面板（世界信息）
     ├── hint_bar.gd                底部操作提示条
@@ -292,7 +295,7 @@ ui/
 | 类型 | 数量 | 说明 |
 | --- | --- | --- |
 | 总文件 | **11560** | 含 addons vendored 与全部素材 |
-| `.gd` | **~711** | scripts 164 / tests 86 / ui 23 / addons ~430（+gdtest/godot_autosim）/ tools 等 |
+| `.gd` | **~713** | scripts 166 / tests 86 / ui 23 / addons ~430（+gdtest/godot_autosim）/ tools 等 |
 | `.md` | 223 | story 19 + rules 4 + claude/ + docs/ + handoff/ + addons 文档 |
 | `.tscn` | 自有 16 | main + scenes/11 + ui/pixel_panel + tests 探针 + addons |
 | `.png` | 566 | meowa_tiles 165 + assets + docs/screenshots 22 等 |

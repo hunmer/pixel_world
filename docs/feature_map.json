@@ -1,8 +1,8 @@
 {
   "project": "Pixel World",
   "description": "功能 → 文件依赖图谱：哪些功能用到哪些代码/场景/着色器/配置文件，多层级分类。文件可归属多个功能（shared）。数据来自 2026-11-15 增量扫描 + 每个文件头部『## file.gd — 职责』注释。",
-  "generated": "2026-11-16",
-  "head_commit": "dc0b9eb",
+  "generated": "2026-11-17",
+  "head_commit": "b43a194",
   "legend": {
     "types": {
       "gd": "GDScript 源码",
@@ -171,8 +171,8 @@
             {
               "path": "main.gd",
               "type": "gd",
-              "lines": 2174,
-              "role": "世界引擎单体：流式生成/群落分区/HUD/B1 战斗与编辑器入口"
+              "lines": 2280,
+              "role": "世界引擎装配层：流式生成/群落分区/输入路由（B1 战斗与编辑器入口）"
             },
             {
               "path": "main.tscn",
@@ -1252,10 +1252,22 @@
               "role": "右侧【战场设置】页的独立内容构造器。"
             },
             {
+              "path": "scripts/hud/game_hud_settings_panel.gd",
+              "type": "gd",
+              "lines": 94,
+              "role": "设置面板（战斗模式切换/AI 难度；自 game_hud 拆出）"
+            },
+            {
+              "path": "scripts/hud/game_hud_battlefield_panel.gd",
+              "type": "gd",
+              "lines": 134,
+              "role": "战场选择面板（O 键，列 data/battlefields/*.json；自 game_hud 拆出）"
+            },
+            {
               "path": "scripts/game_hud.gd",
               "type": "gd",
-              "lines": 359,
-              "role": "战场选择面板（O 键，列 data/battlefields/*.json）"
+              "lines": 178,
+              "role": "世界 HUD 装配层：窗口分栏/信号接线（战场/设置面板已拆至 scripts/hud/）"
             },
             {
               "path": "scripts/hint_bar.gd",

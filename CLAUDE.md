@@ -6,7 +6,7 @@ Pixel World 是一个 **Godot 4.7.2（GL Compatibility）/ Node2D** 单体 2D �
 
 世界中嵌入了从另一个项目（phaserjs）迁移来的**回合制战棋战斗**系统：主入口 `res://scenes/Game.tscn` 提供战旗会话路由（冷启动自动续玩最近战旗，逐战场独立存档）；按 `P` 在玩家所在真实地形"就地战斗"（B1）或切独立场景（B2）；按 `O` 从 `data/battlefields/*.json` 选**预制 JSON 战场**开战（固定 B2，支持**胜利条件 rout/defend_turns/seize**与**按回合波次增援**）；按 `E` 打开**战场地图编辑器**（画笔/填充/橡皮/角色 + 种子生成 + **区域复制/移动/命名预设** + 取色器 + 用户素材库，保存即校验入列）。战棋地形 11 种，等距方块柱渲染；战斗场景 `battle.gd`（1557 行，`_ready`/输入已路由化）+ `scripts/battle/` 20 模块（含 battle_ui 拆出 4 件）、编辑器 `map_editor.gd`（1028 行 + `scripts/editor/` 26 模块）同为此轮拆分；战斗带**沉浸演出层**（开场/行动/结算，可开关可快进）、**相邻单位物品交换**与**无头自动化 CLI**（`tools/battle_cli.gd`）。两个子系统的唯一耦合点是 `scripts/core/world_to_chapter.gd`；JSON 战场由 `scripts/core/battlefield_loader.gd` 平行供给。UI 层有 **22 组件像素组件库 + DESIGN.md 设计 token 规范**（`ui/`，token 唯一实现 `ComponentTheme`）。
 
-世界引擎装配层在 `main.gd`（2026-11-16 拆分后 2174 行；生成/生态/表现能力拆入 `scripts/world/` 25 个模块，`_configure_generation_services()` 统一装配）。运行 `godot --path .`。纯单机：磁盘持久化 = `user://settings.cfg`、`user://battle_saves/`（战旗存档）、`user://battlefields/`、`user://custom_assets/`（用户素材）与调试用 `config/startup.cfg`。
+世界引擎装配层在 `main.gd`（2026-11-16 拆分后 2280 行；生成/生态/表现能力拆入 `scripts/world/` 25 个模块，`_configure_generation_services()` 统一装配）。运行 `godot --path .`。纯单机：磁盘持久化 = `user://settings.cfg`、`user://battle_saves/`（战旗存档）、`user://battlefields/`、`user://custom_assets/`（用户素材）与调试用 `config/startup.cfg`。
 
 ## 约定的规则（高优先级）
 
@@ -64,7 +64,7 @@ Pixel World 是一个 **Godot 4.7.2（GL Compatibility）/ Node2D** 单体 2D �
 ```mermaid
 graph TD
     subgraph 世界生态子系统（3D 正交）
-        Main[main.gd 装配层<br/>2174 行/_configure_generation_services]
+        Main[main.gd 装配层<br/>2280 行/_configure_generation_services]
         World[scripts/world/ 25 模块<br/>地形采样/CellContext/确定RNG/biomes<br/>flora/fauna/minimap/表现装配/配置编译/材质解析]
         Eco[scripts/ecology/<br/>群落解析/spawner/state]
         Anim[scripts/animals/<br/>行为栈]
@@ -96,9 +96,9 @@ graph TD
 
 ## 扫描状态
 
-- **更新时间**：2026-11-16（第三轮增量：**三单体拆分**〔main/map_editor/battle → 装配层+能力模块〕、测试自动化〔run_contracts.py / run_simulations / gdtest / autosim〕、vendored 4→6、代码自检报告〔claude/report.md，四组：结构/重复/可读性/可复用〕、feature_map 图谱刷新 311 文件 100% 覆盖）。
-- **已扫描**：根目录全部源码结构（`main.gd` 拆分后 2174 行、`map_editor.gd` 1028 行、`battle.gd` 1557 行、`scripts/` 文件级 164 `.gd`〔world 25 / editor 26 / battle 20 / iso 14 / ecology 10〕、`tests/` 86 `.gd`〔80 契约 + 2 探针 + gdtest 3 + benches 1〕归类、`config/`+`data/` JSON、16 仓库自有 `.tscn`、6 自有 `.gdshader`、6 addons 全量、automation/assets/ui/editor/world 子系统 API 级、`DESIGN.md`+`story/`+`rules/`+`handoff/`+`docs/` 文档级）。
+- **更新时间**：2026-11-16（第三轮增量：**三单体拆分**〔main/map_editor/battle → 装配层+能力模块〕、测试自动化〔run_contracts.py / run_simulations / gdtest / autosim〕、vendored 4→6、代码自检报告〔claude/report.md，四组：结构/重复/可读性/可复用〕、feature_map 图谱刷新 321 文件 100% 覆盖）。
+- **已扫描**：根目录全部源码结构（`main.gd` 拆分后 2280 行、`map_editor.gd` 1028 行、`battle.gd` 1557 行、`scripts/` 文件级 166 `.gd`〔world 25 / editor 26 / battle 20 / iso 14 / ecology 10 / hud 2〕、`tests/` 86 `.gd`〔80 契约 + 2 探针 + gdtest 3 + benches 1〕归类、`config/`+`data/` JSON、16 仓库自有 `.tscn`、6 自有 `.gdshader`、6 addons 全量、automation/assets/ui/editor/world 子系统 API 级、`DESIGN.md`+`story/`+`rules/`+`handoff/`+`docs/` 文档级）。
 - **运行态验证**：拆分护栏 = terrain_generation SHA-256 零漂移（`docs/plans/split_report_2026-11-15.md`）；统一 runner 口径 pass 70 / known-fail 5 / env-skip 5（`docs/test_automation.md`）；批量模拟 1000 局 3.6s。2026-11-16 深夜优化轮（4 成员并行行为等价重构 report.md 违例）后 0 新增红，terrain_generation SHA 逐字节一致。
 - **跳过**：`.godot/`（引擎生成，gitignore）；二进制素材 `.png`/`.mp3`；引擎生成物 `.import`/`.uid`。
-- **覆盖率**：源码与配置结构 ~100%（feature_map 311/311 = 100%）；二进制素材内容 0%（仅统计）。
+- **覆盖率**：源码与配置结构 ~100%（feature_map 321/321 = 100%）；二进制素材内容 0%（仅统计）。
 - **下一步建议**：已全部整理进 [docs/roadmap.md](docs/roadmap.md)（按优先级 P0–P3 + 前置依赖），不再在此重复。

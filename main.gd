@@ -1524,22 +1524,23 @@ func _handle_world_map_input(event: InputEvent) -> bool:
 	return is_world_map_open()
 
 
+# ============================================================
+# 世界输入：模态守卫 → 视图拖拽 → 缩放手势 → 键位路由表
+# ============================================================
+## 键位路由表（physical_keycode → handler(event)），惰性构建。
+## 覆盖原 elif 链里按 physical 匹配的键（R/Z/Q/←/X/→/T/N/B/P/O/E）。
+var _key_handlers: Dictionary = {}
+## 入口/缩放键的 keycode 兜底路由（P/O/E 双匹配注入输入；=、+、-、F 原链只看 keycode）。
+## 物理键优先、keycode 兜底：与原 elif 链在真实键盘与契约注入下逐键等价。
+var _entry_key_handlers: Dictionary = {}
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	# B2 遭遇覆盖期间阻止 P/O/E 等入口重入；false 时保持原世界输入路径。
 	if _battle_transition_pending:
 		get_viewport().set_input_as_handled()
 		return
-	# B1 就地战斗模式：先处理拖拽平移（中键/空格+左键），再走整体短路
-	if _battle_active:
-		if _battle_system != null and _battle_system.mode == _battle_system.Mode.ANIMATING:
-			_battle_system._unhandled_input(event)
-			get_viewport().set_input_as_handled()
-			return
-		if _handle_battle_camera_input(event):
-			get_viewport().set_input_as_handled()
-			return
-	# B1 就地战斗模式：整体短路，事件转发给 BattleSystem（照搬 world_map 模态范式）
-	if _battle_active and _handle_battle_input(event):
+	if _handle_b1_battle_input(event):
 		get_viewport().set_input_as_handled()
 		return
 	if _handle_world_map_input(event):
@@ -1549,26 +1550,53 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not _battle_active and _world_camera_navigation.handle_input(event, _cam):
 		get_viewport().set_input_as_handled()
 		return
+	if _handle_view_drag_input(event):
+		get_viewport().set_input_as_handled()
+		return
+	if _handle_zoom_input(event):
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		_handle_key_input(event)
+
+
+## B1 就地战斗模式三段守卫（ANIMATING 直通 → 相机拖拽 → 战斗层接管）。
+## 返回 true = 事件已被战斗侧消费，调用方需标记 handled。
+func _handle_b1_battle_input(event: InputEvent) -> bool:
+	if not _battle_active:
+		return false
+	if _battle_system != null and _battle_system.mode == _battle_system.Mode.ANIMATING:
+		_battle_system._unhandled_input(event)
+		return true
+	return _handle_battle_camera_input(event) or _handle_battle_input(event)
+
+
+## 中键按住水平拖转视角（按下记录基准 x；运动按 dx 连续旋转）。
+func _handle_view_drag_input(event: InputEvent) -> bool:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		_view_dragging = event.pressed
 		if event.pressed:
 			_view_drag_last_x = event.position.x
-		get_viewport().set_input_as_handled()
-		return
+		return true
 	if event is InputEventMouseMotion and _view_dragging:
 		var drag_dx: float = event.position.x - _view_drag_last_x
 		_view_drag_last_x = event.position.x
 		_cam.drag_by(Vector2(drag_dx, 0.0))
-		get_viewport().set_input_as_handled()
-		return
+		return true
+	return false
+
+
+## 滚轮缩放（带锚点）与触控板捏合（累积越过阈值才触发一档）。
+func _handle_zoom_input(event: InputEvent) -> bool:
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_zoom_step(1, event.position)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			return true
+		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_zoom_step(-1, event.position)
-			get_viewport().set_input_as_handled()
-	elif event is InputEventMagnifyGesture:
+			return true
+		return false
+	if event is InputEventMagnifyGesture:
 		_pinch_factor *= event.factor
 		if _pinch_factor >= PINCH_THRESHOLD:
 			_zoom_step(1)
@@ -1576,54 +1604,132 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif _pinch_factor <= 1.0 / PINCH_THRESHOLD:
 			_zoom_step(-1)
 			_pinch_factor = 1.0
-		get_viewport().set_input_as_handled()
-	elif event is InputEventKey and event.pressed and not event.echo:
-		if event.physical_keycode == KEY_R and event.ctrl_pressed:
-			_regenerate(0)
-		elif event.physical_keycode == KEY_R:
-			_cam.reset_rotation()
-		elif event.physical_keycode in [KEY_Z, KEY_Q, KEY_LEFT]:
-			_cam.rotate_step(-1)
-		elif event.physical_keycode in [KEY_X, KEY_RIGHT]:
-			_cam.rotate_step(1)
-		elif event.physical_keycode == KEY_T and _weather != null:
-			if event.shift_pressed:
-				_weather.set_auto_mode()
-			else:
-				_weather.cycle_manual_weather()
-		elif event.physical_keycode == KEY_N and _day_night != null:
-			if event.shift_pressed:
-				_day_night.set_auto_mode()
-			else:
-				_day_night.toggle_manual_night()
-		elif event.physical_keycode == KEY_B and _depth_of_field != null:
-			_depth_of_field.toggle()
-		elif event.physical_keycode == KEY_P or event.keycode == KEY_P:
-			# 进入战棋（融合进 pixel_world 的战术 RPG 系统）
-			# P = Play battle；physical_keycode 和 keycode 都匹配，确保注入输入也能触发
-			_enter_battle()
-		elif (event.physical_keycode == KEY_O or event.keycode == KEY_O) and not _battle_active:
-			# 打开/关闭 JSON 战场加载列表（调试入口，与 P 的随机遭遇战互补）。
-			# B1 就地战斗进行中不开（_battle_active 时输入已被战斗层接管）。
-			if _hud != null:
-				_hud.toggle_battlefield_panel()
-		elif (
-			(event.physical_keycode == KEY_E or event.keycode == KEY_E)
-			and event.ctrl_pressed
-			and not _battle_active
-		):
-			# Ctrl+E 打开地图编辑器；单独 E 用于离散顺时针切换。
-			if not is_world_map_open():
-				_open_map_editor()
-		elif event.physical_keycode == KEY_E:
-			_cam.rotate_step(1)
-		elif event.keycode == KEY_EQUAL or event.keycode == KEY_KP_ADD:
-			_zoom_step(1)
-		elif event.keycode == KEY_MINUS or event.keycode == KEY_KP_SUBTRACT:
-			_zoom_step(-1)
-		elif event.keycode == KEY_F:
-			_zoom_index = DEFAULT_ZOOM_INDEX
-			_apply_zoom()
+		return true
+	return false
+
+
+func _handle_key_input(event: InputEventKey) -> void:
+	var handler: Callable = _key_route().get(event.physical_keycode)
+	if not handler.is_valid() and event.keycode != event.physical_keycode:
+		handler = _entry_key_route().get(event.keycode)
+	if handler.is_valid():
+		handler.call(event)
+
+
+func _key_route() -> Dictionary:
+	if _key_handlers.is_empty():
+		_key_handlers = {
+			KEY_R: Callable(self, "_key_reset_or_regenerate"),
+			KEY_Z: Callable(self, "_key_rotate_ccw"),
+			KEY_Q: Callable(self, "_key_rotate_ccw"),
+			KEY_LEFT: Callable(self, "_key_rotate_ccw"),
+			KEY_X: Callable(self, "_key_rotate_cw"),
+			KEY_RIGHT: Callable(self, "_key_rotate_cw"),
+			KEY_T: Callable(self, "_key_weather"),
+			KEY_N: Callable(self, "_key_day_night"),
+			KEY_B: Callable(self, "_key_depth_of_field"),
+			KEY_P: Callable(self, "_key_enter_battle"),
+			KEY_O: Callable(self, "_key_battlefield_panel"),
+			KEY_E: Callable(self, "_key_editor_or_rotate"),
+		}
+	return _key_handlers
+
+
+func _entry_key_route() -> Dictionary:
+	if _entry_key_handlers.is_empty():
+		_entry_key_handlers = {
+			KEY_P: Callable(self, "_key_enter_battle"),
+			KEY_O: Callable(self, "_key_battlefield_panel"),
+			KEY_E: Callable(self, "_key_editor_or_rotate"),
+			KEY_EQUAL: Callable(self, "_key_zoom_in"),
+			KEY_KP_ADD: Callable(self, "_key_zoom_in"),
+			KEY_MINUS: Callable(self, "_key_zoom_out"),
+			KEY_KP_SUBTRACT: Callable(self, "_key_zoom_out"),
+			KEY_F: Callable(self, "_key_zoom_reset"),
+		}
+	return _entry_key_handlers
+
+
+## Ctrl+R 重生成世界；单独 R 复位视角。
+func _key_reset_or_regenerate(event: InputEventKey) -> void:
+	if event.ctrl_pressed:
+		_regenerate(0)
+	else:
+		_cam.reset_rotation()
+
+
+## Z/Q/← 逆时针；X/→/E 顺时针（E 见 _key_editor_or_rotate）。
+func _key_rotate_ccw(_event: InputEventKey) -> void:
+	_cam.rotate_step(-1)
+
+
+func _key_rotate_cw(_event: InputEventKey) -> void:
+	_cam.rotate_step(1)
+
+
+## Shift+T 自动天气；单独 T 手动轮换。天气模块缺席时静默忽略。
+func _key_weather(event: InputEventKey) -> void:
+	if _weather == null:
+		return
+	if event.shift_pressed:
+		_weather.set_auto_mode()
+	else:
+		_weather.cycle_manual_weather()
+
+
+## Shift+N 自动昼夜；单独 N 手动切夜。昼夜模块缺席时静默忽略。
+func _key_day_night(event: InputEventKey) -> void:
+	if _day_night == null:
+		return
+	if event.shift_pressed:
+		_day_night.set_auto_mode()
+	else:
+		_day_night.toggle_manual_night()
+
+
+## B 切换景深。模块缺席时静默忽略。
+func _key_depth_of_field(_event: InputEventKey) -> void:
+	if _depth_of_field != null:
+		_depth_of_field.toggle()
+
+
+## P = Play battle：进入战棋（融合进 pixel_world 的战术 RPG 系统）。
+## physical/keycode 双匹配，确保注入输入也能触发；无前置 guard（与原链一致）。
+func _key_enter_battle(_event: InputEventKey) -> void:
+	_enter_battle()
+
+
+## O 打开/关闭 JSON 战场加载列表（调试入口，与 P 的随机遭遇战互补）。
+## B1 就地战斗进行中不开（_battle_active 时输入已被战斗层接管）。
+func _key_battlefield_panel(_event: InputEventKey) -> void:
+	if not _battle_active and _hud != null:
+		_hud.toggle_battlefield_panel()
+
+
+## Ctrl+E 打开地图编辑器；单独 E 用于离散顺时针步进。
+## 原 elif 链里 Ctrl+E 命中后即使内部 guard 拦下也整体短路（不落到旋转），
+## 仅 B1 进行中不满足前置（not _battle_active）才落到 plain-E 旋转——此处保持一致。
+func _key_editor_or_rotate(event: InputEventKey) -> void:
+	if event.ctrl_pressed and not _battle_active:
+		if not is_world_map_open():
+			_open_map_editor()
+		return
+	if event.physical_keycode == KEY_E:
+		_cam.rotate_step(1)
+
+
+func _key_zoom_in(_event: InputEventKey) -> void:
+	_zoom_step(1)
+
+
+func _key_zoom_out(_event: InputEventKey) -> void:
+	_zoom_step(-1)
+
+
+## F 复位到默认缩放档。
+func _key_zoom_reset(_event: InputEventKey) -> void:
+	_zoom_index = DEFAULT_ZOOM_INDEX
+	_apply_zoom()
 
 
 func _setup_day_night() -> void:

@@ -13,9 +13,8 @@
 ##   3. 迁移接线（静态源检查）：迁移文件引用工厂/主题且不再保留被删除的本地
 ##      样式 helper 定义；一方源码不再裸创建按钮（Button/CheckButton/
 ##      OptionButton .new() 一律走组件/工厂；tests 原生夹具与 addons 除外）。
-## 注：game_hud_contract.gd 在 HEAD 上本就无法以 --script 模式编译
-## （Settings autoload 限制，见 hint_bar_contract.gd 头部注释），
-## HUD 运行态断言由 Godot MCP runtime_assert_* 覆盖，不在本测试重复。
+## 注：game_hud_contract.gd 已可 --script 直跑（2026-11-16 复测 0.8s pass；
+## --path . 全 autoload 环境），HUD 运行态断言不在本测试重复。
 
 extends SceneTree
 
@@ -198,8 +197,16 @@ func _run() -> void:
 		["func _btn_styles(", "func _make_panel_style(", "func _sidebar_panel_style(",
 			"func _detail_label(", "func _tab_styles("])
 	_check_source("res://scripts/game_hud.gd",
-		["UIThemeScript.rail_style()", "UIFactoryScript.option_button("],
+		["UIThemeScript.rail_style()", "UIFactoryScript.button("],
 		["func _label(", "func _panel_style(", "func _rail_style("])
+	# 2026-11-17 拆分：设置面板装配迁至 scripts/hud/game_hud_settings_panel.gd
+	#（option_button 接线随之迁移），战场面板迁至 game_hud_battlefield_panel.gd。
+	_check_source("res://scripts/hud/game_hud_battlefield_panel.gd",
+		["UIFactoryScript.button("],
+		[])
+	_check_source("res://scripts/hud/game_hud_settings_panel.gd",
+		["UIFactoryScript.option_button("],
+		[])
 	_check_source("res://scripts/side_panel.gd",
 		["UIThemeScript.dock_panel_style(", "UIFactoryScript.log_label("],
 		["func _panel_style("])
@@ -220,6 +227,8 @@ func _run() -> void:
 	for path: String in [
 		"res://main.gd",
 		"res://scripts/game_hud.gd",
+		"res://scripts/hud/game_hud_battlefield_panel.gd",
+		"res://scripts/hud/game_hud_settings_panel.gd",
 		"res://scripts/side_panel.gd",
 		"res://scripts/scenes/battle.gd",
 		"res://scripts/scenes/title.gd",
