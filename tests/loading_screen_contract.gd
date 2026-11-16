@@ -167,22 +167,23 @@ func _run() -> void:
 	_expect(not rig.would_begin({}, sprites, false), "空事件 would_begin=false")
 	_expect(not rig.would_begin(event, {}, false), "无有效参战点 would_begin=false")
 
-	# ---- 7. 静态源检查：battle.gd 唯一接入点 + prewarm 不挪位 ----
-	_check_source("res://scripts/scenes/battle.gd",
+	# ---- 7. 静态源检查：battle_fx.gd 唯一接入点 + prewarm 不挪位 ----
+	# （拆分后预热/遮罩逻辑在 scripts/battle/battle_fx.gd；battle.gd 只调 _fx.prewarm_action_fx）
+	_check_source("res://scripts/battle/battle_fx.gd",
 		["LoadingScreen.show_loading()", "LoadingScreen.hide_loading()",
-			"would_begin(event, _unit_sprites, skipped)",
+			"would_begin(event, unit_sprites, skipped)",
 			"await get_tree().process_frame",
-			"_prewarm_damage_fx_variants(impacts)",
-			"func _prewarm_action_fx("],
+			"prewarm_damage_fx_variants(impacts)",
+			"func prewarm_action_fx("],
 		[])
 	_check_source("res://scripts/battle/immersive_camera.gd",
 		["func would_begin("], [])
-	var battle_src := FileAccess.open("res://scripts/scenes/battle.gd", FileAccess.READ)
-	if battle_src != null:
-		var battle_text := battle_src.get_as_text()
-		battle_src.close()
-		_expect(battle_text.count("LoadingScreen.show_loading()") == 1,
-			"battle.gd 只有一处 show_loading 调用（经 _prewarm_action_fx 复用）")
+	var fx_src := FileAccess.open("res://scripts/battle/battle_fx.gd", FileAccess.READ)
+	if fx_src != null:
+		var fx_text := fx_src.get_as_text()
+		fx_src.close()
+		_expect(fx_text.count("LoadingScreen.show_loading()") == 1,
+			"battle_fx.gd 只有一处 show_loading 调用（经 prewarm_action_fx 复用）")
 
 	screen.queue_free()
 	rig.queue_free()

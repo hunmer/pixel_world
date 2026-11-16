@@ -376,3 +376,29 @@ static func build_region_endpoint_row(ed, which: String, store: Dictionary) -> H
 		store[axis] = sp
 		row.add_child(sp)
 	return row
+
+
+## 右下角 34×30 键盘图标；节点名保留 EditorHintBar，点击打开完整键帽弹窗。
+## 原门面 Button.new() 直建控件改经 ed._pixel_btn()（PixelButton 组件，
+## 音效已关）——属性与加树顺序与原实现逐行一致。
+static func build_hint_bar(ed) -> Button:
+	var button: Button = ed._pixel_btn()
+	button.name = "EditorHintBar"
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.tooltip_text = "操作提示"
+	button.custom_minimum_size = Vector2(34, 30)
+	button.icon = UIThemeScript.icon("keyboard")
+	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.add_theme_constant_override("icon_max_width", 20)
+	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	button.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	button.offset_left = -46.0
+	button.offset_top = -42.0
+	button.offset_right = -12.0
+	button.offset_bottom = -12.0
+	button.pressed.connect(func():
+		if ed._shortcut_hints_dialog != null:
+			ed._shortcut_hints_dialog.open(ed.HINT_ITEMS))
+	return button

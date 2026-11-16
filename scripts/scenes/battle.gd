@@ -3,11 +3,20 @@
 ## 完整回合制循环：选单位→蓝格移动/红格攻击→移动→菜单(攻击/技能/物品/等待)→战斗演出→敌方AI回合→胜负。
 ## 2D 等距（pixel_world 融合版）：IsoBoard(Node2D) + UnitSprite3D(Node2D)；UI 用 CanvasLayer。
 ##
-## 本文件只保留场景编排核心：生命周期/状态机/输入/选择/移动/战斗演出(伤害/死亡/经验)/胜负。
-## 已按职责拆出三个助手模块（scripts/battle/，均通过 setup()+Callable 注入，不持有本场景引用）：
-##   - RangeOverlay (Node2D)    地形回退铺底 + 移动/攻击范围菱形描边 + 光标金色呼吸框
-##   - TurnDirector (Node)      敌方 AI 回合 + 玩家方托管编排 + 偏好数据
-##   - BattleUI    (CanvasLayer) HUD + 单位菜单/选择器/预览面板/结果横幅
+## 本文件只保留场景编排核心：生命周期/状态机/输入/选择/移动/战斗演出调度/胜负。
+## 已按职责拆出的助手模块（scripts/battle/，均通过 setup()+Callable 注入，不持有本场景引用）：
+##   - RangeOverlay (Node2D)      地形回退铺底 + 移动/攻击范围菱形描边 + 光标金色呼吸框
+##   - TurnDirector (Node)        敌方 AI 回合 + 玩家方托管编排 + 偏好数据
+##   - BattleUI    (CanvasLayer)  HUD + 单位菜单/选择器/预览面板/结果横幅
+##   - BattleFx    (Node)         伤害数字/血条受击/飘字/抖动 + PixelFx 预热
+##   - BattleSfx   (Node)         出手/受击/结算演出音效（含程序化回退波形）
+##   - BattleResultStage (Node)   结算演出视觉（欢呼/倒地/死亡淡出 + 姿态捕获恢复）
+##   - BattlePrefPanel (Node)     托管偏好面板（优先目标 + 策略）
+##   - BattleSave (RefCounted)    战旗持久化（完整行动边界提交）
+##   - BattleCameraKick (Node)    行动演出镜头踢击（strike/return 相位附加位移）
+## 契约测试兼容面：_presentation_audio/_presentation_sound_cache/_result_visual_states 为
+## 模块实例/字典的别名变量；_on_presentation_*/_restore_result_visuals/_on_impact_presented/
+## _open_pref_panel/_commit_snapshot 为薄委托（tests/ 直戳这些成员）。
 
 extends Node2D
 
@@ -21,20 +30,26 @@ const BattlePresentationScript = preload("res://scripts/battle/battle_presentati
 const ActionAnimScript = preload("res://scripts/battle/action_anim.gd")
 const ImmersiveCameraScript = preload("res://scripts/battle/immersive_camera.gd")
 const BattleActionResolver = preload("res://scripts/battle/battle_action_resolver.gd")
-const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
-const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
-const PixelFx2DScript = preload("res://addons/pixelfx/nodes/pixel_fx_2d.gd")
-const PixelFxBakerScript = preload("res://addons/pixelfx/bake/baker.gd")
+const BattleFxScript = preload("res://scripts/battle/battle_fx.gd")
+const BattleSfxScript = preload("res://scripts/battle/battle_sfx.gd")
+const BattleResultStageScript = preload("res://scripts/battle/battle_result_stage.gd")
+const BattlePrefPanelScript = preload("res://scripts/battle/battle_pref_panel.gd")
+const BattleSaveScript = preload("res://scripts/battle/battle_save.gd")
+const BattleCameraKickScript = preload("res://scripts/battle/battle_camera_kick.gd")
 
 var action_anim: Node = null
 var _immersive_camera: Node = null
-var _action_camera_kick_tween: Tween = null
-var _action_camera_kick_offset := Vector3.ZERO
-var _action_camera_kick_active := false
-var _result_visual_states: Dictionary = {}
-var _unit_visual_tweens: Dictionary = {}
+# 演出助手模块（职责见各模块头注释；battle.gd 只保留编排与契约兼容委托）
+var _fx: BattleFx = null
+var _sfx: BattleSfx = null
+var _result_stage: BattleResultStage = null
+var _pref_panel: BattlePrefPanel = null
+var _save: BattleSave = null
+var _camera_kick: BattleCameraKick = null
+# 契约测试别名（指向模块实例/模块内部字典，勿重赋值）
 var _presentation_audio: AudioStreamPlayer = null
 var _presentation_sound_cache: Dictionary = {}
+var _result_visual_states: Dictionary = {}
 
 var grid: GridSystem
 var turn: TurnManager
@@ -68,8 +83,6 @@ var _unit_sprites: Dictionary = {}  # unitId -> UnitSprite3D
 var range_overlay: RangeOverlay = null
 # 屏幕空间 UI（HUD + 菜单/面板/预览/横幅）
 var battle_ui: BattleUI = null
-# 偏好配置面板（默认 hidden，_open_pref_panel 动态填充；数据在 turn_director）
-var pref_panel: Control = null
 
 # 状态机
 enum Mode { IDLE, UNIT_SELECTED, MOVING, MENU, ENEMY_TURN, ANIMATING }
@@ -88,12 +101,8 @@ var _pending_move_undo: Dictionary = {}
 # 仅本场战斗有效，偏好存 turn_director 内（key=unitId → {priorityTargetId, strategy}）。
 var turn_director: TurnDirector = null
 
-# ---- 战旗持久化（GameSession 自动存档）----
-# save_identity 非空 → 本场战斗在完整行动边界自动提交；save_state 非空 → 恢复进度。
-# _last_committed 缓存最近一次完整快照：演出中途退出时用它补落盘（防半行动丢失）。
-var _save_identity: String = ""
-var _save_state: Dictionary = {}
-var _last_committed: Dictionary = {}
+# ---- 战旗持久化（GameSession 自动存档；逻辑在 BattleSave 模块）----
+# _save.identity 非空 → 本场战斗在完整行动边界自动提交；pending_state 非空 → 恢复进度。
 
 
 func _ready() -> void:
@@ -106,8 +115,8 @@ func _ready() -> void:
 	_world = SceneArgs.battle_args.get("world", null)
 	_b1_mode = _world != null
 	# 战旗记录参数：save_identity 非空开启自动存档；save_state 非空表示恢复进度
-	_save_identity = String(SceneArgs.battle_args.get("save_identity", ""))
-	_save_state = SceneArgs.battle_args.get("save_state", {})
+	var save_identity := String(SceneArgs.battle_args.get("save_identity", ""))
+	var save_state: Dictionary = SceneArgs.battle_args.get("save_state", {})
 	var _save_notice := String(SceneArgs.battle_args.get("save_notice", ""))
 	if _b1_mode:
 		_world_origin = chapter.get("world_origin", Vector2i.ZERO)
@@ -125,6 +134,15 @@ func _ready() -> void:
 	# AI 难度档从全局设置注入（非法/缺失由 normalize 回 normal）
 	turn_director.enemy_difficulty = AIDifficulty.normalize(Settings.enemy_ai_difficulty)
 	turn_director.host_difficulty = AIDifficulty.normalize(Settings.host_ai_difficulty)
+	# 1a. 战旗持久化模块（完整行动边界提交；toast 经 battle_ui 回交，调用时才求值）
+	_save = BattleSaveScript.new()
+	_save.setup(
+		save_identity,
+		save_state,
+		turn,
+		turn_director,
+		func(msg: String) -> void: battle_ui.show_toast(msg)
+	)
 	_inject_turn_director_callables()
 	add_child(turn_director)
 	if SceneArgs.battle_args.get("hosting", false):
@@ -134,27 +152,35 @@ func _ready() -> void:
 		_setup_b1_render()
 	else:
 		_setup_b2_render()
+	# 2b. 演出音效/结算视觉模块（_build_ui 的信号连接走 battle 侧委托，先建实例与别名）
+	_sfx = BattleSfxScript.new()
+	_sfx.name = "BattleSfx"
+	add_child(_sfx)
+	_sfx.setup(grid)
+	_presentation_audio = _sfx.audio_player
+	_presentation_sound_cache = _sfx.sound_cache
+	_result_stage = BattleResultStageScript.new()
+	_result_stage.name = "BattleResultStage"
+	add_child(_result_stage)
+	_result_stage.setup(_unit_sprites)
+	_result_visual_states = _result_stage.states
 	# 3. UI 层（屏幕空间，两种模式共用）
 	_build_ui()
+	# 托管偏好面板模块（容器由 battle_ui 提供；数据面读写走 turn_director）
+	_pref_panel = BattlePrefPanelScript.new()
+	_pref_panel.name = "BattlePrefPanel"
+	add_child(_pref_panel)
+	_pref_panel.setup(grid, turn_director, battle_ui.get_pref_panel_container())
 	turn_director.update_host_btn_text()
 	# 有存档身份的 B2 战斗提供「退出战斗」按钮（B1 由 main.gd 自己接管）
-	if not _save_identity.is_empty() and not _b1_mode:
+	if not save_identity.is_empty() and not _b1_mode:
 		battle_ui.set_exit_callback(_on_exit_to_list)
 	if _save_notice != "":
 		battle_ui.show_toast(_save_notice)
 	# 4. 单位
 	for u in grid.units.values():
 		_spawn_unit_sprite(u)
-	action_anim = ActionAnimScript.new()
-	action_anim.name = "ActionAnim"
-	add_child(action_anim)
-	action_anim.setup(
-		_unit_sprites,
-		_world._cam if _b1_mode else board.camera,
-		_spawn_action_float_text
-	)
-	action_anim.phase_started.connect(_on_action_phase_started)
-	action_anim.finished.connect(_on_action_anim_finished)
+	# 沉浸演出相机（先建：特效预热的 LoadingScreen 遮罩门控用它）
 	_immersive_camera = ImmersiveCameraScript.new()
 	_immersive_camera.name = "ImmersiveCamera"
 	add_child(_immersive_camera)
@@ -164,6 +190,40 @@ func _ready() -> void:
 	# 沉浸遮挡：B1 用世界柱地形，B2 用战场柱地形（同一 IsometricTerrain3D 接口）。
 	# B2 headless 无相机时 renderer._terrain_3d 为 null，遮挡自然停用。
 	_immersive_camera.setup_occlusion(_world._terrain if _b1_mode else renderer._terrain_3d)
+	# 演出特效模块（飘字/伤害数字/血条受击/抖动/预热；坐标与相机经适配方法注入）
+	_fx = BattleFxScript.new()
+	_fx.name = "BattleFx"
+	add_child(_fx)
+	_fx.setup(
+		grid,
+		_unit_sprites,
+		_immersive_camera,
+		Callable(self, "_float_cell_to_screen"),
+		Callable(self, "_damage_camera"),
+		Callable(battle_ui, "get_float_text_container")
+	)
+	# 行动演出镜头踢击（strike/return 相位附加位移；strike 出手音经 BattleSfx 回调）
+	_camera_kick = BattleCameraKickScript.new()
+	_camera_kick.name = "BattleCameraKick"
+	add_child(_camera_kick)
+	_camera_kick.setup(
+		_unit_sprites,
+		_immersive_camera,
+		_world if _b1_mode else null,
+		Callable(self, "_b2_camera"),
+		Callable(_sfx, "play_strike")
+	)
+	action_anim = ActionAnimScript.new()
+	action_anim.name = "ActionAnim"
+	add_child(action_anim)
+	action_anim.setup(
+		_unit_sprites,
+		_world._cam if _b1_mode else board.camera,
+		Callable(_fx, "spawn_action_float_text")
+	)
+	action_anim.phase_started.connect(_camera_kick.on_phase_started)
+	action_anim.finished.connect(_on_action_anim_finished)
+	action_anim.finished.connect(_camera_kick.on_anim_finished)
 	# 受伤特效：impacts 带 hp_before/hp_after，比 float_text 回调信息全。
 	action_anim.impact_presented.connect(_on_impact_presented)
 	await get_tree().process_frame
@@ -186,11 +246,10 @@ func _ready() -> void:
 	set_process_input(true)
 	set_process_unhandled_input(true)
 	print("[Battle] BattleReady units=%d" % _unit_sprites.size())
-	if not _save_state.is_empty():
+	var resume_state := _save.consume_pending_state()
+	if not resume_state.is_empty():
 		# 恢复进度：不复位列标志/不重跑开局 tick，直接进保存时的阶段
-		var resume: Dictionary = _save_state
-		_save_state = {}
-		_apply_resume_state(resume)
+		_apply_resume_state(resume_state)
 	else:
 		# 首个玩家回合必须在 battle_ready 之前启动：battle_ready 语义 = 完全就绪
 		# （含首回合复位/冷却/buff tick）。监听方恢复后会立即行动结算，
@@ -222,69 +281,10 @@ func _play_encounter_opening() -> void:
 	await battle_ui.play_opening(opening_units, boss)
 
 
-## ActionAnim 仍负责缩放；位置推近走 main/IsoCamera 认可的附加位移，避免被每帧取景覆盖。
-func _process(_delta: float) -> void:
-	if _action_camera_kick_active:
-		_apply_action_camera_kick()
-
-
-func _on_action_phase_started(phase: StringName, event: Dictionary) -> void:
-	if is_instance_valid(_immersive_camera) and _immersive_camera.is_engaged():
-		return
-	if phase != &"strike" and phase != &"return":
-		return
-	var target_offset := Vector3.ZERO
-	if phase == &"strike":
-		_play_strike_sound(event)
-		var camera := get_viewport().get_camera_3d()
-		if camera == null:
-			return
-		var attacker_id := StringName(event.get(&"attacker_id", &""))
-		var target_id := StringName(event.get(&"target_id", &""))
-		var impacts: Array = event.get(&"impacts", [])
-		if target_id == &"" and not impacts.is_empty():
-			target_id = StringName((impacts[0] as Dictionary).get(&"target_id", &""))
-		var attacker: UnitSprite3D = _unit_sprites.get(attacker_id)
-		var target: UnitSprite3D = _unit_sprites.get(target_id)
-		var focus := Vector3.ZERO
-		if attacker != null and target != null:
-			focus = (attacker.global_position + target.global_position) * 0.5
-		elif attacker != null:
-			focus = attacker.global_position
-		elif target != null:
-			focus = target.global_position
-		else:
-			return
-		target_offset = (focus - camera.global_position) * 0.08
-	if _action_camera_kick_tween != null and _action_camera_kick_tween.is_valid():
-		_action_camera_kick_tween.kill()
-	_action_camera_kick_active = true
-	_action_camera_kick_tween = create_tween()
-	_action_camera_kick_tween.tween_property(
-		self, "_action_camera_kick_offset", target_offset, 0.16 if phase == &"strike" else 0.14
-	)
-
-
+## 演出结束（含跳过/中断）立即按当前 HP 恢复常驻血条。
+## 镜头踢击清零由 BattleCameraKick.on_anim_finished（并列订阅）负责。
 func _on_action_anim_finished(_event: Dictionary, _skipped: bool) -> void:
-	# 演出结束（含跳过/中断）立即按当前 HP 恢复常驻血条。
 	_set_unit_bars_visible(true)
-	if _action_camera_kick_tween != null and _action_camera_kick_tween.is_valid():
-		_action_camera_kick_tween.kill()
-	_action_camera_kick_offset = Vector3.ZERO
-	_apply_action_camera_kick()
-	_action_camera_kick_active = false
-
-
-func _apply_action_camera_kick() -> void:
-	if is_instance_valid(_immersive_camera) and _immersive_camera.is_engaged():
-		# B1 的 additive kick 与沉浸有效焦点互斥；B2 的 presentation_offset 由沉浸模块独占。
-		if _b1_mode and is_instance_valid(_world):
-			_world.set_battle_camera_kick(Vector3.ZERO)
-		return
-	if _b1_mode and is_instance_valid(_world):
-		_world.set_battle_camera_kick(_action_camera_kick_offset)
-	elif is_instance_valid(board) and board.camera != null:
-		board.camera.presentation_offset = _action_camera_kick_offset
 
 
 ## B2 切场景模式渲染初始化：等距方块地形（像素版 Minecraft 风格，复用世界渲染管线）
@@ -367,6 +367,31 @@ func _b1_cell_level(x: int, y: int) -> int:
 	return _world.cell_stand_level(world_cell)
 
 
+## 飘字/特效脚点坐标（默认站立/可见顶面层；BattleFx 经 cell_screen_fn 注入使用，
+## 与拆分前 _spawn_float_text 的 B1/B2 分支逐行等价）。
+func _float_cell_to_screen(x: int, y: int) -> Vector2:
+	if _b1_mode:
+		return _b1_cell_to_screen(x, y)
+	var lvl: int = renderer.visual_top_level(x, y) if renderer != null else 0
+	return board.cell_to_screen(x, y, float(lvl))
+
+
+## 当前取景相机（BattleFx 伤害特效 unproject 用；B1 世界相机 / B2 战场相机）。
+func _damage_camera() -> Camera3D:
+	if _b1_mode and is_instance_valid(_world):
+		return _world._cam
+	if is_instance_valid(board):
+		return board.camera
+	return null
+
+
+## B2 演出相机（BattleCameraKick 的 presentation_offset 通道）。
+func _b2_camera() -> Camera3D:
+	if is_instance_valid(board):
+		return board.camera
+	return null
+
+
 ## 屏幕坐标 → 战场 cell（仅 B2 调用；B1 走 _screen_to_battle_cell* 系列）。
 ## renderer.pick_cell 逐层尝试柱顶投影，支持高低起伏地形。
 func _pick_battle_cell(screen_pos: Vector2) -> Vector2i:
@@ -414,16 +439,11 @@ func _build_ui() -> void:
 	battle_ui.cell_screen_fn = Callable(self, "_b1_cell_to_screen" if _b1_mode else "_b2_cell_to_screen")
 	battle_ui.level_fn = Callable(self, "_b1_cell_level") if _b1_mode else Callable(renderer, "visual_top_level")
 	add_child(battle_ui)
-	_presentation_audio = AudioStreamPlayer.new()
-	_presentation_audio.name = "PresentationAudio"
-	add_child(_presentation_audio)
 	battle_ui.cheer_requested.connect(_on_presentation_cheer)
 	battle_ui.collapse_requested.connect(_on_presentation_collapse)
 	battle_ui.presentation_sound_requested.connect(_on_presentation_sound)
 	_inject_battle_ui_callables()
 	battle_ui.build(_on_end_turn, _toggle_hosting, _open_pref_panel)
-	# 偏好面板容器（数据在 turn_director，所以面板由 battle.gd 持有）
-	pref_panel = battle_ui.get_pref_panel_container()
 
 
 ## 把 battle.gd 的方法注入 battle_ui（让它能回交战斗演出 / 状态机修改 / 胜负判定，
@@ -515,37 +535,13 @@ func _spawn_due_reinforcements(turn_num: int) -> void:
 
 
 # ============================================================
-# 战旗持久化（完整行动边界提交；演出中退出回退上一完整快照）
+# 战旗持久化（BattleSave 模块；battle.gd 保留委托以维持注入面）
 # ============================================================
-## 收集恢复所需的运行态（回合/阶段/托管/偏好/胜负）。
-func _capture_battle_state(result: StringName = &"") -> Dictionary:
-	return {
-		"turn_number": int(turn.turn_number),
-		"phase": turn.phase,
-		"hosting": turn_director.is_hosting(),
-		"prefs": turn_director.get_prefs().duplicate(true),
-		"result": result,
-	}
-
-
 ## 在完整行动边界提交（回合开始 / 行动收尾 / 终局）。result 非空表示终局记录。
+## 逻辑在 BattleSave.commit；turn_director.on_action_committed 与终局路径都调本委托。
 func _commit_snapshot(result: StringName = &"") -> void:
-	if _save_identity.is_empty():
-		return
-	_last_committed = {
-		"chapter": chapter.duplicate(true),
-		"state": _capture_battle_state(result),
-	}
-	_flush_save()
-
-
-## 落盘最近一次完整快照（幂等；_exit_tree 用它补防半途退出）。
-func _flush_save() -> void:
-	if _save_identity.is_empty() or _last_committed.is_empty():
-		return
-	var res: Dictionary = GameSession.commit(_last_committed["chapter"], _last_committed["state"])
-	if not res.get("ok", false):
-		battle_ui.show_toast("保存失败：%s" % String(res.get("error", "")))
+	if _save != null:
+		_save.commit(chapter, result)
 
 
 ## 恢复进度：不复位行动标志、不重跑开局 tick（冷却/buff 由存档单位数据承载）。
@@ -1098,7 +1094,7 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 	if action_anim != null and not event.is_empty():
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
-		if not await _prewarm_action_fx(event, event.get(&"impacts", []), skipped):
+		if not await _fx.prewarm_action_fx(event, event.get(&"impacts", []), skipped):
 			return
 		_set_unit_bars_visible(false)
 		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
@@ -1120,228 +1116,13 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 	atk_us.update_state()
 
 
-## ActionAnim 每个 impact 只回调一次，按权威单位 id 取当前格位，避免重复订阅飘字信号。
-func _spawn_action_float_text(unit_id: StringName, text: String, color: Color, font_size: int) -> void:
-	var unit: Dictionary = grid.units.get(unit_id, {})
-	if unit.is_empty():
-		return
-	_spawn_float_text(unit, text, color, font_size)
-
-
-## 通用飘字（ActionAnim/物品用：治疗绿、buff 黄、回 MP 蓝；伤害红已由 pixelfx 接管）。
-func _spawn_float_text(u: Dictionary, text: String, color: Color, font_size: int = 18) -> void:
-	# 伤害数字（"-N"）统一走 pixelfx damage-number + health-bar-hit，不再叠标签飘字。
-	if text.begins_with("-"):
-		return
-	var lbl := UIFactoryScript.outline_label(text, font_size, color, 4)
-	# 单位脚点由当前 Camera3D 投影到屏幕，再抬升 50px。
-	var screen: Vector2
-	if _b1_mode:
-		var world_cell: Vector2i = _world_origin + u.position
-		var lvl: int = _world.cell_stand_level(world_cell)
-		screen = _world._grid_to_screen(world_cell, float(lvl))
-	else:
-		var lvl: int = renderer.visual_top_level(u.position.x, u.position.y) if renderer != null else 0
-		screen = board.cell_to_screen(u.position.x, u.position.y, float(lvl))
-	lbl.position = screen + Vector2(0, -50) - Vector2(20, 30)
-	battle_ui.get_float_text_container().add_child(lbl)
-	var tw := create_tween()
-	tw.tween_property(lbl, "position:y", lbl.position.y - 30, 0.7)
-	tw.parallel().tween_property(lbl, "modulate:a", 0.0, 0.7)
-	tw.tween_callback(lbl.queue_free)
-
-
-## ActionAnim 每次 impact 回调一次：实际受伤（命中且 damage>0）播 pixelfx 伤害数字 + 血条受击特效。
-## 零伤害 / 未命中 / 治疗 / 纯 buff 均不触发。
 # ============================================================
-# 战斗音效（assets/audio/sfx，经 Sfx autoload 播放）
+# 战斗音效 / 演出特效（BattleSfx / BattleFx 模块；battle.gd 只留 impact 委托）
 # ============================================================
-## 出手音：按事件动画/武器类型选拨剑/挥斧/突刺/放箭；法系由受击音覆盖。
-func _play_strike_sound(event: Dictionary) -> void:
-	var anim := String(event.get(&"anim", &"slash"))
-	var cue := StringName()
-	if anim == "projectile:arrow":
-		cue = &"bow_release"
-	elif anim == "slash":
-		var attacker: Dictionary = grid.units.get(StringName(event.get(&"attacker_id", &"")), {})
-		var weapon_type := StringName(attacker.get(&"weapon", {}).get(&"type", &"sword"))
-		match weapon_type:
-			&"axe":
-				cue = &"swing_axe"
-			&"lance":
-				cue = &"swing_lance"
-			_:
-				cue = &"swing_sword"
-	if cue != StringName():
-		Sfx.play(cue)
-
-
-## 受击/闪避/治疗/死亡/暴击/低血量警报音；素材缺失时 Sfx 内部静默。
-func _play_impact_sound(impact: Dictionary) -> void:
-	if int(impact.get(&"healing", 0)) > 0:
-		Sfx.play(&"heal")
-		return
-	if not bool(impact.get(&"hit", false)):
-		Sfx.play(&"miss")
-		return
-	if bool(impact.get(&"died", false)):
-		Sfx.play(&"unit_death")
-		return
-	if bool(impact.get(&"critical", false)):
-		Sfx.play(&"crit")
-		return
-	var element := StringName(impact.get(&"element", &"physical"))
-	if element == &"physical":
-		var source: Dictionary = grid.units.get(StringName(impact.get(&"source_id", &"")), {})
-		var weapon_type := StringName(source.get(&"weapon", {}).get(&"type", &"sword"))
-		match weapon_type:
-			&"axe":
-				Sfx.play(&"hit_blunt")
-			&"lance", &"bow":
-				Sfx.play(&"hit_pierce")
-			_:
-				Sfx.play(&"hit_blade")
-	else:
-		Sfx.play(StringName("skill_" + String(element)))
-	# 低血量警报：我方单位 HP ≤ 25%（Sfx 内部带 6s 冷却）
-	var hp_after := int(impact.get(&"hp_after", 0))
-	if hp_after > 0:
-		var u: Dictionary = grid.units.get(StringName(impact.get(&"target_id", &"")), {})
-		if not u.is_empty() and u.get(&"faction", &"") == &"player":
-			var max_hp := int(u.get(&"stats", {}).get(&"hp", 0))
-			if max_hp > 0 and hp_after * 4 <= max_hp:
-				Sfx.play_low_hp()
-
-
+## impact 呈现回调：受击音（BattleSfx.play_impact）+ 伤害数字/血条受击（BattleFx.spawn_damage_from_impact）。
 func _on_impact_presented(impact: Dictionary) -> void:
-	_play_impact_sound(impact)
-	if not bool(impact.get(&"hit", false)):
-		return
-	var damage := int(impact.get(&"damage", 0))
-	if damage <= 0:
-		return
-	var unit_id := StringName(impact.get(&"target_id", &""))
-	var u: Dictionary = grid.units.get(unit_id, {})
-	if u.is_empty():
-		return
-	_spawn_damage_fx(u, damage, int(impact.get(&"hp_before", int(u.get(&"hp", 0)))), int(impact.get(&"hp_after", int(u.get(&"hp", 0)))))
-
-
-## 演出前预热：把 impacts 的动态变体（伤害数字 text / 血条 from/to）提前烘焙进 PixelFx2D 静态缓存。
-## BAKED 缓存键 = 脚本路径|JSON.stringify(options)|layer —— 动态参数几乎每个伤害值/血量比都是冷变体，
-## 冷播放要逐帧 CPU 渲染 + ImageTexture 创建上传（headless 实测约 120~194ms/帧，拖垮整个 2s 动画）；
-## 在 action_anim.play 的走位窗口里同步预热（单变体毫秒级），受伤瞬间即为热重放（≤1.7ms/帧）。
-func _prewarm_damage_fx_variants(impacts: Array) -> void:
-	for impact_value in impacts:
-		var impact: Dictionary = impact_value
-		if not bool(impact.get(&"hit", false)) or int(impact.get(&"damage", 0)) <= 0:
-			continue
-		var u: Dictionary = grid.units.get(StringName(impact.get(&"target_id", &"")), {})
-		if u.is_empty():
-			continue
-		var damage := int(impact.get(&"damage", 0))
-		var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
-		var hp_before := int(impact.get(&"hp_before", int(u.get(&"hp", 0))))
-		var hp_after := int(impact.get(&"hp_after", int(u.get(&"hp", 0))))
-		_prewarm_fx_variant("ui/damage-number", {"text": "-%d" % damage})
-		_prewarm_fx_variant("ui/health-bar-hit", {
-			"from": clampf(float(hp_before) / float(max_hp), 0.0, 1.0),
-			"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),
-		})
-
-
-## 遮罩只在本场战斗首次预热时展示：缓存键含伤害值文本，几乎每个伤害值都是冷变体，
-## 每次出手都真烘焙；但玩家只需第一次感知"加载"，之后静默烘焙不再闪遮罩。
-var _action_fx_mask_shown := false
-
-
-## 演出前预热（含可选全局加载遮罩）：沉浸镜头确认会接管时，先弹 LoadingScreen 并
-## await 2 帧让遮罩真正上屏，再在遮罩下同步预烘焙特效变体（烘焙卡顿由遮罩覆盖），随后立即隐藏。
-## 默认关闭/空事件/预先跳过时走原同步预热路径，不弹遮罩。返回 false = 等待期间战斗已退出。
-func _prewarm_action_fx(event: Dictionary, impacts: Array, skipped: bool) -> bool:
-	var use_loading_screen: bool = (
-		_immersive_camera.would_begin(event, _unit_sprites, skipped)
-		and not _action_fx_mask_shown
-	)
-	if use_loading_screen:
-		_action_fx_mask_shown = true
-		LoadingScreen.show_loading()
-		# 同步烘焙会卡住当前帧渲染；必须等遮罩先绘制出来，否则卡顿期间全屏无反馈。
-		await get_tree().process_frame
-		await get_tree().process_frame
-		if not is_inside_tree():
-			LoadingScreen.hide_loading()
-			return false
-	_prewarm_damage_fx_variants(impacts)
-	if use_loading_screen:
-		LoadingScreen.hide_loading()
-	return true
-
-
-## 单变体烘焙：缓存未命中才创建 Track 并强制渲染全部帧（Track 是懒渲染，get_textures(n-1) 一次拉全）。
-func _prewarm_fx_variant(effect_name: String, opts: Dictionary) -> void:
-	var path := "res://addons/pixelfx/fx/%s.gd" % effect_name
-	# 与 PixelFx2D._reload 的缓存键构造保持一致（layer 默认 ""，故键以 "|" 结尾）。
-	var key := "%s|%s|" % [path, JSON.stringify(opts)]
-	if PixelFx2D._cache.has(key):
-		return
-	var mod: Script = load(path)
-	if mod == null:
-		return
-	var track = PixelFxBakerScript.track(mod, opts)
-	track.get_textures(track.n - 1)
-	PixelFx2D._cache[key] = track
-
-
-## 物品路径预热：由 hp_deltas 反推伤害变体（与 _resolve_item 的 _spawn_damage_fx 参数一致）。
-func _prewarm_item_damage_fx(result: Dictionary) -> void:
-	for h in result.get(&"hp_deltas", []):
-		var t: Dictionary = h[&"unit"]
-		var delta: int = int(h[&"delta"])
-		if delta >= 0:
-			continue
-		var hp_after := int(t.get(&"hp", 0))
-		var u: Dictionary = grid.units.get(StringName(t.get(&"id", &"")), t)
-		var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
-		_prewarm_fx_variant("ui/damage-number", {"text": "-%d" % -delta})
-		_prewarm_fx_variant("ui/health-bar-hit", {
-			"from": clampf(float(hp_after - delta) / float(max_hp), 0.0, 1.0),
-			"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),
-		})
-
-
-## 伤害特效：damage-number 绑头顶（实际伤害数字），health-bar-hit 绑同锚点（from=伤前 to=伤后 占最大生命比）。
-func _spawn_damage_fx(u: Dictionary, damage: int, hp_before: int, hp_after: int) -> void:
-	if damage <= 0:
-		return
-	var us: UnitSprite3D = _unit_sprites.get(u.get(&"id", &""))
-	if us == null:
-		return
-	var camera: Camera3D = null
-	if _b1_mode:
-		camera = _world._cam
-	elif board != null:
-		camera = board.camera
-	if camera == null:
-		return
-	var head := camera.unproject_position(us.global_position + Vector3(0.0, us.get_bar_y(), 0.0))
-	var dn: Node2D = PixelFx2DScript.new()
-	dn.effect = "ui/damage-number"
-	dn.options = {"text": "-%d" % damage}
-	dn.free_when_done = true
-	dn.position = head + Vector2(0, -10)
-	battle_ui.get_float_text_container().add_child(dn)
-	var hit_fx: Node2D = PixelFx2DScript.new()
-	hit_fx.effect = "ui/health-bar-hit"
-	var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
-	hit_fx.options = {
-		"from": clampf(float(hp_before) / float(max_hp), 0.0, 1.0),
-		"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),
-	}
-	hit_fx.free_when_done = true
-	# 特效画布 origin=(80,30)：让血条中心落在头顶上方 10px。
-	hit_fx.position = head + Vector2(-80, -40)
-	battle_ui.get_float_text_container().add_child(hit_fx)
+	_sfx.play_impact(impact)
+	_fx.spawn_damage_from_impact(impact)
 
 
 # ============================================================
@@ -1367,7 +1148,7 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 	if action_anim != null and not event.is_empty():
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
-		if not await _prewarm_action_fx(event, event.get(&"impacts", []), skipped):
+		if not await _fx.prewarm_action_fx(event, event.get(&"impacts", []), skipped):
 			return true
 		_set_unit_bars_visible(false)
 		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
@@ -1409,7 +1190,7 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 	var outcome := BattleActionResolver.resolve_item(user, targets, item_entry)
 	var result: Dictionary = outcome[&"item"]
 	# 预热在抬升动画窗口内完成，投掷命中瞬间零冷启动。
-	_prewarm_item_damage_fx(result)
+	_fx.prewarm_item_damage_fx(result)
 	# 简短使用动画：沿真实世界 Y 轴上抬 6 个美术像素。
 	if us != null:
 		var start: Vector3 = us.global_position
@@ -1422,20 +1203,20 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 		var t: Dictionary = h[&"unit"]
 		var delta: int = int(h[&"delta"])
 		if delta > 0:
-			_spawn_float_text(t, "+%d" % delta, Color(0.29, 0.87, 0.50))
+			_fx.spawn_float_text(t, "+%d" % delta, Color(0.29, 0.87, 0.50))
 		elif delta < 0:
 			var hp_after := int(t.get(&"hp", 0))
-			_spawn_damage_fx(t, -delta, hp_after - delta, hp_after)
+			_fx.spawn_damage_fx(t, -delta, hp_after - delta, hp_after)
 			if _unit_sprites.get(t.id) != null:
-				_shake(_unit_sprites[t.id])
+				_fx.shake_sprite(_unit_sprites[t.id])
 	# MP 恢复飘字（蓝）
 	for h in result.get(&"mp_deltas", []):
 		var t: Dictionary = h[&"unit"]
-		_spawn_float_text(t, "+%d MP" % int(h[&"delta"]), Color(0.35, 0.6, 1.0))
+		_fx.spawn_float_text(t, "+%d MP" % int(h[&"delta"]), Color(0.35, 0.6, 1.0))
 	# buff 飘字
 	for b in result.get(&"buffed", []):
 		var t: Dictionary = b[&"unit"]
-		_spawn_float_text(t, String(b[&"desc"]), Color(0.98, 0.84, 0.30))
+		_fx.spawn_float_text(t, String(b[&"desc"]), Color(0.98, 0.84, 0.30))
 	# 刷新 sprite
 	for h in result.get(&"hp_deltas", []):
 		var t: Dictionary = h[&"unit"]
@@ -1452,27 +1233,11 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 	return true
 
 
-func _shake(us: Node3D) -> void:
-	# 在相机右方向水平抖动 4 个美术像素。
-	var orig: Vector3 = us.global_position
-	var camera := get_viewport().get_camera_3d()
-	var right := camera.global_basis.x if camera != null else Vector3.RIGHT
-	var tw := create_tween()
-	for i in range(4):
-		tw.tween_property(us, "global_position", orig + right * (4.0 / 32.0) * (1.0 if i % 2 == 0 else -1.0), 0.04)
-	tw.tween_property(us, "global_position", orig, 0.04)
-
-
 func _on_unit_death(u: Dictionary) -> void:
 	var us: UnitSprite3D = _unit_sprites.get(u.id)
 	grid.remove_unit(u)
 	if us != null:
-		var tw := create_tween()
-		_track_unit_visual_tween(StringName(u[&"id"]), tw)
-		# UnitSprite3D 是 Node2D（2D 版），用 fade_alpha 驱动子 CanvasItem alpha 淡出
-		tw.tween_method(us.fade_alpha, 1.0, 0.0, 0.4)
-		tw.parallel().tween_property(us, "scale", us.scale * 1.5, 0.4)
-		tw.tween_callback(func(): us.visible = false)
+		_result_stage.play_death_fade(StringName(u[&"id"]), us)
 
 
 # ============================================================
@@ -1534,122 +1299,11 @@ func _toggle_hosting() -> void:
 
 
 # ============================================================
-# 托管偏好面板（每单位配：优先目标 + 策略）
+# 托管偏好面板（BattlePrefPanel 模块；battle.gd 只留委托）
 # ============================================================
-## 打开偏好面板：动态拉取当前存活敌方单位填充优先目标下拉，列出所有 player 单位。
+## host_btn 旁的偏好按钮入口：面板构建/事件读写在 BattlePrefPanel.open。
 func _open_pref_panel() -> void:
-	# 清旧内容
-	for c in pref_panel.get_children():
-		c.queue_free()
-	await get_tree().process_frame
-
-	# 收集 player 单位（含 name/class）和存活敌方单位（优先目标候选）
-	var player_units: Array = []
-	var enemy_units: Array = []
-	for u in grid.units.values():
-		if u.isDead:
-			continue
-		if u.faction == &"player":
-			player_units.append(u)
-		else:
-			enemy_units.append(u)
-
-	# 居中面板
-	var viewport_size := get_viewport().get_visible_rect().size
-	var panel := Panel.new()
-	panel.size = Vector2(440, 60 + player_units.size() * 34)
-	panel.position = (viewport_size - panel.size) / 2.0
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	pref_panel.add_child(panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 10; vbox.offset_top = 8; vbox.offset_right = -10; vbox.offset_bottom = -8
-	panel.add_child(vbox)
-
-	var title := UIFactoryScript.label("托管偏好（仅本场战斗有效）", 14, UIThemeScript.TEXT_MAIN)
-	vbox.add_child(title)
-
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.custom_minimum_size = Vector2(0, 0)
-	vbox.add_child(scroll)
-
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(list)
-
-	# 策略下拉选项
-	var strat_ids: Array = []
-	var strat_labels: Array = []
-	for opt in PlayerAI.STRATEGY_OPTIONS:
-		strat_ids.append(opt[&"id"])
-		strat_labels.append(String(opt[&"label"]))
-
-	for u in player_units:
-		var row := HBoxContainer.new()
-		list.add_child(row)
-
-		var name_lbl := UIFactoryScript.label(
-			"%s [%s]" % [String(u.name), String(ProfessionData.profession_name(u.classId))],
-			16, UIThemeScript.TEXT_MAIN)
-		name_lbl.custom_minimum_size = Vector2(150, 0)
-		row.add_child(name_lbl)
-
-		# 优先目标下拉
-		var target_opt := UIFactoryScript.option_button()
-		target_opt.add_item("（无，按策略）", 0)
-		var cur_pref: Dictionary = turn_director.get_pref(u.id)
-		var cur_priority = cur_pref.get(&"priorityTargetId", "")
-		var sel_idx := 0
-		for i in range(enemy_units.size()):
-			var e: Dictionary = enemy_units[i]
-			target_opt.add_item("%s [%s]" % [String(e.name), String(ProfessionData.profession_name(e.classId))], i + 1)
-			if cur_priority != "" and cur_priority == e.id:
-				sel_idx = i + 1
-		target_opt.select(sel_idx)
-		target_opt.custom_minimum_size = Vector2(150, 0)
-		target_opt.item_selected.connect(_on_pref_target_changed.bind(u.id, target_opt, enemy_units))
-		row.add_child(target_opt)
-
-		# 策略下拉
-		var strat_opt := UIFactoryScript.option_button()
-		for i in range(strat_ids.size()):
-			strat_opt.add_item(strat_labels[i], i)
-		var cur_strat = cur_pref.get(&"strategy", PlayerAI.STRATEGY_AUTO)
-		var strat_sel := 0
-		for i in range(strat_ids.size()):
-			if strat_ids[i] == cur_strat:
-				strat_sel = i
-				break
-		strat_opt.select(strat_sel)
-		strat_opt.custom_minimum_size = Vector2(120, 0)
-		strat_opt.item_selected.connect(_on_pref_strategy_changed.bind(u.id, strat_opt, strat_ids))
-		row.add_child(strat_opt)
-
-	var close_btn := UIFactoryScript.button("关闭", _close_pref_panel)
-	vbox.add_child(close_btn)
-
-	pref_panel.visible = true
-
-
-func _on_pref_target_changed(unit_id, opt: OptionButton, enemy_units: Array) -> void:
-	var idx := opt.get_selected_id()
-	var priority_id = ""
-	if idx >= 1 and idx <= enemy_units.size():
-		priority_id = enemy_units[idx - 1].id
-	turn_director.set_pref(unit_id, &"priorityTargetId", priority_id)
-
-
-func _on_pref_strategy_changed(unit_id, opt: OptionButton, strat_ids: Array) -> void:
-	var idx := opt.get_selected_id()
-	turn_director.set_pref(unit_id, &"strategy", strat_ids[idx])
-
-
-func _close_pref_panel() -> void:
-	pref_panel.visible = false
-	for c in pref_panel.get_children():
-		c.queue_free()
+	_pref_panel.open()
 
 
 # ============================================================
@@ -1724,165 +1378,24 @@ func _units_by_life(faction: StringName, alive: bool) -> Array:
 	return units
 
 
-func _capture_result_visual(sprite: UnitSprite3D) -> void:
-	var unit_id := StringName(sprite.unit.get(&"id", &""))
-	if _result_visual_states.has(unit_id):
-		return
-	var visual: Node3D = sprite.portrait if sprite.portrait != null else sprite
-	var children: Array[Dictionary] = []
-	for child in sprite.get_children():
-		if child is Sprite3D or child is Label3D:
-			children.append({"node": child, "modulate": child.modulate})
-	var state := {
-		"sprite": sprite,
-		"position": sprite.global_position,
-		"scale": sprite.scale,
-		"visible": sprite.visible,
-		"visual": visual,
-		"visual_rotation": visual.rotation,
-		"children": children,
-	}
-	if visual is Sprite3D:
-		state["visual_modulate"] = (visual as Sprite3D).modulate
-	_result_visual_states[unit_id] = state
-
-
-func _track_unit_visual_tween(unit_id: StringName, tween: Tween) -> void:
-	var previous: Tween = _unit_visual_tweens.get(unit_id)
-	if previous != null and previous.is_valid():
-		previous.kill()
-	_unit_visual_tweens[unit_id] = tween
-
-
+# ============================================================
+# 结算演出视觉 / 演出音（BattleResultStage / BattleSfx 模块；battle.gd 只留委托）
+# ============================================================
 func _on_presentation_cheer(unit: Dictionary) -> void:
-	var sprite: UnitSprite3D = _unit_sprites.get(unit.get(&"id", &""))
-	if sprite == null:
-		return
-	_capture_result_visual(sprite)
-	var unit_id := StringName(unit[&"id"])
-	var base: Vector3 = _result_visual_states[unit_id]["position"]
-	sprite.global_position = base
-	sprite.visible = true
-	sprite.fade_alpha(1.0)
-	var tween := create_tween()
-	_track_unit_visual_tween(unit_id, tween)
-	tween.tween_property(sprite, "global_position", base + Vector3.UP * 0.45, 0.12)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(sprite, "global_position", base, 0.18)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	_result_stage.cheer(unit)
 
 
 func _on_presentation_collapse(unit: Dictionary) -> void:
-	var sprite: UnitSprite3D = _unit_sprites.get(unit.get(&"id", &""))
-	if sprite == null:
-		return
-	_capture_result_visual(sprite)
-	var unit_id := StringName(unit[&"id"])
-	var state: Dictionary = _result_visual_states[unit_id]
-	var visual := state["visual"] as Node3D
-	sprite.global_position = state["position"]
-	sprite.visible = true
-	sprite.fade_alpha(1.0)
-	var tween := create_tween()
-	_track_unit_visual_tween(unit_id, tween)
-	tween.tween_property(visual, "rotation:z", -PI * 0.5, 0.26)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	if visual is Sprite3D:
-		tween.parallel().tween_property(visual, "modulate:a", 0.55, 0.26)
+	_result_stage.collapse(unit)
 
 
 ## 跳过/退出只结束显示时间轴；恢复姿态与透明度，绝不写 HP、isDead 或逻辑格。
 func _restore_result_visuals() -> void:
-	for raw_tween in _unit_visual_tweens.values():
-		var tween := raw_tween as Tween
-		if tween != null and tween.is_valid():
-			tween.kill()
-	_unit_visual_tweens.clear()
-	for raw_state in _result_visual_states.values():
-		var state := raw_state as Dictionary
-		var sprite := state.get("sprite") as UnitSprite3D
-		if not is_instance_valid(sprite) or not sprite.is_inside_tree():
-			continue
-		sprite.global_position = state["position"]
-		sprite.scale = state["scale"]
-		sprite.visible = state["visible"]
-		var visual := state.get("visual") as Node3D
-		if is_instance_valid(visual):
-			visual.rotation = state["visual_rotation"]
-			if visual is Sprite3D and state.has("visual_modulate"):
-				(visual as Sprite3D).modulate = state["visual_modulate"]
-		for entry_value in state["children"]:
-			var entry := entry_value as Dictionary
-			var child := entry.get("node") as Node
-			if is_instance_valid(child):
-				child.set("modulate", entry["modulate"])
-	_result_visual_states.clear()
+	_result_stage.restore()
 
 
 func _on_presentation_sound(cue: StringName) -> void:
-	# 优先播放真实素材（assets/audio/sfx，经 Sfx autoload）；缺失时回退程序化波形。
-	if Sfx.play(_presentation_cue_to_sfx(cue)):
-		print("[Battle] PresentationSound cue=%s (sfx)" % String(cue))
-		return
-	if _presentation_audio == null:
-		return
-	if not _presentation_sound_cache.has(cue):
-		_presentation_sound_cache[cue] = _make_presentation_sound(cue)
-	_presentation_audio.stop()
-	_presentation_audio.stream = _presentation_sound_cache[cue]
-	_presentation_audio.play()
-	print("[Battle] PresentationSound cue=%s" % String(cue))
-
-
-## 演出 cue → Sfx cue 映射（胜利/失败/拾取/名牌/Boss 横幅）。
-func _presentation_cue_to_sfx(cue: StringName) -> StringName:
-	match cue:
-		&"victory", &"chapter_end":
-			return &"victory"
-		&"defeat":
-			return &"defeat"
-		&"loot":
-			return &"ui_equip"
-		&"nameplate":
-			return &"ui_select"
-		&"boss":
-			return &"skill_dark"
-	return cue
-
-
-## 固定波形，无 RNG、无外部资产依赖；各 cue 以音高/时长区分。
-func _make_presentation_sound(cue: StringName) -> AudioStreamWAV:
-	const SAMPLE_RATE := 22050
-	var pitches := {
-		&"nameplate": 660.0,
-		&"boss": 180.0,
-		&"victory": 880.0,
-		&"chapter_end": 740.0,
-		&"defeat": 130.0,
-		&"loot": 980.0,
-	}
-	var duration := 0.30 if cue == &"boss" or cue == &"defeat" else 0.16
-	var sample_count := int(SAMPLE_RATE * duration)
-	var bytes := PackedByteArray()
-	bytes.resize(sample_count * 2)
-	var pitch := float(pitches.get(cue, 440.0))
-	for index in range(sample_count):
-		var t := float(index) / float(SAMPLE_RATE)
-		var progress := t / duration
-		var frequency := pitch
-		if cue == &"victory" or cue == &"chapter_end":
-			frequency *= 1.0 + 0.25 * floorf(progress * 3.0)
-		elif cue == &"defeat":
-			frequency *= 1.0 - 0.35 * progress
-		var envelope := minf(1.0, t / 0.01) * pow(1.0 - progress, 2.0)
-		var wave := sin(TAU * frequency * t) + 0.25 * sin(TAU * frequency * 2.0 * t)
-		bytes.encode_s16(index * 2, int(clampf(wave * envelope * 10500.0, -32768.0, 32767.0)))
-	var stream := AudioStreamWAV.new()
-	stream.format = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate = SAMPLE_RATE
-	stream.stereo = false
-	stream.data = bytes
-	return stream
+	_sfx.on_presentation_sound(cue)
 
 
 func _on_result_presentation_finished(result: StringName, skipped: bool) -> void:
@@ -1918,14 +1431,11 @@ func _exit_tree() -> void:
 	# 防御：退出战斗（含 B1 就地模式）时恢复全部常驻血条。
 	_set_unit_bars_visible(true)
 	_restore_result_visuals()
-	_flush_save()  # 防半途退出：用最近一次完整快照补落盘（幂等）
+	if _save != null:
+		_save.flush()  # 防半途退出：用最近一次完整快照补落盘（幂等）
 	if _presentation_audio != null:
 		_presentation_audio.stop()
-	if _action_camera_kick_tween != null and _action_camera_kick_tween.is_valid():
-		_action_camera_kick_tween.kill()
-	_action_camera_kick_offset = Vector3.ZERO
-	_apply_action_camera_kick()
-	_action_camera_kick_active = false
+	# 镜头踢击复位由 BattleCameraKick._exit_tree 自理（children 先于父退出）。
 
 
 func setup_battle(p_chapter: Dictionary, p_return_to: String = "res://main.tscn") -> void:

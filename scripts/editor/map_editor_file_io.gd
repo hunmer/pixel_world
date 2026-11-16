@@ -9,6 +9,7 @@ extends RefCounted
 
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
+const ProfessionDataScript = preload("res://scripts/core/professions.gd")
 
 
 ## 打开并解析战场 JSON（rows / map 两种写法都支持），通过方块布局校验后返回
@@ -64,3 +65,59 @@ static func refresh_load_box(ed) -> void:
 			continue
 		ed._load_box.add_item("%s · %s" % [entry.get("name", ""), entry.get("file", "")])
 		ed._load_box.set_item_metadata(ed._load_box.item_count - 1, entry.get("path", ""))
+
+
+## 从战场 JSON 读入编辑器（rows / map 两种写法都支持）。
+## 解析内核在 load_candidate；此处含历史入栈、面板回显、模式清理与状态栏。
+static func apply_load(ed, path: String) -> Dictionary:
+	var res: Dictionary = load_candidate(path)
+	if not bool(res.get("ok", false)):
+		var err: String = String(res.get("error", ""))
+		if err == "无法打开文件":
+			ed._status("无法打开 %s" % path, true)
+		elif err == "JSON 解析失败":
+			ed._status("JSON 解析失败：%s" % path, true)
+		else:
+			ed._status("读取失败：%s" % err, true)
+		return { "ok": false, "error": err }
+	var candidate: Dictionary = res.get("model", {})
+	ed._push_undo("读取")
+	ed.model = candidate
+	ed._canvas.selected_cell = Vector2i(-1, -1)
+	# 补 tag（画布职业缩写）
+	for u in ed.model.units:
+		if String(u.get("tag", "")).is_empty():
+			u["tag"] = ProfessionDataScript.profession_name(StringName(String(u.get("class", "swordsman")))).substr(0, 1)
+	ed._id_edit.text = String(ed.model.id)
+	ed._name_edit.text = String(ed.model.name)
+	ed._hosting_check.button_pressed = bool(ed.model.hosting)
+	ed._syncing_boxes = true
+	ed._width_box.value = ed.model.width
+	ed._height_box.value = ed.model.height
+	ed._syncing_boxes = false
+	ed._refresh_canvas()
+	ed._clipboard.clear()  # 跨模型粘贴语义不成立：读取即清剪贴板/取消预览
+	ed._cancel_paste()
+	ed._cancel_place_mode()  # 跨模型粘贴语义不成立：读取退出放置
+	if ed._move_tool_active:
+		ed._set_move_tool(false)  # 新模型旧选区不成立：收起移动工具
+	ed._status("已读取 %s（%d×%d · 我方%d/敌方%d）" % [
+		path.get_file(), ed.model.width, ed.model.height,
+		(ed.model.units as Array).filter(func(u): return u.faction != "enemy").size(),
+		(ed.model.units as Array).filter(func(u): return u.faction == "enemy").size()])
+	print("[editor] 读取战场: %s" % path)  # L1 埋点
+	return { "ok": true }
+
+
+## 保存当前模型：面板输入回写 model、被引用素材快照入档、save_model 落盘。
+static func apply_save(ed) -> Dictionary:
+	ed.model.id = ed._id_edit.text
+	ed.model.name = ed._name_edit.text if not ed._name_edit.text.strip_edges().is_empty() else "自定义战场"
+	ed.model.hosting = ed._hosting_check.button_pressed
+	sync_user_assets(ed.model, ed._asset_service)  # 被引用素材描述符快照入档（B2 渲染离线自包含）
+	var result: Dictionary = BattlefieldDocScript.save_model(ed.model)
+	if bool(result.get("ok", false)):
+		print("[editor] 保存战场: %s" % result.get("path", ""))  # L1 埋点
+	else:
+		print("[editor] 保存失败: %s" % result.get("error", ""))
+	return result

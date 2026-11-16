@@ -197,7 +197,7 @@ func _run() -> void:
 	_check_source("res://scripts/side_panel.gd",
 		["UIThemeScript.dock_panel_style(", "UIFactoryScript.log_label("],
 		["func _panel_style("])
-	_check_source("res://scripts/scenes/battle.gd",
+	_check_source("res://scripts/battle/battle_pref_panel.gd",
 		["UIFactoryScript.option_button(", "UIThemeScript.menu_panel_style("],
 		["func _make_panel_style("])
 	_check_source("res://scripts/battle/result_presentation.gd",
@@ -225,6 +225,8 @@ func _run() -> void:
 		"res://scripts/editor/asset_library_panel.gd",
 		"res://scripts/battle/battle_ui.gd",
 		"res://scripts/battle/battle_settings_tab.gd",
+		"res://scripts/battle/battle_fx.gd",
+		"res://scripts/battle/battle_pref_panel.gd",
 		"res://scripts/battle/result_presentation.gd",
 	]:
 		_check_source(path, [], ["Button.new(", "CheckButton.new(", "OptionButton.new("])
