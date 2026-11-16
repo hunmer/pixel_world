@@ -125,8 +125,7 @@ static func update_paste_preview(ed, hover: Vector2i) -> void:
 	if hover.x < 0:
 		ed._canvas.clear_paste_preview()
 		return
-	var ghost := RegionClipboardScript.ghost_at(ed.model, ed._clipboard, hover)
-	ed._canvas.set_placement_preview(ghost.cells, ghost.valid)
+	ed._canvas.set_placement_preview(ed._clipboard, hover)
 
 
 ## 提交粘贴：越界/非法仅 _status 报错（不改模型不入历史）；成功一步历史

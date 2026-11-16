@@ -72,6 +72,12 @@ static func on_block_asset_btn_pressed(ed, asset_id: String) -> void:
 	else:
 		ed._selected_block_asset = asset_id
 		ed._clear_asset_selection()  # 与素材 Tab 选中互斥（先清再写前景槽：清空的素材回落不覆盖刚选的方块素材）
+		# 与地形/植物调色板同页互斥：清按钮按下态（no_signal 不触发 pressed，避免反向清刚选的素材）
+		# 并清 current_prop，让画笔语义让位给素材放置（与选地形按钮的行为一致）
+		if ed._terrain_group != null:
+			for b: BaseButton in ed._terrain_group.get_buttons():
+				b.set_pressed_no_signal(false)
+		ed.current_prop = ""
 		ed._set_block_slot("fg", {"kind": "asset", "id": asset_id, "z": int(ed._block_fg.z)})
 	update_asset_preview(ed)
 	if ed._selected_block_asset.is_empty():

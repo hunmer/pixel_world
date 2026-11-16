@@ -1,13 +1,14 @@
 # Pixel World · UI 组件库（ui/）
 
-新增的共享 UI 组件层：集中 Theme + 二十二个 `@tool` 自定义控件（按钮 / 页签 / 卡片 +
+新增的共享 UI 组件层：集中 Theme + 二十三个 `@tool` 自定义控件（按钮 / 页签〔含垂直
+模式〕/ 卡片 +
 输入框 / 下拉 / 开关 / 滑块 / 数值框 / 进度条 / 图片 / 图标 / 多行文本 / 动作菜单 /
 弹层 / 音频容器 / 视频容器 + 六个布局容器），全部复用现有
 `scripts/ui/ui_theme.gd`（配色 / StyleBox）与 `scripts/ui/ui_factory.gd`（工厂方法），
 不改它们的既有行为。设计取值（间距/圆角/字号/边距）以根目录 `DESIGN.md` 为单一事实来源。
 
 - 目录：`ui/theme/component_theme.gd`（ComponentTheme：设计 token + 主题工厂）、
-  `ui/components/`（PixelButton / PixelTabs / PixelPanel 与六类输入/数值组件、
+  `ui/components/`（PixelButton / PixelTabs / PixelTabsVertical / PixelPanel 与六类输入/数值组件、
   七类媒体/菜单组件、六个布局容器 pixel_v_box / pixel_h_box / pixel_grid /
   pixel_margin / pixel_center / pixel_scroll）。
 - 交互画廊：`scenes/UIComponentGallery.tscn`（脚本 `scripts/scenes/ui_component_gallery.gd`），
@@ -22,7 +23,9 @@
 > token、新增六个布局容器与画廊「布局」页（headless 1062 checks + MCP 运行态断言），
 > 规范详见 `DESIGN.md`。T8（2026-11-15）按验收调整字号层级（辅助 12 / 正文与页签 16 /
 > 标题 28 / 展示 36）与容器默认值（HBox/Grid gap 16、Margin 四向 24），契约与运行态
-> 复验通过（headless 1062 checks + 三档响应式无裁切）。
+> 复验通过（headless 1062 checks + 三档响应式无裁切）。T9（2026-11-17）新增
+> PixelTabsVertical 垂直页签（地图编辑器右侧栏首个使用者，契约扩至 1073 checks +
+> MCP 运行态断言通过）。
 
 ## 1. ComponentTheme — 集中主题
 
@@ -141,6 +144,38 @@ var tabs: TabContainer = PixelTabsScript.new()
 add_child(tabs)
 var page: VBoxContainer = tabs.call("add_pixel_tab", "按钮 Button", "star")
 page.add_child(my_content)
+tabs.tab_changed.connect(_on_tab_changed)
+```
+
+### 3.1 PixelTabsVertical — 垂直页签
+
+`@tool class_name PixelTabsVertical extends HBoxContainer`，垂直模式页签：左侧竖排按钮
+条 + 右侧内容区。引擎 `TabContainer` 无原生垂直布局（`tabs_position` 仅 Top/Bottom），
+组件以「隐藏原生页签的 `PixelTabs` + 自维护按钮条」组合实现，页数据仍归
+`TabContainer`，`tab_changed` 等原生信号与 `current_tab`/`get_tab_title()` API 全部保留。
+
+| 成员 | 签名 / 类型 | 说明 |
+| --- | --- | --- |
+| `tabs` | `TabContainer`（只读属性） | 内部页容器（`tabs_visible = false`），调用方对其 `add_tab` / 连 `tab_changed` |
+| `strip` | `VBoxContainer`（只读属性） | 左侧按钮条，`TabStrip`；按钮 `TabBtn<i>`，点击即切页 |
+| `add_pixel_tab` | `add_pixel_tab(tab_title: String, icon_name: String = "") -> VBoxContainer` | 追加一页并同步按钮；等价于对 `tabs` 调 `UIFactory.add_tab` |
+
+- 按钮条随页增删自动重建（经 `child_entered_tree` / `child_exiting_tree` 延迟一帧，
+  等待 `set_tab_title` / `set_tab_icon` 完成）；选中态与 `current_tab` 双向同步。
+- 按钮为 `PixelButton` toggle 模式 + `ButtonGroup` 单选；样式走
+  `UITheme.apply_vertical_tab_button_styles`（选中 = 底色块 + 右缘 ACCENT 2px 指示条），
+  组件音效已关闭（防与 `Sfx` autoload 双声）。
+- 固定结构：`TabStrip`（VBox，最小宽 `STRIP_MIN_WIDTH = 72`）+ `Tabs`（PixelTabs，
+  EXPAND_FILL）。地图编辑器用法见 `scripts/scenes/map_editor.gd`（`ToolTabsHost/ToolTabs`）。
+
+```gdscript
+const PixelTabsVerticalScript = preload("res://ui/components/pixel_tabs_vertical.gd")
+
+var host: HBoxContainer = PixelTabsVerticalScript.new()
+add_child(host)
+var tabs: TabContainer = host.tabs
+UIFactoryScript.add_tab(tabs, "文件", "floppy_disk")
+UIFactoryScript.add_tab(tabs, "预设", "bookmark")
 tabs.tab_changed.connect(_on_tab_changed)
 ```
 

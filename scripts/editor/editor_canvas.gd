@@ -11,7 +11,7 @@ class_name EditorCanvas
 extends Control
 
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
-const ColumnBatchScript = preload("res://scripts/isometric_column_batch.gd")
+const RegionClipboardScript = preload("res://scripts/editor/region_clipboard.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const IsoBoardScript = preload("res://scripts/iso/iso_board.gd")
@@ -36,8 +36,6 @@ const REGION_LINE_WIDTH := 2.0
 ## 粘贴预览描边色（与区域虚线同一套几何）：绿=合法落点，红=越界/非法
 const PASTE_OK_COLOR := Color(0.45, 1.0, 0.5, 0.95)
 const PASTE_BAD_COLOR := Color(1.0, 0.35, 0.3, 0.95)
-const GHOST_OK_COLOR := Color.WHITE
-const GHOST_BAD_COLOR := Color(1.0, 0.25, 0.2, 1.0)
 ## 滚轮/手势每步缩放因子（与 B2 battle.gd 一致：factor<1 = 放大一步）
 const WHEEL_ZOOM_IN := 0.9
 const WHEEL_ZOOM_OUT := 1.1
@@ -80,10 +78,9 @@ var _region_marker: Node2D = null
 var _paste_marker: Node2D = null
 ## 粘贴预览区域：{"min": Vector2i, "max": Vector2i, "valid": bool}
 var _paste_region: Dictionary = {}
-## 真实方块幽灵：地图格坐标 + terrain/asset_id/z；仅预览数据，不读不写 model。
-var _block_ghost_cells: Array[Dictionary] = []
-var _block_ghost_valid := true
-var _block_ghost_marks: Array[Node2D] = []
+## 正式放置操作生成的显示副本；权威模型和撤销历史保持不变。
+var _placement_model: Dictionary = {}
+var _placement_cell_count := 0
 var _unit_markers: Array[Node2D] = []
 var _dragging := false
 var _panning := false
@@ -167,6 +164,8 @@ func _ready() -> void:
 func _rebuild() -> void:
 	if _world == null:
 		return  # _ready 未跑（未进树）
+	_placement_model = {}
+	_placement_cell_count = 0
 	_clear_unit_markers()
 	if model.is_empty():
 		_renderer.setup(null)
@@ -178,32 +177,37 @@ func _rebuild() -> void:
 			_paste_marker.visible = false
 		clear_block_ghost()
 		return
-	_renderer.set_custom_props(model.get("props", []))  # 植物层（setup 前注入）
-	_renderer.set_custom_assets(
-		asset_adapter.visual_for_entries(model.get("props", []), model.get("tile_overrides", {}))
-	)  # 用户素材视觉层（props 的 asset_id + tile_overrides）
-	_renderer.set_block_layout(model.get("block_layout", {}))
-	_renderer.setup(_build_grid())
-	_rebuild_unit_markers()
-	_update_hover_marker()
-	_update_selection_marker()
 	_clamp_selection_region()
-	_update_region_marker()
-	_update_paste_marker()
+	_render_model(model)
 	_center_map()
 
 
+## 正式模型与放置副本共用同一条 3D 渲染路径，不重置相机。
+func _render_model(document: Dictionary) -> void:
+	_renderer.set_custom_props(document.get("props", []))  # 植物层（setup 前注入）
+	_renderer.set_custom_assets(
+		asset_adapter.visual_for_entries(document.get("props", []), document.get("tile_overrides", {}))
+	)  # 用户素材视觉层（props 的 asset_id + tile_overrides）
+	_renderer.set_block_layout(document.get("block_layout", {}))
+	_renderer.setup(_build_grid(document))
+	_rebuild_unit_markers()
+	_update_hover_marker()
+	_update_selection_marker()
+	_update_region_marker()
+	_update_paste_marker()
+
+
 ## 模型 rows（图例字符画）-> GridSystem（全名地形矩阵）
-func _build_grid() -> GridSystem:
-	var rows: Array = model.rows
+func _build_grid(document: Dictionary) -> GridSystem:
+	var rows: Array = document.rows
 	var map: Array = []
-	for y in range(model.height):
+	for y in range(document.height):
 		var row: String = rows[y]
 		var line: Array = []
-		for x in range(model.width):
+		for x in range(document.width):
 			line.append(BattlefieldDocScript.glyph_to_terrain(row.substr(x, 1)))
 		map.append(line)
-	return GridSystem.new(model.width, model.height, map)
+	return GridSystem.new(document.width, document.height, map)
 
 
 ## 单格重建（画笔/填充/植物/橡皮后由 map_editor.gd 调 _refresh_cell）
@@ -363,7 +367,19 @@ func _refresh_hover(local_pos: Vector2) -> void:
 func _pick(local_pos: Vector2) -> Vector2i:
 	if _renderer == null or _renderer.grid == null:
 		return Vector2i(-1, -1)
+	if not _placement_model.is_empty() and _board != null and _board.camera != null:
+		# 预览抬高/降低地形不能反过来移动落点；拾取仍以正式模型为准。
+		var hit: Dictionary = IsoProjection.pick_top_face(_board.camera,
+			_local_to_screen(local_pos), 0, BattlefieldRendererScript.PICK_MAX_LEVEL,
+			Callable(self, "_pick_document_top_level"))
+		return hit.get("cell", Vector2i(-1, -1)) as Vector2i
 	return _renderer.pick_cell(_local_to_screen(local_pos), size)
+
+
+func _pick_document_top_level(cell: Vector2i) -> float:
+	if cell.x < 0 or cell.y < 0 or cell.x >= int(model.width) or cell.y >= int(model.height):
+		return -1.0
+	return float(BattlefieldDocScript.cell_z(model, cell))
 
 
 ## 相机旋转/缩放是平滑动画：逐帧检查视图状态，变化时重算覆盖层。
@@ -385,7 +401,6 @@ func _process(_delta: float) -> void:
 		_layout_unit_markers()
 		_update_region_marker()
 		_update_paste_marker()
-		_layout_block_ghost()
 
 
 func _update_hover_marker() -> void:
@@ -577,7 +592,7 @@ func _update_region_marker() -> void:
 # ============================================================
 
 ## 设置粘贴预览框：闭区间 [min_cell, max_cell]（自动归一），valid 决定描边色
-## （绿=合法落点 / 红=越界或非法）。旧 API 保留；与真实方块幽灵互斥。
+## （绿=合法落点 / 红=越界或非法）。设置范围提示时恢复正式地图。
 func set_paste_preview(min_cell: Vector2i, max_cell: Vector2i, valid: bool) -> void:
 	clear_block_ghost()
 	var lo := Vector2i(mini(min_cell.x, max_cell.x), mini(min_cell.y, max_cell.y))
@@ -594,36 +609,27 @@ func set_paste_preview(min_cell: Vector2i, max_cell: Vector2i, valid: bool) -> v
 	_update_paste_marker()
 
 
-## 设置放置后的真实效果预览。cells 每项 {x,y,terrain:String,asset_id:String,z:int}；
-## 复用正式渲染的地形/素材贴图与 ColumnBatch 柱体，不写 model，也不入历史。
-func set_placement_preview(cells: Array, valid: bool) -> void:
-	_block_ghost_cells.clear()
-	for value in cells:
-		if not (value is Dictionary):
-			continue
-		var cell: Dictionary = value
-		_block_ghost_cells.append({
-			"x": int(cell.get("x", 0)),
-			"y": int(cell.get("y", 0)),
-			"terrain": String(cell.get("terrain", "plain")),
-			"asset_id": String(cell.get("asset_id", "")),
-			"z": int(cell.get("z", 0)),
-		})
-	_block_ghost_valid = valid
+## 在独立副本执行正式 write；地形、素材、植物、单位与岸线均由正式渲染器生成。
+func set_placement_preview(payload: Dictionary, origin: Vector2i) -> void:
+	var candidate: Dictionary = model.duplicate(true)
+	var result: Dictionary = RegionClipboardScript.write(candidate, payload, origin)
+	if not bool(result.get("ok", false)):
+		set_paste_preview(origin, origin + RegionClipboardScript.payload_size(payload) - Vector2i.ONE, false)
+		return
+	_placement_model = candidate
+	var size: Vector2i = RegionClipboardScript.payload_size(payload)
+	_placement_cell_count = size.x * size.y
 	_paste_region = {}
 	_update_paste_marker()
-	_rebuild_block_ghost()
-
-
-## T12 兼容入口；新代码统一使用 placement_preview 命名。
-func set_block_ghost(cells: Array, valid: bool) -> void:
-	set_placement_preview(cells, valid)
+	_render_model(_placement_model)
 
 
 func clear_placement_preview() -> void:
-	_block_ghost_cells.clear()
-	_block_ghost_valid = true
-	_clear_block_ghost_marks()
+	var restore: bool = not _placement_model.is_empty()
+	_placement_model = {}
+	_placement_cell_count = 0
+	if restore and _renderer != null and not model.is_empty():
+		_render_model(model)
 
 
 func clear_block_ghost() -> void:
@@ -631,14 +637,14 @@ func clear_block_ghost() -> void:
 
 
 func placement_preview_cell_count() -> int:
-	return _block_ghost_cells.size()
+	return _placement_cell_count
 
 
 func ghost_cell_count() -> int:
 	return placement_preview_cell_count()
 
 
-## 清空粘贴预览框与真实方块幽灵。
+## 清空粘贴范围提示并恢复正式地图。
 func clear_paste_preview() -> void:
 	_paste_region = {}
 	clear_block_ghost()
@@ -646,7 +652,7 @@ func clear_paste_preview() -> void:
 
 
 func has_paste_preview() -> bool:
-	return not _paste_region.is_empty() or not _block_ghost_cells.is_empty()
+	return not _paste_region.is_empty() or not _placement_model.is_empty()
 
 
 func _update_paste_marker() -> void:
@@ -661,110 +667,17 @@ func _update_paste_marker() -> void:
 	_paste_marker.visible = not lines.is_empty()
 
 
-func _clear_block_ghost_marks() -> void:
-	for mark in _block_ghost_marks:
-		if is_instance_valid(mark):
-			mark.visible = false
-			mark.queue_free()
-	_block_ghost_marks.clear()
-
-
-func _rebuild_block_ghost() -> void:
-	_clear_block_ghost_marks()
-	if _world == null or _renderer == null:
-		return
-	for cell in _block_ghost_cells:
-		var view := _ghost_view_for(cell)
-		if view.is_empty():
-			continue
-		var blocks := _ghost_blocks_for(cell)
-		if blocks.is_empty():
-			continue
-		var mark := ColumnBatchScript.new()
-		mark.name = "PlacementPreview_%d_%d" % [int(cell.x), int(cell.y)]
-		mark.z_index = 15
-		_world.add_child(mark)
-		mark.configure(
-			Vector2i(int(cell.x), int(cell.y)), blocks,
-			view.position, view.position.y, IsoCoords.LEVEL_H, view.basis_x, view.basis_y)
-		# 正常态保留每块自身材质与 modulate；越界仅加不透明红色 tint 作提示。
-		mark.self_modulate = GHOST_OK_COLOR if _block_ghost_valid else GHOST_BAD_COLOR
-		_block_ghost_marks.append(mark)
-
-
-## 相机旋转/缩放/平移后只更新投影，不重建纹理与几何缓存。
-func _layout_block_ghost() -> void:
-	for i in mini(_block_ghost_marks.size(), _block_ghost_cells.size()):
-		var mark := _block_ghost_marks[i]
-		var view := _ghost_view_for(_block_ghost_cells[i])
-		mark.visible = not view.is_empty()
-		if view.is_empty():
-			continue
-		mark.update_sort_position(view.position, view.position.y, view.basis_x, view.basis_y)
-
-
-func _ghost_view_for(cell: Dictionary) -> Dictionary:
-	if _board == null or _board.camera == null:
-		return {}
-	var camera := _board.camera
-	var grid_cell := Vector2i(int(cell.get("x", 0)), int(cell.get("y", 0)))
-	var center := IsoProjection.grid_to_world(grid_cell, int(cell.get("z", 0)))
-	var projected := IsoProjection.world_to_screen(camera, center)
-	var basis_x := IsoProjection.world_to_screen(camera,
-		center + Vector3(IsoProjection.GRID_STEP, 0, 0)) - projected
-	var basis_y := IsoProjection.world_to_screen(camera,
-		center + Vector3(0, 0, IsoProjection.GRID_STEP)) - projected
-	return {
-		# 抵消 ColumnBatch 2D 顶面的 -2px 偏移，对齐真实 3D 顶面中心。
-		"position": _screen_to_local(projected) - ColumnBatchScript.TOP_CENTER_OFFSET,
-		"basis_x": basis_x,
-		"basis_y": basis_y,
-	}
-
-
-## 与 BattlefieldRenderer._append_explicit_block/_asset_block_for 保持同一应用效果：
-## 素材整格替代柱体，陆地填实 0..z，水只在 z 层放水面；payload 的 z 不受现地图格影响。
-func _ghost_blocks_for(cell: Dictionary) -> Array[Dictionary]:
-	var blocks: Array[Dictionary] = []
-	var z := int(cell.get("z", 0))
-	var asset_id := String(cell.get("asset_id", ""))
-	if not asset_id.is_empty():
-		var visual: Dictionary = asset_adapter.resolve(asset_id)
-		var asset_tex: Texture2D = visual.get("texture", null)
-		if asset_tex != null:
-			var top_half := (ColumnBatchScript.TOP_UV[2].y - ColumnBatchScript.TOP_UV[0].y) * 0.5
-			var offset: Vector2 = visual.get("render_offset", ColumnBatchScript.TOP_CENTER_OFFSET)
-			offset = Vector2(offset.x,
-				offset.y + asset_tex.get_height() * 0.5 - top_half + ColumnBatchScript.TOP_CENTER_OFFSET.y)
-			var asset_block: Dictionary = _renderer._block(asset_tex, z, Color.WHITE, 1, offset)
-			asset_block["occluder_class"] = &"prop"
-			asset_block["asset_id"] = asset_id
-			blocks.append(asset_block)
-			return blocks
-	var terrain := BattlefieldDocScript.glyph_to_terrain(String(cell.get("terrain", "plain")))
-	var style: Dictionary = BattlefieldRendererScript.TERRAIN_STYLES.get(
-		terrain, BattlefieldRendererScript.TERRAIN_STYLES[&"plain"])
-	if terrain == &"water":
-		blocks.append(_renderer._water_block(
-			_renderer._water_tex(&"surface"), z, BattlefieldRendererScript.WATER_SURFACE_ALPHA, &"surface"))
-		return blocks
-	var top_tex: Texture2D = _renderer._surface_texture(style["top"], &"top")
-	var column_tex: Texture2D = _renderer._surface_texture(style["column"], &"column")
-	if top_tex == null or column_tex == null:
-		return blocks
-	var tint: Color = _renderer._terrain_tint(terrain)
-	for level in range(z + 1):
-		blocks.append(_renderer._block(top_tex if level == z else column_tex, level, tint))
-	return blocks
-
-
 # ============================================================
 # 单位标记
 # ============================================================
 
+func _display_model() -> Dictionary:
+	return model if _placement_model.is_empty() else _placement_model
+
+
 func _rebuild_unit_markers() -> void:
 	_clear_unit_markers()
-	for u in model.units:
+	for u in _display_model().units:
 		var marker := _UnitMark.new()
 		var cid := StringName(String(u.get("class", "swordsman")))
 		if ProfessionVisualScript.portrait_exists(cid):
@@ -782,8 +695,9 @@ func _rebuild_unit_markers() -> void:
 func _layout_unit_markers() -> void:
 	if _renderer == null or _renderer.grid == null:
 		return
-	for i in mini(_unit_markers.size(), model.units.size()):
-		var u: Dictionary = model.units[i]
+	var document: Dictionary = _display_model()
+	for i in mini(_unit_markers.size(), document.units.size()):
+		var u: Dictionary = document.units[i]
 		_unit_markers[i].position = _screen_to_local(
 			_renderer.top_center_for(int(u.x), int(u.y)))
 

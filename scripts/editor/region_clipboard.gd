@@ -319,35 +319,6 @@ static func describe(payload: Dictionary) -> String:
 		size.x, size.y, units.size(), props.size(), overrides.size()]
 
 
-## 将五层 payload 的 rows/block_z/tile_overrides 展开为画布幽灵数据。
-## 左上角=anchor；越界格只影响 valid，不进入 cells，也不触碰模型。
-static func ghost_at(model: Dictionary, payload: Dictionary, anchor: Vector2i) -> Dictionary:
-	var size := payload_size(payload)
-	var valid := size.x > 0 and size.y > 0 and bounds_error(
-		model, anchor, anchor + size - Vector2i(1, 1)).is_empty()
-	var cells: Array[Dictionary] = []
-	var rows: Array = payload.get("rows", [])
-	var heights: Array = payload.get("block_z", [])
-	var overrides: Dictionary = payload.get("tile_overrides", {})
-	var width := int(model.get("width", 0))
-	var height := int(model.get("height", 0))
-	for dy in size.y:
-		var row := String(rows[dy])
-		for dx in size.x:
-			var cell := anchor + Vector2i(dx, dy)
-			if cell.x < 0 or cell.y < 0 or cell.x >= width or cell.y >= height:
-				continue
-			var override: Dictionary = overrides.get("%d,%d" % [dx, dy], {})
-			cells.append({
-				"x": cell.x,
-				"y": cell.y,
-				"terrain": row.substr(dx, 1),
-				"asset_id": String(override.get("asset_id", "")),
-				"z": int(heights[dy * size.x + dx]) if dy * size.x + dx < heights.size() else 0,
-			})
-	return {"cells": cells, "valid": valid}
-
-
 static func _remove_entities(model: Dictionary, min_cell: Vector2i, max_cell: Vector2i) -> void:
 	var units: Array = model.get("units", [])
 	for i in range(units.size() - 1, -1, -1):

@@ -1,6 +1,7 @@
 ## map_editor_overlays.gd — 地图编辑器画布悬浮层与替换/选择弹窗构建器
 ##
-## 左上工具条 / 条件替换弹窗 / 最近吸取栏 / 左下格子信息条 / 选择模式弹窗 /
+## 左上工具条 / 条件替换弹窗 / 画布底部最近吸取横条 / 左下格子信息条 /
+## 选择模式弹窗 /
 ## 区域端点行 + 替换候选项枚举与编码解析。全部 static，ed=map_editor 实例；
 ## 节点属性与加树顺序与原 map_editor.gd 内联实现逐行一致。
 ## 按钮一律经 UIFactory.button 创建（PixelButton 组件、音效已关；
@@ -137,39 +138,42 @@ static func build_replace_popup(ed) -> void:
 	ed._refresh_replace_scope()
 
 
-## 画布右侧最近吸取栏：独立于右侧 SidePanel，最多 8 个 34px 窄条按钮，超出后滚动。
+## 画布底部最近吸取横条：独立于右侧 SidePanel，最多 8 个 40px 方块按钮（最新在左）；
+## 标题常驻左端。右端让出 EditorHintBar（右下角图标），上方让出 CellInfoPanel。
+## 8×40 + 标题 ≈ 460px，在最小画布（648px）内完整容纳，不需要滚动
+## （DESIGN.md 禁横向滚动，两个滚动轴均禁用）。
 static func build_recent_picks_bar(ed, holder: Control) -> void:
 	var bar := PanelContainer.new()
 	bar.name = "RecentPicksBar"
-	bar.anchor_left = 1.0
-	bar.anchor_top = 0.0
+	bar.anchor_left = 0.0
+	bar.anchor_top = 1.0
 	bar.anchor_right = 1.0
 	bar.anchor_bottom = 1.0
-	bar.offset_left = -104
-	bar.offset_top = 52
-	bar.offset_right = -8
+	bar.offset_left = 8
+	bar.offset_top = -96
+	bar.offset_right = -52
 	bar.offset_bottom = -44
-	bar.custom_minimum_size = Vector2(96, 0)
 	bar.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
 	holder.add_child(bar)
 	ed._recent_picks_bar = bar
-	var box := VBoxContainer.new()
-	box.name = "RecentPicksVBox"
-	box.add_theme_constant_override("separation", 4)
-	bar.add_child(box)
+	var row := HBoxContainer.new()
+	row.name = "RecentPicksHBox"
+	row.add_theme_constant_override("separation", 4)
+	bar.add_child(row)
 	var title := UIFactoryScript.label("最近吸取", 12, ACCENT)
 	title.name = "RecentPicksTitle"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
+	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(title)
 	var scroll := ScrollContainer.new()
 	scroll.name = "RecentPickScroll"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(scroll)
-	ed._recent_pick_list = VBoxContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(scroll)
+	ed._recent_pick_list = HBoxContainer.new()
 	ed._recent_pick_list.name = "RecentPickList"
-	ed._recent_pick_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ed._recent_pick_list.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	ed._recent_pick_list.add_theme_constant_override("separation", 2)
 	scroll.add_child(ed._recent_pick_list)
 	ed._refresh_recent_picks()

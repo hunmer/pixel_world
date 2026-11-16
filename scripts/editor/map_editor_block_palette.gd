@@ -73,7 +73,8 @@ static func texture(ed, block: Dictionary) -> Texture2D:
 	return null
 
 
-## 重建最近吸取栏（贴图优先，失败回退短标签文本）
+## 重建最近吸取横条（贴图优先，失败回退短标签文本）；底部横条内固定 40×40
+## 方块按钮、垂直居中，最新在左。
 static func refresh_recent_picks(ed) -> void:
 	if ed._recent_pick_list == null:
 		return
@@ -86,9 +87,9 @@ static func refresh_recent_picks(ed) -> void:
 		button.name = "RecentPick%d" % i
 		button.text = short_label(block)
 		button.tooltip_text = label(block)
-		button.custom_minimum_size = Vector2(0, 40)
+		button.custom_minimum_size = Vector2(40, 40)
 		button.clip_text = true
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		button.pressed.connect(ed._on_recent_pick_pressed.bind(i))
 		ed._recent_pick_list.add_child(button)
 		var tex := texture(ed, block)

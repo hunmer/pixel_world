@@ -1,7 +1,8 @@
-## tests/map_editor_ui_contract.gd — 战场地图编辑器 UI 契约（右侧 Tabs 面板版）
+## tests/map_editor_ui_contract.gd — 战场地图编辑器 UI 契约（右侧垂直页签面板版）
 ##
 ## 跑法：godot --headless --path . --script res://tests/map_editor_ui_contract.gd
-## 覆盖：右侧 Tabs 面板布局（画布左满幅 + 面板右停靠固定宽）、7 Tab 结构
+## 覆盖：右侧垂直页签面板布局（画布左满幅 + 面板右停靠固定宽，PixelTabsVertical
+##       垂直页签条）、8 页结构
 ##       （文件/生成/地形/方块/角色/历史/素材）+ 画布左上角悬浮工具条（画笔/填充/橡皮/地形上升/地形下降/角色/选择 垂直图标）、每 Tab 关键控件齐全、
 ##       地形调色板分「地形/植物」两组：地形=单块 tile（不叠高塔），
 ##       植物枚举 meowa_tiles 全部素材（树木/植物/装饰三小节）+ 植物层 props，
@@ -69,14 +70,26 @@ func _run() -> void:
 		_expect(side.size_flags_horizontal == Control.SIZE_FILL,
 			"侧边栏不参与水平伸展（多余宽度全给画布）")
 
-	# ---- 2. 面板结构：SideVBox -> ToolTabs(7 Tab) + StatusLabel ----
+	# ---- 2. 面板结构：SideVBox -> ToolTabsHost(垂直页签宿主) + StatusLabel ----
 	var sv: VBoxContainer = side.get_node_or_null("SideVBox") if side != null else null
 	_expect(sv != null, "SideVBox 存在")
-	var tabs: TabContainer = sv.get_node_or_null("ToolTabs") if sv != null else null
-	_expect(tabs != null, "ToolTabs 存在且为 TabContainer")
+	var tabs_host: HBoxContainer = sv.get_node_or_null("ToolTabsHost") if sv != null else null
+	_expect(tabs_host != null, "ToolTabsHost 存在且为垂直页签宿主（HBoxContainer）")
+	var tabs: TabContainer = sv.get_node_or_null("ToolTabsHost/ToolTabs") if sv != null else null
+	_expect(tabs != null, "ToolTabs 存在于宿主内且为 TabContainer（tabs_visible=false）")
 	if tabs == null:
 		_finish(editor)
 		return
+	_expect(not tabs.tabs_visible, "内部 TabContainer 隐藏原生页签头（垂直页签条替代）")
+	var strip: VBoxContainer = tabs_host.get_node_or_null("TabStrip") if tabs_host != null else null
+	if strip != null:
+		_expect(strip.get_child_count() == tabs.get_tab_count(),
+			"垂直页签条按钮数与页数一致（%d/%d）" % [strip.get_child_count(), tabs.get_tab_count()])
+		var first_btn := strip.get_child(0) as Button
+		_expect(first_btn != null and first_btn.button_pressed
+			and (strip.get_child(1) as Button) != null
+			and not (strip.get_child(1) as Button).button_pressed,
+			"垂直页签条首钮初始选中（当前页 0）")
 	var titles := []
 	for i in range(tabs.get_tab_count()):
 		titles.append(tabs.get_tab_title(i))
@@ -84,8 +97,8 @@ func _run() -> void:
 		"8 个 Tab 且顺序为 文件/生成/地形/方块/角色/历史/素材/预设（实际 %s）" % str(titles))
 	var status: Label = sv.get_node_or_null("StatusLabel")
 	_expect(status != null and status is Label, "状态栏贴面板底部（SideVBox 内）")
-	if status != null:
-		_expect(status.get_index() > tabs.get_index(), "状态栏在 Tabs 下方")
+	if status != null and tabs_host != null:
+		_expect(status.get_index() > tabs_host.get_index(), "状态栏在页签宿主下方")
 
 	# ---- 3. 各 Tab 关键控件齐全（经 Scroll > VBox 容器，子行可嵌套 HBox） ----
 	var file_tab: VBoxContainer = tabs.get_node_or_null("文件Scroll/文件Tab")
@@ -135,15 +148,16 @@ func _run() -> void:
 		"替换弹窗默认隐藏，源/目标选择按钮、范围、执行按钮与提示齐全")
 	var recent_bar := editor.get_node_or_null("EditorRoot/CanvasHolder/RecentPicksBar") as PanelContainer
 	var recent_list := editor.get_node_or_null(
-		"EditorRoot/CanvasHolder/RecentPicksBar/RecentPicksVBox/RecentPickScroll/RecentPickList") as VBoxContainer
+		"EditorRoot/CanvasHolder/RecentPicksBar/RecentPicksHBox/RecentPickScroll/RecentPickList") as HBoxContainer
 	_expect(recent_bar != null and recent_list != null and recent_list.get_child_count() == 0
-		and recent_bar.get_node_or_null("RecentPicksVBox/RecentPicksTitle") is Label
-		and String((recent_bar.get_node("RecentPicksVBox/RecentPicksTitle") as Label).text) == "最近吸取"
-		and is_equal_approx(recent_bar.anchor_left, 1.0)
+		and recent_bar.get_node_or_null("RecentPicksHBox/RecentPicksTitle") is Label
+		and String((recent_bar.get_node("RecentPicksHBox/RecentPicksTitle") as Label).text) == "最近吸取"
+		and is_equal_approx(recent_bar.anchor_left, 0.0)
 		and is_equal_approx(recent_bar.anchor_right, 1.0)
-		and recent_bar.offset_right - recent_bar.offset_left == 96
-		and recent_bar.offset_top >= 44,
-		"最近吸取栏位于 CanvasHolder 右侧，宽 96px、顶部留白且初始列表为空")
+		and is_equal_approx(recent_bar.anchor_top, 1.0)
+		and is_equal_approx(recent_bar.anchor_bottom, 1.0)
+		and recent_bar.offset_bottom - recent_bar.offset_top == 52,
+		"最近吸取为画布底部横条：横向铺满、高 52px 且初始列表为空")
 	if toolbar != null:
 		var bar: Control = toolbar.get_parent()
 		_expect(bar.get_index() == 1 and editor._canvas.get_index() == 0,
@@ -294,13 +308,14 @@ func _run() -> void:
 	var bg_swatch := block_tab.find_child("BgSwatch", true, false) if block_tab != null else null
 	var swap_blocks := block_tab.find_child("SwapBlocksBtn", true, false) if block_tab != null else null
 	_expect(slot_row is HBoxContainer and fg_swatch is Button and bg_swatch is Button
-		and fg_swatch.disabled and bg_swatch.disabled and swap_blocks is Button
-		and swap_blocks.text == "⇄ 交换" and swap_blocks.tooltip_text.contains("Shift+X"),
-		"方块 Tab：BlockSlotRow 含禁用色块 FgSwatch/BgSwatch 与 Shift+X 交换按钮")
-	var block_grid := block_tab.find_child("BlockAssetGrid", true, false) if block_tab != null else null
+		and fg_swatch.disabled and bg_swatch.disabled and swap_blocks == null,
+		"方块 Tab：BlockSlotRow 仅含只读色块 FgSwatch/BgSwatch，交换按钮已移除")
+	var block_grid := terrain_tab.find_child("BlockAssetGrid", true, false) if terrain_tab != null else null
+	var block_grid_gone := block_tab.find_child("BlockAssetGrid", true, false) if block_tab != null else null
 	_expect(block_grid is GridContainer
-		and block_grid.get_script() == preload("res://scripts/editor/editor_block_list.gd"),
-		"方块 Tab：BlockAssetGrid 复用 EditorBlockList（兼容 GridContainer）")
+		and block_grid.get_script() == preload("res://scripts/editor/editor_block_list.gd")
+		and block_grid_gone == null,
+		"地形 Tab：BlockAssetGrid 复用 EditorBlockList（兼容 GridContainer），已从方块 Tab 移除")
 	_expect(not editor._block_z_box.editable and editor._canvas.selected_cell == Vector2i(-1, -1),
 		"初始无选择：高度输入禁用")
 	editor._seal_pending()
@@ -910,7 +925,7 @@ func _check_viewport_layout(editor: Node, viewport_size: Vector2i) -> void:
 	var info: Control = editor.get_node_or_null("EditorRoot/CanvasHolder/CellInfoPanel")
 	_expect(root.size == viewport_size, "窗口尺寸 %s 生效（实际 %s）" % [viewport_size, root.size])
 	# 以实现为准：SidePanel 宽度下限 320px（custom_minimum_size），实际宽度=内容组合
-	# 最小宽（当前 344px，由方块 Tab 内容 ~353px 撑开）；不再断言固定 320px。
+	# 最小宽由地形 Tab 内容（调色板 + 素材方块列表）撑开；不再断言固定 320px。
 	_expect(holder != null and side != null and side.size.x >= 320.0
 		and is_equal_approx(side.size.x, side.get_combined_minimum_size().x),
 		"%s：侧栏不窄于设计下限 320px（实际=内容最小宽）" % viewport_size)

@@ -7,6 +7,8 @@
 ## 原有各文件的样式语义（迁移后保持不变或收敛为统一观感）：
 ##   - style_button      三态按钮 + 禁用 + 聚焦描边（合并 map_editor 与 battle_ui 两版）
 ##   - apply_tab_styles  TabContainer 三态选中/悬停/未选（两版合并，选中下缘 ACCENT 2px）
+##   - apply_vertical_tab_button_styles  垂直页签条按钮三态（选中右缘 ACCENT 2px，
+##                       PixelTabsVertical 页签条专用）
 ##   - overlay_panel_style  画布上悬浮小面板（地图编辑器工具条/格子信息）
 ##   - dock_panel_style     不透明停靠面板（战斗侧栏 / 编辑器右栏）
 ##   - rail_style           左侧竖栏（右单边框，game_hud LeftRail）
@@ -174,6 +176,66 @@ static func apply_tab_styles(tabs: TabContainer) -> void:
 	tabs.add_theme_color_override("font_selected_color", TEXT_MAIN)
 	tabs.add_theme_color_override("font_unselected_color", TEXT_DIM)
 	tabs.add_theme_color_override("font_hovered_color", TEXT_MAIN)
+
+
+## 垂直页签条按钮三态样式（PixelTabsVertical 专用；与 apply_tab_styles 同口径，
+## 选中态 ACCENT 指示边从下缘转到右缘，正对内容区）。按钮为 toggle：
+## normal=未选中（透明）/ hover=悬停 / pressed+hover_pressed=选中。
+## 圆角只留左侧（CORNER_TAB=4），右侧与内容区贴合清零。
+static func apply_vertical_tab_button_styles(b: Button) -> void:
+	var sb_selected := StyleBoxFlat.new()
+	sb_selected.bg_color = Color(0.08, 0.12, 0.15)
+	sb_selected.set_border_width_all(1)
+	sb_selected.border_color = PANEL_BORDER
+	sb_selected.set_border_width(SIDE_RIGHT, 2)
+	sb_selected.border_color = ACCENT
+	sb_selected.set_corner_radius_all(4)
+	sb_selected.set_corner_radius(CORNER_TOP_RIGHT, 0)
+	sb_selected.set_corner_radius(CORNER_BOTTOM_RIGHT, 0)
+	sb_selected.content_margin_left = 10
+	sb_selected.content_margin_right = 8
+	sb_selected.content_margin_top = 4
+	sb_selected.content_margin_bottom = 4
+	b.add_theme_stylebox_override("pressed", sb_selected)
+	b.add_theme_stylebox_override("hover_pressed", sb_selected)
+
+	var sb_hovered := StyleBoxFlat.new()
+	sb_hovered.bg_color = Color(0.06, 0.08, 0.10)
+	sb_hovered.border_color = PANEL_BORDER
+	sb_hovered.set_border_width_all(1)
+	sb_hovered.set_corner_radius_all(4)
+	sb_hovered.set_corner_radius(CORNER_TOP_RIGHT, 0)
+	sb_hovered.set_corner_radius(CORNER_BOTTOM_RIGHT, 0)
+	sb_hovered.content_margin_left = 10
+	sb_hovered.content_margin_right = 8
+	sb_hovered.content_margin_top = 4
+	sb_hovered.content_margin_bottom = 4
+	b.add_theme_stylebox_override("hover", sb_hovered)
+
+	var sb_unselected := StyleBoxFlat.new()
+	sb_unselected.bg_color = Color(0, 0, 0, 0)
+	sb_unselected.border_color = Color(0, 0, 0, 0)
+	sb_unselected.set_border_width_all(1)
+	sb_unselected.set_corner_radius_all(4)
+	sb_unselected.set_corner_radius(CORNER_TOP_RIGHT, 0)
+	sb_unselected.set_corner_radius(CORNER_BOTTOM_RIGHT, 0)
+	sb_unselected.content_margin_left = 10
+	sb_unselected.content_margin_right = 8
+	sb_unselected.content_margin_top = 4
+	sb_unselected.content_margin_bottom = 4
+	b.add_theme_stylebox_override("normal", sb_unselected)
+
+	b.add_theme_stylebox_override("focus",
+		flat_style(Color(0, 0, 0, 0), ACCENT, 1, 4, -1.0))
+	b.add_theme_stylebox_override("disabled",
+		flat_style(Color(0.07, 0.09, 0.11, 0.8), Color(0.2, 0.25, 0.28, 0.5), 1, 4, -1.0))
+	b.add_theme_color_override("font_color", TEXT_DIM)
+	b.add_theme_color_override("font_hover_color", TEXT_MAIN)
+	b.add_theme_color_override("font_pressed_color", TEXT_MAIN)
+	b.add_theme_color_override("font_hover_pressed_color", TEXT_MAIN)
+	b.add_theme_color_override("font_focus_color", TEXT_MAIN)
+	b.add_theme_color_override("font_disabled_color", Color(0.5, 0.55, 0.58, 0.5))
+	b.add_theme_font_size_override("font_size", 13)
 
 
 ## at-icons 图标（缺失时返回 null，调用方自行回退）。

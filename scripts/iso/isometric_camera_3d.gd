@@ -43,6 +43,21 @@ var reserved_left_px: float = 0.0:
 		reserved_left_px = maxf(value, 0.0)
 		_update_projection_size()
 var _viewport_size := Vector2(1280.0, 800.0)
+var _resize_viewport: Viewport = null
+
+
+func _enter_tree() -> void:
+	_resize_viewport = get_viewport()
+	_resize_viewport.size_changed.connect(_on_viewport_size_changed)
+	_on_viewport_size_changed()
+
+
+func _exit_tree() -> void:
+	# 场景切换先退树、后释放；根视口在这段间隙仍可能发出 resize。
+	if is_instance_valid(_resize_viewport):
+		if _resize_viewport.size_changed.is_connected(_on_viewport_size_changed):
+			_resize_viewport.size_changed.disconnect(_on_viewport_size_changed)
+	_resize_viewport = null
 
 
 func _ready() -> void:
@@ -50,16 +65,14 @@ func _ready() -> void:
 	near = 0.05
 	far = 256.0
 	current = true
-	_viewport_size = get_viewport().get_visible_rect().size
-	var resize_callable := Callable(self, "_on_viewport_size_changed")
-	if not get_viewport().size_changed.is_connected(resize_callable):
-		get_viewport().size_changed.connect(resize_callable)
 	_update_projection_size()
 	_apply_view()
 
 
 func _on_viewport_size_changed() -> void:
-	set_viewport_size(get_viewport().get_visible_rect().size)
+	if not is_inside_tree() or not is_instance_valid(_resize_viewport):
+		return
+	set_viewport_size(_resize_viewport.get_visible_rect().size)
 
 
 func set_view_angle(angle_degrees: float, animate: bool = true) -> void:

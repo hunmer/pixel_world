@@ -7,7 +7,7 @@ signal block_activated(kind: String, id: String)
 var items: Array[Dictionary] = []
 var selected_id: String = ""
 var compact: bool = false
-## 弹窗画廊：多列、大尺寸纯缩略图；不影响方块 Tab 的 compact 外观。
+## 弹窗画廊：多列、大尺寸纯缩略图；不影响地形 Tab 素材方块区的 compact 外观。
 var gallery: bool = false
 var _buttons: Array[Button] = []
 
@@ -16,7 +16,7 @@ func _ready() -> void:
 	_rebuild()
 
 
-## 普通模式为 40px 图标文字行；compact 保留方块 Tab 的 46×96 纯图标格子；
+## 普通模式为 40px 图标文字行；compact 保留地形 Tab 素材方块区的 46×96 纯图标格子；
 ## gallery 为选择弹窗提供 4 列 88×88 大缩略图，不显示文本列表。
 func configure(
 	p_items: Array, p_selected_id: String = "", p_compact: bool = false, p_gallery: bool = false

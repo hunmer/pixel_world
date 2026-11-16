@@ -1,6 +1,6 @@
 ## map_editor_shortcuts.gd — 地图编辑器全局快捷键与临时吸管状态机
 ##
-## _unhandled_input 全键盘路由（撤销/重做、区域剪贴板、方块槽交换、
+## _unhandled_input 全键盘路由（撤销/重做、区域剪贴板、
 ## 方向键平移、Esc 级联退出、视角旋转）+ Alt 临时吸管 + 输入框焦点判定。
 ## 全部 static，ed=map_editor 实例；状态留在门面（_alt_key_down 等），
 ## 逻辑与原 map_editor.gd 内联实现逐行一致。
@@ -78,11 +78,6 @@ static func unhandled_input(ed, event: InputEvent) -> void:
 			if ed.get_viewport() != null:
 				ed.get_viewport().set_input_as_handled()
 			ed._on_region_paste_pressed()
-		elif not ctrl and key.shift_pressed and (key.keycode == KEY_X or key.physical_keycode == KEY_X):
-			# Shift+X 交换前景/背景；必须先于下方 X 右转分支拦截。
-			if ed.get_viewport() != null:
-				ed.get_viewport().set_input_as_handled()
-			ed._swap_block_slots()
 		elif ed._move_tool_active and (key.keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]
 				or key.physical_keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]):
 			# 移动工具开启：方向键逐格平移选区（上/下/左/右 = y-/y+/x-/x+），

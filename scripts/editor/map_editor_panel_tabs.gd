@@ -124,9 +124,13 @@ static func build_generate_tab(ed, tab: VBoxContainer) -> void:
 ## 地形组：11 种地形各一个**单块** tile（不叠高塔、不插树）。
 ## 植物组：枚举 trees/plants/decorations 全部素材（树木/植物/装饰三小节），
 ## 每张贴图一个独立 tile，选中后画笔在格子上放置该具体植物（模型 props 层）。
-## 全部按钮共用一个 ButtonGroup（选地形清空 current_prop，选植物反之）。
+## 素材方块组：已保存（✓）的用户地形素材（原方块 Tab 列表融合至此），点选后
+## 画笔放置（tile_overrides 层），再点取消。
+## 地形/植物按钮共用一个 ButtonGroup（选地形清空 current_prop，选植物反之），
+## 与素材方块选中双向互斥。
 static func build_terrain_tab(ed, tab: VBoxContainer) -> void:
-	var terrain_group := ButtonGroup.new()
+	ed._terrain_group = ButtonGroup.new()
+	var terrain_group: ButtonGroup = ed._terrain_group
 	terrain_group.pressed.connect(func(btn: Button):
 		if btn.has_meta("terrain"):
 			ed.current_terrain = btn.get_meta("terrain")
@@ -162,14 +166,31 @@ static func build_terrain_tab(ed, tab: VBoxContainer) -> void:
 		for path: String in ed._prop_paths[group_title]:
 			var pb := plant_btn(ed, path, terrain_group)
 			pgrid.add_child(pb)
+	# ---- 素材方块组：已保存（✓）的用户地形素材，点选后画笔放置；再点取消 ----
+	tab.add_child(UIFactoryScript.label("素材方块（已保存 ✓，点选后用画笔放置；再点取消选中）", 11, TEXT_DIM))
+	ed._block_asset_grid = EditorBlockListScript.new()
+	ed._block_asset_grid.name = "BlockAssetGrid"
+	ed._block_asset_grid.columns = 4
+	ed._block_asset_grid.add_theme_constant_override("h_separation", 2)
+	ed._block_asset_grid.add_theme_constant_override("v_separation", 2)
+	ed._block_asset_grid.block_activated.connect(func(kind: String, id: String):
+		if kind == "asset":
+			ed._on_block_asset_btn_pressed(id))
+	tab.add_child(ed._block_asset_grid)
+	ed._block_asset_empty = UIFactoryScript.label(
+		"暂无已保存的素材方块\n在「素材」Tab 选中方块后点「保存标记」，保存后会出现在这里", 11, UIThemeScript.TEXT_DIM)
+	ed._block_asset_empty.name = "BlockAssetEmptyHint"
+	ed._block_asset_empty.visible = false
+	tab.add_child(ed._block_asset_empty)
 	ed._terrain_buttons[ed.current_terrain].button_pressed = true
 	# 初始地形按钮只负责既有默认选中态；前景/背景仍按新契约从 plain z0 起步。
 	ed._block_fg = {"kind": "terrain", "id": "plain", "z": 0}
 	ed._refresh_block_slot_ui()
+	ed._rebuild_block_asset_grid()
 
 
-## Tab【方块】：编辑当前选格的独立高度（不修改同列/其他格）；
-## 下方「素材方块」列表展示已下载的素材方块，点选后画笔放置（tile_overrides 层），再点取消。
+## Tab【方块】：编辑当前选格的独立高度（不修改同列/其他格）与前景/背景槽回显；
+## 「素材方块」列表已融合进【地形】Tab。
 static func build_block_tab(ed, tab: VBoxContainer) -> void:
 	tab.add_child(UIFactoryScript.label("用「选择」工具点选格子；拖动其他工具不会改变选择。", 11, TEXT_DIM))
 	var row := HBoxContainer.new()
@@ -194,7 +215,7 @@ static func build_block_tab(ed, tab: VBoxContainer) -> void:
 	slot_row.add_theme_constant_override("separation", 4)
 	ed._fg_swatch = ed._pixel_btn()
 	ed._fg_swatch.name = "FgSwatch"
-	ed._fg_swatch.disabled = true  # 色块只展示，点击交换统一走 SwapBlocksBtn / Shift+X
+	ed._fg_swatch.disabled = true  # 色块只读展示，不响应点击
 	ed._fg_swatch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slot_row.add_child(ed._fg_swatch)
 	ed._bg_swatch = ed._pixel_btn()
@@ -202,34 +223,10 @@ static func build_block_tab(ed, tab: VBoxContainer) -> void:
 	ed._bg_swatch.disabled = true
 	ed._bg_swatch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slot_row.add_child(ed._bg_swatch)
-	var swap_btn: Button = ed._pixel_btn()
-	swap_btn.name = "SwapBlocksBtn"
-	swap_btn.text = "⇄ 交换"
-	swap_btn.tooltip_text = "交换前景/背景方块（Shift+X）"
-	swap_btn.pressed.connect(ed._swap_block_slots)
-	slot_row.add_child(swap_btn)
 	tab.add_child(slot_row)
 	UIFactoryScript.center_row(slot_row)
 	ed._refresh_block_slot_ui()
 	tab.add_child(UIFactoryScript.label("每格只有一个独立方块；z=0 为统一平面。", 10, TEXT_DIM))
-	tab.add_child(UIFactoryScript.label("素材方块（已保存 ✓，点选后用画笔放置；再点取消选中）", 11, TEXT_DIM))
-	ed._block_asset_group = ButtonGroup.new()
-	ed._block_asset_group.allow_unpress = true  # 再点已选中按钮 = 取消选中
-	ed._block_asset_grid = EditorBlockListScript.new()
-	ed._block_asset_grid.name = "BlockAssetGrid"
-	ed._block_asset_grid.columns = 4
-	ed._block_asset_grid.add_theme_constant_override("h_separation", 2)
-	ed._block_asset_grid.add_theme_constant_override("v_separation", 2)
-	ed._block_asset_grid.block_activated.connect(func(kind: String, id: String):
-		if kind == "asset":
-			ed._on_block_asset_btn_pressed(id))
-	tab.add_child(ed._block_asset_grid)
-	ed._block_asset_empty = UIFactoryScript.label(
-		"暂无已保存的素材方块\n在「素材」Tab 选中方块后点「保存标记」，保存后会出现在这里", 11, UIThemeScript.TEXT_DIM)
-	ed._block_asset_empty.name = "BlockAssetEmptyHint"
-	ed._block_asset_empty.visible = false
-	tab.add_child(ed._block_asset_empty)
-	ed._rebuild_block_asset_grid()
 
 
 ## Tab【角色】：阵营 + 8 职业头像网格 + 等级/姓名

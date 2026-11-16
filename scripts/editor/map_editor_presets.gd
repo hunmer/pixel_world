@@ -142,8 +142,7 @@ static func update_place_preview(ed, hover: Vector2i) -> void:
 	var payload: Dictionary = ed._preset_store.load(ed._place_preset_id)
 	if payload.is_empty():
 		return
-	var ghost := RegionClipboardScript.ghost_at(ed.model, payload, hover)
-	ed._canvas.set_placement_preview(ghost.cells, ghost.valid)
+	ed._canvas.set_placement_preview(payload, hover)
 
 
 ## 放置提交：以点击格为左上角写五层，一步历史；越界仅报错保持模式可重试；

@@ -13,6 +13,9 @@
 ## - 六个布局容器：PixelVBox/PixelHBox/PixelGrid/PixelMargin/PixelCenter/PixelScroll
 ##   的 token 默认值、非负夹紧幂等、无隐式子节点、滚动方向/Expand Fill/间距数学；
 ## - PixelTabs：与 UIFactory.add_tab 结构兼容、页签信号、重复进树；
+## - PixelTabsVertical：左竖排页签条 + 隐藏原生页签头、add_pixel_tab 与
+##   UIFactory.add_tab 直加页都同步页签条、current_tab/页签条按钮双向联动、
+##   点击已选按钮不漂移、重复进树稳定；
 ## - PixelPanel：头部可见性、标题/说明/图标刷新、内容槽、实例隔离；
 ## - 画廊：7 个短页签、按钮/页签/输入/下拉/开关/滑块/数值联动/重置、布局页六容器
 ##   真实摆位、演示页无说明文本、1024x640 / 1280x800 / 1920x1080 铺满与有效布局、
@@ -24,9 +27,11 @@ extends SceneTree
 const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
 const PixelButtonScript = preload("res://ui/components/pixel_button.gd")
 const PixelTabsScript = preload("res://ui/components/pixel_tabs.gd")
+const PixelTabsVerticalScript = preload("res://ui/components/pixel_tabs_vertical.gd")
 const PixelPanelScene = preload("res://ui/components/pixel_panel.tscn")
 const GalleryScene = preload("res://scenes/UIComponentGallery.tscn")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 const PixelLineEditScript = preload("res://ui/components/pixel_line_edit.gd")
 const PixelOptionButtonScript = preload("res://ui/components/pixel_option_button.gd")
 const PixelCheckButtonScript = preload("res://ui/components/pixel_check_button.gd")
@@ -63,6 +68,7 @@ func _run() -> void:
 	_test_pixel_button()
 	_test_pixel_button_sfx()
 	_test_pixel_tabs()
+	await _test_pixel_tabs_vertical()
 	_test_pixel_panel()
 	_test_layout_containers()
 	_test_pixel_controls()
@@ -885,6 +891,63 @@ func _test_pixel_tabs() -> void:
 	_expect(changed.size() == 1, "重复进树不重复连接 tab_changed")
 	root.remove_child(tabs)
 	tabs.queue_free()
+
+
+# -------------------------------------------------------- PixelTabsVertical
+
+func _test_pixel_tabs_vertical() -> void:
+	var host := PixelTabsVerticalScript.new()
+	_expect(host is HBoxContainer, "PixelTabsVertical 继承 HBoxContainer")
+	var tabs: TabContainer = host.tabs
+	_expect(tabs is TabContainer and tabs.name == "Tabs", "内部 TabContainer 经 tabs 属性暴露")
+	_expect(not tabs.tabs_visible, "内部 TabContainer 隐藏原生页签头")
+	var strip: VBoxContainer = host.get_node_or_null("TabStrip")
+	_expect(strip is VBoxContainer and strip.custom_minimum_size.x >= 72,
+		"左侧竖排页签条 TabStrip 存在且最小宽 ≥72")
+
+	# add_pixel_tab：页结构契约 + 页签条按钮同步（延迟重建，等一帧）。
+	var page_one: VBoxContainer = host.add_pixel_tab("页一", "star")
+	_expect(page_one is VBoxContainer and tabs.get_tab_count() == 1
+		and tabs.get_tab_title(0) == "页一"
+		and tabs.has_node("页一Scroll/页一Tab"), "add_pixel_tab 页结构与 UIFactory.add_tab 一致")
+	root.add_child(host)
+	await process_frame
+	var btn0 := strip.get_child(0) as Button
+	_expect(strip.get_child_count() == 1 and btn0 != null and btn0.text == "页一",
+		"页签条按钮与页签同步（标题来自 set_tab_title，非节点名）")
+
+	# UIFactory.add_tab 直加页也自动同步页签条（child_entered_tree 延迟重建）。
+	var _page_two: VBoxContainer = UIFactoryScript.add_tab(tabs, "页二")
+	await process_frame
+	_expect(strip.get_child_count() == 2 and (strip.get_child(1) as Button).text == "页二",
+		"UIFactory.add_tab 直加页同样同步页签条")
+
+	# 双向联动：程序切页 → 页签条跟随；点按钮 → current_tab 跟随。
+	var changed: Array[int] = []
+	tabs.tab_changed.connect(func(tab_index: int) -> void: changed.append(tab_index))
+	tabs.current_tab = 1
+	_expect(changed == [1] and (strip.get_child(1) as Button).button_pressed
+		and not (strip.get_child(0) as Button).button_pressed,
+		"程序切页后页签条选中态跟随")
+	(strip.get_child(0) as Button).pressed.emit()
+	_expect(tabs.current_tab == 0 and changed == [1, 0]
+		and (strip.get_child(0) as Button).button_pressed
+		and not (strip.get_child(1) as Button).button_pressed,
+		"点击页签条按钮切换 current_tab 并同步选中态")
+
+	# 点击已选中按钮：引擎不为相同 current_tab 重发 tab_changed，选中态不得漂移。
+	(strip.get_child(0) as Button).pressed.emit()
+	_expect(tabs.current_tab == 0 and (strip.get_child(0) as Button).button_pressed,
+		"重复点击已选页签条按钮不产生选中态漂移")
+
+	# 重复进树：页数/页签条按钮数稳定，不重复连接。
+	root.remove_child(host)
+	root.add_child(host)
+	await process_frame
+	_expect(tabs.get_tab_count() == 2 and strip.get_child_count() == 2
+		and changed.size() == 2, "重复进树页数/页签条稳定，不重复触发 tab_changed")
+	root.remove_child(host)
+	host.queue_free()
 
 
 # ---------------------------------------------------------------- PixelPanel

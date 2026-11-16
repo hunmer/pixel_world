@@ -8,9 +8,11 @@
 ##      画笔/填充/橡皮
 ##   3. 添加阵营角色：阵营（我方/敌方）+ 8 职业头像网格（48×48，缺图回退职业
 ##      首字）+ 等级 + 姓名放置，左键放置/再点删除
-## 布局（右侧 Tabs 面板版）：全部 UI 收进右侧固定宽面板（标题 + Tab 页 +
-## 状态栏），左侧画布伸展填充最大化；Tab 共 7 页 —— 文件/生成/地形/方块/角色/
-## 历史/素材，内容超高走 ScrollContainer 纵向滚动；1280×800 与 1024×640 自适应。
+## 布局（右侧垂直页签面板版）：全部 UI 收进右侧固定宽面板（标题 + 垂直页签 +
+## 状态栏），左侧画布伸展填充最大化；页签走 PixelTabsVertical（左竖排页签条 +
+## 右内容区，引擎 TabContainer 无原生垂直模式），共 8 页 —— 文件/生成/地形/
+## 方块/角色/历史/素材/预设，内容超高走 ScrollContainer 纵向滚动；1280×800 与
+## 1024×640 自适应。最近吸取为画布底部水平横条（最近在左，最多 8 个方块）。
 ## 画布生效工具跟随激活 Tab：地形页=画笔刷选中地形（选植物放植物、选素材放素材）、
 ## 角色页=放置单位，其余 Tab 沿用左上角悬浮工具条的手动单选（_active_tool）。
 ## 撤销/重做：Ctrl+Z / Ctrl+Y（或 Ctrl+Shift+Z），快照式历史时间线覆盖全部
@@ -78,7 +80,7 @@ const Tool = {
 	HEIGHT_UP = 6, HEIGHT_DOWN = 7, ASSET = 8, REPLACE = 9, PICK = 10,
 }
 const TAB_BLOCK := 3
-## 操作提示只常驻键盘图标；完整 13 条键帽说明在点击后的弹窗内展示。
+## 操作提示只常驻键盘图标；完整 12 条键帽说明在点击后的弹窗内展示。
 const HINT_ITEMS := [
 	{"key": "左键", "action": "使用工具"},
 	{"key": "SPACE+左键 / 右键拖", "action": "平移"},
@@ -87,7 +89,6 @@ const HINT_ITEMS := [
 	{"key": "R", "action": "视角复位"},
 	{"key": "CTRL+Z / Y", "action": "撤销 / 重做"},
 	{"key": "CTRL+C / X / V", "action": "复制 / 剪切 / 粘贴区域"},
-	{"key": "SHIFT+X", "action": "交换前景 / 背景方块"},
 	{"key": "ALT（按住）", "action": "临时吸管；SHIFT+左键取背景"},
 	{"key": "最近吸取", "action": "点击取前景；SHIFT+点击取背景"},
 	{"key": "区域内拖动", "action": "移动区域"},
@@ -97,6 +98,8 @@ const HINT_ITEMS := [
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+## 垂直页签宿主组件（同 ui_component_gallery 直接实例化 PixelTabs 的先例）。
+const PixelTabsVerticalScript = preload("res://ui/components/pixel_tabs_vertical.gd")
 
 ## 配色常量统一取自 ui_theme.gd（本文件别名保持既有引用不变）。
 const BG := UIThemeScript.BG
@@ -113,8 +116,8 @@ const CLASS_IDS: Array[String] = [
 	"swordsman", "knight", "archer", "mage", "berserker", "assassin", "lancer", "priest",
 ]
 const PORTRAIT_BTN_SIZE := Vector2(48, 48)
-## 右侧面板固定宽度（不随窗口伸展，多出空间全给画布）
-const SIDEBAR_WIDTH := 320
+## 右侧面板固定宽度（不随窗口伸展，多出空间全给画布；含垂直页签条 72px）
+const SIDEBAR_WIDTH := 360
 ## 撤销栈上限（快照式：rows+units 深拷贝，画笔整笔拖动合并为一步）
 const UNDO_LIMIT := 100
 var model: Dictionary = {}
@@ -127,10 +130,11 @@ var _block_fg: Dictionary = {"kind": "terrain", "id": "plain", "z": 0}
 var _block_bg: Dictionary = {"kind": "terrain", "id": "plain", "z": 0}
 var _fg_swatch: Button = null
 var _bg_swatch: Button = null
-## 最近吸取：会话内按 (kind,id) 去重，最新在首，最多 8 条；不随生成/读档/改尺寸清空。
+## 最近吸取（画布底部水平横条）：会话内按 (kind,id) 去重，最新在首（横条左侧），
+## 最多 8 条；不随生成/读档/改尺寸清空。
 var _recent_picks: Array[Dictionary] = []
 var _recent_picks_bar: PanelContainer = null
-var _recent_pick_list: VBoxContainer = null
+var _recent_pick_list: HBoxContainer = null
 ## Alt 按住时的临时吸管：仅由 InputEventKey 的 KEY_ALT 按下/松开驱动，不轮询。
 var _alt_key_down := false
 var _alt_pick_active := false
@@ -172,7 +176,7 @@ var _asset_adapter: UserAssetVisualAdapter
 var _asset_panel: AssetLibraryPanel
 ## 素材页当前选中的素材描述符（asset_selected 写入；选地形/植物调色板时清空，互斥）
 var _selected_asset: Dictionary = {}
-## 方块页「素材方块」选中（asset_id）；与素材 Tab 选中互斥，非空时方块页画笔=ASSET 放置
+## 素材方块选中（asset_id，列表在【地形】Tab）；与素材 Tab / 地形调色板选中互斥，非空时画笔=ASSET 放置
 var _selected_block_asset := ""
 var _block_asset_buttons: Dictionary = {}  # asset_id -> Button
 ## 下载完成待刷缩略图的素材集合 + 0.3s 合批定时器（见 _on_block_asset_ready）
@@ -180,7 +184,8 @@ var _pending_asset_thumbs: Dictionary = {}
 var _asset_thumb_timer: Timer = null
 var _block_asset_grid: EditorBlockListScript = null
 var _block_asset_empty: Label = null
-var _block_asset_group: ButtonGroup = null
+## 地形 Tab 地形/植物调色板单选组（选方块素材时清按下态互斥用）
+var _terrain_group: ButtonGroup = null
 var _tool_buttons: Dictionary = {}   # Tool -> Button
 var _terrain_buttons: Dictionary = {}  # StringName(terrain) -> Button
 var _class_buttons: Dictionary = {}  # String(class_id) -> Button
@@ -308,10 +313,10 @@ func _build_ui() -> void:
 	holder.add_child(_build_hint_bar())
 	_shortcut_hints_dialog = ShortcutHintsDialogScript.new()
 	holder.add_child(_shortcut_hints_dialog)
-	# ---- 画布右侧最近吸取栏（限制在 CanvasHolder 内，不占 SidePanel 宽度） ----
+	# ---- 画布底部最近吸取横条（限制在 CanvasHolder 内，不占 SidePanel 宽度） ----
 	_build_recent_picks_bar(holder)
 
-	# ---- 右侧面板：标题 / 5 个 Tab / 状态栏（固定宽，不吃画布空间） ----
+	# ---- 右侧面板：标题 / 垂直页签 / 状态栏（固定宽，不吃画布空间） ----
 	var side := PanelContainer.new()
 	side.name = "SidePanel"
 	side.custom_minimum_size = Vector2(SIDEBAR_WIDTH, 0)
@@ -344,13 +349,18 @@ func _build_ui() -> void:
 	sv.add_child(title_row)
 
 	# ---- 8 个 Tab：文件 / 生成 / 地形 / 方块 / 角色 / 历史 / 素材 / 预设 ----
-	# Tab 样式统一走 ui_factory.tab_container（含页签三态与面板底）
-	var tabs := UIFactoryScript.tab_container("ToolTabs")
+	# 垂直页签：PixelTabsVertical = 左侧竖排页签条 + 右侧内容区；内部 TabContainer
+	# 改名 ToolTabs（tabs_visible=false），add_tab 页结构与 tab_changed/current_tab
+	# 等契约不变（map_editor_cell_tools 等按 TabContainer API 使用 _tabs）。
+	var tabs_host := PixelTabsVerticalScript.new()
+	tabs_host.name = "ToolTabsHost"
+	tabs_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tabs_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sv.add_child(tabs_host)
+	var tabs: TabContainer = tabs_host.tabs
+	tabs.name = "ToolTabs"
 	_tabs = tabs
-	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tabs.tab_changed.connect(_on_tab_changed)
-	sv.add_child(tabs)
 	_build_file_tab(tabs)
 	_build_generate_tab(tabs)
 	_build_terrain_tab(tabs)
@@ -486,13 +496,6 @@ func _set_block_slot(which: String, block: Dictionary) -> void:
 		if String(normalized.kind) == "terrain":
 			current_terrain = StringName(normalized.id)
 	_refresh_block_slot_ui()
-
-
-func _swap_block_slots() -> void:
-	var old_fg := _block_fg.duplicate(true)
-	_set_block_slot("fg", _block_bg)
-	_set_block_slot("bg", old_fg)
-	_status("已交换前景/背景：%s" % _block_label(_block_fg))
 
 
 func _block_label(block: Dictionary) -> String:

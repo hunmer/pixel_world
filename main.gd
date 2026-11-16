@@ -1609,9 +1609,9 @@ func _handle_zoom_input(event: InputEvent) -> bool:
 
 
 func _handle_key_input(event: InputEventKey) -> void:
-	var handler: Callable = _key_route().get(event.physical_keycode)
+	var handler: Callable = _key_route().get(event.physical_keycode, Callable())
 	if not handler.is_valid() and event.keycode != event.physical_keycode:
-		handler = _entry_key_route().get(event.keycode)
+		handler = _entry_key_route().get(event.keycode, Callable())
 	if handler.is_valid():
 		handler.call(event)
 

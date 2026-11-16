@@ -153,11 +153,12 @@ func refresh_cell(x: int, y: int) -> void:
 
 
 ## 批量设置自定义植物覆盖（setup 前调用即可生效；setup 后需 rebuild_all）。
-## props: [{x,y,texture}]
+## props: [{x,y,texture}] 或 [{x,y,asset_id}]；素材植物由 set_custom_assets 注入。
 func set_custom_props(props: Array) -> void:
 	_custom_props.clear()
 	for p in props:
-		_custom_props[Vector2i(int(p.x), int(p.y))] = String(p.texture)
+		if p.has("texture"):
+			_custom_props[Vector2i(int(p.x), int(p.y))] = String(p.texture)
 
 
 ## setup 前注入显式单块布局；传空字典恢复旧柱体模式。

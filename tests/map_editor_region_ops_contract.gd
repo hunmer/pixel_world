@@ -96,7 +96,7 @@ func _run() -> void:
 	editor._set_glyph(Vector2i(1, 1), "g")
 	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 3)
 	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(3, 2), "asset_grass_block")
-	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "tree")
+	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "res://meowa_tiles/trees/apple_tree.png")
 	(editor.model.units as Array).append({
 		"class": "warrior", "name": "契约探员", "level": 3,
 		"x": 1, "y": 1, "faction": "player",
@@ -130,7 +130,7 @@ func _run() -> void:
 	_expect((editor.model.rows[1] as String).substr(6, 1) == "g"
 		and BattlefieldDocScript.cell_z(editor.model, Vector2i(7, 2)) == 3
 		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(8, 2)) == "asset_grass_block"
-		and BattlefieldDocScript.prop_at(editor.model, Vector2i(7, 1)) == "tree",
+		and BattlefieldDocScript.prop_at(editor.model, Vector2i(7, 1)) == "res://meowa_tiles/trees/apple_tree.png",
 		"C 目标区 (6,1)-(9,3)：地形/高度/覆盖/植物 四层整体落位")
 	var moved_unit: Dictionary = {}
 	for u in editor.model.units:
@@ -172,7 +172,7 @@ func _run() -> void:
 	_expect((editor.model.rows[3] as String).substr(6, 1) == "g"
 		and BattlefieldDocScript.cell_z(editor.model, Vector2i(7, 4)) == 3
 		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(8, 4)) == "asset_grass_block"
-		and BattlefieldDocScript.prop_at(editor.model, Vector2i(7, 3)) == "tree",
+		and BattlefieldDocScript.prop_at(editor.model, Vector2i(7, 3)) == "res://meowa_tiles/trees/apple_tree.png",
 		"D 区域平移 (+5,+2)：四层内容落位到 (6,3)-(9,5)")
 	var moved_unit2: Dictionary = {}
 	for u in editor.model.units:
@@ -275,7 +275,7 @@ func _run() -> void:
 	editor._set_glyph(Vector2i(1, 1), "g")
 	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 3)
 	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(3, 2), "asset_grass_block")
-	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "tree")
+	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "res://meowa_tiles/trees/apple_tree.png")
 	(editor.model.units as Array).append({
 		"class": "warrior", "name": "契约探员", "level": 3,
 		"x": 1, "y": 1, "faction": "player",
@@ -305,7 +305,7 @@ func _run() -> void:
 	_expect((editor.model.rows[2] as String).substr(2, 1) == "g"
 		and BattlefieldDocScript.cell_z(editor.model, Vector2i(3, 3)) == 3
 		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(4, 3)) == "asset_grass_block"
-		and BattlefieldDocScript.prop_at(editor.model, Vector2i(3, 2)) == "tree",
+		and BattlefieldDocScript.prop_at(editor.model, Vector2i(3, 2)) == "res://meowa_tiles/trees/apple_tree.png",
 		"I 五层内容平移 (+1,+1) 到 (2,2)-(5,4)")
 	var i_unit: Dictionary = {}
 	for u in editor.model.units:
@@ -362,7 +362,7 @@ func _run() -> void:
 	editor._set_glyph(Vector2i(1, 1), "g")
 	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 3)
 	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(3, 2), "asset_grass_block")
-	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "tree")
+	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "res://meowa_tiles/trees/apple_tree.png")
 	(editor.model.units as Array).append({
 		"class": "warrior", "name": "契约探员", "level": 3,
 		"x": 1, "y": 1, "faction": "player",
@@ -399,7 +399,7 @@ func _run() -> void:
 	_expect((editor.model.rows[2] as String).substr(2, 1) == "g"
 		and BattlefieldDocScript.cell_z(editor.model, Vector2i(3, 3)) == 3
 		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(4, 3)) == "asset_grass_block"
-		and BattlefieldDocScript.prop_at(editor.model, Vector2i(3, 2)) == "tree",
+		and BattlefieldDocScript.prop_at(editor.model, Vector2i(3, 2)) == "res://meowa_tiles/trees/apple_tree.png",
 		"J 五层内容 (+1,+1) 平移到位（画笔未画任何一笔）")
 	var j_unit: Dictionary = {}
 	for u in editor.model.units:
@@ -541,7 +541,7 @@ func _run() -> void:
 	editor._set_glyph(Vector2i(1, 1), "g")
 	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 3)
 	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(3, 2), "asset_grass_block")
-	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "tree")
+	BattlefieldDocScript.set_prop(editor.model, Vector2i(2, 1), "res://meowa_tiles/trees/apple_tree.png")
 	(editor.model.units as Array).append({
 		"class": "warrior", "name": "预设探员", "level": 2,
 		"x": 1, "y": 1, "faction": "player",
@@ -578,7 +578,7 @@ func _run() -> void:
 		and (editor.model.rows[1] as String).substr(1, 1) == "g"
 		and BattlefieldDocScript.cell_z(editor.model, Vector2i(2, 2)) == 3
 		and BattlefieldDocScript.tile_override_at(editor.model, Vector2i(3, 2)) == "asset_grass_block"
-		and BattlefieldDocScript.prop_at(editor.model, Vector2i(2, 1)) == "tree",
+		and BattlefieldDocScript.prop_at(editor.model, Vector2i(2, 1)) == "res://meowa_tiles/trees/apple_tree.png",
 		"L 填入选区：地形/高度/覆盖/植物四层回写到 (1,1)-(3,3)，标签「填入预设」")
 	var l_unit: Dictionary = {}
 	for u in editor.model.units:
@@ -694,7 +694,7 @@ func _run() -> void:
 		and editor._history_cursor == n_c0 and String(editor._status_label.text).contains("越界"),
 		"N 越界点格中文拒绝，仍不写模型或历史")
 
-	# ---- O. 吸管 + 前景/背景交换：只读模型、不写历史，画笔消费交换后的前景 ----
+	# ---- O. 吸管：只读模型、不写历史，画笔消费吸取后的前景 ----
 	editor.apply_generate("pick_ops", 6, 5)
 	await process_frame
 	editor._on_selection_mode_item(0)
@@ -729,18 +729,6 @@ func _run() -> void:
 		and editor.model == o_before and editor._history.size() == o_h0
 		and editor._history_cursor == o_c0,
 		"O Alt+点击地形格写背景 kind/terrain/id/z，模型与历史不变")
-	_send_key(editor, KEY_X, false, true)
-	_expect(editor._block_fg == {"kind": "terrain", "id": "water", "z": 1}
-		and editor._block_bg == {"kind": "asset", "id": "pick_asset", "z": 3}
-		and editor.model == o_before and editor._history.size() == o_h0,
-		"O Shift+X 交换前景/背景且不触发文档编辑")
-	var o_swap_btn := editor.find_child("SwapBlocksBtn", true, false) as Button
-	_expect(o_swap_btn != null and o_swap_btn.text == "⇄ 交换", "O 方块 Tab 存在 SwapBlocksBtn")
-	if o_swap_btn != null:
-		o_swap_btn.pressed.emit()
-	_expect(editor._block_fg == {"kind": "asset", "id": "pick_asset", "z": 3}
-		and editor._block_bg == {"kind": "terrain", "id": "water", "z": 1},
-		"O SwapBlocksBtn 再次交换，前景恢复所吸素材")
 	var o_paint_target := Vector2i(0, 0)
 	var o_paint_before: Dictionary = editor.model.duplicate(true)
 	var o_paint_c0: int = editor._history_cursor
@@ -751,11 +739,11 @@ func _run() -> void:
 		and editor._history_cursor == o_paint_c0 + 1
 		and editor._history.size() == editor._history_cursor + 1
 		and String(editor._history[editor._history_cursor]["label"]) == "画笔",
-		"O 交换后画笔写入新前景素材，恰好一步历史")
+		"O 画笔写入所吸新前景素材，恰好一步历史")
 	editor._undo()
 	_expect(editor.model == o_paint_before, "O 前景素材画笔一次 undo 回滚")
 
-	# ---- P. 真实应用效果预览：材质/高度、不透明柱体、越界红提示与放置撤销 ----
+	# ---- P. 预览执行正式 write，正式 3D 渲染与提交结果一致 ----
 	editor.apply_generate("ghost_ops", 6, 5)
 	await process_frame
 	editor._preset_store = load("res://scripts/editor/region_preset_store.gd").new(
@@ -765,88 +753,87 @@ func _run() -> void:
 	editor._selection_range.update_focus(Vector3i(2, 2, 0))
 	editor._region_pos2_set = true
 	BattlefieldDocScript.set_tile_override(editor.model, Vector2i(1, 1), "ghost_asset")
+	BattlefieldDocScript.set_prop_asset(editor.model, Vector2i(1, 1), "ghost_plant")
 	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(1, 1), 3)
 	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 1), 2)
 	editor._set_glyph(Vector2i(2, 2), "w")
 	BattlefieldDocScript.set_cell_z(editor.model, Vector2i(2, 2), 1)
+	editor.model.units = [
+		{"class": "swordsman", "name": "预览兵", "level": 2, "x": 1, "y": 1, "faction": "player", "tag": "新"},
+		{"class": "swordsman", "name": "水上丢弃", "level": 1, "x": 2, "y": 2, "faction": "player", "tag": "水"},
+		{"class": "swordsman", "name": "目标旧兵", "level": 1, "x": 0, "y": 0, "faction": "enemy", "tag": "旧"},
+	]
+	BattlefieldDocScript.set_prop_asset(editor.model, Vector2i(0, 0), "old_plant")
 	editor._push_undo("布景P")
 	editor._seal_pending()
+	editor._refresh_canvas()
 	editor._preset_name_edit.text = "幽灵契约"
 	editor._on_save_preset_pressed()
-	_expect(editor._preset_store.count() == 1 and editor._preset_list.item_count == 1,
-		"P 准备 2×2 预设成功")
+	_expect(editor._preset_store.count() == 1, "P 准备五层 2×2 预设")
 	var p_before: Dictionary = editor.model.duplicate(true)
+	var p_history: int = editor._history_cursor
+	var p_pick_positions: Array[Vector2] = []
+	var p_pick_cells: Array[Vector2i] = []
+	for y in 5:
+		for x in 6:
+			var local_pos: Vector2 = editor._canvas._screen_to_local(
+				editor._canvas._renderer.top_center_for(x, y))
+			p_pick_positions.append(local_pos)
+			p_pick_cells.append(editor._canvas._pick(local_pos))
 	editor._place_preset_btn.button_pressed = true
-	_expect(editor._place_mode and editor._place_preview_enabled,
-		"P 放置模式开启且实时预览默认开启")
 	editor._on_hover_changed(Vector2i(0, 0))
-	var p_cells: Array = editor._canvas._block_ghost_cells
+	var p_preview: Dictionary = editor._canvas._placement_model.duplicate(true)
+	var p_blocks: Array = _canvas_blocks(editor._canvas, 6, 5)
+	var p_picks_stable := true
+	for i in p_pick_positions.size():
+		p_picks_stable = p_picks_stable and editor._canvas._pick(p_pick_positions[i]) == p_pick_cells[i]
+	_expect(p_picks_stable, "P 高度变化的预览不影响正式模型拾取，鼠标不因预览跳格")
 	_expect(editor._canvas.placement_preview_cell_count() == 4
-		and editor._canvas.ghost_cell_count() == 4 and editor._canvas.has_paste_preview()
-		and editor._canvas._block_ghost_valid and editor.model == p_before,
-		"P 合法悬停生成 w×h=4 个真实应用预览格，模型不变")
-	_expect(editor._canvas._block_ghost_marks.size() == 4
-		and editor._canvas._block_ghost_marks[0].self_modulate == Color.WHITE
-		and is_equal_approx(editor._canvas._block_ghost_marks[0].self_modulate.a, 1.0),
-		"P 预览层实际创建 4 个 ColumnBatch，正常态不着统一色且整体不透明")
-	var p_asset_blocks: Array = editor._canvas._block_ghost_marks[0]._blocks
-	var p_land_blocks: Array = editor._canvas._block_ghost_marks[1]._blocks
-	var p_water_blocks: Array = editor._canvas._block_ghost_marks[3]._blocks
-	_expect(p_asset_blocks.size() == 1 and p_asset_blocks[0].get("texture") != null
-		and int(p_asset_blocks[0].get("level", -1)) == 3
-		and String(p_asset_blocks[0].get("asset_id", "")) == "ghost_asset"
-		and p_land_blocks.size() == 3 and int(p_land_blocks[0].level) == 0
-		and int(p_land_blocks[2].level) == 2 and p_land_blocks[0].get("texture") != null
-		and p_land_blocks[2].get("texture") != null
-		and p_water_blocks.size() == 1 and int(p_water_blocks[0].level) == 1
-		and p_water_blocks[0].get("texture") != null,
-		"P 素材用真实贴图且 level=z；陆地填实 0..z，水面使用真实 z 与材质")
-	_expect(p_cells.size() == 4 and p_cells[0] == {
-		"x": 0, "y": 0, "terrain": "f", "asset_id": "ghost_asset", "z": 3,
-	} and p_cells[3] == {"x": 1, "y": 1, "terrain": "w", "asset_id": "", "z": 1},
-		"P rows/block_z/tile_overrides 按相对坐标正确展开；实际=%s" % str(p_cells))
+		and editor._canvas.has_paste_preview() and editor.model == p_before
+		and editor._history_cursor == p_history,
+		"P 预览生成副本而不修改正式模型/历史")
+	_expect(BattlefieldDocScript.prop_asset_at(p_preview, Vector2i(0, 0)) == "ghost_plant"
+		and p_preview.units.size() == p_before.units.size() - 1
+		and p_preview.units[-1].name == "预览兵" and p_preview.units[-1].x == 0,
+		"P 五层预览替换目标植物/单位并丢弃水上单位")
+	_expect(editor._canvas._unit_markers.size() == p_preview.units.size()
+		and editor._canvas._renderer._terrain_3d != null,
+		"P 单位标记消费副本，地形沿用正式 3D 管线")
+	editor._on_cell_pressed(Vector2i(0, 0))
+	editor._seal_pending()
+	_expect(editor.model == p_preview and _canvas_blocks(editor._canvas, 6, 5) == p_blocks,
+		"P 提交后的完整五层模型及全图 block 快照与悬停预览完全一致（含岸线/素材偏移/缺图 tint）")
+	_expect(editor._history_cursor == p_history + 1, "P 提交恰好一步历史")
+	editor._undo()
+	_expect(editor.model == p_before, "P 提交一次 undo 原子回滚")
 	editor._on_hover_changed(Vector2i(1, 0))
-	p_cells = editor._canvas._block_ghost_cells
-	_expect(editor._canvas.placement_preview_cell_count() == 4 and p_cells[0].x == 1 and p_cells[0].y == 0
-		and p_cells[3].x == 2 and p_cells[3].y == 1 and editor.model == p_before,
-		"P 幽灵格坐标随悬停整体平移且仍不改模型")
+	_expect(editor._canvas._placement_model != p_preview and editor.model == p_before,
+		"P 移动落点重新从正式模型生成副本，不累积前一落点")
 	editor._on_hover_changed(Vector2i(5, 4))
-	_expect(not editor._canvas._block_ghost_valid and editor._canvas.placement_preview_cell_count() == 1
-		and editor._canvas._block_ghost_cells[0].x == 5
-		and editor._canvas._block_ghost_cells[0].y == 4 and editor.model == p_before,
-		"P 越界落点 valid=false，只画地图内的一格")
-	_expect(editor._canvas._block_ghost_marks.size() == 1
-		and editor._canvas._block_ghost_marks[0].self_modulate == editor._canvas.GHOST_BAD_COLOR
-		and is_equal_approx(editor._canvas._block_ghost_marks[0].self_modulate.a, 1.0)
-		and editor._canvas._block_ghost_marks[0].self_modulate.r
-			> editor._canvas._block_ghost_marks[0].self_modulate.g,
-		"P 越界保留真实实体柱并叠加清晰的不透明红色 tint")
+	_expect(editor._canvas._placement_model.is_empty()
+		and editor._canvas._paste_marker.line_color == editor._canvas.PASTE_BAD_COLOR
+		and editor._canvas.has_paste_preview() and editor.model == p_before,
+		"P 越界恢复原地图，只显示红色范围提示，不伪造部分放置")
+	editor._on_hover_changed(Vector2i(0, 0))
 	editor._place_preview_toggle.button_pressed = false
-	_expect(editor._canvas.placement_preview_cell_count() == 0 and not editor._canvas.has_paste_preview()
-		and editor.model == p_before, "P 关闭实时预览立即清空幽灵层")
-	var p_place_c0: int = editor._history_cursor
+	_expect(editor._canvas._placement_model.is_empty() and not editor._canvas.has_paste_preview()
+		and editor._canvas._display_model() == p_before and editor.model == p_before,
+		"P 关闭预览立即恢复正式地图和单位标记")
 	editor._on_cell_pressed(Vector2i(0, 3))
 	editor._seal_pending()
-	_expect(editor._history_cursor == p_place_c0 + 1
-		and editor._history.size() == editor._history_cursor + 1
-		and String(editor._history[editor._history_cursor]["label"]) == "放置预设",
-		"P 无预览点击仍放置且恰好一步「放置预设」历史")
+	_expect(editor._history_cursor == p_history + 1, "P 关闭预览仍能提交一步历史")
 	editor._undo()
-	_expect(editor.model == p_before, "P 无预览放置一次 undo 原子回滚")
 	editor._place_preview_toggle.button_pressed = true
 	editor._on_hover_changed(Vector2i(0, 0))
-	_expect(editor._canvas.placement_preview_cell_count() == 4 and editor._canvas._block_ghost_valid
-		and editor.model == p_before, "P 重新开启预览后悬停恢复 4 个幽灵块")
+	_expect(editor._canvas._placement_model == p_preview, "P 重新开启恢复相同预览")
 	editor._on_region_copy_pressed()
 	editor._on_region_paste_pressed()
 	editor._on_hover_changed(Vector2i(0, 0))
 	_expect(editor._paste_mode and not editor._place_mode
-		and editor._canvas.placement_preview_cell_count() == 4 and editor._canvas.has_paste_preview()
-		and editor._canvas._block_ghost_valid and editor.model == p_before,
-		"P 粘贴模式同样展开 4 个幽灵块并与放置模式互斥")
+		and editor._canvas._placement_model == p_preview, "P 粘贴复用同一正式应用预览")
 	editor._cancel_paste()
-	_expect(editor._canvas.placement_preview_cell_count() == 0 and not editor._canvas.has_paste_preview(),
-		"P 取消粘贴清空幽灵层但保留剪贴板")
+	_expect(editor._canvas._placement_model.is_empty() and not editor._canvas.has_paste_preview()
+		and editor._canvas._display_model() == p_before, "P 取消粘贴恢复原图")
 	editor._on_delete_preset_pressed()
 	var p_dir := DirAccess.open("user://")
 	if p_dir != null and p_dir.dir_exists("test_editor_presets_ghost"):
@@ -1016,7 +1003,7 @@ func _run() -> void:
 	editor._on_cell_pressed(Vector2i(2, 0))
 	var r_info: Array[Dictionary] = editor._recent_picks_info()
 	var r_list := editor.get_node_or_null(
-		"EditorRoot/CanvasHolder/RecentPicksBar/RecentPicksVBox/RecentPickScroll/RecentPickList") as VBoxContainer
+		"EditorRoot/CanvasHolder/RecentPicksBar/RecentPicksHBox/RecentPickScroll/RecentPickList") as HBoxContainer
 	_expect(r_info.size() == 3 and r_info[0] == {"kind": "terrain", "id": "grass", "z": 3}
 		and r_info[1] == {"kind": "asset", "id": "recent_asset", "z": 2}
 		and r_info[2] == {"kind": "terrain", "id": "water", "z": 1}
@@ -1163,3 +1150,12 @@ func _finish(editor: Node) -> void:
 		for failure in failures:
 			push_error(failure)
 		quit(1)
+
+
+## 比较正式渲染器全图结果，包含目标矩形外受邻格变化影响的岸线。
+func _canvas_blocks(canvas: Control, width: int, height: int) -> Array:
+	var result: Array = []
+	for y in height:
+		for x in width:
+			result.append(canvas._renderer.cell_blocks_snapshot(Vector2i(x, y)))
+	return result

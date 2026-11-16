@@ -17,9 +17,9 @@ static func on_tab_changed(ed, _idx: int) -> void:
 
 
 ## 当前生效工具：高度升降/替换始终遵循工具条；素材选中优先于工具条画笔——
-## 选中素材（素材 Tab / 方块页素材）期间点画布必须是放置/再点取消（Tool.ASSET），
-## 否则植物素材永远落不了地、地形素材丢失再点取消语义（925fe0c 引入的回归）；
-## 无素材选中时地形 Tab = 画笔/植物；角色 Tab = 放置单位。
+## 选中素材（素材 Tab / 地形 Tab 素材方块列表）期间点画布必须是放置/再点取消
+## （Tool.ASSET），否则植物素材永远落不了地、地形素材丢失再点取消语义
+## （925fe0c 引入的回归）；无素材选中时地形 Tab = 画笔/植物；角色 Tab = 放置单位。
 ## 避免在角色页选好职业点画布，却沿用工具条遗留的填充/橡皮。
 static func active_tool(ed) -> int:
 	if ed.current_tool == ed.Tool.HEIGHT_UP or ed.current_tool == ed.Tool.HEIGHT_DOWN \
@@ -29,7 +29,7 @@ static func active_tool(ed) -> int:
 		return ed.current_tool
 	var title: String = ed._tabs.get_tab_title(ed._tabs.current_tab)
 	if title == "地形":
-		if not ed._selected_asset.is_empty():
+		if not ed._selected_asset.is_empty() or not ed._selected_block_asset.is_empty():
 			return ed.Tool.ASSET
 		if ed.current_tool == ed.Tool.PAINT:
 			return ed.Tool.PLANT if not ed.current_prop.is_empty() else ed.Tool.PAINT

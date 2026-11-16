@@ -230,10 +230,10 @@ func _run() -> void:
 	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(1, 1))).is_empty(),
 		"S3 内置填充覆盖素材地块应清 tile_override")
 
-	# --- S9 方块页「素材方块」列表：已保存（✓）的地形素材出现在方块 Tab，点选后画笔放置 ---
+	# --- S9 地形 Tab「素材方块」列表（原方块 Tab 列表融合至此）：已保存（✓）的地形素材，点选后画笔放置 ---
 	editor._rebuild_block_asset_grid()
 	var block_grid: GridContainer = editor.find_child("BlockAssetGrid", true, false)
-	_expect(block_grid != null, "S9 方块页应有 BlockAssetGrid")
+	_expect(block_grid != null, "S9 地形 Tab 应有 BlockAssetGrid")
 	_expect(editor._block_asset_buttons.has("terra_a"), "S9 terra_a 应在素材方块列表")
 	_expect(not editor._block_asset_buttons.has("flora_b"), "S9 flora_b(plant) 不应出现在素材方块列表")
 	# 只列已保存（✓）的方块：取消保存标记应从列表消失（一键清空同理），恢复标记后回归
@@ -247,22 +247,22 @@ func _run() -> void:
 	editor._rebuild_block_asset_grid()
 	_expect(editor._block_asset_buttons.has("terra_a"), "S9 恢复保存标记后 terra_a 回到素材方块列表")
 	(editor._block_asset_buttons["terra_a"] as Button).pressed.emit()  # 模拟点选按钮
-	_expect(editor._selected_block_asset == "terra_a", "S9 点选后方块页选中 terra_a")
-	tabs.current_tab = 3  # 方块
+	_expect(editor._selected_block_asset == "terra_a", "S9 点选后素材方块选中 terra_a")
+	tabs.current_tab = 2  # 地形（素材方块列表所在页）
 	await process_frame
-	_expect(editor._active_tool() == editor.Tool.ASSET, "S9 方块页选中素材后工具应为 ASSET")
+	_expect(editor._active_tool() == editor.Tool.ASSET, "S9 地形 Tab 选中方块素材后工具应为 ASSET")
 	editor._apply_tool(Vector2i(3, 3))
-	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(3, 3))) == "terra_a", "S9 方块页素材应写入 tile_override")
+	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(3, 3))) == "terra_a", "S9 地形 Tab 方块素材应写入 tile_override")
 	editor._apply_tool(Vector2i(3, 3))  # 同格再点取消
-	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(3, 3))).is_empty(), "S9 方块页素材再点应取消")
-	# 再点已选中按钮 = 取消选中 → 工具回 SELECT
+	_expect(String(DocScript.tile_override_at(editor.model, Vector2i(3, 3))).is_empty(), "S9 地形 Tab 方块素材再点应取消")
+	# 再点已选中按钮 = 取消选中 → 地形页工具回落画笔
 	editor._on_block_asset_btn_pressed("terra_a")
-	_expect(editor._selected_block_asset.is_empty(), "S9 再点应取消方块页选中")
-	_expect(editor._active_tool() == editor.Tool.SELECT, "S9 取消后方块页工具回 SELECT")
-	# 互斥：素材 Tab 选中应清空方块页选中（反之亦然）
+	_expect(editor._selected_block_asset.is_empty(), "S9 再点应取消素材方块选中")
+	_expect(editor._active_tool() != editor.Tool.ASSET, "S9 取消后地形 Tab 工具不再为 ASSET")
+	# 互斥：素材 Tab 选中应清空素材方块选中（反之亦然）
 	editor._on_block_asset_btn_pressed("terra_a")
 	editor._on_asset_selected(ed_svc.find_by_id("flora_b"))
-	_expect(editor._selected_block_asset.is_empty(), "S9 素材 Tab 选中应清空方块页选中")
+	_expect(editor._selected_block_asset.is_empty(), "S9 素材 Tab 选中应清空素材方块选中")
 	tabs.current_tab = 2  # 回地形页
 	await process_frame
 
