@@ -5,8 +5,8 @@
 extends SceneTree
 
 const PresentationScript = preload("res://scripts/battle/result_presentation.gd")
-# 预加载脚本同时作为类型，保证干净 headless 不依赖 global class cache。
-const BattleUIScript = preload("res://scripts/battle/battle_ui.gd")
+# BattleUI 依赖 Settings autoload，须等 SceneTree 启动后再加载。
+const BATTLE_UI_PATH := "res://scripts/battle/battle_ui.gd"
 
 var failures: Array[String] = []
 
@@ -213,7 +213,7 @@ func _test_defeat_key_skip(presentation: PresentationScript) -> void:
 
 
 func _test_battle_ui_wrapper() -> void:
-	var ui := BattleUIScript.new()
+	var ui: Node = load(BATTLE_UI_PATH).new()
 	root.add_child(ui)
 	ui.build(Callable(self, "_noop"), Callable(self, "_noop"), Callable(self, "_noop"))
 	await _flush_frames()

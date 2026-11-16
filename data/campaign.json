@@ -1,0 +1,47 @@
+{
+	"version": 1,
+	"levels": [
+		{
+			"id": "plains_skirmish",
+			"name": "平原前哨战",
+			"source": "res://data/battlefields/plains_skirmish.json"
+		},
+		{
+			"id": "river_crossing",
+			"name": "渡河攻坚战",
+			"source": "res://data/battlefields/river_crossing.json"
+		},
+		{
+			"id": "ambush_reinforce",
+			"name": "峡谷伏击·增援",
+			"source": "res://data/battlefields/ambush_reinforce.json"
+		},
+		{
+			"id": "mountain_pass",
+			"name": "山口要塞",
+			"source": "res://data/battlefields/mountain_pass.json"
+		},
+		{
+			"id": "last_stand",
+			"name": "桥头守卫战",
+			"source": "res://data/battlefields/last_stand.json"
+		},
+		{
+			"id": "arena_1v1",
+			"name": "竞技场单挑",
+			"source": "res://data/battlefields/arena_1v1.json"
+		}
+	],
+	"rewards": {
+		"first_clear": {
+			"gold": 200,
+			"items": [
+				{ "id": "hpPotion", "count": 1 }
+			]
+		},
+		"repeat": {
+			"gold": 50,
+			"items": []
+		}
+	}
+}

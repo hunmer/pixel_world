@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="pixel_world"
-run/main_scene="res://scenes/Game.tscn"
+run/main_scene="res://scenes/Campaign.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 SceneArgs="*res://scripts/scenes/scene_args.gd"
 GameSession="*res://scripts/scenes/game_session.gd"
+CampaignSession="*res://scripts/campaign/campaign_session.gd"
 Settings="*res://scripts/settings.gd"
 GameCursor="*res://scripts/game_cursor.gd"
 Sfx="*res://scripts/audio/game_sfx.gd"

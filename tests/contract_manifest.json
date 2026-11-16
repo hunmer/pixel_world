@@ -30,6 +30,7 @@
     "battle-automation": 2,
     "battle-presentation": 5,
     "battle-persistence": 2,
+    "campaign": 2,
     "biome": 2,
     "cell": 2,
     "ecology": 7,
@@ -46,6 +47,26 @@
     "simulation": 1
   },
   "contracts": [
+    {
+      "name": "campaign_ui",
+      "path": "tests/campaign_ui_contract.gd",
+      "group": "campaign",
+      "tags": ["scene", "ui"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-17 headless campaign_ui_contract: ALL PASS；覆盖存档CRUD/最近项与备份提示/营地详情/手动保存/关卡奖励与锁定/出征失败弹层/ESC与焦点/1024×640、1280×800、1920×1080；使用会话桩，测试隔离自动音效，须正常process_frame"
+    },
+    {
+      "name": "campaign",
+      "path": "tests/campaign_contract.gd",
+      "group": "campaign",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-17 headless exit=0 CAMPAIGN_CONTRACT_OK，无脚本错误；22组覆盖多档隔离/往返/胜败与幂等/全员部署/物品补给消耗/落盘故障重试/备份自愈/结构损坏/新版拒绝/最近使用索引；使用独立user://临时目录，串行以避runtime桥端口冲突"
+    },
     {
       "name": "action_anim",
       "path": "tests/action_anim_contract.gd",
@@ -1016,6 +1037,12 @@
     }
   ],
   "probes": [
+    {
+      "name": "campaign_battle_integration",
+      "path": "tests/campaign_battle_integration_contract.gd",
+      "scene": "res://tests/campaign_battle_integration_contract.tscn",
+      "note": "MCP 场景探针：真实 Campaign→Battle→Campaign、胜利持久化/失败回退/幂等奖励/旧档隔离；断言 finished=true 与 passed=true，runner 默认不跑"
+    },
     {
       "name": "flat_rotation_probe",
       "path": "tests/flat_rotation_probe.gd",

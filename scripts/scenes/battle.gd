@@ -37,6 +37,7 @@ const BattleResultStageScript = preload("res://scripts/battle/battle_result_stag
 const BattlePrefPanelScript = preload("res://scripts/battle/battle_pref_panel.gd")
 const BattleSaveScript = preload("res://scripts/battle/battle_save.gd")
 const BattleCameraKickScript = preload("res://scripts/battle/battle_camera_kick.gd")
+const CampaignBattleBridgeScript = preload("res://scripts/battle/campaign_battle_bridge.gd")
 
 var action_anim: Node = null
 var _immersive_camera: Node = null
@@ -108,6 +109,9 @@ var turn_director: TurnDirector = null
 var _save_identity := ""
 var _save_state: Dictionary = {}
 var _save_notice := ""
+var _campaign_token := ""
+var _campaign_result: StringName = &""
+var _campaign_receipt: Dictionary = {}
 
 
 ## _ready 装配序列（各拆分件内部顺序与拆分前逐句一致，勿调整调用顺序）：
@@ -151,6 +155,10 @@ func _configure_scene_args() -> void:
 	_save_identity = String(SceneArgs.battle_args.get("save_identity", ""))
 	_save_state = SceneArgs.battle_args.get("save_state", {})
 	_save_notice = String(SceneArgs.battle_args.get("save_notice", ""))
+	_campaign_token = String(SceneArgs.battle_args.get("campaign_token", ""))
+	if not _campaign_token.is_empty():
+		_save_identity = ""
+		_save_state = {}
 
 
 ## _ready 拆分件②：网格 + 单位 + 回合 + 回合编排器 + 战旗持久化 + 托管接管。
@@ -216,7 +224,7 @@ func _configure_ui_layer() -> void:
 	_pref_panel.setup(grid, turn_director, battle_ui.get_pref_panel_container())
 	turn_director.update_host_btn_text()
 	# 有存档身份的 B2 战斗提供「退出战斗」按钮（B1 由 main.gd 自己接管）
-	if not _save_identity.is_empty() and not _b1_mode:
+	if (not _save_identity.is_empty() or not _campaign_token.is_empty()) and not _b1_mode:
 		battle_ui.set_exit_callback(_on_exit_to_list)
 	if _save_notice != "":
 		battle_ui.show_toast(_save_notice)
@@ -619,9 +627,15 @@ func _on_exit_to_list() -> void:
 		return  # 行动演出中不允许退出（防半行动快照）
 	if mode == Mode.ENEMY_TURN:
 		return  # 敌方回合推进中不允许退出
+	if not _campaign_token.is_empty():
+		var result: StringName = _campaign_result if _battle_ended else &"abandon"
+		if not _settle_campaign(result):
+			return
 	battle_ui.close_menu()
 	var tree := get_tree()
 	if tree != null:
+		if not _campaign_token.is_empty():
+			SceneArgs.battle_args = {}
 		tree.change_scene_to_file(return_to_scene)
 
 
@@ -1464,13 +1478,16 @@ func _seize_cell_held() -> bool:
 
 ## 结算演出（_check_battle_end 与恢复局共用）。
 func _present_result(result: StringName) -> void:
+	_campaign_result = result
+	if not _campaign_token.is_empty():
+		_settle_campaign(result)
 	var data := {
-		"loot": chapter.get("loot", []),
+		"loot": _campaign_receipt.get("items", chapter.get("loot", [])),
 		"exp": int(chapter.get("exp", 0)),
-		"gold": int(chapter.get("gold", 0)),
+		"gold": int(_campaign_receipt.get("gold", chapter.get("gold", 0))),
 		"chapter_end": bool(chapter.get("chapterEnd", false)),
 		"chapter_title": String(chapter.get("title", "")),
-		"return_hint": "返回世界",
+		"return_hint": "返回营地" if not _campaign_token.is_empty() else "返回世界",
 	}
 	var survivors: Array = _units_by_life(
 		&"player" if result == &"win" else &"enemy", true
@@ -1511,8 +1528,25 @@ func _on_presentation_sound(cue: StringName) -> void:
 	_sfx.on_presentation_sound(cue)
 
 
+func _settle_campaign(result: StringName) -> bool:
+	if not _campaign_receipt.is_empty():
+		return true
+	var receipt: Dictionary = CampaignBattleBridgeScript.settle(
+		get_tree(), _campaign_token, result, chapter)
+	if not bool(receipt.get("ok", false)):
+		battle_ui.show_toast("冒险保存失败：%s。请点击退出战斗重试。" % String(receipt.get("error", "")))
+		return false
+	_campaign_receipt = receipt
+	print("[campaign] settled result=%s token=%s" % [String(result), _campaign_token])
+	return true
+
+
 func _on_result_presentation_finished(result: StringName, skipped: bool) -> void:
 	_restore_result_visuals()
+	if not _campaign_token.is_empty():
+		if not _settle_campaign(result):
+			return
+		SceneArgs.battle_args = {}
 	print("[battle] ResultFinished result=%s skipped=%s" % [String(result), str(skipped)])
 	if _b1_mode:
 		# B1 就地模式：发信号让 main.gd 接管 _exit_battle（不切场景）
