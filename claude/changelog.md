@@ -8,6 +8,7 @@
 - `game_hud.gd` 拆面板：359→178 行装配层，战场/设置面板拆至 `scripts/hud/`（battlefield_panel 134 + settings_panel 94），对外信号/方法名不变（main.gd 零改动）；game_hud/ui/hint_bar 契约全绿。
 - feature_map：+2 文件、3 处行数/角色刷新，321/321=100%。
 - 同步：module-responsibilities（main.gd 函数行号）、file-map（scripts 166、hud/ 段）、CLAUDE.md、ui_contract 头注释勘误。
+- report.md 清理：已处理项移除（保留开放观察项与可复用资产清单），UIFactory 引用数刷新为实测 23 文件。
 ## 2026-11-16（深夜） — report.md 违例并行优化轮（dsh team / glm-5.3 max ×4）
 
 - **触发**：用户指令「使用 dsh team 创建 team，用 glm 5.3 max 针对 report 的报告并行做优化」；4 成员（battle / ecology / terrain-render / editor-ui）文件域互斥并行行为等价重构，Lead 统一验收。
