@@ -73,7 +73,8 @@ var grid: GridSystem = null
 var _columns: Dictionary = {}  # 2D 编辑器: Vector2i -> ColumnBatch；3D: cell -> block 记录
 var _terrain_3d: Node3D = null
 ## 自定义植物覆盖表（编辑器植物层 / JSON 战场 props）：cell -> 贴图路径。
-## ""=显式无植物（压制该地形默认装饰）；缺省格走 TERRAIN_PROPS 确定性选取。
+## ""=显式无植物（压制该地形默认装饰）；缺省格在旧柱体模式走 TERRAIN_PROPS，
+## 显式 block_layout 仅渲染明确记录的 props。
 var _custom_props: Dictionary = {}
 ## 空字典 = 旧柱体模式；非空 = 每格仅在指定 z 绘制一个独立方块。
 var _block_layout: Dictionary = {}
@@ -175,7 +176,7 @@ func cell_z(cell: Vector2i) -> int:
 
 
 ## 单格设置自定义植物（不重建，随下一次 refresh_cell 生效）；
-## texture 为空 = 清除该格覆盖（恢复地形默认装饰选取）
+## texture 为空 = 清除该格覆盖：旧柱体模式恢复默认装饰，显式布局保持纯方块。
 func set_cell_prop(cell: Vector2i, texture: String) -> void:
 	if texture.is_empty():
 		_custom_props.erase(cell)
@@ -460,7 +461,7 @@ func _append_explicit_block(
 	for lvl in range(z + 1):
 		var tex: Texture2D = top_tex if lvl == z else col_tex
 		blocks.append(_block(tex, lvl, tint))
-	var prop := _asset_prop_or_default(cell, asset_rec, tile_type)
+	var prop := _explicit_prop_for(cell, asset_rec, tile_type)
 	if not prop.is_empty():
 		blocks.append(prop)
 
@@ -532,6 +533,17 @@ func _prop_for(cell: Vector2i, tile_type: StringName) -> Dictionary:
 	var block := _block(tex, visual_top_level(cell.x, cell.y), Color.WHITE, 1, offset)
 	block["occluder_class"] = &"prop"
 	return block
+
+
+## 显式 block_layout 只渲染用户明确放置的装饰物；没有 props 时保持纯方块。
+## 用户素材 prop 视觉优先，其次是 custom_props 中明确指定的贴图，不回退到 TERRAIN_PROPS。
+func _explicit_prop_for(cell: Vector2i, asset_rec: Dictionary, tile_type: StringName) -> Dictionary:
+	var prop_visual: Dictionary = asset_rec.get("prop", {})
+	if not prop_visual.is_empty():
+		return _asset_block_for(cell, prop_visual)
+	if not _custom_props.has(cell):
+		return {}
+	return _prop_for(cell, tile_type)
 
 
 ## 装饰物选取：用户素材 prop 覆盖优先（渲染层资产视觉替代默认/贴图装饰），

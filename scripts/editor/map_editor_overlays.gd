@@ -88,6 +88,33 @@ static func build_tool_bar(ed) -> Control:
 	return bar
 
 
+## 弹窗统一标题头：左侧标题 + 右上角关闭（cross 图标）按钮。
+## 关闭回调统一为 ed._dismiss_tool_popups（收起面板并切回画笔工具）。
+static func build_popup_header(title: String, on_close: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "PopupHeader"
+	row.add_theme_constant_override("separation", 6)
+	var title_label := UIFactoryScript.label(title, 13, ACCENT)
+	title_label.name = "PopupTitle"
+	row.add_child(title_label)
+	var spacer := Control.new()
+	spacer.name = "PopupHeaderSpacer"
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+	var close_btn: Button = UIFactoryScript.button("", on_close, "cross", false)
+	close_btn.name = "PopupCloseBtn"
+	close_btn.tooltip_text = "关闭"
+	close_btn.focus_mode = Control.FOCUS_NONE
+	if close_btn.icon != null:
+		close_btn.custom_minimum_size = Vector2(24, 24)
+		close_btn.set("icon_size", 16)
+		close_btn.expand_icon = true
+	else:
+		close_btn.text = "×"
+	row.add_child(close_btn)
+	return row
+
+
 ## 条件替换弹窗：双下拉编码 terrain:<glyph> / asset:<id>；只有执行按钮写模型。
 ## 三个 UIFactoryScript.button 由门面预建（ed._replace_source_opt 等），此处只接线加树。
 static func build_replace_popup(ed) -> void:
@@ -96,17 +123,18 @@ static func build_replace_popup(ed) -> void:
 	popup.visible = false
 	popup.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	popup.offset_left = 52
-	popup.offset_top = 8
+	# 顶部与工具条首个按钮顶边持平（工具条 offset_top 8 + 面板上内边距 4）
+	popup.offset_top = 12
 	popup.offset_right = 352
 	popup.offset_bottom = 310
-	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
+	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_popup_style())
 	ed._replace_popup = popup
 	ed.add_child(popup)
 	var box := VBoxContainer.new()
 	box.name = "ReplacePopupBox"
 	box.add_theme_constant_override("separation", 6)
 	popup.add_child(box)
-	box.add_child(UIFactoryScript.label("替换方块", 13, ACCENT))
+	box.add_child(build_popup_header("替换方块", ed._dismiss_tool_popups))
 	box.add_child(UIFactoryScript.label("被替换方块", 10, TEXT_DIM))
 	ed._replace_source_opt.name = "ReplaceSourceOpt"
 	ed._replace_source_opt.custom_minimum_size = Vector2(0, 40)
@@ -275,10 +303,11 @@ static func build_selection_popup(ed, mode_option: OptionButton) -> void:
 	popup.visible = false
 	popup.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	popup.offset_left = 52
-	popup.offset_top = 8
+	# 顶部与工具条首个按钮顶边持平（工具条 offset_top 8 + 面板上内边距 4）
+	popup.offset_top = 12
 	popup.offset_right = 332
 	popup.offset_bottom = 460
-	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_panel_style())
+	popup.add_theme_stylebox_override("panel", UIThemeScript.overlay_popup_style())
 	ed._selection_popup = popup
 	ed.add_child(popup)
 
@@ -287,7 +316,7 @@ static func build_selection_popup(ed, mode_option: OptionButton) -> void:
 	box.add_theme_constant_override("separation", 6)
 	popup.add_child(box)
 
-	box.add_child(UIFactoryScript.label("选择模式", 13, ACCENT))
+	box.add_child(build_popup_header("选择模式", ed._dismiss_tool_popups))
 	ed._mode_option = mode_option
 	ed._mode_option.name = "ModeOption"
 	ed._mode_option.add_item("单格选择", 0)
@@ -320,9 +349,6 @@ static func build_selection_popup(ed, mode_option: OptionButton) -> void:
 	var clear_btn: Button = UIFactoryScript.button("清除区域", ed._on_region_clear_pressed)
 	clear_btn.name = "RegionClearBtn"
 	btns.add_child(clear_btn)
-	var close_btn: Button = UIFactoryScript.button("关闭", ed._close_selection_popup)
-	close_btn.name = "CloseBtn"
-	btns.add_child(close_btn)
 	box.add_child(btns)
 
 	# ---- 区域操作：复制/剪切/粘贴（Ctrl+C/X/V 同款；区域内按下拖动=移动）----

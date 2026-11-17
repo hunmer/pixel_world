@@ -11,7 +11,7 @@
 ## 名牌页展示 PixelNameplate 名牌底板（nameplates 素材），高度锁定、宽度随内容自动拉宽。
 ## 头像页展示 PixelAvatarFrame 头像边框（timeline_frames 素材），整框等比缩放、四档尺寸演示。
 ## 战棋页还原 story/10_ui_ux.md 的战棋界面（顶部 HUD / 行动菜单 / 技能面板 / 战斗预测 / 单位详情 /
-## 战前整备 / 胜负结算 / 设置），story 专属色板以 UITheme 常量近似，不引入新颜色。
+## 战前整备 / 胜负结算 / 设置 / 背包容器），story 专属色板以 UITheme 常量近似，不引入新颜色。
 ## F6 独立运行，不依赖战斗参数，不修改默认启动；ESC 退出。
 extends Control
 
@@ -54,6 +54,8 @@ const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", 
 const DEMO_VALUE_MAX: float = 100.0
 ## 头像页尺寸演示的四档边长（px）。
 const AVATAR_SIZES: Array[int] = [80, 105, 128, 160]
+## 战棋页背包容器演示的格子容量（含空格）。
+const BATTLE_BAG_CAPACITY: int = 6
 
 var _tabs: TabContainer
 var _feedback_log: RichTextLabel
@@ -129,6 +131,13 @@ var _battle_autosave_option: OptionButton
 var _battle_auto_battle_switch: CheckButton
 var _battle_deploy_checks: Array[CheckButton] = []
 var _battle_deploy_counter: Label
+## 战棋页背包容器演示状态：条目（空字典=空格）/ 格子按钮 / 选中格序号 / 详情与容量控件。
+var _battle_bag_items: Array[Dictionary] = []
+var _battle_bag_buttons: Array[Button] = []
+var _battle_bag_selected: int = 0
+var _battle_bag_detail: Label
+var _battle_bag_counter: Label
+var _battle_bag_action: Button
 
 
 func _ready() -> void:
@@ -1156,6 +1165,7 @@ func _build_battle_page() -> void:
 	column.add_child(_battle_row([_build_battle_preview_card(), _build_battle_detail_card()]))
 	column.add_child(_battle_row([_build_battle_prep_card(), _build_battle_victory_card()]))
 	column.add_child(_battle_row([_build_battle_defeat_card(), _build_battle_settings_card()]))
+	column.add_child(_battle_row([_build_battle_bag_card()]))
 
 
 ## 战棋页一行卡片：PixelHBox + 卡片均分，竖向收缩避免行内拉高。
@@ -1391,6 +1401,176 @@ func _battle_stat_cell(stat_name: String, stat_value: int) -> Label:
 	cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cell.custom_minimum_size = Vector2(56, 0)
 	return cell
+
+
+## 背包容器：持有者与容量计数 + PixelGrid 六格容量网格（图标 + 剩余次数，装备格主操作高亮，
+## 空格灰显）+ 选中详情行 + 使用/装备操作；消耗到 0 格子空出，装备可切换。
+func _build_battle_bag_card() -> PanelContainer:
+	var card := _make_card("背包", "")
+	card.name = "BattleBagCard"
+	var slot := _card_slot(card)
+	var column := VBoxContainer.new()
+	column.name = "BattleBagColumn"
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_SM)
+
+	_battle_bag_items = _battle_bag_default_items()
+	_battle_bag_selected = 0
+
+	var header := HBoxContainer.new()
+	header.name = "BattleBagHeader"
+	header.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	header.add_child(
+		UIFactoryScript.label("凯尔的随身背包", ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
+	)
+	_battle_bag_counter = UIFactoryScript.label("", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
+	header.add_child(_battle_bag_counter)
+	column.add_child(header)
+
+	var grid := PixelGridScript.new() as GridContainer
+	grid.name = "BattleBagGrid"
+	grid.columns = BATTLE_BAG_CAPACITY
+	grid.add_theme_constant_override("h_separation", ComponentThemeScript.SPACE_XS)
+	grid.add_theme_constant_override("v_separation", ComponentThemeScript.SPACE_XS)
+	_battle_bag_buttons.clear()
+	for i: int in BATTLE_BAG_CAPACITY:
+		var btn := _make_pixel_button("", 1, "")
+		btn.name = "BattleBagSlot%d" % i
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_battle_bag_slot_pressed.bind(i))
+		_battle_bag_buttons.append(btn)
+		grid.add_child(btn)
+	column.add_child(grid)
+
+	var footer := HBoxContainer.new()
+	footer.name = "BattleBagFooter"
+	footer.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	_battle_bag_detail = UIFactoryScript.label("", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN)
+	_battle_bag_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(_battle_bag_detail)
+	_battle_bag_action = _make_pixel_button("使用", 0, "")
+	_battle_bag_action.name = "BattleBagAction"
+	_battle_bag_action.pressed.connect(_on_battle_bag_action_pressed)
+	footer.add_child(_battle_bag_action)
+	column.add_child(footer)
+
+	slot.add_child(column)
+	_refresh_battle_bag()
+	return card
+
+
+## 背包演示初始条目（名称/效果/次数/射程取自 data/items.json 真实物品字段）。
+func _battle_bag_default_items() -> Array[Dictionary]:
+	var items: Array[Dictionary] = [
+		{
+			"name": "生命药剂", "icon": "heart", "kind": "消耗",
+			"detail": "恢复 20 HP · 射程 0-1", "uses": 2, "max_uses": 3,
+		},
+		{
+			"name": "手里剑", "icon": "dagger", "kind": "投掷",
+			"detail": "固定伤害 8 · 射程 1-3", "uses": 4, "max_uses": 4,
+		},
+		{
+			"name": "守护之戒", "icon": "shield", "kind": "装备",
+			"detail": "防御 +4", "equipped": true,
+		},
+		{
+			"name": "炸弹", "icon": "bomb", "kind": "投掷",
+			"detail": "范围伤害 10 · 射程 1-2", "uses": 1, "max_uses": 2,
+		},
+	]
+	while items.size() < BATTLE_BAG_CAPACITY:
+		items.append({})
+	return items
+
+
+## 背包格子文案：装备格带装备态注记，其余按剩余次数显示。
+func _battle_bag_slot_text(item: Dictionary) -> String:
+	if String(item.get("kind", "")) == "装备":
+		return "%s%s" % [String(item.name), "（已装备）" if item.get("equipped", false) else ""]
+	return "%s ×%d" % [String(item.name), int(item.uses)]
+
+
+## 刷新背包全部格子、容量计数与详情/操作行；空字典条目显示为灰显空格。
+func _refresh_battle_bag() -> void:
+	var filled := 0
+	for i: int in BATTLE_BAG_CAPACITY:
+		var btn := _battle_bag_buttons[i]
+		var item: Dictionary = _battle_bag_items[i]
+		if item.is_empty():
+			btn.set("semantic", 1)
+			btn.text = "空"
+			btn.icon = null
+			btn.disabled = true
+			continue
+		filled += 1
+		var equipped: bool = String(item.get("kind", "")) == "装备" and item.get("equipped", false)
+		btn.set("semantic", 0 if equipped else 1)
+		btn.text = _battle_bag_slot_text(item)
+		btn.icon = UIThemeScript.icon(String(item.icon))
+		btn.disabled = false
+	_battle_bag_counter.text = "%d/%d" % [filled, BATTLE_BAG_CAPACITY]
+	_refresh_battle_bag_detail()
+
+
+## 当前选中格的条目；越界或空格返回空字典。
+func _battle_bag_selected_item() -> Dictionary:
+	if _battle_bag_selected < 0 or _battle_bag_selected >= _battle_bag_items.size():
+		return {}
+	return _battle_bag_items[_battle_bag_selected]
+
+
+## 刷新详情行与操作按钮：空格禁用操作；装备格切换「装备/卸下」，其余为「使用」。
+func _refresh_battle_bag_detail() -> void:
+	var item := _battle_bag_selected_item()
+	if item.is_empty():
+		_battle_bag_detail.text = "选中：空格"
+		_battle_bag_action.disabled = true
+		_battle_bag_action.text = "使用"
+		return
+	var line := "选中：%s · %s · %s" % [String(item.name), String(item.kind), String(item.detail)]
+	if String(item.get("kind", "")) != "装备":
+		line += " · 剩 %d/%d" % [int(item.uses), int(item.max_uses)]
+	_battle_bag_detail.text = line
+	_battle_bag_action.disabled = false
+	if String(item.get("kind", "")) == "装备":
+		_battle_bag_action.text = "卸下" if item.get("equipped", false) else "装备"
+	else:
+		_battle_bag_action.text = "使用"
+
+
+func _on_battle_bag_slot_pressed(index: int) -> void:
+	_battle_bag_selected = index
+	_refresh_battle_bag_detail()
+	var item := _battle_bag_selected_item()
+	if item.is_empty():
+		return
+	_status_label.text = "背包：%s" % String(item.name)
+	_log_feedback("背包选中 → %s" % String(item.name))
+
+
+## 背包操作：装备格切换装备态；消耗/投掷格扣 1 次，次数归零格子空出并取消选中。
+func _on_battle_bag_action_pressed() -> void:
+	var item := _battle_bag_selected_item()
+	if item.is_empty():
+		return
+	if String(item.get("kind", "")) == "装备":
+		var now_equipped: bool = not item.get("equipped", false)
+		item["equipped"] = now_equipped
+		_status_label.text = "背包：%s %s" % [String(item.name), "已装备" if now_equipped else "已卸下"]
+		_log_feedback("背包 %s → %s" % [String(item.name), "装备" if now_equipped else "卸下"])
+	else:
+		var uses_left := int(item.uses) - 1
+		if uses_left <= 0:
+			var consumed := String(item.name)
+			_battle_bag_items[_battle_bag_selected] = {}
+			_battle_bag_selected = -1
+			_status_label.text = "背包：%s 已用尽" % consumed
+			_log_feedback("背包 %s 用尽 → 格子空出" % consumed)
+		else:
+			item["uses"] = uses_left
+			_status_label.text = "背包：使用 %s" % String(item.name)
+			_log_feedback("背包使用 → %s（剩 %d）" % [String(item.name), uses_left])
+	_refresh_battle_bag()
 
 
 ## 战前整备：左栏编队勾选（联动上场计数）/ 中栏五个 Tab / 右栏选中单位详情。
@@ -1709,6 +1889,9 @@ func _reset_demo() -> void:
 	for i: int in _battle_deploy_checks.size():
 		_battle_deploy_checks[i].set_pressed_no_signal(i < 3)
 	_battle_deploy_counter.text = "上场 3/6"
+	_battle_bag_items = _battle_bag_default_items()
+	_battle_bag_selected = 0
+	_refresh_battle_bag()
 	_tabs.current_tab = 0
 	_status_label.text = "已重置"
 	_log_feedback("重置")

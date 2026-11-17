@@ -3,9 +3,8 @@
 ## 复用 BattlefieldRenderer + IsoBoard（与 B2 战棋同款 IsometricCamera3D）：
 ## 视角旋转（Q/E/Z/X/R）、滚轮/双指捏合缩放、右键拖拽或空格+左键平移。
 ## 左键按下/拖动发出 cell 信号，由 map_editor.gd 按工具解释。
-## 地形走 3D 等距管线（渲染器检测到 Camera3D 自动切换）；悬停/选中/单位
-## 标记为屏幕空间 2D 节点，挂 _world（恒等变换）下并随相机逐帧对齐。
-## 已放置单位显示职业头像+阵营色环+等级徽标（缺图回退阵营色圆点+职业字，原视觉）。
+## 悬停/选中标记使用屏幕空间 2D 覆盖层；已放置单位复用战场 UnitSprite3D，
+## 职业精灵、脚底锚点、相机转向和深度遮挡均与 B2 战场一致。
 
 class_name EditorCanvas
 extends Control
@@ -13,7 +12,6 @@ extends Control
 const BattlefieldRendererScript = preload("res://scripts/iso/battlefield_renderer.gd")
 const RegionClipboardScript = preload("res://scripts/editor/region_clipboard.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
-const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const IsoBoardScript = preload("res://scripts/iso/iso_board.gd")
 const SunlightSystemScript = preload("res://scripts/sunlight_system.gd")
 const UserAssetVisualAdapterScript = preload("res://scripts/assets/user_asset_visual_adapter.gd")
@@ -24,8 +22,6 @@ signal cell_dragged(cell: Vector2i)
 signal cell_released(cell: Vector2i)
 signal hover_changed(cell: Vector2i)
 
-const PLAYER_COLOR := Color(0.376, 0.647, 0.980)
-const ENEMY_COLOR := Color(0.973, 0.443, 0.443)
 const HOVER_COLOR := Color(1.0, 0.85, 0.3, 0.55)
 const SELECTION_COLOR := Color(0.25, 0.95, 1.0, 0.62)
 ## 区域虚线投影描边色（框选范围边框；深色底衬见 _RegionOutlineMark）
@@ -81,13 +77,13 @@ var _paste_region: Dictionary = {}
 ## 正式放置操作生成的显示副本；权威模型和撤销历史保持不变。
 var _placement_model: Dictionary = {}
 var _placement_cell_count := 0
-var _unit_markers: Array[Node2D] = []
+var _unit_markers: Array[UnitSprite3D] = []
 var _dragging := false
 var _panning := false
 ## 本次左键笔画的落格 cell（press 时记下；release 无移动时 hover 可能为空）
 var _press_cell := Vector2i(-1, -1)
 ## 视图状态缓存（相机 yaw/elevation/zoom/focus + 画布全局矩形）：
-## 任一变化时重算悬停/选中多边形与单位标记位置（相机旋转是平滑动画）。
+## 任一变化时重算悬停/选中多边形（相机旋转是平滑动画）。
 var _view_cache := {}
 
 ## 右侧栏宽度（世界单位换算预留列，同 main.gd reserved_right_px）：
@@ -219,7 +215,7 @@ func _refresh_cell(cell: Vector2i) -> void:
 	# rows 是权威源：先把该格地形同步进渲染器网格，再重建柱（否则画笔无视觉效果）
 	var terrain: StringName = BattlefieldDocScript.glyph_to_terrain((model.rows[cell.y] as String).substr(cell.x, 1))
 	(_renderer.grid.tiles[cell.y][cell.x] as Dictionary)["type"] = terrain
-	# 植物层同步：该格 props 覆盖表条目（无则清空覆盖，恢复地形默认装饰）
+	# 植物层同步：该格 props 覆盖表条目；显式方块布局下无条目即不添加默认装饰
 	_renderer.set_cell_prop(cell, BattlefieldDocScript.prop_at(model, cell))
 	# 用户素材视觉层同步：prop 层（props 的 asset_id）与 tile 层（tile_overrides）独立清除
 	_sync_cell_assets(cell)
@@ -398,7 +394,6 @@ func _process(_delta: float) -> void:
 		_view_cache = view
 		_update_hover_marker()
 		_update_selection_marker()
-		_layout_unit_markers()
 		_update_region_marker()
 		_update_paste_marker()
 
@@ -677,29 +672,20 @@ func _display_model() -> Dictionary:
 
 func _rebuild_unit_markers() -> void:
 	_clear_unit_markers()
-	for u in _display_model().units:
-		var marker := _UnitMark.new()
-		var cid := StringName(String(u.get("class", "swordsman")))
-		if ProfessionVisualScript.portrait_exists(cid):
-			marker.portrait = load(ProfessionVisualScript.portrait_path(cid))
-		marker.faction_color = ENEMY_COLOR if String(u.get("faction", "player")) == "enemy" else PLAYER_COLOR
-		marker.tag = "%s%d" % [String(u.get("tag", "?")), int(u.get("level", 1))]
-		marker.level = int(u.get("level", 1))
-		marker.z_index = 15
-		_world.add_child(marker)
+	for u: Dictionary in _display_model().units:
+		# 编辑器文档只存放置数据；适配战场显示所需字段，不生成战斗数值或修改文档。
+		var visual_unit: Dictionary = {
+			classId = StringName(String(u.get("class", "swordsman"))),
+			faction = StringName(String(u.get("faction", "player"))),
+			level = int(u.get("level", 1)),
+			position = Vector2i(int(u.x), int(u.y)),
+			stats = {hp = 1}, hp = 1, hasActed = false, isDead = false,
+		}
+		var marker: UnitSprite3D = UnitSprite3D.new()
+		_board.add_child(marker)
+		marker.setup(visual_unit, _board, Callable(_renderer, "visual_top_level"))
+		marker.set_persistent_bar_visible(false)
 		_unit_markers.append(marker)
-	_layout_unit_markers()
-
-
-## 单位标记对齐当前相机投影（相机旋转/缩放/平移后由 _process 调用）。
-func _layout_unit_markers() -> void:
-	if _renderer == null or _renderer.grid == null:
-		return
-	var document: Dictionary = _display_model()
-	for i in mini(_unit_markers.size(), document.units.size()):
-		var u: Dictionary = document.units[i]
-		_unit_markers[i].position = _screen_to_local(
-			_renderer.top_center_for(int(u.x), int(u.y)))
 
 
 ## 单格地形/高度变了可能影响顶面 -> 该格上的标记位置重算
@@ -715,45 +701,6 @@ func _clear_unit_markers() -> void:
 		if is_instance_valid(marker):
 			marker.queue_free()
 	_unit_markers.clear()
-
-
-## 阵营色环 + 职业圆形头像 + 等级徽标（自绘，随 world 缩放）；缺图回退阵营色圆点+职业字
-class _UnitMark:
-	extends Node2D
-	const R := 14.0  # 头像半径（缺图回退圆点维持原 r=9 视觉）
-	var faction_color: Color = Color.WHITE
-	var tag := "?"
-	var level := 1
-	var portrait: Texture2D = null
-
-	func _draw() -> void:
-		var font := ThemeDB.fallback_font
-		if portrait != null:
-			# 圆形头像：draw_polygon UV 映射把方形立绘贴进圆
-			var seg := 40
-			var pts := PackedVector2Array()
-			var uvs := PackedVector2Array()
-			var cols := PackedColorArray()
-			for i in range(seg):
-				var a := TAU * float(i) / float(seg)
-				pts.append(Vector2(cos(a), sin(a)) * R)
-				uvs.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
-				cols.append(Color.WHITE)
-			draw_polygon(pts, cols, uvs, portrait)
-			draw_arc(Vector2.ZERO, R + 1.5, 0, TAU, 40, Color(faction_color, 0.95), 3.0)
-			draw_arc(Vector2.ZERO, R + 3.0, 0, TAU, 40, Color(0, 0, 0, 0.5), 1.5)
-			var lv := "Lv%d" % level
-			draw_string(font, Vector2(-R + 1, R + 12), lv,
-				HORIZONTAL_ALIGNMENT_CENTER, R * 2.0, 9, Color(0, 0, 0, 0.8))
-			draw_string(font, Vector2(-R, R + 11), lv,
-				HORIZONTAL_ALIGNMENT_CENTER, R * 2.0, 9, Color(1, 1, 1, 0.95))
-		else:
-			# 缺图回退：阵营色圆 + 职业首字/等级文本（原视觉不变）
-			var r := 9.0
-			draw_circle(Vector2.ZERO, r, Color(faction_color, 0.85))
-			draw_arc(Vector2.ZERO, r, 0, TAU, 24, Color(0, 0, 0, 0.6), 2.0)
-			draw_string(font, Vector2(-7, 4), tag,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.95))
 
 
 ## 素材预览块（自绘）：纹理中心锚点 + render_offset（同 renderer _asset_block_for 规则）。

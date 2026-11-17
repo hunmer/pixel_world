@@ -146,6 +146,17 @@ func _run() -> void:
 		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceApplyBtn") is Button
 		and replace_popup.get_node_or_null("ReplacePopupBox/ReplaceHint") is Label,
 		"替换弹窗默认隐藏，源/目标选择按钮、范围、执行按钮与提示齐全")
+	var rep_header := replace_popup.get_node_or_null("ReplacePopupBox/PopupHeader") if replace_popup != null else null
+	_expect(rep_header is HBoxContainer
+		and (rep_header.get_node_or_null("PopupTitle") as Label) != null
+		and String((rep_header.get_node("PopupTitle") as Label).text) == "替换方块"
+		and (rep_header.get_node_or_null("PopupCloseBtn") as Button) != null
+		and (rep_header.get_node("PopupCloseBtn") as Button).icon != null,
+		"替换弹窗统一 header：标题+右上角 cross 图标关闭钮")
+	var rep_panel_sb := replace_popup.get_theme_stylebox("panel") as StyleBoxFlat if replace_popup != null else null
+	_expect(rep_panel_sb != null and is_equal_approx(rep_panel_sb.content_margin_right, 12.0)
+		and replace_popup.offset_top == 12,
+		"替换弹窗内容右边距 12、顶部与工具条按钮持平(y=12)")
 	var recent_bar := editor.get_node_or_null("EditorRoot/CanvasHolder/RecentPicksBar") as PanelContainer
 	var recent_list := editor.get_node_or_null(
 		"EditorRoot/CanvasHolder/RecentPicksBar/RecentPicksHBox/RecentPickScroll/RecentPickList") as HBoxContainer
@@ -728,6 +739,10 @@ func _run() -> void:
 	if popup == null:
 		_finish(editor)
 		return
+	var sel_panel_sb := popup.get_theme_stylebox("panel") as StyleBoxFlat
+	_expect(sel_panel_sb != null and is_equal_approx(sel_panel_sb.content_margin_right, 12.0)
+		and popup.offset_top == 12,
+		"10 选择菜单内容右边距 12、顶部与工具条按钮持平(y=12)")
 	var sel_box: VBoxContainer = popup.get_node_or_null("SelectionPopupBox")
 	_expect(sel_box != null, "10 菜单内容容器存在")
 	var mode_opt := sel_box.get_node_or_null("ModeOption") if sel_box != null else null
@@ -741,10 +756,16 @@ func _run() -> void:
 		and sel_box.get_node_or_null("Pos2Row/Pos2Z") is SpinBox,
 		"10 pos1/pos2 六维坐标 SpinBox 齐全")
 	_expect(sel_box.get_node_or_null("FillBlockSelector") != null, "10 通用方块选择器在菜单内")
+	var sel_header := sel_box.get_node_or_null("PopupHeader") if sel_box != null else null
+	_expect(sel_header is HBoxContainer
+		and (sel_header.get_node_or_null("PopupTitle") as Label) != null
+		and String((sel_header.get_node("PopupTitle") as Label).text) == "选择模式"
+		and (sel_header.get_node_or_null("PopupCloseBtn") as Button) != null,
+		"10 选择菜单统一 header：标题+右上角关闭钮")
 	_expect(sel_box.get_node_or_null("RegionBtnRow/RegionFillBtn") is Button
 		and sel_box.get_node_or_null("RegionBtnRow/RegionClearBtn") is Button
-		and sel_box.get_node_or_null("RegionBtnRow/CloseBtn") is Button,
-		"10 填充/清除/关闭按钮齐全")
+		and sel_box.get_node_or_null("RegionBtnRow/CloseBtn") == null,
+		"10 区域行填充/清除齐全，底部关闭钮移至 header 右上角")
 
 	# 两次独立点击（拖动无效）+ 虚线框 / SpinBox 同步
 	editor._on_selection_mode_item(1)
@@ -907,6 +928,38 @@ func _run() -> void:
 	_expect(editor._selection_popup.visible, "10 菜单可打开")
 	_send_key(editor, KEY_ESCAPE)
 	_expect(not editor._selection_popup.visible, "10 Esc 先关选择菜单（不返回世界）")
+	# 切换工具自动收起：选择菜单跟随选择/填充工具、替换弹窗跟随替换工具，切走即收（互斥不叠加）
+	editor._tool_buttons[editor.Tool.PAINT].button_pressed = true
+	editor._tool_buttons[editor.Tool.FILL].button_pressed = true
+	_expect(popup.visible, "10 点填充工具重新打开选择菜单")
+	editor._tool_buttons[editor.Tool.REPLACE].button_pressed = true
+	_expect(not popup.visible and replace_popup != null and replace_popup.visible,
+		"10 切替换工具：选择菜单自动收起、替换弹窗打开（不叠加）")
+	editor._tool_buttons[editor.Tool.PAINT].button_pressed = true
+	_expect(replace_popup == null or not replace_popup.visible,
+		"10 切画笔：替换弹窗自动收起")
+	editor._tool_buttons[editor.Tool.UNIT].button_pressed = true
+	_expect(not popup.visible, "10 切角色：选择菜单保持收起")
+	editor._tool_buttons[editor.Tool.SELECT].button_pressed = true
+	_expect(popup.visible, "10 切回选择重新打开菜单")
+	# 弹窗右上角 x（统一 header）：关闭 = 切回画笔，选择/替换弹窗一并收起
+	var sel_close: Button = sel_box.get_node_or_null("PopupHeader/PopupCloseBtn") as Button
+	_expect(sel_close != null and sel_close.icon != null, "10 选择菜单 header 右上角 cross 图标钮")
+	if sel_close != null:
+		sel_close.pressed.emit()
+	_expect(not popup.visible and editor.current_tool == editor.Tool.PAINT,
+		"10 点 header 关闭钮收起菜单并切回画笔")
+	editor._tool_buttons[editor.Tool.REPLACE].button_pressed = true
+	var rep_close: Button = null
+	if replace_popup != null:
+		rep_close = replace_popup.get_node_or_null(
+			"ReplacePopupBox/PopupHeader/PopupCloseBtn") as Button
+	if rep_close != null:
+		rep_close.pressed.emit()
+	_expect(rep_close == null or (not replace_popup.visible
+		and editor.current_tool == editor.Tool.PAINT),
+		"10 替换弹窗 header 关闭钮同样收起并切回画笔")
+	editor._tool_buttons[editor.Tool.SELECT].button_pressed = true  # 恢复后续单格选择断言所需工具
 	tabs.current_tab = 3
 	editor._apply_tool(Vector2i(5, 5))
 	_expect(editor._canvas.selected_cell == Vector2i(5, 5)

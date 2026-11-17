@@ -65,6 +65,14 @@ static func overlay_panel_style() -> StyleBoxFlat:
 	return sb
 
 
+## 画布上悬浮工具面板弹窗（地图编辑器选择/替换弹窗）：内容右边距比工具条
+## 面板大（12 vs 6），弹出内容不贴右缘；其余与 overlay_panel_style 一致。
+static func overlay_popup_style() -> StyleBoxFlat:
+	var sb := overlay_panel_style()
+	sb.content_margin_right = 12
+	return sb
+
+
 ## 不透明停靠面板（战斗侧栏 / 编辑器右栏）。
 static func dock_panel_style() -> StyleBoxFlat:
 	var sb := flat_style(BG, PANEL_BORDER)

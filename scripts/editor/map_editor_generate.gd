@@ -76,6 +76,11 @@ static func on_tool_changed(ed) -> void:
 		ed._replace_popup.visible = ed.current_tool == ed.Tool.REPLACE
 		if ed._replace_popup.visible:
 			ed._reset_replace_popup()
+	# 选择菜单只属于选择/填充工具：切到其他工具自动收起（与替换弹窗互斥不叠加；
+	# 打开仍由工具条回调 _open_selection_popup 负责，保留刷新素材/回显语义）
+	if ed._selection_popup != null and ed.current_tool != ed.Tool.SELECT \
+			and ed.current_tool != ed.Tool.FILL:
+		ed._close_selection_popup()
 	var names := {
 		ed.Tool.SELECT: "选择", ed.Tool.PAINT: "画笔", ed.Tool.FILL: "填充", ed.Tool.ERASE: "橡皮",
 		ed.Tool.UNIT: "角色", ed.Tool.HEIGHT_UP: "地形上升", ed.Tool.HEIGHT_DOWN: "地形下降",

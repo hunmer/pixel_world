@@ -193,12 +193,17 @@ func _test_explicit_layout(root: Node2D, grid: GridSystem) -> void:
 		plane.setup(one_grid)
 		_expect(plane.stand_level(0, 0) == 0, "显式平面 %s stand_level=0" % terrain_id)
 		var terrain_blocks: Array = []
+		var prop_blocks: Array = []
 		for block: Dictionary in (plane._columns[Vector2i.ZERO] as Node)._blocks:
-			if block.get("occluder_class", &"terrain") != &"prop":
+			if block.get("occluder_class", &"terrain") == &"prop":
+				prop_blocks.append(block)
+			else:
 				terrain_blocks.append(block)
 		_expect(terrain_blocks.size() == 1 and int(terrain_blocks[0].get("level", -1)) == 0,
 			"显式平面 %s 仅一个 z=0 地形块" % terrain_id)
 		_expect(terrain_blocks[0].get("water_part", &"") != &"bed", "显式平面 %s 不填湖床" % terrain_id)
+		if terrain_id == &"fort" or terrain_id == &"village":
+			_expect(prop_blocks.is_empty(), "显式平面 %s 不附带默认装饰" % terrain_id)
 		var top: Vector2 = plane.top_center_for(0, 0)
 		_expect(top == IsoCoordsScript.to_screen(0, 0, 0) + Vector2(0, -2),
 			"显式平面 %s 顶面中心使用真实贴图偏移" % terrain_id)
@@ -206,6 +211,22 @@ func _test_explicit_layout(root: Node2D, grid: GridSystem) -> void:
 		_expect(plane.pick_world(top + Vector2(0, -9)) == Vector2i(-1, -1),
 			"显式平面 %s 顶面外空白不 fallback" % terrain_id)
 	plane.free()
+
+	var prop_plane: Node2D = RendererScript.new()
+	root.add_child(prop_plane)
+	prop_plane.set_block_layout(BlockLayoutScript.create(1, 1))
+	prop_plane.set_custom_props([{
+		"x": 0,
+		"y": 0,
+		"texture": "res://meowa_tiles/trees/apple_tree.png",
+	}])
+	prop_plane.setup(GridSystem.new(1, 1, [[&"village"]]))
+	var explicit_prop_blocks: Array = []
+	for block: Dictionary in (prop_plane._columns[Vector2i.ZERO] as Node)._blocks:
+		if block.get("occluder_class", &"terrain") == &"prop":
+			explicit_prop_blocks.append(block)
+	_expect(explicit_prop_blocks.size() == 1, "显式布局明确放置的植物仍显示")
+	prop_plane.free()
 
 	var layout: Dictionary = BlockLayoutScript.create(5, 5)
 	BlockLayoutScript.set_z(layout, Vector2i(1, 0), 1)

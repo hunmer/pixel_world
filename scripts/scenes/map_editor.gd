@@ -717,6 +717,13 @@ func _close_selection_popup() -> void:
 	MapEditorRegionSelectScript.close_selection_popup(self)
 
 
+## 弹窗右上角关闭按钮统一入口：按下画笔工具，借 _on_tool_changed 的
+## 收起逻辑统一关闭选择/替换弹窗。弹窗开启时 current_tool 必为
+## SELECT/FILL/REPLACE，与 PAINT 不重合，button_pressed 赋值必有信号。
+func _dismiss_tool_popups() -> void:
+	_tool_buttons[Tool.PAINT].button_pressed = true
+
+
 func _on_selection_mode_item(idx: int) -> void:
 	MapEditorRegionSelectScript.on_selection_mode_item(self, idx)
 
