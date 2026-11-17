@@ -142,8 +142,10 @@ func close(action_id: String) -> void:
 	# 先恢复背景焦点与原焦点，再发 chosen：处理器里若开新弹窗（如空名→错误
 	# 提示），新弹窗的焦点陷阱才能建立在已恢复的干净状态上。
 	for pair: Variant in _focus_disabled:
-		var control := pair[0] as Control
-		if control != null and is_instance_valid(control):
+		# pair[0] 可能已在弹层存活期间被释放（战斗切换/嵌套流程销毁节点）：
+		# freed 对象连 `as Control` 都会报 cast 错，必须先判活再取回。
+		if is_instance_valid(pair[0]):
+			var control := pair[0] as Control
 			control.focus_mode = pair[1]
 	_focus_disabled.clear()
 	if CampaignFormatScript.can_grab_focus(_previous_focus):

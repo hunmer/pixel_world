@@ -28,6 +28,7 @@ const RESULT_LOSE := &"lose"
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+const CampaignFormatScript = preload("res://scripts/scenes/campaign_format.gd")
 
 const _DEFEAT_SHADER_CODE := """
 shader_type canvas_item;
@@ -141,7 +142,8 @@ func play_opening(units: Array, boss: Dictionary = {}) -> void:
 
 ## result 接受现有战斗的 win/lose（也兼容 victory/defeat）。
 ## data: { loot:Array, exp:int, gold:int, chapter_end:bool, chapter_title:String,
-##         title:String, return_hint:String }；仅读取，不改写逻辑数据。
+##         title:String, return_hint:String, level_ups:Array }；仅读取，
+## 不改写逻辑数据。loot/level_ups 空时对应分节整体省略，不渲染占位行。
 func play_result(result: StringName, data: Dictionary = {}, survivors: Array = [], defeated: Array = []) -> void:
 	_ensure_widgets()
 	var normalized := _normalize_result(result)
@@ -428,27 +430,26 @@ func _build_result(kind: StringName) -> void:
 
 
 func _build_victory_widgets(box: VBoxContainer) -> void:
-	var loot_title := UIFactoryScript.label("战利品", 17, Color(0.95, 0.80, 0.43))
-	box.add_child(loot_title)
-	var loot_list := VBoxContainer.new()
-	loot_list.name = "LootList"
-	box.add_child(loot_list)
+	# 掉落空则整节省略（标题+列表都不渲染，不显示「（无）」占位）。
 	_loot_entries = _normalized_loot()
-	for index in range(_loot_entries.size()):
-		var row := PanelContainer.new()
-		row.name = "Loot%d" % index
-		row.visible = false
-		row.modulate.a = 0.0
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.09, 0.12, 0.96), Color(0.35, 0.40, 0.50), 7))
-		loot_list.add_child(row)
-		var label := UIFactoryScript.label(_loot_text(_loot_entries[index]), 18, UIThemeScript.TEXT_MAIN)
-		row.add_child(label)
-		_loot_rows.append(row)
-		_loot_sent.append(false)
-	if _loot_entries.is_empty():
-		var empty := UIFactoryScript.label("（无）", 16, UIThemeScript.TEXT_MAIN)
-		loot_list.add_child(empty)
+	if not _loot_entries.is_empty():
+		var loot_title := UIFactoryScript.label("战利品", 17, Color(0.95, 0.80, 0.43))
+		box.add_child(loot_title)
+		var loot_list := VBoxContainer.new()
+		loot_list.name = "LootList"
+		box.add_child(loot_list)
+		for index in range(_loot_entries.size()):
+			var row := PanelContainer.new()
+			row.name = "Loot%d" % index
+			row.visible = false
+			row.modulate.a = 0.0
+			row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.09, 0.12, 0.96), Color(0.35, 0.40, 0.50), 7))
+			loot_list.add_child(row)
+			var label := UIFactoryScript.label(_loot_text(_loot_entries[index]), 18, UIThemeScript.TEXT_MAIN)
+			row.add_child(label)
+			_loot_rows.append(row)
+			_loot_sent.append(false)
 
 	var stats := HBoxContainer.new()
 	stats.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -458,6 +459,26 @@ func _build_victory_widgets(box: VBoxContainer) -> void:
 	_gold_value = _add_reward_counter(stats, "金币", "GoldValue")
 	_exp_value.text = "0"
 	_gold_value.text = "0"
+
+	# 成长分节：level_ups 非空才渲染（真实 receipt 差分，非 campaign 为空数组
+	# 不虚构）；行静态可见（不走掉落逐行 reveal 时间轴），文案复用
+	# CampaignFormat.level_up_lines 与 Hub 收据一致。
+	var growth_lines := CampaignFormatScript.level_up_lines(_result_data.get(&"level_ups", []))
+	if not growth_lines.is_empty():
+		var growth_title := UIFactoryScript.label("成长", 17, Color(0.55, 0.95, 0.66))
+		growth_title.name = "GrowthTitle"
+		box.add_child(growth_title)
+		var growth_list := VBoxContainer.new()
+		growth_list.name = "GrowthList"
+		box.add_child(growth_list)
+		for index in range(growth_lines.size()):
+			var grow_row := PanelContainer.new()
+			grow_row.name = "LevelUp_%d" % index
+			grow_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			grow_row.add_theme_stylebox_override("panel", _panel_style(Color(0.06, 0.10, 0.07, 0.96), Color(0.35, 0.50, 0.40), 7))
+			growth_list.add_child(grow_row)
+			var grow_label := UIFactoryScript.label(String(growth_lines[index]), 18, UIThemeScript.TEXT_MAIN)
+			grow_row.add_child(grow_label)
 
 	_chapter_card = PanelContainer.new()
 	_chapter_card.name = "ChapterCard"

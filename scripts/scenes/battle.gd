@@ -1527,12 +1527,23 @@ func _present_result(result: StringName) -> void:
 	if not _campaign_token.is_empty():
 		_settle_campaign(result)
 	var data := {
-		"loot": _campaign_receipt.get("items", chapter.get("loot", [])),
+		# campaign 模式严格只信 receipt（战场掉落字段名固定为 loot，固定通关
+		# 奖励 items/items_awarded 由 Hub 收据展示，两处分行不合并）；W2 落地
+		# 前 receipt 无 loot 键 → 空数组 → 演出省略掉落行，不虚构奖励。
+		# 非 campaign（世界战斗）保持 chapter 顶层 loot 原数据来源不变。
+		"loot": (
+			_campaign_receipt.get("loot", [])
+			if not _campaign_token.is_empty()
+			else chapter.get("loot", [])
+		),
 		"exp": int(chapter.get("exp", 0)),
 		"gold": int(_campaign_receipt.get("gold", chapter.get("gold", 0))),
 		"chapter_end": bool(chapter.get("chapterEnd", false)),
 		"chapter_title": String(chapter.get("title", "")),
 		"return_hint": "返回营地" if not _campaign_token.is_empty() else "返回世界",
+		# 升级差分随成功 receipt 发布；非 campaign receipt 为空 → 空数组，
+		# 演出层按空省略成长分节，不虚构成长。
+		"level_ups": _campaign_receipt.get("level_ups", []),
 	}
 	var survivors: Array = _units_by_life(
 		&"player" if result == &"win" else &"enemy", true

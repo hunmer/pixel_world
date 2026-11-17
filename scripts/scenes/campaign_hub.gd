@@ -27,6 +27,7 @@ var _roster_list: VBoxContainer
 var _inventory_list: VBoxContainer
 var _save_btn: Button
 var _map_btn: Button
+var _shop_btn: Button
 var _switch_btn: Button
 var _gold_caption: Label
 
@@ -166,12 +167,16 @@ func _build() -> void:
 	_map_btn.name = "MapBtn"
 	footer.add_child(_map_btn)
 
+	_shop_btn = _make_action_button("营地商店", 0, _on_open_shop)
+	_shop_btn.name = "ShopBtn"
+	footer.add_child(_shop_btn)
+
 	_switch_btn = _make_action_button("切换存档", 1, _on_switch_profile)
 	_switch_btn.name = "SwitchProfileBtn"
 	footer.add_child(_switch_btn)
 
 	var hint: Label = UIFactoryScript.label(
-		"ESC：世界地图中返回基地 / 基地中回到存档选择",
+		"ESC：商店 / 世界地图中返回基地 / 基地中回到存档选择",
 		ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM
 	)
 	hint.name = "EscHint"
@@ -302,8 +307,11 @@ func _present_last_result() -> void:
 			title = "胜利！"
 			var gold := CampaignFormatScript.as_int(result.get("gold", 0), 0)
 			lines.append("获得金币：%d" % gold)
-			var items_line := CampaignFormatScript.items_line(result.get("items", []))
-			lines.append("获得物品：%s" % items_line)
+			# 固定通关奖励（items/items_awarded）空则整行省略；战场掉落（loot）
+			# 在战斗胜利演出中分行展示，此处不合并。
+			var win_items: Variant = result.get("items", [])
+			if win_items is Array and not (win_items as Array).is_empty():
+				lines.append("获得物品：%s" % CampaignFormatScript.items_line(win_items))
 			if bool(result.get("first_clear", false)):
 				lines.append("首次通关！")
 			for line: String in CampaignFormatScript.level_up_lines(result.get("level_ups", [])):
@@ -351,6 +359,10 @@ func _on_save_now() -> void:
 
 func _on_open_map() -> void:
 	_main.call("go_levels")
+
+
+func _on_open_shop() -> void:
+	_main.call("go_shop")
 
 
 func _on_switch_profile() -> void:

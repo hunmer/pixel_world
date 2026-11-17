@@ -1,9 +1,9 @@
 ## scripts/scenes/campaign_main.gd — 冒险入口装配层
 ##
-## Campaign.tscn 的根脚本：装配三屏（存档选择 / 基地 Hub / 关卡列表）与
-## 模态层，路由屏间切换，向 CampaignSession 转发 changed 事件（事件驱动，
-## 不轮询）。出征经 battle_requested 信号 + campaign_battle_bridge（直接
-## preload）跳转 Battle.tscn。
+## Campaign.tscn 的根脚本：装配四屏（存档选择 / 基地 Hub / 关卡列表 /
+## 营地商店）与模态层，路由屏间切换，向 CampaignSession 转发 changed 事件
+## （事件驱动，不轮询）。出征经 battle_requested 信号 +
+## campaign_battle_bridge（直接 preload）跳转 Battle.tscn。
 extends Control
 
 signal battle_requested(level_id: String)
@@ -11,6 +11,7 @@ signal battle_requested(level_id: String)
 const SaveSelectScript = preload("res://scripts/scenes/campaign_save_select.gd")
 const HubScript = preload("res://scripts/scenes/campaign_hub.gd")
 const LevelsScript = preload("res://scripts/scenes/campaign_levels.gd")
+const ShopScript = preload("res://scripts/scenes/campaign_shop.gd")
 const ModalScript = preload("res://scripts/scenes/campaign_modal.gd")
 const CampaignFormatScript = preload("res://scripts/scenes/campaign_format.gd")
 ## 战斗桥接已落盘：直接 preload（缺失会在加载期暴露，而非运行期兜底）。
@@ -21,6 +22,7 @@ var _modal_layer: Control
 var _save_select: Control
 var _hub: Control
 var _levels: Control
+var _shop: Control
 
 
 func _ready() -> void:
@@ -44,6 +46,11 @@ func _ready() -> void:
 	_levels.name = "Levels"
 	_levels.call("setup", self)
 	_screens.add_child(_levels)
+
+	_shop = ShopScript.new()
+	_shop.name = "Shop"
+	_shop.call("setup", self)
+	_screens.add_child(_shop)
 
 	_modal_layer = Control.new()
 	_modal_layer.name = "ModalLayer"
@@ -75,6 +82,10 @@ func go_hub() -> void:
 
 func go_levels() -> void:
 	_switch_screen(_levels)
+
+
+func go_shop() -> void:
+	_switch_screen(_shop)
 
 
 func _switch_screen(screen: Control) -> void:
@@ -146,7 +157,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _modal_layer.get_child_count() > 0:
 		return  # 弹层自行处理 ESC（关闭弹层而非切屏）。
-	if _levels.visible:
+	if _shop.visible:
+		get_viewport().set_input_as_handled()
+		go_hub()
+	elif _levels.visible:
 		get_viewport().set_input_as_handled()
 		go_hub()
 	elif _hub.visible:

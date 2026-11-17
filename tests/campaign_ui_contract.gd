@@ -1,4 +1,4 @@
-## tests/campaign_ui_contract.gd — 冒险 UI（Campaign.tscn 三屏）契约测试
+## tests/campaign_ui_contract.gd — 冒险 UI（Campaign.tscn 四屏）契约测试
 ##
 ## 只写不跑（由 lead 统一执行）：`godot --headless --path . --script res://tests/campaign_ui_contract.gd`
 ## 用桩 CampaignSession（同名 autoload 形态挂在 root 下）验证：
@@ -6,8 +6,10 @@
 ## ②存档列表（排序/最近标记/不可加载警告/默认焦点）③模态焦点陷阱与还原
 ## ④重命名 ⑤新建→自动进基地 ⑥基地四数据+进度条 ⑦手动保存 ⑧胜利结算弹窗
 ## ⑨单位/物品详情 ⑩关卡列表/出征确认/battle_requested+桥接缺失兜底
-## ⑪ESC 屏级返回 ⑫删除存档 ⑬切换存档 ⑭三档分辨率布局 ⑮无会话降级。
-## ESC 用直接调 _unhandled_input(构造 InputEventAction) 保证确定性。
+## ⑪ESC 屏级返回 ⑫删除存档 ⑬切换存档 ⑭三档分辨率布局 ⑮无会话降级
+## ⑳营地商店（入口/列表/限购/余额禁用/确认防重/changed 刷新/售罄/失败明示/
+## ESC 返回/焦点还原）。ESC 用直接调 _unhandled_input(构造 InputEventAction)
+## 保证确定性。
 extends SceneTree
 
 const CampaignScene = preload("res://scenes/Campaign.tscn")
@@ -16,6 +18,7 @@ const UI_FILES: Array[String] = [
 	"res://scripts/scenes/campaign_main.gd",
 	"res://scripts/scenes/campaign_hub.gd",
 	"res://scripts/scenes/campaign_levels.gd",
+	"res://scripts/scenes/campaign_shop.gd",
 	"res://scripts/scenes/campaign_modal.gd",
 	"res://scripts/scenes/campaign_save_select.gd",
 ]
@@ -23,6 +26,7 @@ const UI_FILES: Array[String] = [
 const BUTTON_FILES: Array[String] = [
 	"res://scripts/scenes/campaign_hub.gd",
 	"res://scripts/scenes/campaign_levels.gd",
+	"res://scripts/scenes/campaign_shop.gd",
 	"res://scripts/scenes/campaign_modal.gd",
 	"res://scripts/scenes/campaign_save_select.gd",
 ]
@@ -144,6 +148,27 @@ func _run() -> void:
 		"03 关闭后焦点还原到原控件"
 	)
 
+	# ③b 弹层存活期间释放被禁焦控件 → close 恢复循环必须判活跳过。
+	# 回归：freed 对象连 `as Control` 都会报错（运行态实测
+	# campaign_modal.gd close "Trying to cast a freed object"）。
+	rename_btn.pressed.emit()
+	await process_frame
+	modal = campaign.find_child("CampaignModal", true, false)
+	var victim: Button = campaign.find_child("LoadBtn_1", true, false) as Button
+	check(
+		victim != null and victim.focus_mode == Control.FOCUS_NONE,
+		"03 弹层存活期背景控件处于陷阱中"
+	)
+	root.remove_child(victim)
+	victim.free()
+	(modal.find_child("Action_cancel", true, false) as Button).pressed.emit()
+	await process_frame
+	check(
+		campaign.find_child("CampaignModal", true, false) == null,
+		"03 含已释放控件的陷阱关闭不崩且弹层移除"
+	)
+	check(load_b.focus_mode == Control.FOCUS_ALL, "03 其余背景控件焦点仍恢复")
+
 	# ④ 重命名流程。
 	rename_btn.pressed.emit()
 	await process_frame
@@ -227,7 +252,7 @@ func _run() -> void:
 	var message: Label = modal.find_child("ModalMessage", true, false) as Label
 	check(message.text.find("获得金币：50") >= 0, "08 重复胜利金币=50")
 	check(message.text.find("首次通关") < 0, "08 非首胜不显示首通标记")
-	check(message.text.find("获得物品：无") >= 0, "08 重复胜利物品=无")
+	check(message.text.find("获得物品") < 0, "08 重复胜利物品空整行省略（不显示占位）")
 	check(message.text.find("升级：剑士队长 2→3") >= 0, "08 胜利弹层含升级行")
 	check(
 		message.text.find("力+1 速+1") >= 0,
@@ -254,6 +279,111 @@ func _run() -> void:
 	check(message.text.find("治疗药水") >= 0, "09 物品详情含名称")
 	(modal.find_child("Action_close", true, false) as Button).pressed.emit()
 	await process_frame
+
+	# ⑳ 营地商店：入口/列表/限购/余额禁用/确认防重/购买刷新/售罄/失败明示/
+	# ESC 返回。预备金 400 覆盖余额不足（500>400）、限购递减（2→1→0）与
+	# 不限购路径；金币状态为测试预备值，不影响后续组断言。
+	stub.profiles["b"]["gold"] = 400
+	(campaign.find_child("ShopBtn", true, false) as Button).pressed.emit()
+	await process_frame
+	var shop_screen: Control = campaign.find_child("Shop", true, false)
+	check(shop_screen != null and shop_screen.visible, "20 Hub ShopBtn 进入营地商店")
+	check(campaign.find_child("Levels", true, false).visible == false, "20 进入商店后地图屏隐藏")
+	var shop_gold: Label = shop_screen.find_child("GoldLabel", true, false) as Label
+	check(shop_gold.text == "金币 400", "20 商店金币=400")
+	for i: int in 3:
+		check(shop_screen.find_child("ItemRow_%d" % i, true, false) != null, "20 商品行 %d" % i)
+	var meta_0: Label = shop_screen.find_child("ItemMeta_0", true, false) as Label
+	check(
+		meta_0.text.find("80 金币") >= 0 and meta_0.text.find("不限购") >= 0,
+		"20 不限购商品文案（价格+不限购）"
+	)
+	var meta_1: Label = shop_screen.find_child("ItemMeta_1", true, false) as Label
+	check(
+		meta_1.text.find("120 金币") >= 0 and meta_1.text.find("本周期剩 2") >= 0,
+		"20 限购商品文案（价格+剩余额度）"
+	)
+	var buy_0: Button = shop_screen.find_child("BuyBtn_0", true, false) as Button
+	var buy_1: Button = shop_screen.find_child("BuyBtn_1", true, false) as Button
+	var buy_2: Button = shop_screen.find_child("BuyBtn_2", true, false) as Button
+	check(buy_0 != null and not buy_0.disabled, "20 不限购商品可买")
+	check(buy_1 != null and not buy_1.disabled, "20 限购余量内可买")
+	check(buy_2 != null and buy_2.disabled, "20 余额不足商品禁用")
+	var shop_focus: Control = root.gui_get_focus_owner()
+	check(shop_focus != null and shop_focus.name == "BuyBtn_0", "20 默认焦点=首个可购买按钮")
+	# 确认弹窗（单层）+ 防重：弹窗开着再点其他入口不叠加弹层。
+	buy_1.pressed.emit()
+	await process_frame
+	modal = campaign.find_child("CampaignModal", true, false)
+	check(
+		modal != null
+			and String(modal.find_child("ModalPanel", true, false).get("title")) == "购买确认",
+		"20 购买确认弹层（单层）"
+	)
+	var buy_message: Label = modal.find_child("ModalMessage", true, false) as Label
+	check(
+		buy_message.text.find("法力药水 ×1") >= 0 and buy_message.text.find("120 金币") >= 0,
+		"20 确认文案含商品与价格（买 1）"
+	)
+	buy_0.pressed.emit()
+	await process_frame
+	check(
+		campaign.find_children("CampaignModal", "", true, false).size() == 1,
+		"20 确认期间防重（不叠加弹层）"
+	)
+	(modal.find_child("Action_confirm", true, false) as Button).pressed.emit()
+	await process_frame
+	check(stub.buy_calls.size() == 1, "20 buy_item 恰好调用一次")
+	check(int(stub.profiles["b"]["gold"]) == 280, "20 购买入账 400-120")
+	check(shop_gold.text == "金币 280", "20 金币标签随 changed 刷新")
+	var meta_1_after: Label = shop_screen.find_child("ItemMeta_1", true, false) as Label
+	check(meta_1_after.text.find("本周期剩 1") >= 0, "20 限购额度递减 2→1")
+	var restored: Control = root.gui_get_focus_owner()
+	check(
+		restored != null and restored.name == "BuyBtn_1",
+		"20 购买后焦点恢复到刚购商品行（refresh 重建不悬空）"
+	)
+	# 限购售罄：mpPotion 剩 1 → 买 1 → 剩 0 禁用。
+	(shop_screen.find_child("BuyBtn_1", true, false) as Button).pressed.emit()
+	await process_frame
+	modal = campaign.find_child("CampaignModal", true, false)
+	(modal.find_child("Action_confirm", true, false) as Button).pressed.emit()
+	await process_frame
+	check(int(stub.profiles["b"]["gold"]) == 160, "20 第二次购买入账 280-120")
+	var buy_1_after: Button = shop_screen.find_child("BuyBtn_1", true, false) as Button
+	check(buy_1_after != null and buy_1_after.disabled, "20 售罄后按钮禁用")
+	# 不限购购买 + 库存入账。
+	(shop_screen.find_child("BuyBtn_0", true, false) as Button).pressed.emit()
+	await process_frame
+	modal = campaign.find_child("CampaignModal", true, false)
+	(modal.find_child("Action_confirm", true, false) as Button).pressed.emit()
+	await process_frame
+	check(int(stub.profiles["b"]["gold"]) == 80, "20 不限购入账 160-80")
+	var inventory: Array = stub.profiles["b"]["inventory"]
+	check(
+		inventory.size() == 5
+			and String((inventory[2] as Dictionary).get("id", "")) == "mpPotion"
+			and String((inventory[4] as Dictionary).get("id", "")) == "hpPotion",
+		"20 三次购买各入库存一条（末条=hpPotion）"
+	)
+	check(stub.buy_calls.size() == 3, "20 buy_calls 累计 3 次")
+	# 失败明示：确认回调直调模拟余额拒绝（售罄/余额不足按钮已禁用，无法自然触发）。
+	shop_screen._on_buy_chosen("confirm", "shuriken")
+	await process_frame
+	var shop_notice: Label = shop_screen.find_child("ShopNotice", true, false) as Label
+	check(
+		shop_notice != null and shop_notice.visible and shop_notice.text.find("金币不足") >= 0,
+		"20 购买失败在页面明示"
+	)
+	check(stub.buy_calls.size() == 4, "20 失败路径同样记录 buy 调用")
+	check(int(stub.profiles["b"]["gold"]) == 80, "20 失败不入账")
+	# ESC：商店→基地（屏级返回链新增 shop→hub 分支）。
+	var shop_cancel := InputEventAction.new()
+	shop_cancel.action = "ui_cancel"
+	shop_cancel.pressed = true
+	campaign._unhandled_input(shop_cancel)
+	await process_frame
+	check(campaign.find_child("Hub", true, false).visible, "20 ESC：商店→基地")
 
 	# ⑩ 关卡列表 + 出征确认 + 桥接。
 	(campaign.find_child("MapBtn", true, false) as Button).pressed.emit()
@@ -405,7 +535,7 @@ func _run() -> void:
 	# PageMargin=屏——隐藏屏锚点布局同样成立），各列表 viewport 正高度；
 	# Levels 首卡无需滚动可见、滚至底部末卡进入视口（六关实际可访问）。
 	var screens: Control = campaign.find_child("Screens", true, false)
-	var screen_names: Array = ["SaveSelect", "Hub", "Levels"]
+	var screen_names: Array = ["SaveSelect", "Hub", "Levels", "Shop"]
 	for size_cfg: Variant in sizes:
 		var w := int(size_cfg[0])
 		var h := int(size_cfg[1])
@@ -469,6 +599,15 @@ func _run() -> void:
 		check(
 			last_card != null and _v_overlaps(last_card, level_scroll),
 			"19 %dx%d 滚动后末卡进入视口" % [w, h]
+		)
+		campaign.call("go_shop")
+		await process_frame
+		var shop_scroll_19: ScrollContainer = (
+			campaign.find_child("ShopScroll", true, false) as ScrollContainer
+		)
+		check(
+			shop_scroll_19 != null and shop_scroll_19.size.y > 0.0,
+			"19 %dx%d 商店滚动区高度>0" % [w, h]
 		)
 	# 还原到与旧流程一致的屏态，再进入无会话降级检查。
 	campaign.call("go_save_select")
@@ -583,8 +722,17 @@ class StubSession extends Node:
 	var saved_count := 0
 	var next_id := 0
 	var settled_tokens := {}
+	## 购买调用流水（无论成败都记录）——供防重/失败路径断言。
+	var buy_calls: Array = []
+	## 商店货架（实例字段而非 const：remaining 随购买递减需可变）。
+	var shop_stock: Array = []
 
 	func _init() -> void:
+		shop_stock = [
+			{"id": "hpPotion", "name": "治疗药水", "price": 80, "remaining": -1, "max_buyable": -1},
+			{"id": "mpPotion", "name": "法力药水", "price": 120, "remaining": 2, "max_buyable": 2},
+			{"id": "shuriken", "name": "手里剑", "price": 500, "remaining": -1, "max_buyable": -1},
+		]
 		profiles["a"] = _make_profile("a", "旧档冒险", 120, ["plains_skirmish"], 100, [], [])
 		# a 可加载但带 notice：备份恢复档也必须在列表上警示玩家。
 		profiles["a"]["notice"] = "备份恢复：部分回合数据来自自动备份"
@@ -712,6 +860,54 @@ class StubSession extends Node:
 		prepare_calls.append(level_id)
 		# 测试默认阻止真实出征（避免 change_scene 破坏测试树）。
 		return {"ok": false, "error": "测试桩：阻止真实进入战斗"}
+
+	func list_shop() -> Dictionary:
+		if current == "" or not profiles.has(current):
+			return {"ok": false, "error": "没有已加载的存档"}
+		var profile: Dictionary = profiles[current]
+		var clear_index := (profile.get("completed_levels", []) as Array).size()
+		var stock: Array = []
+		for entry: Variant in shop_stock:
+			var item: Dictionary = (entry as Dictionary).duplicate()
+			if int(item["remaining"]) >= 0:
+				item["max_buyable"] = int(item["remaining"])
+			stock.append(item)
+		return {
+			"ok": true, "error": "",
+			"gold": int(profile.get("gold", 0)),
+			"clear_index": clear_index,
+			"stock": stock,
+		}
+
+	func buy_item(id: String, count: int = 1) -> Dictionary:
+		buy_calls.append({"id": id, "count": count})
+		if current == "" or not profiles.has(current):
+			return {"ok": false, "error": "没有已加载的存档"}
+		var profile: Dictionary = profiles[current]
+		for entry: Variant in shop_stock:
+			var item: Dictionary = entry as Dictionary
+			if String(item["id"]) != id:
+				continue
+			var price := int(item["price"])
+			var remaining := int(item.get("remaining", -1))
+			if remaining == 0:
+				return {"ok": false, "error": "%s 本周期限购已用完" % String(item["name"])}
+			if int(profile["gold"]) < price * count:
+				return {
+					"ok": false,
+					"error": "金币不足：%s 需 %d，当前 %d" % [
+						String(item["name"]), price * count, int(profile["gold"]),
+					],
+				}
+			profile["gold"] = int(profile["gold"]) - price * count
+			var inventory: Array = profile["inventory"]
+			inventory.append({"id": id, "name": String(item["name"]), "uses": 3})
+			if remaining > 0:
+				item["remaining"] = remaining - count
+			# 失败不 emit：UI 失败路径保持页面不动，仅成功后 changed 刷新。
+			_emit()
+			return {"ok": true}
+		return {"ok": false, "error": "未知商品：%s" % id}
 
 	func settle_battle(token: String, result: StringName, chapter: Variant) -> Dictionary:
 		if settled_tokens.has(token):
