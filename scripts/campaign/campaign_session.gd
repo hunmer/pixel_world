@@ -398,13 +398,16 @@ func list_shop() -> Dictionary:
 ## 买入每件实例满 uses 直接入公共库存；若该物品未被任何携带方案行覆盖，
 ## 则给队长（roster 首名）行追加 {id, count:1}（已覆盖不重复追加）——下次出征
 ## 自动带上；FIFO 补给拿不完的留在库存。
-func buy_item(item_id: String, count := 1) -> Dictionary:
+## count 取 Variant 并在函数内严格校验（bool/float/字符串一律拒绝）：
+## int 形参会在调用点被隐式截断（1.5→1、true→1）或直接抛原生类型错误炸掉
+## 调用方（String 经 Variant 通道，2026-11-18 实测），无法返回友好 error。
+func buy_item(item_id: String, count: Variant = 1) -> Dictionary:
 	if _state.is_empty():
 		return {"ok": false, "error": "尚未加载冒险档案"}
 	if not _attempt.is_empty():
 		return {"ok": false, "error": "战斗进行中，不能购买"}
 	if count is not int or int(count) < 1:
-		return {"ok": false, "error": "购买数量必须是正整数"}
+		return {"ok": false, "error": "购买数量必须是正整数（收到 %s）" % str(count)}
 	var wanted := StringName(String(item_id))
 	var loaded: Dictionary = ShopCatalogScript.load_catalog()
 	if not loaded.get("ok", false):

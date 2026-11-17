@@ -1049,11 +1049,14 @@ func _test_shop_buy() -> void:
 	_expect(by_id.has("mpPotion") and int(by_id["mpPotion"].limit_per_clear) == 2
 		and int(by_id["mpPotion"].remaining) == 2,
 		"shop: mpPotion 应限购 2 剩 2")
-	# 校验失败链（每条都不得有副作用）
+	# 校验失败链（每条都不得有副作用）；1.5/"2"/true 为真实调用——
+	# int 形参会在调用点截断/抛错，Variant 形参必须函数内拒绝
 	var before := JSON.stringify(session.get_profile())
 	_expect(not session.buy_item("notAThing", 1).ok, "shop: 未知物应拒绝")
-	_expect(str(session.buy_item("hpPotion", 0).error).contains("正整数"), "shop: count=0 应拒正整数")
-	_expect(not session.buy_item("hpPotion", -3).ok, "shop: 负数应拒绝")
+	for bad_count: Variant in [0, -3, 1.5, "2", true]:
+		var bad: Dictionary = session.buy_item("hpPotion", bad_count)
+		_expect(not bad.ok and str(bad.error).contains("正整数"),
+			"shop: 非法 count=%s 应拒正整数，实际 %s" % [str(bad_count), str(bad.error)])
 	var poor: Dictionary = session.buy_item("hpPotion", 1)
 	_expect(str(poor.error).contains("金币不足"), "shop: 0 金应报金币不足，实际 %s" % str(poor.error))
 	_expect(JSON.stringify(session.get_profile()) == before, "shop: 失败购买不得改变 state")
