@@ -16,6 +16,7 @@
       "def": 5,
       "res": 2,
       "mov": 5,
+      "growths": { "hp": 60, "mp": 15, "str": 40, "mag": 0, "skl": 40, "spd": 50, "luk": 30, "def": 25, "res": 15 },
       "image": "ui/portraits/class-swordsman.png",
       "defaultAnimation": null,
       "animations": []
@@ -35,6 +36,7 @@
       "def": 11,
       "res": 1,
       "mov": 4,
+      "growths": { "hp": 80, "mp": 15, "str": 40, "mag": 0, "skl": 25, "spd": 15, "luk": 15, "def": 55, "res": 5 },
       "image": "ui/portraits/class-knight.png",
       "defaultAnimation": "idle",
       "animations": [
@@ -65,6 +67,7 @@
       "def": 3,
       "res": 1,
       "mov": 5,
+      "growths": { "hp": 40, "mp": 15, "str": 35, "mag": 0, "skl": 55, "spd": 45, "luk": 35, "def": 20, "res": 15 },
       "image": "ui/portraits/class-archer.png",
       "defaultAnimation": null,
       "animations": []
@@ -84,6 +87,7 @@
       "def": 2,
       "res": 6,
       "mov": 5,
+      "growths": { "hp": 30, "mp": 40, "str": 0, "mag": 55, "skl": 40, "spd": 35, "luk": 30, "def": 10, "res": 50 },
       "image": "ui/portraits/class-mage.png",
       "defaultAnimation": null,
       "animations": []
@@ -103,6 +107,7 @@
       "def": 5,
       "res": 0,
       "mov": 5,
+      "growths": { "hp": 75, "mp": 15, "str": 60, "mag": 0, "skl": 30, "spd": 25, "luk": 20, "def": 25, "res": 0 },
       "image": "ui/portraits/class-berserker.png",
       "defaultAnimation": null,
       "animations": []
@@ -122,6 +127,7 @@
       "def": 3,
       "res": 2,
       "mov": 6,
+      "growths": { "hp": 40, "mp": 10, "str": 35, "mag": 0, "skl": 50, "spd": 65, "luk": 40, "def": 15, "res": 15 },
       "image": "ui/portraits/class-assassin.png",
       "defaultAnimation": null,
       "animations": []
@@ -141,6 +147,7 @@
       "def": 6,
       "res": 1,
       "mov": 7,
+      "growths": { "hp": 55, "mp": 15, "str": 40, "mag": 0, "skl": 35, "spd": 40, "luk": 25, "def": 40, "res": 10 },
       "image": "ui/portraits/class-lancer.png",
       "defaultAnimation": null,
       "animations": []
@@ -160,6 +167,7 @@
       "def": 2,
       "res": 8,
       "mov": 5,
+      "growths": { "hp": 40, "mp": 40, "str": 0, "mag": 20, "skl": 35, "spd": 35, "luk": 45, "def": 15, "res": 65 },
       "image": "ui/portraits/class-priest.png",
       "defaultAnimation": null,
       "animations": []

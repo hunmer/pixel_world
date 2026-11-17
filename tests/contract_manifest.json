@@ -24,11 +24,11 @@
     "battle-anim": 1,
     "ambient": 2,
     "animals": 4,
-    "battle-logic": 9,
+    "battle-logic": 10,
     "presentation": 7,
     "battle-3d-editor": 17,
     "battle-automation": 2,
-    "battle-presentation": 5,
+    "battle-presentation": 7,
     "battle-persistence": 2,
     "campaign": 2,
     "biome": 2,
@@ -1131,6 +1131,36 @@
       "parallel_safe": true,
       "fast_flag_safe": true,
       "evidence": "2026-11-16 实测直跑 exit=0 0.9s；覆盖 fixtures schema/非法拒绝、fixed 6 次不变量、sequential runs_override、A→B→A 同进程 RNG 隔离（digest A2==A）；CLI --runs 1000 容量模式 3.6s 1000 run 摘要唯一（/tmp/sim_contract/）"
+    },
+    {
+      "name": "profession_growths",
+      "path": "tests/profession_growths_contract.gd",
+      "group": "battle-logic",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-18 W3 登记（登记时未实跑，待 Lead 统一 headless 首跑确认）；覆盖：八职九键 growths 0–100 int/总和 250–300/八表互异、魔法职 str=0 mag>0 与物理职 str>0 mag=0 方向、create_random_unit 与 CampaignRoster.build_initial 新档逐键对表、growths_for 空 prof/部分缺键/越界夹取/非数字逐键回退 DEFAULT_GROWTHS、返回副本与两单位互不污染；与 battle_movement 同款 SceneTree headless 入口（PROFESSION_GROWTHS_CONTRACT_OK）"
+    },
+    {
+      "name": "level_up_presentation",
+      "path": "tests/level_up_presentation_contract.gd",
+      "group": "battle-presentation",
+      "tags": [],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-18 W1（battle-growth）实跑 exit=0, LEVEL_UP_PRESENTATION_CONTRACT_OK（10 组断言）；SceneTree headless 直跑，不加载 .tscn；含 2.5s 真实超时等待故不进 fast 白名单"
+    },
+    {
+      "name": "battle_levelup_flow",
+      "path": "tests/battle_levelup_flow_contract.gd",
+      "group": "battle-presentation",
+      "tags": ["scene"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-18 W3 按 Lead m00336 规格登记（登记时未实跑，统一验证阶段禁跑 Godot 待首跑）；SceneTree 契约但真实实例化 res://scenes/Battle.tscn + 真实 resolver/Sfx 主路径（非 mock），await 帧驱动，故 scene/不可并行/不进 fast；覆盖：普攻与技能末击双级/单级升级弹窗文本==exp.levels[].gains、ui_levelup 音效与 battle meta 双观测、skip 后 on_done/finished 恰一次、终局判定在弹窗之后、无升级零弹窗零音效（BATTLE_LEVELUP_FLOW_CONTRACT_OK）"
     }
   ],
   "probes": [

@@ -4,6 +4,8 @@
 ## 约定（与 TS 版一致）：
 ##   power 统一表示主攻击属性，apply_profession 按武器类型写入 str（物理）或 mag（魔法）。
 ##   agility → spd。attack_range 是职业固有属性，优先于武器射程。
+##   growths 键与运行时九键一致（hp,mp,str,mag,skl,spd,luk,def,res）：power→str/mag、
+##   agility→spd 映射同样适用于成长表；缺键逐键回退 DEFAULT_GROWTHS（见 _GROWTH_FALLBACK）。
 
 class_name ProfessionData
 extends RefCounted
@@ -13,6 +15,19 @@ static var _professions: Dictionary = {}    # { id -> ProfessionData dict }
 static var _list: Array = []                # [ProfessionData dict, ...]（保持 json 顺序）
 static var _default_id: StringName = &"swordsman"
 static var _loaded := false
+
+## 成长表固定九键（与 UnitData.growths 一致；mov 不参与升级掷骰）
+const GROWTH_KEYS := [
+	&"hp", &"mp", &"str", &"mag", &"skl", &"spd", &"luk", &"def", &"res",
+]
+
+## 职业 growths 缺键时的逐键回退，值与 UnitFactory.DEFAULT_GROWTHS 逐键一致
+##（契约 tests/profession_growths_contract.gd 锁定两者相等，勿单边改动）。
+## 本地持有副本以避免 professions.gd ↔ unit.gd 的 class_name 循环引用。
+const _GROWTH_FALLBACK := {
+	&"hp": 70, &"mp": 20, &"str": 45, &"mag": 15, &"skl": 45, &"spd": 45,
+	&"luk": 40, &"def": 30, &"res": 25,
+}
 
 
 static func _ensure_loaded() -> void:
@@ -61,6 +76,13 @@ static func _normalize(p: Dictionary) -> Dictionary:
 			else:
 				an[StringName(k)] = ad[k]
 		anims_out.append(an)
+	# growths 归一化：只保留九键内的数字项（夹取 0–100）；缺键交给 growths_for 回退
+	var growths_in: Dictionary = g.call("growths") if g.call("growths") is Dictionary else {}
+	var growths_out := {}
+	for k in GROWTH_KEYS:
+		var gv: Variant = growths_in.get(String(k), null)
+		if gv is int or gv is float:
+			growths_out[k] = clampi(int(gv), 0, 100)
 	return {
 		id = StringName(g.call("id")),
 		name = String(g.call("name")),
@@ -76,6 +98,7 @@ static func _normalize(p: Dictionary) -> Dictionary:
 		def = int(g.call("def")),
 		res = int(g.call("res")),
 		mov = int(g.call("mov")),
+		growths = growths_out,
 		image = String(g.call("image")),
 		defaultAnimation = StringName(g.call("defaultAnimation")) if g.call("defaultAnimation") != null else &"",
 		animations = anims_out,
@@ -126,8 +149,24 @@ static func random_profession(pool: Array = []) -> Dictionary:
 	return p[randi() % p.size()]
 
 
+## 职业成长表：返回九键齐全的**全新字典**。prof.growths 缺键/非法值逐键回退
+## _GROWTH_FALLBACK（= UnitFactory.DEFAULT_GROWTHS）；prof 无 growths（空 dict/旧数据）
+## 时返回纯默认表。与职业表/常量零共享引用，调用方可安全修改。
+static func growths_for(prof: Dictionary) -> Dictionary:
+	var src: Variant = prof.get(&"growths", null)
+	var table: Dictionary = src if src is Dictionary else {}
+	var out := {}
+	for k in GROWTH_KEYS:
+		var gv: Variant = table.get(k, null)
+		if gv is int or gv is float:
+			out[k] = clampi(int(gv), 0, 100)
+		else:
+			out[k] = _GROWTH_FALLBACK[k]
+	return out
+
+
 ## 把职业属性写入 UnitData（mutates unit dict）。
-## 对应 professions.ts 的 applyProfession。
+## 对应 professions.ts 的 applyProfession；同时写入九键职业成长表 growths。
 static func apply_profession(unit: Dictionary, prof: Dictionary) -> Dictionary:
 	var physical := WeaponData.is_physical(prof[&"weaponType"])
 	unit[&"classId"] = prof[&"id"]
@@ -145,6 +184,7 @@ static func apply_profession(unit: Dictionary, prof: Dictionary) -> Dictionary:
 	stats[&"res"] = prof[&"res"]
 	stats[&"mov"] = prof[&"mov"]
 	unit[&"hp"] = prof[&"hp"]
+	unit[&"growths"] = growths_for(prof)
 	return unit
 
 

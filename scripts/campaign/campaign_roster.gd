@@ -13,6 +13,7 @@ const BattlefieldLoaderScript := preload("res://scripts/core/battlefield_loader.
 const ItemDataScript := preload("res://scripts/core/items.gd")
 const CampaignConfigScript := preload("res://scripts/campaign/campaign_config.gd")
 const TerrainDataScript := preload("res://scripts/core/terrain.gd")
+const ProfessionDataScript := preload("res://scripts/core/professions.gd")
 
 
 ## 从首关战场确定性重建初始队伍。
@@ -56,6 +57,11 @@ static func build_initial(first_level_id: String) -> Dictionary:
 			entry["count"] = int(entry.count) + 1
 			inventory.append({"id": iid, "uses": int(raw_item.get("uses", 0))})
 		unit["items"] = []
+		# 新档成长分化：只写职业成长表（不重新 apply_profession，避免重置单位已带
+		# stats/武器/技能）；职业未知（手搓夹具缺 classId）时保留单位原 growths。
+		var prof_id := StringName(String(unit.get("classId", unit.get("class", ""))))
+		if prof_id != &"" and ProfessionDataScript.has_profession(prof_id):
+			unit["growths"] = ProfessionDataScript.growths_for(ProfessionDataScript.get_profession(prof_id))
 		_normalize_hub_unit(unit)
 		roster.append(unit)
 		templates.append(tmpl)

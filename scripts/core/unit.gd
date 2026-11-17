@@ -16,7 +16,9 @@
 class_name UnitFactory
 extends RefCounted
 
-## 默认成长率（与 TS 版 chapter1.ts / levelToChapter.ts 的 DEFAULT_GROWTHS 一致）
+## 默认成长率（与 TS 版 chapter1.ts / levelToChapter.ts 的 DEFAULT_GROWTHS 一致）。
+## 职业表配 growths 时由 ProfessionData.apply_profession 覆盖为职业表；
+## 职业缺键/未配置则逐键回退本表（勿改：旧档/夹具依赖此基线）。
 const DEFAULT_GROWTHS := {
 	&"hp": 70, &"mp": 20, &"str": 45, &"mag": 15, &"skl": 45, &"spd": 45,
 	&"luk": 40, &"def": 30, &"res": 25,
