@@ -175,6 +175,16 @@
       "evidence": "2026-11-18 headless exit=0 SHOP_CATALOG_CONTRACT_OK；覆盖真实货架装载（hpPotion80/antidote60/mpPotion120限2/shuriken100、id 归一 StringName）、entry_for 命中与未命中、parse_catalog 严格校验（版本整数语义/stock 数组/条目对象/id 空缺未知重复/price 必填非负整数/limit 非负整数缺省 0/空货架合法）"
     },
     {
+      "name": "battle_drop",
+      "path": "tests/battle_drop_contract.gd",
+      "group": "campaign",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-18 headless exit=0 BATTLE_DROP_CONTRACT_OK；9段覆盖 plains drop_table 数据形状/loader 严格校验（player侧拒绝/空表拒绝/未知id/重复id/count与weight语义）/resolver 击杀掉落 seed 重放一致与空ctx旧行为/重复致死不重掷/同id合并/独立RNG不扰全局流（探针对拍）/普攻反击技能投掷四类致死入口/automation runner 入口掉落与同seed重放一致/campaign 胜利入账 receipt.loot 与手工对拍+level_ups保留+落盘重载"
+    },
+    {
       "name": "action_anim",
       "path": "tests/action_anim_contract.gd",
       "group": "battle-anim",

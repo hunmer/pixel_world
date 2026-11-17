@@ -28,6 +28,8 @@ var _winner: StringName = &""
 var _battle_over: bool = false
 var _illegal: String = ""  # 非空 = exit 2 的定位信息
 var _limits: Dictionary = {}
+# 击杀掉落上下文（W4）：独立 RNG + pending 数组挂 _chapter（每次 run 重置防实例复用污染）
+var _drop_ctx: Dictionary = {}
 
 
 ## 执行场景，返回事件流与结果。同一 runner 实例可重复 run（状态全部重置）。
@@ -51,6 +53,12 @@ func _run(scenario: Dictionary) -> Dictionary:
 	_limits["stop_after_steps"] = int(scenario["stop_after_steps"])
 	# 1) RNG：runner 的全部随机判定来源（CombatSystem/SkillSystem/升级成长的 randf）
 	seed(int(scenario["seed"]))
+	# 1b) 击杀掉落 RNG（W4）：独立流（不消耗上面的全局 seed 契约），由场景 seed 派生；
+	#     pending_loot 每次 run 重置（chapter 字典可能随实例复用被共享）。
+	var drop_rng := RandomNumberGenerator.new()
+	drop_rng.seed = (int(scenario["seed"]) & 0x7fffffff) ^ 0x44424f50
+	_chapter["pending_loot"] = []
+	_drop_ctx = { "rng": drop_rng, "loot": _chapter["pending_loot"], "rolled": {} }
 	# 2) 战场构建（与 battle.gd _ready 相同：GridSystem + place 全部单位）
 	_grid = GridSystem.new(int(_chapter["width"]), int(_chapter["height"]), _chapter["map"])
 	# 2b) 建筑占用（无 buildings 键的旧文档为空表，安全跳过）
@@ -297,7 +305,7 @@ func _exec_skill(caster: Dictionary, payload: Dictionary, source: StringName) ->
 				_steps + 1, String(tid), String(skill_id)]
 			return
 		targets.append(t)
-	var outcome := Resolver.resolve_skill(caster, targets, skill_id)
+	var outcome := Resolver.resolve_skill(caster, targets, skill_id, _drop_ctx)
 	_emit_skill_event(caster, skill_id, outcome, source)
 
 
@@ -331,7 +339,7 @@ func _exec_item(user: Dictionary, payload: Dictionary, source: StringName) -> vo
 				_steps + 1, String(tid), String(item_id)]
 			return
 		targets.append(t)
-	var outcome := Resolver.resolve_item(user, targets, entry)
+	var outcome := Resolver.resolve_item(user, targets, entry, _drop_ctx)
 	_emit_item_event(user, item_id, entry, outcome, source)
 
 
@@ -359,11 +367,11 @@ func _exec_ai_decision(faction: StringName, u: Dictionary, decision: Dictionary)
 	var action: Dictionary = decision.get("action", {})
 	var atype: StringName = action.get("type", &"normal")
 	if atype == &"skill" and action.has(&"skillId"):
-		var outcome := Resolver.resolve_skill(u, action.get(&"targets", []), action[&"skillId"])
+		var outcome := Resolver.resolve_skill(u, action.get(&"targets", []), action[&"skillId"], _drop_ctx)
 		_emit_skill_event(u, action[&"skillId"], outcome, source)
 	elif atype == &"item" and action.has(&"itemId"):
 		var entry: Dictionary = action.get(&"entry", {})
-		var outcome := Resolver.resolve_item(u, action.get(&"targets", []), entry)
+		var outcome := Resolver.resolve_item(u, action.get(&"targets", []), entry, _drop_ctx)
 		_emit_item_event(u, entry.get(&"id", &""), entry, outcome, source)
 	elif decision.get("attackTarget", {}) is Dictionary and not (decision["attackTarget"] as Dictionary).is_empty() and not bool((decision["attackTarget"] as Dictionary).get(&"isDead", true)):
 		_resolve_and_emit_attack(u, decision["attackTarget"], source)
@@ -377,7 +385,7 @@ func _exec_ai_decision(faction: StringName, u: Dictionary, decision: Dictionary)
 
 ## 普攻结算 + 事件（resolver 与 battle.gd 共用同一规则实现）。
 func _resolve_and_emit_attack(attacker: Dictionary, defender: Dictionary, source: StringName) -> void:
-	var outcome := Resolver.resolve_attack(attacker, defender, _grid)
+	var outcome := Resolver.resolve_attack(attacker, defender, _grid, _drop_ctx)
 	var combat: Dictionary = outcome[&"combat"]
 	_emit({
 		"type": &"attack",

@@ -10,6 +10,8 @@
 - 第一关默认解锁，其后线性解锁；已通关的关卡可重复挑战，全通后仍可继续游戏。
 - 首次通关奖励 200 金币和 1 份现有恢复物品；再次通关奖励 50 金币。具体奖励由关卡配置管理，在地图展示。
 - 关卡奖励可另配掉落表 `loot_table`（`{id,count,weight}` 条目）与 `loot_rolls`（缺省 1，无表为 0）：胜利时用独立随机流掷骰（不触碰战斗全局随机流，战斗复放不受影响），掷出与固定奖励分开入账。无掉落表的关卡行为与旧版完全一致。
+- 敌方单位可配击杀掉落表 `drop_table`（`{id,count,weight}` 条目，仅敌方、表非空、id 须为已知物品且不重复）。普攻、反击、技能、道具四类致死入口都在共享结算器内对**新死亡**敌人各掷一次（重复致死不重掷），结果合并进 `chapter.pending_loot`（同 id 合并计数）。掷骰使用调用方注入的独立 `RandomNumberGenerator`，种子由「战场 id + 出征令牌」派生（automation 入口由场景 seed 派生），不消耗战斗全局随机流；无表敌人零随机消费。无表战场与旧版行为完全一致。
+- 胜利结算将 `chapter.pending_loot` 与关卡掉落表掷出合并入账（同 id 合并、每件满 uses、名称取物品表）；失败或放弃清空本次 `pending_loot`，库存恢复出征前精确值。
 - 胜利提交本次战斗实际获得的经验、等级、物品消耗、奖励和进度；结算收据以 `loot` 字段单独回报掉落（与 `items` 固定奖励、`level_ups` 升级差分并列，同 id 掉落合并计数）。返回营地全员复活、恢复 HP/MP，清除战斗临时状态。
 - 失败或主动放弃恢复出征前数据，不奖励、不扣除物品、不保留本次经验。
 - 创建、出征前、胜利后自动保存，营地提供立即保存。战斗中退出程序后，重新加载回到出征前营地，不恢复回合。
@@ -38,6 +40,7 @@
 ## 验证入口
 
 - `tests/campaign_contract.gd`：纯数据与持久化契约（28 组，含掉落表校验、胜利掉落 seed 复现/幂等/落盘重试、商店原子购买/限购周期/模板补齐），使用独立临时存档目录。
+- `tests/battle_drop_contract.gd`：击杀掉落契约（9 组：plains 示范数据形状、loader 严格校验、resolver seed 复现/重复致死不重掷/同 id 合并/独立 RNG 探针对拍、四类致死入口、automation 入口、campaign 胜利入账对拍与落盘重载）。
 - `tests/shop_catalog_contract.gd`：商店货架数据契约（真实货架 + 非法拒绝）。
 - `tests/campaign_ui_contract.gd`：存档、营地、关卡、详情/确认弹层、焦点与三档分辨率交互契约；逐层断言页面尺寸和滚动区，并验证首末关卡可见。
 - `res://tests/campaign_battle_integration_contract.tscn`：经 MCP `dbg_launch` 运行，断言根节点 `/root/CampaignBattleIntegration` 的 `finished=true`、`passed=true`。覆盖真实战斗结算、旧战场存档隔离、重复回调、失败回退，以及 Campaign → Battle → Campaign 的实际切换；测试存档与玩家档隔离。
@@ -50,6 +53,7 @@
 python3 tools/run_contracts.py --test campaign --no-warmup
 python3 tools/run_contracts.py --test campaign_ui --no-warmup
 python3 tools/run_contracts.py --test shop_catalog --no-warmup
+python3 tools/run_contracts.py --test battle_drop --no-warmup
 ```
 
 相关旧契约 `battle_save`、`battle_result_presentation`、`ui` 回归通过。最终默认入口另经 MCP 检查存档选择屏可见、三屏节点完整且 error/warning 为空。

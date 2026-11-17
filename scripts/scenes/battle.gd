@@ -116,6 +116,10 @@ var _save_notice := ""
 var _campaign_token := ""
 var _campaign_result: StringName = &""
 var _campaign_receipt: Dictionary = {}
+# 击杀掉落（W4）：独立 RNG + pending 数组（挂 chapter.pending_loot，胜利结算随收据入账；
+# 失败/撤退不入账——新一次出征构建新 chapter，pending 自然清空）。
+var _drop_rng: RandomNumberGenerator = null
+var _drop_ctx: Dictionary = {}
 
 
 ## _ready 装配序列（各拆分件内部顺序与拆分前逐句一致，勿调整调用顺序）：
@@ -163,6 +167,14 @@ func _configure_scene_args() -> void:
 	if not _campaign_token.is_empty():
 		_save_identity = ""
 		_save_state = {}
+	# 击杀掉落上下文（W4）：种子 = 战场 id + campaign token 的哈希 —— 独立随机流，
+	# 不消耗全局 randf（结算/经验契约不变），同一场战斗重放/保存重试掷出相同掉落；
+	# 无 drop_table 的敌人零随机消费。pending_loot 每次 进 战 斗 重 置（chapter 每次新建，
+	# 此处显式赋空防实例复用污染）。
+	_drop_rng = RandomNumberGenerator.new()
+	_drop_rng.seed = hash("%s|%s" % [String(chapter.get("id", "")), _campaign_token])
+	chapter["pending_loot"] = []
+	_drop_ctx = { "rng": _drop_rng, "loot": chapter["pending_loot"], "rolled": {} }
 
 
 ## _ready 拆分件②：网格 + 单位 + 回合 + 回合编排器 + 战旗持久化 + 托管接管。
@@ -1234,7 +1246,7 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 	var atk_us: UnitSprite3D = _unit_sprites[attacker.id]
 	var def_us: UnitSprite3D = _unit_sprites[defender.id]
 	# 结算（execute+死亡标志+hasActed+经验）走共享 resolver；演出在结算后播放。
-	var outcome := BattleActionResolver.resolve_attack(attacker, defender, grid)
+	var outcome := BattleActionResolver.resolve_attack(attacker, defender, grid, _drop_ctx)
 	var result: Dictionary = outcome[&"combat"]
 	var event: Dictionary = result.get(&"attack_event", {})
 	var options := turn_director.get_action_anim_options(attacker.id)
@@ -1290,7 +1302,7 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 	mode = Mode.ANIMATING
 	var atk_us: UnitSprite3D = _unit_sprites.get(caster.id)
 	# 结算（execute+死亡标志+hasActed+经验）走共享 resolver；演出在结算后播放。
-	var outcome := BattleActionResolver.resolve_skill(caster, targets, skill_id)
+	var outcome := BattleActionResolver.resolve_skill(caster, targets, skill_id, _drop_ctx)
 	var result: Dictionary = outcome[&"skill"]
 	var event: Dictionary = result.get(&"attack_event", {})
 	var options := turn_director.get_action_anim_options(caster.id)
@@ -1343,7 +1355,7 @@ func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> 
 	_set_unit_bars_visible(false)
 	var us: UnitSprite3D = _unit_sprites.get(user.id)
 	# 结算先行（execute+死亡标志+hasActed）走共享 resolver：伤害数值确定后才能预热对应 FX 变体。
-	var outcome := BattleActionResolver.resolve_item(user, targets, item_entry)
+	var outcome := BattleActionResolver.resolve_item(user, targets, item_entry, _drop_ctx)
 	var result: Dictionary = outcome[&"item"]
 	# 预热在抬升动画窗口内完成，投掷命中瞬间零冷启动。
 	_fx.prewarm_item_damage_fx(result)

@@ -20,9 +20,11 @@
 		{ "class": "priest", "name": "塞西尔", "level": 2, "x": 1, "y": 5 }
 	],
 	"enemyUnits": [
-		{ "class": "berserker", "name": "血斧", "level": 2, "x": 10, "y": 4 },
+		{ "class": "berserker", "name": "血斧", "level": 2, "x": 10, "y": 4,
+		  "drop_table": [ { "id": "hpPotion", "count": 1, "weight": 60 }, { "id": "shuriken", "count": 2, "weight": 40 } ] },
 		{ "class": "archer", "level": 2, "x": 11, "y": 3 },
 		{ "class": "lancer", "level": 2, "x": 10, "y": 5 },
-		{ "class": "assassin", "name": "影刃", "level": 3, "x": 11, "y": 2 }
+		{ "class": "assassin", "name": "影刃", "level": 3, "x": 11, "y": 2,
+		  "drop_table": [ { "id": "bomb", "count": 1, "weight": 100 } ] }
 	]
 }

@@ -51,6 +51,7 @@ extends RefCounted
 
 const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
 const BuildingLayoutScript = preload("res://scripts/core/building_layout.gd")
+const ItemDataScript = preload("res://scripts/core/items.gd")
 
 ## 战场 JSON 目录
 const BATTLEFIELD_DIR := "res://data/battlefields"
@@ -478,9 +479,63 @@ static func _parse_unit_entries(
 		if uname.is_empty():
 			uname = "%s%d" % [ProfessionData.profession_name(class_id), i + 1]
 		var uid := StringName("%s_%d" % [id_prefix, i])
-		units.append(UnitFactory.create_random_unit(
-			uid, uname, faction, level, pos, ProfessionData.get_profession(class_id)))
+		# 击杀掉落表（可选，仅敌方单位）：[{id,count,weight}]，loader 严格校验后挂到单位上；
+		# 击杀该敌人时由 BattleActionResolver 按表加权掷 1 件入 drop_ctx.loot（chapter.pending_loot）。
+		if rd.has("drop_table"):
+			var drop_res := _parse_drop_table(
+				rd["drop_table"], "%s 第 %d 项（%s）" % [label, i + 1, class_str], faction)
+			if not bool(drop_res.get("ok", false)):
+				return drop_res
+			var unit: Dictionary = UnitFactory.create_random_unit(
+				uid, uname, faction, level, pos, ProfessionData.get_profession(class_id))
+			if not (drop_res["table"] as Array).is_empty():
+				unit[&"drop_table"] = drop_res["table"]
+			units.append(unit)
+		else:
+			units.append(UnitFactory.create_random_unit(
+				uid, uname, faction, level, pos, ProfessionData.get_profession(class_id)))
 	return { "ok": true, "units": units }
+
+
+## 击杀掉落表解析（严格校验）：[{id,count,weight}] → [{id:StringName,count:int,weight:float}]。
+## - 仅敌方单位可声明（playerUnits/增援均按 faction 判定，增援天然是敌方）。
+## - id 必须存在于物品表；count 为 ≥1 整数；weight 为 >0 的整数或整浮点；表内 id 不重复。
+## - 表必须非空：不需要掉落就整段删除 drop_table（无表敌人零随机消费）。
+static func _parse_drop_table(raw, label: String, faction: StringName) -> Dictionary:
+	if faction != &"enemy":
+		return { "ok": false, "error": "%s 的 drop_table 仅支持敌方单位" % label }
+	if not (raw is Array):
+		return { "ok": false, "error": "%s 的 drop_table 必须是数组（[{id,count,weight}]）" % label }
+	var entries: Array = raw
+	if entries.is_empty():
+		return { "ok": false, "error": "%s 的 drop_table 不能为空（无需掉落请删除该字段）" % label }
+	var table: Array = []
+	var seen_ids: Dictionary = {}
+	for j in range(entries.size()):
+		var ev = entries[j]
+		if not (ev is Dictionary):
+			return { "ok": false, "error": "%s 的 drop_table[%d] 必须是对象" % [label, j] }
+		var e: Dictionary = ev
+		var id_str := String(e.get("id", ""))
+		var item_id := StringName(id_str)
+		if id_str.is_empty() or ItemDataScript.get_item(item_id).get("id", &"") != item_id:
+			return { "ok": false, "error": "%s 的 drop_table[%d] 引用未知物品 \"%s\"" % [label, j, id_str] }
+		if seen_ids.has(item_id):
+			return { "ok": false, "error": "%s 的 drop_table[%d] 物品 \"%s\" 重复" % [label, j, id_str] }
+		seen_ids[item_id] = true
+		var count := int(e.get("count", 1))
+		if not _is_json_int(e.get("count", 1)) or count < 1:
+			return { "ok": false, "error": "%s 的 drop_table[%d] 的 count 必须是 ≥1 的整数" % [label, j] }
+		var weight_val = e.get("weight", 1)
+		var ok_weight := false
+		if weight_val is int:
+			ok_weight = int(weight_val) > 0
+		elif weight_val is float:
+			ok_weight = is_finite(float(weight_val)) and float(weight_val) > 0.0
+		if not ok_weight:
+			return { "ok": false, "error": "%s 的 drop_table[%d] 的 weight 必须是 >0 的数字" % [label, j] }
+		table.append({ "id": item_id, "count": count, "weight": float(weight_val) })
+	return { "ok": true, "table": table }
 
 
 ## 增援波次解析：[{turn:N, units:[unitdef...], positions:[{x,y}...]}]。

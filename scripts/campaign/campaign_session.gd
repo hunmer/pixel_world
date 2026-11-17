@@ -426,7 +426,7 @@ func buy_item(item_id: String, count: Variant = 1) -> Dictionary:
 			"ok": false,
 			"error": "限购：本周期（已通关 %d 关）最多还能购买 %d 件 %s" % [clear_index, remaining, String(wanted)],
 		}
-	var cost := price * count
+	var cost := price * int(count)
 	if cost > int(_state.gold):
 		return {"ok": false, "error": "金币不足（需要 %d，持有 %d）" % [cost, int(_state.gold)]}
 	var max_uses := maxi(1, int(ItemDataScript.get_item(wanted).get("uses", 0)))
