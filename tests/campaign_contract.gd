@@ -40,6 +40,7 @@ func _run() -> void:
 	_cleanup_root()
 	_test_config()
 	_test_config_validation()
+	_test_config_loot()
 	_test_create_and_profile()
 	_test_list_profiles()
 	_test_prepare()
@@ -100,6 +101,12 @@ func _test_config() -> void:
 	var repeat: Dictionary = CampaignConfigScript.rewards_for(L0, false)
 	_expect(int(repeat.gold) == 50 and repeat.items.is_empty(), "config: 重复胜奖励应为 50 金币无物品")
 	_expect(CampaignConfigScript.level_index(L2) == 2, "config: ambush_reinforce 序号应为 2")
+	var first_loot: Dictionary = CampaignConfigScript.rewards_for(L0, true)
+	_expect(first_loot.loot_table.size() == 2 and int(first_loot.loot_rolls) == 1,
+		"config: plains 首胜掉落表应 2 条且掷 1 次")
+	var no_table: Dictionary = CampaignConfigScript.rewards_for(L3, true)
+	_expect(no_table.loot_table.is_empty() and int(no_table.loot_rolls) == 0,
+		"config: 无表关（mountain_pass 走全局）掉落应精确为空")
 
 
 func _test_config_validation() -> void:
@@ -126,6 +133,101 @@ func _test_config_validation() -> void:
 	for case in cases:
 		var res: Dictionary = CampaignConfigScript.parse_config(case.d)
 		_expect(not res.ok, "config_validation: %s 应被拒绝" % case.why)
+
+
+# ============================================================
+# 关卡掉落表（W1）：归一化/透传 + roll_loot 纯函数契约 + 非法配置拒绝
+# ============================================================
+
+func _test_config_loot() -> void:
+	# —— 归一化与透传 ——
+	var loaded: Dictionary = CampaignConfigScript.load_config(true)
+	_expect(loaded.ok, "loot: 配置应装载成功")
+	var plains: Dictionary = CampaignConfigScript.rewards_for(L0, true)
+	_expect(int(plains.gold) == 200 and plains.items.size() == 1,
+		"loot: 有表关固定奖励应保持（200 金 + 1×hpPotion）")
+	_expect(plains.loot_table.size() == 2 and int(plains.loot_rolls) == 1,
+		"loot: plains 首胜应 2 条表 1 次掷骰")
+	_expect(String(plains.loot_table[0].id) == "shuriken" and int(plains.loot_table[0].count) == 1,
+		"loot: 表条目应归一化保留 id/count")
+	var ambush: Dictionary = CampaignConfigScript.rewards_for(L2, true)
+	_expect(ambush.loot_table.size() == 3 and int(ambush.loot_rolls) == 1,
+		"loot: 有表未设 loot_rolls 应默认 1 次")
+	var mountain: Dictionary = CampaignConfigScript.rewards_for(L3, true)
+	_expect(int(mountain.gold) == 200 and mountain.loot_table.is_empty() and int(mountain.loot_rolls) == 0,
+		"loot: 无表关固定奖励照旧且掉落精确为空")
+
+	# —— roll_loot 纯函数 ——
+	var table: Array = [
+		{"id": "shuriken", "count": 1, "weight": 60.0},
+		{"id": "bomb", "count": 1, "weight": 40.0},
+	]
+	# 固定 seed 重放一致（掉落版确定性契约）
+	var rng_a := RandomNumberGenerator.new()
+	rng_a.seed = 42
+	var roll_a: Array = CampaignConfigScript.roll_loot(table, 1, rng_a)
+	var rng_b := RandomNumberGenerator.new()
+	rng_b.seed = 42
+	var roll_b: Array = CampaignConfigScript.roll_loot(table, 1, rng_b)
+	_expect(JSON.stringify(roll_a) == JSON.stringify(roll_b) and not roll_a.is_empty(),
+		"loot: 同 seed 同表同次数应重放一致")
+	# 单条表：任意 seed 下结果唯一（固定 seed 精确结果）
+	var solo: Array = [{"id": "hpPotion", "count": 2, "weight": 100.0}]
+	var rng_c := RandomNumberGenerator.new()
+	rng_c.seed = 7
+	var roll_solo: Array = CampaignConfigScript.roll_loot(solo, 3, rng_c)
+	_expect(roll_solo.size() == 1 and String(roll_solo[0].id) == "hpPotion" and int(roll_solo[0].count) == 6,
+		"loot: 单条表 3 次应精确合并为 1 条 count=6")
+	# 多次抽样总量不变量
+	var rng_d := RandomNumberGenerator.new()
+	rng_d.seed = 99
+	var roll_many: Array = CampaignConfigScript.roll_loot(table, 8, rng_d)
+	var total_count := 0
+	for e: Dictionary in roll_many:
+		total_count += int(e.count)
+	_expect(total_count == 8 and roll_many.size() <= 2,
+		"loot: 8 次单 count 抽样总量应恰为 8 且按 id 合并")
+	# 0 次 / 空表：完全不触碰 rng 状态
+	var rng_e := RandomNumberGenerator.new()
+	rng_e.seed = 5
+	var state_before: int = rng_e.state
+	_expect(CampaignConfigScript.roll_loot(table, 0, rng_e).is_empty(), "loot: 0 次应返回空")
+	_expect(CampaignConfigScript.roll_loot([], 3, rng_e).is_empty(), "loot: 空表应返回空")
+	_expect(rng_e.state == state_before, "loot: 空表/0 次不得消耗 rng 状态")
+	# 不改输入
+	var table_snapshot := JSON.stringify(table)
+	CampaignConfigScript.roll_loot(table, 4, rng_e)
+	_expect(JSON.stringify(table) == table_snapshot, "loot: roll_loot 不得修改入参表")
+
+	# —— 非法配置拒绝 ——
+	var mk := func(loot_branch: Dictionary) -> Dictionary:
+		return {
+			"version": 1,
+			"levels": [{"id": "a", "name": "A", "source": "res://data/battlefields/plains_skirmish.json"}],
+			"rewards": {
+				"first_clear": loot_branch,
+				"repeat": {"gold": 1, "items": []},
+			},
+		}
+	var bad_cases := [
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": [{"id": "no_such_item", "count": 1, "weight": 1}]}), "why": "掉落未知物品"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": [{"id": "hpPotion", "count": 0, "weight": 1}]}), "why": "掉落 count<1"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": [{"id": "hpPotion", "count": 1.5, "weight": 1}]}), "why": "掉落 count 非整数"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": [{"id": "hpPotion", "count": 1, "weight": 0}]}), "why": "掉落 weight=0"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": [{"id": "hpPotion", "count": 1, "weight": -3.0}]}), "why": "掉落 weight 负数"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": [{"id": "hpPotion", "count": 1, "weight": "60"}]}), "why": "掉落 weight 字符串"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": [
+			{"id": "hpPotion", "count": 1, "weight": 1}, {"id": "hpPotion", "count": 1, "weight": 1}]}), "why": "掉落 id 重复"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": [{"id": "hpPotion", "count": 1, "weight": 1}, "x"]}), "why": "掉落条目非对象"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_table": "x"}), "why": "loot_table 非数组"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_rolls": -1}), "why": "loot_rolls 负数"},
+		{"d": mk.call({"gold": 1, "items": [], "loot_rolls": 1.5}), "why": "loot_rolls 非整数"},
+	]
+	for case in bad_cases:
+		_expect(not CampaignConfigScript.parse_config(case.d).ok, "loot: %s 应被拒绝" % case.why)
+	# 合法：无表但显式 loot_rolls 0
+	var ok_no_table: Dictionary = CampaignConfigScript.parse_config(mk.call({"gold": 1, "items": [], "loot_rolls": 0}))
+	_expect(ok_no_table.ok, "loot: 无表显式 rolls 0 应合法")
 
 
 # ============================================================

@@ -1,0 +1,9 @@
+{
+	"version": 1,
+	"stock": [
+		{ "id": "hpPotion", "price": 80, "limit_per_clear": 0 },
+		{ "id": "antidote", "price": 60, "limit_per_clear": 0 },
+		{ "id": "mpPotion", "price": 120, "limit_per_clear": 2 },
+		{ "id": "shuriken", "price": 100, "limit_per_clear": 0 }
+	]
+}

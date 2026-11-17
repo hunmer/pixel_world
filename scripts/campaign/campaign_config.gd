@@ -151,7 +151,9 @@ static func first_level_id() -> String:
 
 
 ## 解析某关的奖励。first_clear=true 用首胜奖励，否则用重复奖励。
-## 返回 {gold:int, items:[{id:StringName, name:String, count:int}]}。
+## 返回 {gold:int, items:[{id:StringName, name:String, count:int}],
+##       loot_table:[{id:StringName, count:int, weight:float}], loot_rolls:int}。
+## 无掉落表关卡 loot_table=[] 且 loot_rolls=0（现网固定奖励行为精确不变）。
 static func rewards_for(level_id: String, first_clear: bool) -> Dictionary:
 	var level := get_level(level_id)
 	var base: Dictionary = {}
@@ -171,7 +173,68 @@ static func rewards_for(level_id: String, first_clear: bool) -> Dictionary:
 			"name": ItemDataScript.item_name(item_id),
 			"count": count,
 		})
-	return {"gold": maxi(0, _as_int(branch.get("gold", 0))), "items": items}
+	var loot_table: Array = []
+	for raw_entry: Variant in branch.get("loot_table", []):
+		var entry_id := str(raw_entry.get("id", ""))
+		if entry_id == "":
+			continue
+		loot_table.append({
+			"id": StringName(entry_id),
+			"count": maxi(1, _as_int(raw_entry.get("count", 1))),
+			"weight": maxf(0.0, float(raw_entry.get("weight", 1.0))),
+		})
+	return {
+		"gold": maxi(0, _as_int(branch.get("gold", 0))),
+		"items": items,
+		"loot_table": loot_table,
+		"loot_rolls": maxi(0, _as_int(branch.get("loot_rolls", 0))),
+	}
+
+
+## 纯函数掉落掷骰：对 loot_table 做 rolls 次有放回加权抽样，同 id 结果合并，
+## 输出按表内首次出现顺序。空表或 rolls<=0 时立即返回空数组且**完全不触碰 rng**
+## （无表关卡不得消耗任何随机数）；不修改入参。
+## 返回 [{id:StringName, name:String, count:int}]，count 为各次抽样条目 count 之和。
+static func roll_loot(table: Array, rolls: int, rng: RandomNumberGenerator) -> Array:
+	if table.is_empty() or rolls <= 0:
+		return []
+	var order: Array = []
+	var weights: Array = []
+	var total := 0.0
+	for raw_entry: Variant in table:
+		var weight := float(raw_entry.get("weight", 1.0))
+		if not is_finite(weight) or weight <= 0.0:
+			continue
+		order.append(raw_entry)
+		weights.append(weight)
+		total += weight
+	if total <= 0.0:
+		return []
+	var counts := {}
+	for _i in range(rolls):
+		var pick := rng.randf() * total
+		var acc := 0.0
+		var chosen: Variant = null
+		for j in range(order.size()):
+			acc += weights[j]
+			if pick < acc:
+				chosen = order[j]
+				break
+		if chosen == null:
+			chosen = order[order.size() - 1]
+		var chosen_id := str(chosen.get("id", ""))
+		counts[chosen_id] = int(counts.get(chosen_id, 0)) + maxi(1, int(chosen.get("count", 1)))
+	var out: Array = []
+	for raw_entry: Variant in order:
+		var entry_id := str(raw_entry.get("id", ""))
+		if counts.has(entry_id):
+			out.append({
+				"id": StringName(entry_id),
+				"name": ItemDataScript.item_name(entry_id),
+				"count": int(counts[entry_id]),
+			})
+			counts.erase(entry_id)
+	return out
 
 
 static func _validate_rewards(rewards: Dictionary, where: String) -> Dictionary:
@@ -197,7 +260,52 @@ static func _validate_rewards(rewards: Dictionary, where: String) -> Dictionary:
 			if count < 1:
 				return {"ok": false, "error": "%s.%s.items 条目 count 必须 >= 1" % [where, branch_name]}
 			items.append({"id": item_id, "count": count})
-		return {"ok": true, "error": "", "rewards": {"gold": gold, "items": items}}
+		# —— 关卡掉落表（W1）：缺省无掉落；有表未设 loot_rolls 默认 1 次 ——
+		var raw_loot_table: Variant = branch.get("loot_table", [])
+		if raw_loot_table is not Array:
+			return {"ok": false, "error": "%s.%s.loot_table 必须是数组" % [where, branch_name]}
+		var loot_table: Array = []
+		var seen_loot_ids := {}
+		for raw_entry: Variant in raw_loot_table:
+			if raw_entry is not Dictionary:
+				return {"ok": false, "error": "%s.%s.loot_table 条目必须是对象" % [where, branch_name]}
+			var loot_id := str(raw_entry.get("id", ""))
+			if loot_id == "":
+				return {"ok": false, "error": "%s.%s.loot_table 条目缺少 id" % [where, branch_name]}
+			if ItemDataScript.get_item(loot_id).get("id", &"") != StringName(loot_id):
+				return {"ok": false, "error": "%s.%s.loot_table 引用未知物品：%s" % [where, branch_name, loot_id]}
+			if seen_loot_ids.has(loot_id):
+				return {"ok": false, "error": "%s.%s.loot_table 条目 id 重复：%s" % [where, branch_name, loot_id]}
+			seen_loot_ids[loot_id] = true
+			var loot_count: Variant = raw_entry.get("count", 1)
+			if not _is_json_int(loot_count) or int(loot_count) < 1:
+				return {"ok": false, "error": "%s.%s.loot_table 条目 count 必须是 >= 1 的整数" % [where, branch_name]}
+			var loot_weight: Variant = raw_entry.get("weight", 1)
+			var weight_ok: bool = (loot_weight is int and loot_weight > 0) \
+				or (loot_weight is float and is_finite(loot_weight) and loot_weight > 0.0)
+			if not weight_ok:
+				return {"ok": false, "error": "%s.%s.loot_table 条目 weight 必须是有限正数" % [where, branch_name]}
+			loot_table.append({
+				"id": loot_id,
+				"count": int(loot_count),
+				"weight": float(loot_weight),
+			})
+		var loot_rolls := 0
+		if branch.has("loot_rolls"):
+			var rolls_raw: Variant = branch.get("loot_rolls")
+			if not _is_json_int(rolls_raw) or int(rolls_raw) < 0:
+				return {"ok": false, "error": "%s.%s.loot_rolls 必须是 >= 0 的整数" % [where, branch_name]}
+			loot_rolls = int(rolls_raw)
+		elif not loot_table.is_empty():
+			loot_rolls = 1
+		if loot_table.is_empty():
+			loot_rolls = 0
+		return {"ok": true, "error": "", "rewards": {
+			"gold": gold,
+			"items": items,
+			"loot_table": loot_table,
+			"loot_rolls": loot_rolls,
+		}}
 
 	var first: Dictionary = check_branch.call(rewards.get("first_clear", {}), "first_clear")
 	if not first.ok:
@@ -220,3 +328,13 @@ static func _as_int(value: Variant) -> int:
 	if value is String and value.is_valid_int():
 		return int(value)
 	return 0
+
+
+## JSON 整数语义判定（数字必须是整数值：拒绝 1.5/字符串/布尔），
+## 与 battlefield_loader._is_json_int 同模式，供 loot 次数等严格校验复用。
+static func _is_json_int(v: Variant) -> bool:
+	if v is int:
+		return true
+	if v is float:
+		return is_finite(v) and float(int(v)) == v
+	return false

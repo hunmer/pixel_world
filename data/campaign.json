@@ -4,17 +4,75 @@
 		{
 			"id": "plains_skirmish",
 			"name": "平原前哨战",
-			"source": "res://data/battlefields/plains_skirmish.json"
+			"source": "res://data/battlefields/plains_skirmish.json",
+			"rewards": {
+				"first_clear": {
+					"gold": 200,
+					"items": [{ "id": "hpPotion", "count": 1 }],
+					"loot_table": [
+						{ "id": "shuriken", "count": 1, "weight": 60 },
+						{ "id": "bomb", "count": 1, "weight": 40 }
+					],
+					"loot_rolls": 1
+				},
+				"repeat": {
+					"gold": 50,
+					"items": [],
+					"loot_table": [
+						{ "id": "hpPotion", "count": 1, "weight": 100 }
+					],
+					"loot_rolls": 1
+				}
+			}
 		},
 		{
 			"id": "river_crossing",
 			"name": "渡河攻坚战",
-			"source": "res://data/battlefields/river_crossing.json"
+			"source": "res://data/battlefields/river_crossing.json",
+			"rewards": {
+				"first_clear": {
+					"gold": 220,
+					"items": [{ "id": "mpPotion", "count": 1 }],
+					"loot_table": [
+						{ "id": "antidote", "count": 1, "weight": 50 },
+						{ "id": "hpPotion", "count": 1, "weight": 30 },
+						{ "id": "powerRing", "count": 1, "weight": 20 }
+					],
+					"loot_rolls": 2
+				},
+				"repeat": {
+					"gold": 60,
+					"items": [],
+					"loot_table": [
+						{ "id": "antidote", "count": 1, "weight": 60 },
+						{ "id": "hpPotion", "count": 1, "weight": 40 }
+					],
+					"loot_rolls": 1
+				}
+			}
 		},
 		{
 			"id": "ambush_reinforce",
 			"name": "峡谷伏击·增援",
-			"source": "res://data/battlefields/ambush_reinforce.json"
+			"source": "res://data/battlefields/ambush_reinforce.json",
+			"rewards": {
+				"first_clear": {
+					"gold": 240,
+					"items": [{ "id": "mpPotion", "count": 1 }],
+					"loot_table": [
+						{ "id": "bomb", "count": 1, "weight": 35 },
+						{ "id": "shuriken", "count": 1, "weight": 35 },
+						{ "id": "armorRing", "count": 1, "weight": 30 }
+					]
+				},
+				"repeat": {
+					"gold": 60,
+					"items": [],
+					"loot_table": [
+						{ "id": "shuriken", "count": 1, "weight": 100 }
+					]
+				}
+			}
 		},
 		{
 			"id": "mountain_pass",
