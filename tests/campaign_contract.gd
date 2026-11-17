@@ -17,6 +17,7 @@ const CodecScript := preload("res://scripts/campaign/campaign_profile_codec.gd")
 const StoreScript := preload("res://scripts/campaign/campaign_profile_store.gd")
 const RosterScript := preload("res://scripts/campaign/campaign_roster.gd")
 const BattlefieldLoaderScript := preload("res://scripts/core/battlefield_loader.gd")
+const ResolverScript := preload("res://scripts/battle/battle_action_resolver.gd")
 
 const ROOT := "user://campaign_contract_tmp"
 
@@ -62,6 +63,11 @@ func _run() -> void:
 	_test_bak_heal()
 	_test_recent_marker()
 	_test_configure_store_dir()
+	_test_shop_buy()
+	_test_shop_limit_cycle()
+	_test_victory_loot()
+	_test_victory_loot_pending()
+	_test_victory_loot_persist_retry()
 	_cleanup_root()
 	for raw_session in _sessions:
 		var node := raw_session as Node
@@ -1014,6 +1020,330 @@ func _test_configure_store_dir() -> void:
 	var back: Array = session.list_profiles()
 	_expect(back.size() == 1, "dir: 切回原目录档案应在，实际 %d" % back.size())
 	_expect(str(back[0].name) == "隔离队", "dir: 原目录档案未丢失")
+
+
+# ============================================================
+# 商店购买（W2）：原子性 / 失败无副作用 / 模板补齐 / 限购周期
+# ============================================================
+
+func _test_shop_buy() -> void:
+	# 无档拒绝
+	var session := _begin("shop_buy")
+	var no_profile := session.list_shop()
+	_expect(not no_profile.ok, "shop: 无档 list_shop 应失败")
+	var no_buy: Dictionary = session.buy_item("hpPotion", 1)
+	_expect(not no_buy.ok, "shop: 无档购买应失败")
+	# 创建档（gold=0）
+	session.create_profile("采购队")
+	var listed: Dictionary = session.list_shop()
+	_expect(listed.ok, "shop: list_shop 应成功")
+	_expect(int(listed.gold) == 0 and int(listed.clear_index) == 0, "shop: 新档 gold=0 周期=0")
+	var stock: Array = listed.stock
+	_expect(stock.size() == 4, "shop: 货架应 4 条，实际 %d" % stock.size())
+	var by_id := {}
+	for e in stock:
+		by_id[String(e.id)] = e
+	_expect(by_id.has("hpPotion") and int(by_id["hpPotion"].price) == 80
+		and int(by_id["hpPotion"].limit_per_clear) == 0 and int(by_id["hpPotion"].remaining) == -1,
+		"shop: hpPotion 应 80 金不限购（remaining -1）")
+	_expect(by_id.has("mpPotion") and int(by_id["mpPotion"].limit_per_clear) == 2
+		and int(by_id["mpPotion"].remaining) == 2,
+		"shop: mpPotion 应限购 2 剩 2")
+	# 校验失败链（每条都不得有副作用）
+	var before := JSON.stringify(session.get_profile())
+	_expect(not session.buy_item("notAThing", 1).ok, "shop: 未知物应拒绝")
+	_expect(str(session.buy_item("hpPotion", 0).error).contains("正整数"), "shop: count=0 应拒正整数")
+	_expect(not session.buy_item("hpPotion", -3).ok, "shop: 负数应拒绝")
+	var poor: Dictionary = session.buy_item("hpPotion", 1)
+	_expect(str(poor.error).contains("金币不足"), "shop: 0 金应报金币不足，实际 %s" % str(poor.error))
+	_expect(JSON.stringify(session.get_profile()) == before, "shop: 失败购买不得改变 state")
+	# 首胜得 200 金后购买
+	_win_once(session, L0)
+	var rich: Dictionary = session.list_shop()
+	_expect(int(rich.gold) == 200, "shop: 首胜后应 200 金")
+	var hp_entry: Dictionary = {}
+	for e in rich.stock:
+		if String(e.id) == "hpPotion":
+			hp_entry = e
+	_expect(int(hp_entry.affordable_count) == 2 and int(hp_entry.max_buyable) == 2,
+		"shop: 200 金 hpPotion 应可购 2，实际 %s" % str([hp_entry.affordable_count, hp_entry.max_buyable]))
+	_expect(not session.buy_item("hpPotion", 3).ok, "shop: 超额购买（240>200）应金币不足")
+	var template_hp_before := _template_entries(session, "hpPotion")
+	var hp_pre := _count_items(session.get_profile().inventory, "hpPotion")
+	var bought: Dictionary = session.buy_item("hpPotion", 2)
+	_expect(bought.ok, "shop: 买 2×hpPotion 应成功，实际 %s" % str(bought.error))
+	_expect(int(bought.total_cost) == 160 and int(bought.gold) == 40, "shop: 应扣 160 剩 40")
+	var inv: Array = session.get_profile().inventory
+	_expect(_count_items(inv, "hpPotion") == hp_pre + 2,
+		"shop: 库存 hpPotion 应恰 +2，实际 %s" % _inv_str(inv))
+	var hp_tail_full := 0
+	for idx in range(inv.size() - 1, -1, -1):
+		if String((inv[idx] as Dictionary).get("id", "")) == "hpPotion":
+			if int((inv[idx] as Dictionary).uses) == 3:
+				hp_tail_full += 1
+			else:
+				break
+	_expect(hp_tail_full >= 2, "shop: 买入的 2 件 hpPotion 应满充 uses=3（尾部），实际 %s" % _inv_str(inv))
+	if template_hp_before > 0:
+		_expect(_template_entries(session, "hpPotion") == template_hp_before,
+			"shop: hpPotion 已被模板覆盖，购买不得重复追加")
+	else:
+		_expect(_template_entries(session, "hpPotion") == 1,
+			"shop: hpPotion 未覆盖时购买应补模板 1 条")
+	# 模板补齐：买新物品给队长行追加 {id,1}；已覆盖再买不重复
+	_win_once(session, L0)
+	_win_once(session, L0)
+	_expect(int(session.get_profile().gold) == 140, "shop: 前置凑钱应 140")
+	_expect(_template_entries(session, "shuriken") == 0, "shop: 前置 shuriken 应无模板")
+	var bought_shuriken: Dictionary = session.buy_item("shuriken", 1)
+	_expect(bought_shuriken.ok, "shop: 买 shuriken 应成功")
+	_expect(_template_entries(session, "shuriken") == 1, "shop: 买新物品应补模板 1 条")
+	_win_once(session, L0)
+	_win_once(session, L0)
+	var bought_again: Dictionary = session.buy_item("shuriken", 1)
+	_expect(bought_again.ok, "shop: 二买 shuriken 应成功")
+	_expect(_template_entries(session, "shuriken") == 1, "shop: 已覆盖物品不得重复追加模板")
+	# 出征挂起时拒绝购买
+	var prepared: Dictionary = session.prepare_battle(L0)
+	_expect(prepared.ok, "shop: 前置出征应成功")
+	_expect(str(session.buy_item("hpPotion", 1).error).contains("战斗进行中"),
+		"shop: 出征挂起应拒绝购买")
+	session.settle_battle(str(prepared.token), &"lose", {})
+	_win_once(session, L0)
+	_win_once(session, L0)
+	_expect(session.buy_item("hpPotion", 1).ok, "shop: 战斗结束后购买应恢复")
+	# 落盘失败：未扣费、state 不变；修复后重试成功
+	_win_once(session, L0)
+	var gold_before_fail := int(session.get_profile().gold)
+	_expect(gold_before_fail >= 80, "shop: 前置应有购买资金，实际 %d" % gold_before_fail)
+	var faulty := FaultyStore.new()
+	faulty.base_dir = session.base_dir
+	session._store = faulty
+	var failed_buy: Dictionary = session.buy_item("hpPotion", 1)
+	_expect(not failed_buy.ok and str(failed_buy.error).contains("落盘失败"), "shop: 落盘失败应报错")
+	_expect(int(session.get_profile().gold) == gold_before_fail, "shop: 落盘失败不得扣费")
+	faulty.fail_saves = false
+	_expect(session.buy_item("hpPotion", 1).ok, "shop: 修复后重试应成功")
+	# 重载：限购计数与库存持久（与 session 终态精确对拍，规避随机掷落影响）
+	var hp_final := _count_items(session.get_profile().inventory, "hpPotion")
+	var shuriken_final := _count_items(session.get_profile().inventory, "shuriken")
+	var fresh := _mk_session()
+	fresh.load_profile(str(session.get_profile().id))
+	var reloaded: Array = fresh.get_profile().inventory
+	_expect(_count_items(reloaded, "shuriken") == shuriken_final
+		and _count_items(reloaded, "hpPotion") == hp_final,
+		"shop: 重载库存应与终态一致（%d hp / %d shuriken），实际 %s"
+			% [hp_final, shuriken_final, _inv_str(reloaded)])
+	var purchases: Dictionary = fresh._state.shop_purchases
+	_expect(int(purchases.clear_index) == 1 and int(purchases.counts.get("hpPotion", 0)) == 4
+		and int(purchases.counts.get("shuriken", 0)) == 2,
+		"shop: 重载限购记录应持久（clear1 hp4 shuriken2），实际 %s" % str(purchases))
+	# 买的物品真实可用：部署进战斗并由 Resolver 结算
+	var deploy_prepared: Dictionary = fresh.prepare_battle(L0)
+	_expect(deploy_prepared.ok, "shop: 部署出征应成功，实际 %s" % str(deploy_prepared.error))
+	if deploy_prepared.ok:
+		var units: Array = deploy_prepared.chapter.playerUnits
+		var carried := 0
+		for it in units[0].items:
+			if String(it.id) == "shuriken":
+				carried += 1
+		_expect(carried >= 1, "shop: 队长应实际带上新买的 shuriken（模板补齐 + FIFO 补给）")
+		var enemy: Dictionary = deploy_prepared.chapter.enemyUnits[0]
+		var enemy_hp := int(enemy.hp)
+		var shuriken_entry := {}
+		for it in units[0].items:
+			if String(it.id) == "shuriken":
+				shuriken_entry = it
+				break
+		if not shuriken_entry.is_empty():
+			var used: Dictionary = ResolverScript.resolve_item(units[0], [enemy], shuriken_entry)
+			_expect(used.has("item"), "shop: resolve_item 应可结算购买的 shuriken")
+			_expect(int(enemy.hp) < enemy_hp, "shop: shuriken 应造成实际伤害 %d→%d" % [enemy_hp, int(enemy.hp)])
+
+
+func _template_entries(session: SessionScript, iid: String) -> int:
+	var n := 0
+	var state: Dictionary = session._state
+	for row: Variant in state.get("carry_templates", []):
+		if row is not Array:
+			continue
+		for entry: Variant in row:
+			if entry is Dictionary and String((entry as Dictionary).get("id", "")) == iid:
+				n += 1
+	return n
+
+
+## 限购周期：completed_levels.size() 推进（新关首通）才刷新；repeat 与重载不刷新。
+func _test_shop_limit_cycle() -> void:
+	var session := _begin("shop_limit")
+	session.create_profile("限购队")
+	_win_once(session, L0)
+	_win_once(session, L0)
+	_win_once(session, L0)
+	_expect(int(session.get_profile().gold) == 300, "limit: 前置应 300 金")
+	# 超 limit 拒绝（0+3 > 2）
+	var over: Dictionary = session.buy_item("mpPotion", 3)
+	_expect(str(over.error).contains("限购"), "limit: 超限购应拒绝，实际 %s" % str(over.error))
+	# 顶格买 2 → remaining 0
+	var bought: Dictionary = session.buy_item("mpPotion", 2)
+	_expect(bought.ok and int(bought.remaining) == 0, "limit: 顶格购买后 remaining 应 0")
+	var listed: Dictionary = session.list_shop()
+	for e in listed.stock:
+		if String(e.id) == "mpPotion":
+			_expect(int(e.remaining) == 0 and int(e.max_buyable) == 0,
+				"limit: 售罄后 remaining/max_buyable 应 0")
+	_expect(str(session.buy_item("mpPotion", 1).error).contains("限购"), "limit: 售罄再买应拒绝")
+	_expect(int(session.get_profile().gold) == 60, "limit: 应扣 240 剩 60")
+	# 重载：计数持久、仍售罄
+	var fresh := _mk_session()
+	fresh.load_profile(str(session.get_profile().id))
+	for e in fresh.list_shop().stock:
+		if String(e.id) == "mpPotion":
+			_expect(int(e.remaining) == 0, "limit: 重载后仍应售罄（计数持久）")
+	# repeat 通关：completed 不变 → 不刷新
+	_win_once(fresh, L0)
+	for e in fresh.list_shop().stock:
+		if String(e.id) == "mpPotion":
+			_expect(int(e.remaining) == 0, "limit: repeat 通关不得刷新额度")
+	# 首通新关：周期推进 → 额度重置
+	_win_once(fresh, L1)
+	var refreshed: Dictionary = fresh.list_shop()
+	_expect(int(refreshed.clear_index) == 2, "limit: 首通后周期应为 2")
+	for e in refreshed.stock:
+		if String(e.id) == "mpPotion":
+			_expect(int(e.remaining) == 2, "limit: 新关首通应刷新限购额度")
+	var rebuy: Dictionary = fresh.buy_item("mpPotion", 1)
+	_expect(rebuy.ok, "limit: 新周期购买应成功，实际 %s" % str(rebuy.error))
+	var purchases: Dictionary = fresh._state.shop_purchases
+	_expect(int(purchases.clear_index) == 2 and int(purchases.counts.get("mpPotion", 0)) == 1
+		and not purchases.counts.has("hpPotion"),
+		"limit: 周期推进后计数应重起（clear_index=2 mp=1），实际 %s" % str(purchases))
+
+
+## 胜利掉落：seed 精确复现 / pending 合并 / 固定奖不污染 / 幂等 / 落盘
+func _test_victory_loot() -> void:
+	var session := _begin("loot")
+	session.create_profile("拾荒队")
+	# 无表关（L3）行为与现网一致：receipt.loot == []
+	_win_once(session, L0)
+	_win_once(session, L1)
+	_win_once(session, L2)
+	var no_table: Dictionary = session.prepare_battle(L3)
+	_expect(no_table.ok, "loot: L3 出征应成功，实际 %s" % str(no_table.error))
+	if no_table.ok:
+		var r3: Dictionary = session.settle_battle(str(no_table.token), &"win", no_table.chapter)
+		_expect(r3.ok and (r3.loot as Array).is_empty(), "loot: 无表关 receipt.loot 应为空数组")
+	# 有表关（L0 首胜）：注入 loot_seed 精确对拍 roll_loot
+	var seed_session := _begin("loot_seed")
+	seed_session.create_profile("对拍队")
+	var prepared: Dictionary = seed_session.prepare_battle(L0)
+	_expect(prepared.ok, "loot: L0 出征应成功")
+	seed_session._attempt["loot_seed"] = 42
+	var rewards: Dictionary = CampaignConfigScript.rewards_for(L0, true)
+	var rng_e := RandomNumberGenerator.new()
+	rng_e.seed = 42
+	var expected: Array = CampaignConfigScript.roll_loot(rewards.loot_table, int(rewards.loot_rolls), rng_e)
+	var chapter: Dictionary = prepared.chapter
+	chapter["pending_loot"] = [{"id": "shuriken", "count": 2}]
+	var receipt: Dictionary = seed_session.settle_battle(str(prepared.token), &"win", chapter)
+	_expect(receipt.ok, "loot: 胜利结算应成功，实际 %s" % str(receipt.error))
+	if not receipt.ok:
+		return
+	# 期望 = 掷出（seed 42 确定性）+ pending shuriken×2 同 id 合并
+	var expect_counts := {}
+	for e in expected:
+		expect_counts[String(e.id)] = int(e.count)
+	expect_counts["shuriken"] = int(expect_counts.get("shuriken", 0)) + 2
+	var loot: Array = receipt.loot
+	var loot_counts := {}
+	for e in loot:
+		loot_counts[String(e.id)] = int(e.count)
+	_expect(JSON.stringify(loot_counts) == JSON.stringify(expect_counts),
+		"loot: seed42 掉落应精确对拍 roll_loot+pending，期望 %s 实际 %s" % [str(expect_counts), str(loot_counts)])
+	for e in loot:
+		var max_uses := 4 if String(e.id) == "shuriken" else 2
+		_expect(int(e.uses) == max_uses, "loot: %s 应满充 uses=%d" % [String(e.id), max_uses])
+	# 固定奖与 loot 分离；level_ups 保留
+	_expect((receipt.items as Array).size() == 1, "loot: items 固定奖应仍 1×hpPotion")
+	_expect(receipt.has("level_ups"), "loot: receipt 应保留 level_ups 键")
+	# 库存入账 + 磁盘持久
+	var inv: Array = seed_session.get_profile().inventory
+	_expect(_count_items(inv, "shuriken") == int(loot_counts.get("shuriken", 0)),
+		"loot: 库存 shuriken 应等于 receipt 掉落数")
+	var replay: Dictionary = seed_session.settle_battle(str(prepared.token), &"win", chapter)
+	_expect(replay.ok and bool(replay.already_settled) and JSON.stringify(replay.loot) == JSON.stringify(loot),
+		"loot: 幂等重放应回带同一 loot")
+	var fresh := _mk_session()
+	fresh.load_profile(str(seed_session.get_profile().id))
+	var disk_inv: Array = fresh.get_profile().inventory
+	_expect(_count_items(disk_inv, "shuriken") == int(loot_counts.get("shuriken", 0)),
+		"loot: 磁盘库存应持久掉落")
+
+
+## pending_loot：胜利并入（非法条目跳过）；失败/撤退不入账、库存恢复出征前。
+func _test_victory_loot_pending() -> void:
+	var session := _begin("loot_pending")
+	session.create_profile("缴获队")
+	var prepared: Dictionary = session.prepare_battle(L0)
+	_expect(prepared.ok, "pending: 出征应成功")
+	var chapter: Dictionary = prepared.chapter
+	chapter["pending_loot"] = [
+		{"id": "antidote", "count": 2},
+		{"id": "noSuchItem", "count": 5},
+		"garbage-entry",
+		{"id": "hpPotion", "count": 1},
+	]
+	var receipt: Dictionary = session.settle_battle(str(prepared.token), &"win", chapter)
+	_expect(receipt.ok, "pending: 胜利应成功（非法条目跳过不报错）")
+	var inv: Array = session.get_profile().inventory
+	_expect(_count_items(inv, "antidote") == 2 and _uses_of_first(inv, "antidote") == 2,
+		"pending: antidote 应 2 件满充 2 入账")
+	# 失败/撤退：pending 不入账，库存恢复出征前精确值
+	for mode in ["lose", "abandon"]:
+		var s2 := _begin("loot_" + mode)
+		s2.create_profile("撤退队" + mode)
+		var p2: Dictionary = s2.prepare_battle(L0)
+		_expect(p2.ok, "pending: %s 出征应成功" % mode)
+		p2.chapter["pending_loot"] = [{"id": "antidote", "count": 3}]
+		var r2: Dictionary = s2.settle_battle(str(p2.token), StringName(mode), {})
+		_expect(r2.ok and not r2.has("loot"), "pending: %s receipt 不应带 loot" % mode)
+		var inv2: Array = s2.get_profile().inventory
+		_expect(_count_items(inv2, "antidote") == 0 and _count_items(inv2, "hpPotion") == 4
+			and _count_items(inv2, "mpPotion") == 4,
+			"pending: %s 库存应恢复出征前，实际 %s" % [mode, _inv_str(inv2)])
+
+
+## 胜利落盘失败：掷出结果缓存，同 token 重试不重掷、恰入账一次。
+func _test_victory_loot_persist_retry() -> void:
+	var session := _begin("loot_retry")
+	session.create_profile("重掷队")
+	var prepared: Dictionary = session.prepare_battle(L0)
+	_expect(prepared.ok, "loot_retry: 出征应成功")
+	session._attempt["loot_seed"] = 12345
+	var faulty := FaultyStore.new()
+	faulty.base_dir = session.base_dir
+	session._store = faulty
+	var token := str(prepared.token)
+	var failed: Dictionary = session.settle_battle(token, &"win", prepared.chapter)
+	_expect(not failed.ok and bool(failed.get("retryable", false)), "loot_retry: 落盘失败应可重试")
+	_expect(not failed.has("loot"), "loot_retry: 失败 receipt 不应发布 loot")
+	_expect(session._attempt.has("loot_rolled"), "loot_retry: 失败后掷出结果应已缓存")
+	# 篡改缓存为已知值：重试若重掷，结果（几乎）不可能等于篡改值
+	var tampered := [{"id": &"bomb", "name": "炸弹", "count": 9, "uses": 2}]
+	session._attempt["loot_rolled"] = tampered
+	faulty.fail_saves = false
+	var retried: Dictionary = session.settle_battle(token, &"win", prepared.chapter)
+	_expect(retried.ok, "loot_retry: 修复后重试应成功，实际 %s" % str(retried.error))
+	if retried.ok:
+		var loot: Array = retried.loot
+		_expect(loot.size() == 1 and String(loot[0].id) == "bomb" and int(loot[0].count) == 9,
+			"loot_retry: 重试应复用缓存掷出结果（不重掷）")
+		var inv: Array = session.get_profile().inventory
+		_expect(_count_items(inv, "bomb") == 9, "loot_retry: 库存应恰 9×bomb")
+		_expect(int(session.get_profile().gold) == 200, "loot_retry: 奖励应恰入账一次")
+	var fresh := _mk_session()
+	fresh.load_profile(str(session.get_profile().id))
+	_expect(_count_items(fresh.get_profile().inventory, "bomb") == 9, "loot_retry: 磁盘应持久 9×bomb")
 
 
 # ============================================================

@@ -2,7 +2,8 @@
 ##
 ## 职责：多档案管理（创建/加载/重命名/删除/列表）、公共库存、线性关卡解锁、
 ## 出征部署（prepare_battle，防重复出征）与战后结算（settle_battle，win/lose/abandon；
-## 胜利 receipt 附 level_ups 升级差分，按 id 对位出征前快照，等级提升才列）。
+## 胜利 receipt 附 level_ups 升级差分，按 id 对位出征前快照，等级提升才列）、
+## 商店购买（list_shop/buy_item，限购周期 = completed_levels.size()，先落盘后切内存）。
 ##
 ## 磁盘契约（user://campaign_saves/，经 CampaignProfileStore 原子写）：
 ## 磁盘永远是"安全态"——出征挂起时落盘的是出征前快照 + attempt 标记；胜利结算
@@ -24,6 +25,7 @@ const Roster := preload("res://scripts/campaign/campaign_roster.gd")
 const StoreScript := preload("res://scripts/campaign/campaign_profile_store.gd")
 const BattlefieldLoaderScript := preload("res://scripts/core/battlefield_loader.gd")
 const ItemDataScript := preload("res://scripts/core/items.gd")
+const ShopCatalogScript := preload("res://scripts/campaign/shop_catalog.gd")
 
 ## 存档根目录（测试可改；改动在下次访问 store 时生效）。
 var base_dir: String = DEFAULT_STORE_DIR
@@ -234,6 +236,7 @@ func create_profile(profile_name: String) -> Dictionary:
 		"inventory": built.inventory,
 		"completed_levels": [],
 		"carry_templates": built.templates,
+		"shop_purchases": {"clear_index": 0, "counts": {}},
 		"created_at": now,
 		"saved_at": now,
 	}
@@ -350,6 +353,153 @@ func leave_profile() -> void:
 
 
 # ============================================================
+# 商店（购买原子性：先落盘成功才切内存态；失败完整回滚无副作用）
+# ============================================================
+
+## 货架视图（只读，不落盘）。返回 {ok, gold, clear_index, stock:[...]}；
+## stock 条目 {id, name, price, limit_per_clear, remaining, affordable_count, max_buyable}：
+## - remaining：本限购周期剩余可购数，-1 = 不限购（limit_per_clear == 0）。
+## - affordable_count：仅金币维度最多可购数（gold / price），-1 = 免费不限。
+## - max_buyable：综合限购与金币后的「本次最多还能买几件」，-1 = 双双不限。
+## 限购周期唯一基准 = completed_levels.size()：周期推进（新关首通）后旧计数
+## 自动视作清零，repeat 通关 / 保存重载都不刷新额度。
+func list_shop() -> Dictionary:
+	if _state.is_empty():
+		return {"ok": false, "error": "尚未加载冒险档案"}
+	var loaded: Dictionary = ShopCatalogScript.load_catalog()
+	if not loaded.get("ok", false):
+		return {"ok": false, "error": str(loaded.error)}
+	var clear_index := int(_state.completed_levels.size())
+	var counts: Dictionary = _current_purchase_counts()
+	var stock: Array = []
+	for entry: Variant in loaded.catalog.stock:
+		var item_id := StringName(String(entry.id))
+		var price := int(entry.price)
+		var limit := int(entry.limit_per_clear)
+		var bought := int(counts.get(String(item_id), 0))
+		var remaining := -1 if limit <= 0 else maxi(0, limit - bought)
+		var affordable := -1 if price <= 0 else int(int(_state.gold) / price)
+		var max_buyable := _cap_buyable(affordable, remaining)
+		stock.append({
+			"id": String(item_id),
+			"name": str(ItemDataScript.item_name(item_id)),
+			"price": price,
+			"limit_per_clear": limit,
+			"remaining": remaining,
+			"affordable_count": affordable,
+			"max_buyable": max_buyable,
+		})
+	return {"ok": true, "error": "", "gold": int(_state.gold), "clear_index": clear_index, "stock": stock}
+
+
+## 购买：严格原子——所有校验通过后组装完整新态，_persist 成功才提交内存并
+## 发 changed；任何失败（未知物/售罄/金币不足/无档/出征挂起/落盘失败）返回
+## {ok:false, error}，内存与磁盘完整无副作用（可安全重试，不重复扣费）。
+## 买入每件实例满 uses 直接入公共库存；若该物品未被任何携带方案行覆盖，
+## 则给队长（roster 首名）行追加 {id, count:1}（已覆盖不重复追加）——下次出征
+## 自动带上；FIFO 补给拿不完的留在库存。
+func buy_item(item_id: String, count := 1) -> Dictionary:
+	if _state.is_empty():
+		return {"ok": false, "error": "尚未加载冒险档案"}
+	if not _attempt.is_empty():
+		return {"ok": false, "error": "战斗进行中，不能购买"}
+	if count is not int or int(count) < 1:
+		return {"ok": false, "error": "购买数量必须是正整数"}
+	var wanted := StringName(String(item_id))
+	var loaded: Dictionary = ShopCatalogScript.load_catalog()
+	if not loaded.get("ok", false):
+		return {"ok": false, "error": str(loaded.error)}
+	var entry := ShopCatalogScript.entry_for(String(wanted))
+	if entry.is_empty():
+		return {"ok": false, "error": "商店不出售：%s" % String(wanted)}
+	var price := int(entry.price)
+	var limit := int(entry.limit_per_clear)
+	var clear_index := int(_state.completed_levels.size())
+	var counts: Dictionary = _current_purchase_counts()
+	var bought := int(counts.get(String(wanted), 0))
+	if limit > 0 and bought + count > limit:
+		var remaining := maxi(0, limit - bought)
+		return {
+			"ok": false,
+			"error": "限购：本周期（已通关 %d 关）最多还能购买 %d 件 %s" % [clear_index, remaining, String(wanted)],
+		}
+	var cost := price * count
+	if cost > int(_state.gold):
+		return {"ok": false, "error": "金币不足（需要 %d，持有 %d）" % [cost, int(_state.gold)]}
+	var max_uses := maxi(1, int(ItemDataScript.get_item(wanted).get("uses", 0)))
+	var inventory_new: Array = _state.inventory.duplicate(true)
+	for _c in count:
+		inventory_new.append({"id": wanted, "uses": max_uses})
+	var counts_new: Dictionary = counts.duplicate(true)
+	counts_new[String(wanted)] = bought + count
+	var templates_new: Array = _state.carry_templates.duplicate(true)
+	if not _templates_cover(templates_new, wanted) and not templates_new.is_empty():
+		(templates_new[0] as Array).append({"id": wanted, "count": 1})
+	var staged := {
+		"id": _state.id,
+		"name": _state.name,
+		"gold": int(_state.gold) - cost,
+		"roster": _state.roster,
+		"inventory": inventory_new,
+		"completed_levels": _state.completed_levels,
+		"carry_templates": templates_new,
+		"shop_purchases": {"clear_index": clear_index, "counts": counts_new},
+		"created_at": _state.created_at,
+		"saved_at": Time.get_unix_time_from_system(),
+	}
+	var persisted := _persist(staged)
+	if not persisted.get("ok", false):
+		return {"ok": false, "error": "购买落盘失败，未扣费（可重试）：%s" % str(persisted.error)}
+	_state = staged
+	_emit_changed("purchased")
+	var remaining_after := -1 if limit <= 0 else maxi(0, limit - (bought + count))
+	return {
+		"ok": true,
+		"error": "",
+		"id": String(wanted),
+		"count": count,
+		"total_cost": cost,
+		"gold": int(_state.gold),
+		"remaining": remaining_after,
+	}
+
+
+## 当前限购周期内的已购计数（周期推进则旧计数视作清零；不修改 _state）。
+func _current_purchase_counts() -> Dictionary:
+	var purchases: Variant = _state.get("shop_purchases", null)
+	if purchases is not Dictionary:
+		return {}
+	var record: Dictionary = purchases
+	if int(record.get("clear_index", -1)) != int(_state.completed_levels.size()):
+		return {}
+	var raw_counts: Variant = record.get("counts", {})
+	return raw_counts if raw_counts is Dictionary else {}
+
+
+## 综合可购上限：-1 视为不限，双双不限返回 -1。
+func _cap_buyable(gold_cap: int, limit_cap: int) -> int:
+	if gold_cap < 0 and limit_cap < 0:
+		return -1
+	if gold_cap < 0:
+		return limit_cap
+	if limit_cap < 0:
+		return gold_cap
+	return mini(gold_cap, limit_cap)
+
+
+## 物品是否已被任意携带方案行覆盖（购买补模板的判据）。
+func _templates_cover(templates: Array, item_id: StringName) -> bool:
+	for row: Variant in templates:
+		if row is not Array:
+			continue
+		for entry: Variant in row:
+			if entry is Dictionary and StringName(String((entry as Dictionary).get("id", ""))) == item_id:
+				return true
+	return false
+
+
+
+# ============================================================
 # 出征与结算
 # ============================================================
 
@@ -386,6 +536,7 @@ func prepare_battle(level_id: String) -> Dictionary:
 		"level_id": str(level.id),
 		"prepared_at": Time.get_unix_time_from_system(),
 		"snapshot": snapshot,
+		"loot_seed": randi(),
 	}
 	# 出征前快照必须落盘成功：失败则回滚出征扣减与挂起态，阻止进入战斗
 	# （没有安全快照不允许出征，绝不静默继续）。
@@ -473,6 +624,14 @@ func _settle_win(token: String, level_id: String, level_name: String, chapter: D
 			"uses": max_uses,
 			"count": count,
 		})
+	# 掉落（关卡 loot_table 掷骰 + 战斗层击杀积累 pending_loot）只入胜利账：
+	# 失败/撤退路径不经过这里，inventory 由快照恢复出征前精确值。
+	var loot_award: Array = _victory_loot(rewards, chapter)
+	for loot_entry: Variant in loot_award:
+		var loot_id := StringName(String(loot_entry.get("id", "")))
+		var loot_uses := maxi(1, int(loot_entry.get("uses", 1)))
+		for c in int(loot_entry.get("count", 0)):
+			inventory_new.append({"id": loot_id, "uses": loot_uses})
 	var completed_new: Array = _state.completed_levels.duplicate(true)
 	if first_clear:
 		completed_new.append(level_id)
@@ -484,6 +643,7 @@ func _settle_win(token: String, level_id: String, level_name: String, chapter: D
 		"inventory": inventory_new,
 		"completed_levels": completed_new,
 		"carry_templates": _state.carry_templates,
+		"shop_purchases": _state.shop_purchases,
 		"created_at": _state.created_at,
 		"saved_at": Time.get_unix_time_from_system(),
 	}
@@ -508,6 +668,7 @@ func _settle_win(token: String, level_id: String, level_name: String, chapter: D
 		"gold_awarded": gold_awarded,
 		"items": items_awarded,
 		"items_awarded": items_awarded,
+		"loot": loot_award,
 		"gold_before": gold_before,
 		"gold_after": int(staged.gold),
 		"items_recovered": int(imported.recovered.size()),
@@ -588,6 +749,68 @@ func _diff_level_ups(before_roster: Array, after_roster: Array) -> Array:
 	return level_ups
 
 
+## 胜利掉落：关卡 loot_table 掷骰（独立 RandomNumberGenerator，种子为出征时
+## 生成的 _attempt.loot_seed（int，非 RNG 对象，不落盘），绝不触碰战斗全局随机流）
+## 合并战斗层积累的 chapter.pending_loot[{id,count}]（对 chapter 只读，未知物品
+## 条目跳过），同 id 合并计数、按首次出现序输出
+## [{id:StringName, name:String, count:int, uses:int}]（uses = 掉落统一满充）。
+## 掷出结果缓存于内存 _attempt.loot_rolled：落盘失败重试直接复用绝不重掷
+## （「保存失败重试不重掷」）；进程重启后 attempt 标记恢复为出征前态，缓存自然
+## 失效则重掷——上一次结果从未入账，无重复风险。
+func _victory_loot(rewards: Dictionary, chapter: Dictionary) -> Array:
+	if _attempt.has("loot_rolled"):
+		return (_attempt.loot_rolled as Array).duplicate(true)
+	var merged := {}
+	var order: Array = []
+	var loot_table: Array = rewards.get("loot_table", [])
+	var loot_rolls := int(rewards.get("loot_rolls", 0))
+	if not loot_table.is_empty() and loot_rolls > 0:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(_attempt.get("loot_seed", randi()))
+		for rolled: Variant in CampaignConfigScript.roll_loot(loot_table, loot_rolls, rng):
+			if rolled is not Dictionary:
+				continue
+			var rolled_id := StringName(String((rolled as Dictionary).get("id", "")))
+			if rolled_id == &"":
+				continue
+			_merge_loot_entry(merged, order, rolled_id, maxi(0, int((rolled as Dictionary).get("count", 0))))
+	var pending: Variant = chapter.get("pending_loot", [])
+	if pending is Array:
+		for raw: Variant in pending:
+			if raw is not Dictionary:
+				continue
+			var pending_id := StringName(String((raw as Dictionary).get("id", "")))
+			if pending_id == &"" or ItemDataScript.get_item(pending_id).get("id", &"") != pending_id:
+				continue
+			_merge_loot_entry(merged, order, pending_id, maxi(1, int((raw as Dictionary).get("count", 1))))
+	var out: Array = []
+	for key: Variant in order:
+		var entry: Dictionary = merged[key]
+		out.append({
+			"id": entry.id,
+			"name": str(entry.name),
+			"count": int(entry.count),
+			"uses": maxi(1, int(ItemDataScript.get_item(entry.id).get("uses", 0))),
+		})
+	_attempt["loot_rolled"] = out.duplicate(true)
+	return out
+
+
+func _merge_loot_entry(merged: Dictionary, order: Array, item_id: StringName, count: int) -> void:
+	if count <= 0:
+		return
+	var key := String(item_id)
+	if merged.has(key):
+		(merged[key] as Dictionary)["count"] = int((merged[key] as Dictionary).count) + count
+	else:
+		merged[key] = {
+			"id": item_id,
+			"name": str(ItemDataScript.item_name(item_id)),
+			"count": count,
+		}
+		order.append(key)
+
+
 # ============================================================
 # 内部：持久化与工具
 # ============================================================
@@ -622,6 +845,7 @@ func _persist_safe(override_name := "") -> Dictionary:
 			"inventory": snapshot.inventory,
 			"completed_levels": snapshot.completed,
 			"carry_templates": _state.carry_templates,
+			"shop_purchases": _state.shop_purchases,
 			"created_at": _state.created_at,
 			"saved_at": now,
 			"attempt": {

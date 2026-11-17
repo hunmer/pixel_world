@@ -53,6 +53,9 @@ static func capture(state: Dictionary) -> Dictionary:
 	err = _normalize_templates(state.carry_templates)
 	if err != "":
 		return {"ok": false, "error": "携带方案校验失败：%s" % err}
+	var purchases: Dictionary = _normalize_purchases(state.get("shop_purchases", null))
+	if not purchases.get("ok", false):
+		return {"ok": false, "error": "限购记录校验失败：%s" % str(purchases.error)}
 	var attempt: Variant = null
 	if state.get("attempt", null) != null:
 		var marker: Dictionary = state.attempt
@@ -71,6 +74,7 @@ static func capture(state: Dictionary) -> Dictionary:
 		"inventory": state.inventory.duplicate(true),
 		"completed_levels": state.completed_levels.duplicate(true),
 		"carry_templates": state.carry_templates.duplicate(true),
+		"shop_purchases": (purchases.value as Dictionary).duplicate(true),
 		"created_at": float(state.get("created_at", 0.0)),
 		"saved_at": float(state.get("saved_at", 0.0)),
 		"attempt": attempt,
@@ -128,6 +132,9 @@ static func restore(record: Variant) -> Dictionary:
 	var attempt: Variant = data.get("attempt", null)
 	if attempt != null and attempt is not Dictionary:
 		return {"ok": false, "newer": false, "error": "attempt 标记不是对象"}
+	var purchases: Dictionary = _normalize_purchases(data.get("shop_purchases", null))
+	if not purchases.get("ok", false):
+		return {"ok": false, "newer": false, "error": "限购记录校验失败：%s" % str(purchases.error)}
 	return {
 		"ok": true,
 		"state": {
@@ -138,6 +145,7 @@ static func restore(record: Variant) -> Dictionary:
 			"inventory": inventory,
 			"completed_levels": completed_out,
 			"carry_templates": templates,
+			"shop_purchases": purchases.value,
 			"created_at": float(data.get("created_at", 0.0)),
 			"saved_at": float(data.get("saved_at", 0.0)),
 			"attempt": attempt,
@@ -387,3 +395,30 @@ static func _normalize_templates(templates: Array) -> String:
 			entry["id"] = iid
 			entry["count"] = int(count)
 	return ""
+
+
+## 校验限购记录（v1 可选字段，旧档缺失回填缺省）。形状 {clear_index:int, counts:{id:int}}：
+## clear_index = 记录所属限购周期（购买时的 completed_levels.size()，整数 >= 0）；
+## counts 键为物品 id（必须存在）且值为非负整数。缺失/null 视为全新记录（周期 0 空计数）。
+## 返回 {ok:true, value:{clear_index, counts}}（counts 键归一为 String）或 {ok:false, error}。
+static func _normalize_purchases(raw: Variant) -> Dictionary:
+	if raw == null:
+		return {"ok": true, "value": {"clear_index": 0, "counts": {}}}
+	if raw is not Dictionary:
+		return {"ok": false, "error": "shop_purchases 不是对象"}
+	var clear_index: Variant = raw.get("clear_index", 0)
+	if clear_index is not int or int(clear_index) < 0:
+		return {"ok": false, "error": "shop_purchases.clear_index 必须是 >= 0 的整数"}
+	var raw_counts: Variant = raw.get("counts", {})
+	if raw_counts is not Dictionary:
+		return {"ok": false, "error": "shop_purchases.counts 不是对象"}
+	var counts := {}
+	for key: Variant in raw_counts:
+		var iid := StringName(String(key))
+		if iid == &"" or not item_exists(iid):
+			return {"ok": false, "error": "限购计数引用未知物品：%s" % String(key)}
+		var value: Variant = raw_counts[key]
+		if value is not int or int(value) < 0:
+			return {"ok": false, "error": "限购计数 %s 必须是 >= 0 的整数" % String(key)}
+		counts[String(iid)] = int(value)
+	return {"ok": true, "value": {"clear_index": int(clear_index), "counts": counts}}
