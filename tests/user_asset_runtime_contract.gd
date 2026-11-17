@@ -480,6 +480,9 @@ func _run() -> void:
 	var cfg_err: int = ovr_cfg.save(ovr_root + "/asset_source.cfg")
 	_expect(cfg_err == OK, "S15 写入源覆盖配置应成功 (err=%d)" % cfg_err)
 	var svc3: Node = ServiceScript.new(ovr_root)
+	# 断源测试使用明确的短超时，避免系统连接重试超过测试等待窗口。
+	svc3.request_timeout = 0.5
+	svc3.max_retries = 0
 	root.add_child(svc3)
 	_expect(svc3.get_source_url() == "http://127.0.0.1:%d/blocks.json" % dead_port,
 		"S15 覆盖 URL 应优先于默认/库内 source_url: " + svc3.get_source_url())
@@ -488,8 +491,9 @@ func _run() -> void:
 	_expect(bool(dead_req.get("ok", false)), "S15 断源清单请求应入队")
 	fired = await _await_sig(svc3.manifest_loaded, 20000)
 	_expect(bool(fired[0]), "S15 断源 manifest_loaded 应触发（降级不挂起）")
-	_expect(not bool((fired[1] as Dictionary).get("ok", true)), "S15 断源结果应 ok=false")
-	_expect(not str((fired[1] as Dictionary).get("error", "")).is_empty(),
+	var dead_result: Dictionary = fired[1] if fired[1] is Dictionary else {}
+	_expect(not bool(dead_result.get("ok", true)), "S15 断源结果应 ok=false")
+	_expect(not str(dead_result.get("error", "")).is_empty(),
 		"S15 断源应携带明确 error")
 	var offline_imp: Dictionary = svc3.import_image_bytes(img_a, "offline_block.png")
 	_expect(bool(offline_imp.get("ok", false)), "S15 断源时本地导入仍可用: " + str(offline_imp.get("error", "")))
