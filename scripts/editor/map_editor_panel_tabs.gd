@@ -15,6 +15,9 @@ const ProfessionVisualScript = preload("res://scripts/iso/profession_visual.gd")
 const AssetLibraryPanelScript = preload("res://scripts/editor/asset_library_panel.gd")
 const EditorBlockListScript = preload("res://scripts/editor/editor_block_list.gd")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const MapEditorUnitsScript = preload("res://scripts/editor/map_editor_units.gd")
+const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
+const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 
 const TEXT_MAIN := UIThemeScript.TEXT_MAIN
@@ -231,14 +234,21 @@ static func build_block_tab(ed, tab: VBoxContainer) -> void:
 
 ## Tab【角色】：阵营 + 8 职业头像网格 + 等级/姓名
 static func build_units_tab(ed, tab: VBoxContainer) -> void:
+	ed._unit_info_label = UIFactoryScript.label("", ComponentThemeScript.FONT_CAPTION, TEXT_DIM)
+	ed._unit_info_label.name = "UnitInfoLabel"
+	ed._unit_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var faction_row := HBoxContainer.new()
 	faction_row.add_theme_constant_override("separation", 4)
 	var faction_group := ButtonGroup.new()
 	faction_group.pressed.connect(func(btn: Button):
 		ed.selected_faction = btn.get_meta("faction"))
-	faction_row.add_child(faction_btn(ed, "player", "我方", "shield", faction_group))
-	faction_row.add_child(faction_btn(ed, "enemy", "敌方", "skull", faction_group))
+	for faction: String in ["player", "enemy"]:
+		var button := faction_btn(ed, faction, "我方" if faction == "player" else "敌方",
+			"shield" if faction == "player" else "skull", faction_group)
+		faction_row.add_child(button)
+		ed._faction_buttons[faction] = button
 	tab.add_child(faction_row)
+	tab.add_child(ed._unit_info_label)
 
 	var class_group := ButtonGroup.new()
 	class_group.pressed.connect(func(btn: Button):
@@ -272,6 +282,20 @@ static func build_units_tab(ed, tab: VBoxContainer) -> void:
 	lv_row.add_child(ed._unit_name_edit)
 	tab.add_child(lv_row)
 	UIFactoryScript.center_row(lv_row)
+	var actions := PixelHBoxScript.new()
+	ed._unit_apply_btn = UIFactoryScript.button("应用修改", func(): MapEditorUnitsScript.apply_changes(ed))
+	ed._unit_apply_btn.name = "ApplyUnitBtn"
+	ed._unit_apply_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(ed._unit_apply_btn)
+	ed._unit_remove_btn = UIFactoryScript.button("移除角色", func(): MapEditorUnitsScript.remove_selected(ed))
+	ed._unit_remove_btn.name = "RemoveUnitBtn"
+	ed._unit_remove_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(ed._unit_remove_btn)
+	tab.add_child(actions)
+	var new_btn := UIFactoryScript.button("新建角色", func(): MapEditorUnitsScript.clear_selection(ed))
+	new_btn.name = "NewUnitBtn"
+	tab.add_child(new_btn)
+	MapEditorUnitsScript.sync_panel(ed)
 
 
 ## Tab【历史】：动作时间线（点击任意记录跳转到该状态）
@@ -298,6 +322,11 @@ static func build_asset_tab(ed, tab: VBoxContainer) -> void:
 	ed._asset_panel.asset_selected.connect(ed._on_asset_selected)
 	ed._asset_panel.library_changed.connect(ed._on_asset_library_changed)
 	tab.add_child(ed._asset_panel)
+	# 素材页禁外层垂直滚动：面板撑满侧栏可用高度，AssetList 拿到全部剩余
+	# 高度（列表自身滚动）；其余 Tab 是表单，保留 add_tab 默认滚动行为。
+	var scroll := tab.get_parent() as ScrollContainer
+	if scroll != null:
+		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	ed._asset_panel.setup(ed._asset_service, ed._asset_adapter)
 
 

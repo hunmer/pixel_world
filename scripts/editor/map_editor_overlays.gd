@@ -41,50 +41,36 @@ static func build_tool_bar(ed) -> Control:
 		ed._on_tool_changed()
 		if ed.current_tool == ed.Tool.SELECT or ed.current_tool == ed.Tool.FILL:
 			ed._open_selection_popup())
-	add_tool_btn(ed, box, tool_group, ed.Tool.SELECT, "选择", "mouse_pointer")
-	add_tool_btn(ed, box, tool_group, ed.Tool.PAINT, "画笔", "paintbrush")
-	add_tool_btn(ed, box, tool_group, ed.Tool.FILL, "填充", "bucket_fill")
-	add_tool_btn(ed, box, tool_group, ed.Tool.ERASE, "橡皮", "eraser")
-	add_tool_btn(ed, box, tool_group, ed.Tool.HEIGHT_UP, "地形上升", "arrow_up_from_line")
-	add_tool_btn(ed, box, tool_group, ed.Tool.HEIGHT_DOWN, "地形下降", "arrow_down_from_line")
-	add_tool_btn(ed, box, tool_group, ed.Tool.UNIT, "角色", "person")
+	add_tool_btn(ed, box, tool_group, ed.Tool.SELECT, "选择")
+	add_tool_btn(ed, box, tool_group, ed.Tool.PAINT, "画笔")
+	add_tool_btn(ed, box, tool_group, ed.Tool.FILL, "填充")
+	add_tool_btn(ed, box, tool_group, ed.Tool.ERASE, "橡皮")
+	add_tool_btn(ed, box, tool_group, ed.Tool.HEIGHT_UP, "地形上升")
+	add_tool_btn(ed, box, tool_group, ed.Tool.HEIGHT_DOWN, "地形下降")
+	add_tool_btn(ed, box, tool_group, ed.Tool.UNIT, "角色")
 	ed._tool_buttons[ed.Tool.PAINT].button_pressed = true
 	# 移动工具开关：ToolBox 第 8 钮（用户已取消 7 钮契约）。独立开关，
 	# 不入 tool_group（不与 7 个画布工具互斥，可任意工具下叠加开启）
-	var move_toggle: Button = UIFactoryScript.button("", Callable(), "", false)
+	var move_toggle: Button = UIFactoryScript.button("移动", Callable(), "", false)
 	move_toggle.name = "MoveToolToggle"
 	move_toggle.toggle_mode = true
-	var move_icon: Texture2D = UIThemeScript.icon("move")
-	if move_icon != null:
-		# 与上方 7 钮同观感：方形图标按钮（tooltip 提示用途）
-		move_toggle.icon = move_icon
-		move_toggle.set("icon_size", 22)
-		move_toggle.text = ""
-		move_toggle.custom_minimum_size = Vector2(34, 34)
-		move_toggle.expand_icon = true
-	else:
-		move_toggle.text = "移动"
+	move_toggle.custom_minimum_size = Vector2(34, 34)
 	move_toggle.tooltip_text = "移动工具：拖拽移动选中区域"
 	move_toggle.focus_mode = Control.FOCUS_NONE
 	move_toggle.toggled.connect(ed._on_move_tool_toggled)
 	box.add_child(move_toggle)
 	ed._move_tool_toggle = move_toggle
 	# 替换方块：ToolBox 第 9 钮，保持在移动开关之后以稳定既有按钮索引。
-	add_tool_btn(ed, box, tool_group, ed.Tool.REPLACE, "替换方块", "replace")
+	add_tool_btn(ed, box, tool_group, ed.Tool.REPLACE, "替换方块")
 	var replace_btn := ed._tool_buttons[ed.Tool.REPLACE] as Button
 	replace_btn.name = "ReplaceToolBtn"
 	replace_btn.custom_minimum_size = Vector2(34, 34)
-	if replace_btn.icon == null:
-		replace_btn.text = "替"
-		replace_btn.tooltip_text = "替换方块工具"
 	# 吸管：ToolBox 第 10 钮；点击写前景，Alt+点击写背景，不产生文档历史。
-	add_tool_btn(ed, box, tool_group, ed.Tool.PICK, "吸管", "pipette")
+	add_tool_btn(ed, box, tool_group, ed.Tool.PICK, "吸管")
 	var pick_btn := ed._tool_buttons[ed.Tool.PICK] as Button
 	pick_btn.name = "PickToolBtn"
 	pick_btn.custom_minimum_size = Vector2(34, 34)
 	pick_btn.tooltip_text = "吸管：点击吸取前景，Alt+点击吸取背景；其它工具按住 Alt 临时吸取，Shift+点击取背景"
-	if pick_btn.icon == null:
-		pick_btn.text = "吸"
 	return bar
 
 
@@ -266,29 +252,16 @@ static func build_cell_info(ed) -> Control:
 	return panel
 
 
-## 工具条按钮（toggle + ButtonGroup；有图标只显图标，无图标回退文字；
-## 工厂默认叠 style_button，等价原先建后手动 UIThemeScript.style_button）
-static func add_tool_btn(ed, parent: Node, group: ButtonGroup, tool: int, text: String, icon_name := "") -> void:
+## 工具条按钮（toggle + ButtonGroup；直接显示文字（用户要求图标全部
+## 改成文字展示），tooltip 提示"XX工具"；工厂默认叠 style_button，
+## 等价原先建后手动 UIThemeScript.style_button）
+static func add_tool_btn(ed, parent: Node, group: ButtonGroup, tool: int, text: String) -> void:
 	var b: Button = UIFactoryScript.button()
 	b.toggle_mode = true
 	b.button_group = group
-	var icon: Texture2D = null
-	if icon_name != "":
-		icon = UIThemeScript.icon(icon_name)
-	if icon != null:
-		# 垂直工具条：只显示图标（tooltip 提示名称），固定方形按钮。
-		# icon_size=22 对齐 34×34 按钮内容区（34-2×6），保住 expand_icon 原观感
-		# （组件默认 icon_max_width=18 会把放大后的图标截小）；b 静态类型是
-		# Button，组件属性经 set() 走 PixelButton setter（触发 _refresh 生效）。
-		b.icon = icon
-		b.set("icon_size", 22)
-		b.text = ""
-		b.tooltip_text = "%s工具" % text
-		b.custom_minimum_size = Vector2(34, 34)
-		b.expand_icon = true
-	else:
-		b.text = text
-		b.tooltip_text = text
+	b.text = text
+	b.tooltip_text = "%s工具" % text
+	b.custom_minimum_size = Vector2(34, 34)
 	b.set_meta("tool", tool)
 	parent.add_child(b)
 	ed._tool_buttons[tool] = b

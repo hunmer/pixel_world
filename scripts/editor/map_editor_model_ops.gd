@@ -160,6 +160,7 @@ static func remove_unit_at(ed, cell: Vector2i) -> bool:
 		if int(u.x) == cell.x and int(u.y) == cell.y:
 			ed.model.units.remove_at(i)
 			ed._canvas._refresh_cell(cell)
+			ed.MapEditorUnitsScript.sync_panel(ed)
 			ed._status("移除 %s @(%d,%d)" % [u.name, cell.x, cell.y])
 			return true
 	return false

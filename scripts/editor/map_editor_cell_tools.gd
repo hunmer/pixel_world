@@ -8,6 +8,7 @@
 class_name MapEditorCellTools
 extends RefCounted
 
+const MapEditorUnitsScript = preload("res://scripts/editor/map_editor_units.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 
 
@@ -151,6 +152,9 @@ static func on_cell_released(ed, cell: Vector2i) -> void:
 
 static func apply_tool(ed, cell: Vector2i) -> void:
 	var tool := active_tool(ed)
+	if tool == ed.Tool.UNIT or (tool == ed.Tool.SELECT and ed._selection_mode == &"single"):
+		if MapEditorUnitsScript.select_unit(ed, cell):
+			return
 	if tool == ed.Tool.SELECT:
 		if ed._selection_mode == &"region":
 			ed._apply_region_click(cell)
@@ -184,8 +188,9 @@ static func apply_tool(ed, cell: Vector2i) -> void:
 				ed._set_tile_override(cell, "")
 				ed._set_prop_asset(cell, "")
 		ed.Tool.UNIT:
-			if not ed._remove_unit_at(cell):
-				ed.place_unit(cell, ed.selected_faction, ed.selected_class, int(ed._level_box.value), ed._unit_name_edit.text)
+			ed._level_box.apply()
+			if ed.place_unit(cell, ed.selected_faction, ed.selected_class, int(ed._level_box.value), ed._unit_name_edit.text):
+				MapEditorUnitsScript.select_unit(ed, cell)
 		ed.Tool.PLANT:
 			ed._set_prop(cell, ed.current_prop)
 		ed.Tool.ASSET:
@@ -276,6 +281,10 @@ static func on_block_z_changed(ed, value: float) -> void:
 
 
 static func sync_selection_after_model_change(ed, clear_selection: bool = false) -> void:
+	if clear_selection or ed._canvas.selected_cell == Vector2i(-1, -1):
+		MapEditorUnitsScript.clear_selection(ed)
+	else:
+		MapEditorUnitsScript.sync_panel(ed)
 	var cell: Vector2i = ed._canvas.selected_cell
 	if clear_selection or cell.x < 0 or cell.y < 0 or cell.x >= int(ed.model.width) or cell.y >= int(ed.model.height):
 		ed._canvas.selected_cell = Vector2i(-1, -1)

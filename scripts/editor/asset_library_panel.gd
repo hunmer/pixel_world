@@ -125,7 +125,7 @@ func setup(p_service: UserAssetService, p_adapter: UserAssetVisualAdapter) -> vo
 # ============================================================
 
 func _build_ui() -> void:
-	# ---- 来源 URL：输入 + 保存 + 刷新 + 错误重试 ----
+	# ---- 来源行并排：label + URL 输入 + 保存 / 刷新清单 / 重试（失败时出现） ----
 	var src_row := HBoxContainer.new()
 	src_row.name = "SourceRow"
 	src_row.add_theme_constant_override("separation", 4)
@@ -134,62 +134,50 @@ func _build_ui() -> void:
 	_source_edit.name = "SourceEdit"
 	_source_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	src_row.add_child(_source_edit)
+	_source_save_btn = UIFactoryScript.button("保存", _on_source_save)
+	_source_save_btn.name = "SourceSaveButton"
+	src_row.add_child(_source_save_btn)
+	_refresh_btn = UIFactoryScript.button("刷新清单", _on_refresh_pressed)
+	_refresh_btn.name = "RefreshButton"
+	src_row.add_child(_refresh_btn)
+	_retry_btn = UIFactoryScript.button("重试", _on_refresh_pressed)
+	_retry_btn.name = "RetryButton"
+	_retry_btn.visible = false
+	src_row.add_child(_retry_btn)
 	add_child(src_row)
 	UIFactoryScript.center_row(src_row)
 
-	var src_btn_row := HBoxContainer.new()
-	src_btn_row.add_theme_constant_override("separation", 4)
-	_source_save_btn = UIFactoryScript.button("保存", _on_source_save, "floppy_disk")
-	_source_save_btn.name = "SourceSaveButton"
-	_source_save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	src_btn_row.add_child(_source_save_btn)
-	_refresh_btn = UIFactoryScript.button("刷新清单", _on_refresh_pressed, "rotate")
-	_refresh_btn.name = "RefreshButton"
-	_refresh_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	src_btn_row.add_child(_refresh_btn)
-	_retry_btn = UIFactoryScript.button("重试", _on_refresh_pressed, "rotate")
-	_retry_btn.name = "RetryButton"
-	_retry_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_retry_btn.visible = false
-	src_btn_row.add_child(_retry_btn)
-	add_child(src_btn_row)
-
-	# ---- 本地导入 ----
+	# ---- 操作行并排：导入类型下拉 + 本地图片… + 保存标记 + 清空缓存 ----
 	var import_row := HBoxContainer.new()
 	import_row.name = "ImportRow"
 	import_row.add_theme_constant_override("separation", 4)
-	import_row.add_child(UIFactoryScript.label("导入", 11, UIThemeScript.TEXT_DIM))
 	_import_kind = UIFactoryScript.option_button()
 	_import_kind.name = "ImportKind"
+	_import_kind.tooltip_text = "选择本地导入素材的类型（地块 / 植物）"
 	_import_kind.add_item("地块")
 	_import_kind.set_item_metadata(0, Catalog.KIND_TERRAIN)
 	_import_kind.add_item("植物")
 	_import_kind.set_item_metadata(1, Catalog.KIND_PLANT)
 	import_row.add_child(_import_kind)
-	_import_btn = UIFactoryScript.button("本地图片…", _on_import_pressed, "folder_open")
+	_import_btn = UIFactoryScript.button("本地图片…", _on_import_pressed)
 	_import_btn.name = "ImportButton"
 	_import_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	import_row.add_child(_import_btn)
-	_download_btn = UIFactoryScript.button("保存标记", _on_download_selected, "cloud")
+	_download_btn = UIFactoryScript.button("保存标记", _on_download_selected)
 	_download_btn.name = "DownloadSelectedButton"
 	_download_btn.tooltip_text = "下载所有选中（Ctrl+点击多选）的在线素材；已下载的自动跳过"
 	_download_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	import_row.add_child(_download_btn)
+	_clear_btn = UIFactoryScript.button("清空缓存", _on_clear_cache_pressed)
+	_clear_btn.name = "ClearCacheButton"
+	_clear_btn.tooltip_text = ("清空已下载：删除全部在线素材的本地缓存（原图 + 烘焙图），"
+		+ "本地导入不受影响；素材列表保留，再次浏览会自动重新下载")
+	_clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	import_row.add_child(_clear_btn)
 	add_child(import_row)
 	UIFactoryScript.center_row(import_row)
 
-	# ---- 缓存清理 ----
-	var cache_row := HBoxContainer.new()
-	cache_row.name = "CacheRow"
-	_clear_btn = UIFactoryScript.button("清空已下载…", _on_clear_cache_pressed, "trash_can")
-	_clear_btn.name = "ClearCacheButton"
-	_clear_btn.tooltip_text = ("删除全部在线素材的本地缓存（原图 + 烘焙图），本地导入不受影响；"
-		+ "素材列表保留，再次浏览会自动重新下载")
-	_clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cache_row.add_child(_clear_btn)
-	add_child(cache_row)
-
-	# ---- 过滤：分类 / 来源 / 搜索 / 标签 ----
+	# ---- 过滤行并排：分类 / 来源 / 标签 ----
 	var filter_row := HBoxContainer.new()
 	filter_row.name = "FilterRow"
 	filter_row.add_theme_constant_override("separation", 4)
@@ -213,6 +201,11 @@ func _build_ui() -> void:
 	_source_filter.set_item_metadata(2, "net")
 	_source_filter.item_selected.connect(func(_i: int): _page = 0; _rebuild_grid())
 	filter_row.add_child(_source_filter)
+	_tag_filter = UIFactoryScript.option_button()
+	_tag_filter.name = "TagFilter"
+	_tag_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tag_filter.item_selected.connect(func(_i: int): _page = 0; _rebuild_grid())
+	filter_row.add_child(_tag_filter)
 	add_child(filter_row)
 
 	_search_edit = UIFactoryScript.line_edit("搜索名称 / id / 标签")
@@ -220,12 +213,6 @@ func _build_ui() -> void:
 	_search_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search_edit.text_changed.connect(func(_t: String): _page = 0; _rebuild_grid())
 	add_child(_search_edit)
-
-	_tag_filter = UIFactoryScript.option_button()
-	_tag_filter.name = "TagFilter"
-	_tag_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tag_filter.item_selected.connect(func(_i: int): _page = 0; _rebuild_grid())
-	add_child(_tag_filter)
 
 	# ---- 素材列表（懒预览网格）----
 	_asset_list = ItemList.new()
@@ -247,7 +234,7 @@ func _build_ui() -> void:
 	var page_row := HBoxContainer.new()
 	page_row.name = "PageRow"
 	page_row.add_theme_constant_override("separation", 4)
-	_prev_btn = UIFactoryScript.button("上一页", _on_prev_page, "arrow_up_from_line")
+	_prev_btn = UIFactoryScript.button("上一页", _on_prev_page)
 	_prev_btn.name = "PagePrevButton"
 	page_row.add_child(_prev_btn)
 	_page_label = UIFactoryScript.label("0 / 0", 11, UIThemeScript.TEXT_DIM)
@@ -255,7 +242,7 @@ func _build_ui() -> void:
 	_page_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	page_row.add_child(_page_label)
-	_next_btn = UIFactoryScript.button("下一页", _on_next_page, "arrow_down_to_line")
+	_next_btn = UIFactoryScript.button("下一页", _on_next_page)
 	_next_btn.name = "PageNextButton"
 	page_row.add_child(_next_btn)
 	add_child(page_row)
@@ -365,11 +352,11 @@ func _build_detail_box() -> void:
 	var action_row := HBoxContainer.new()
 	action_row.name = "DetailActionRow"
 	action_row.add_theme_constant_override("separation", 4)
-	_apply_btn = UIFactoryScript.button("应用修改", _on_apply_pressed, "checkmark")
+	_apply_btn = UIFactoryScript.button("应用修改", _on_apply_pressed)
 	_apply_btn.name = "ApplyButton"
 	_apply_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_row.add_child(_apply_btn)
-	_hide_btn = UIFactoryScript.button("隐藏素材", _on_hide_pressed, "eye_closed")
+	_hide_btn = UIFactoryScript.button("隐藏素材", _on_hide_pressed)
 	_hide_btn.name = "HideButton"
 	_hide_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_row.add_child(_hide_btn)

@@ -7,7 +7,7 @@
 ##      每项单独一个 tile——地形=纯方块柱，植物=独立树贴图，不组合）+
 ##      画笔/填充/橡皮
 ##   3. 添加阵营角色：阵营（我方/敌方）+ 8 职业头像网格（48×48，缺图回退职业
-##      首字）+ 等级 + 姓名放置，左键放置/再点删除
+##      首字）+ 等级 + 姓名放置，点击已有角色回显编辑，按钮移除
 ## 布局（右侧垂直页签面板版）：全部 UI 收进右侧固定宽面板（标题 + 垂直页签 +
 ## 状态栏），左侧画布伸展填充最大化；页签走 PixelTabsVertical（左竖排页签条 +
 ## 右内容区，引擎 TabContainer 无原生垂直模式），共 8 页 —— 文件/生成/地形/
@@ -70,6 +70,7 @@ const MapEditorReplaceScript = preload("res://scripts/editor/map_editor_replace.
 const MapEditorAssetsScript = preload("res://scripts/editor/map_editor_assets.gd")
 const MapEditorCellToolsScript = preload("res://scripts/editor/map_editor_cell_tools.gd")
 const MapEditorModelOpsScript = preload("res://scripts/editor/map_editor_model_ops.gd")
+const MapEditorUnitsScript = preload("res://scripts/editor/map_editor_units.gd")
 const MapEditorRegionSelectScript = preload("res://scripts/editor/map_editor_region_select.gd")
 const MapEditorClipboardScript = preload("res://scripts/editor/map_editor_clipboard.gd")
 const MapEditorPresetsScript = preload("res://scripts/editor/map_editor_presets.gd")
@@ -166,6 +167,11 @@ var _height_box: SpinBox
 var _hosting_check: CheckButton
 var _level_box: SpinBox
 var _unit_name_edit: LineEdit
+var _selected_unit_cell := Vector2i(-1, -1)
+var _unit_info_label: Label
+var _unit_apply_btn: Button
+var _unit_remove_btn: Button
+var _faction_buttons: Dictionary = {}
 var _load_box: OptionButton
 var _block_z_box: SpinBox
 var _cell_info_label: Label

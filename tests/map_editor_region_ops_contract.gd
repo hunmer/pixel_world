@@ -247,8 +247,9 @@ func _run() -> void:
 
 	# ---- I. 左侧工具栏移动工具：开关 + 拖拽平移选区 + 原地松开不触发区域选择 ----
 	var mt_toggle := editor.find_child("MoveToolToggle", true, false) as BaseButton
-	_expect(mt_toggle != null and mt_toggle.icon != null,
-		"移动工具开关是带图标的按钮（control/move 图标）")
+	_expect(mt_toggle != null and mt_toggle.icon == null
+		and String(mt_toggle.text) == "移动",
+		"移动工具开关是文字按钮（工具条图标全部文字化）")
 	var mt_box: Node = mt_toggle.get_parent() if mt_toggle != null else null
 	_expect(mt_box != null and mt_box.name == "ToolBox"
 		and not mt_toggle.button_pressed,

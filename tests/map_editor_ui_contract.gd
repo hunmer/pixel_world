@@ -117,7 +117,7 @@ func _run() -> void:
 		_expect(_count_type(gen_tab, SpinBox) == 2, "生成 Tab：宽+高 SpinBox")
 		_expect(_count_type(gen_tab, LineEdit, SpinBox) == 1,
 			"生成 Tab：种子输入框（排除 SpinBox 内部 LineEdit）")
-	# 工具条：左上角悬浮（CanvasHolder/ToolBar/ToolBox），10 个垂直图标按钮（9 工具 + 移动开关）
+	# 工具条：左上角悬浮（CanvasHolder/ToolBar/ToolBox），10 个垂直文字按钮（9 工具 + 移动开关）
 	var toolbar: Node = editor.get_node_or_null("EditorRoot/CanvasHolder/ToolBar/ToolBox")
 	_expect(toolbar != null and toolbar.get_child_count() == 10,
 		"左上角工具条存在且含 10 个按钮（9 工具 + 移动开关）")
