@@ -381,7 +381,10 @@ func update_asset(asset_id: String, changes: Dictionary) -> Dictionary:
 		if not (render is Dictionary):
 			assets[idx] = before
 			return {"ok": false, "error": "render_must_be_dictionary"}
-		d["render"] = (render as Dictionary).duplicate(true)
+		var render_copy: Dictionary = (render as Dictionary).duplicate(true)
+		# single 切回时强制清空背面引用（不残留旧 id；与库加载归一化同规则）
+		Catalog.enforce_single_back(render_copy)
+		d["render"] = render_copy
 	if changes.has("saved"):
 		d["saved"] = bool(changes["saved"])
 	var errors: Array[String] = Catalog.validate_descriptor(d, "update_asset(%s)" % asset_id, max_image_bytes)

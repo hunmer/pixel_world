@@ -165,6 +165,8 @@ func _configure_scene_args() -> void:
 func _configure_battle_core() -> void:
 	# 1. 网格 + 单位 + 回合（与模式无关）；死亡单位只在恢复局出现——不放入 grid
 	grid = GridSystem.new(chapter.width, chapter.height, chapter.map)
+	# 1a. 建筑占用（B1 就地战斗无 buildings，快照缺失时为空表，安全跳过）
+	grid.apply_buildings(chapter.get("buildings", []), chapter.get("user_assets", {}))
 	for u in chapter.playerUnits + chapter.enemyUnits:
 		if not u.isDead:
 			grid.place_unit(u, u.position.x, u.position.y)
@@ -360,8 +362,11 @@ func _setup_b2_render() -> void:
 			chapter.get("props", []), chapter.get("tile_overrides", {})
 		)
 	)
+	renderer.set_building_visuals(visual_adapter.visual_for_buildings(
+		chapter.get("buildings", []), chapter.get("user_assets", {})), false)
 	renderer.set_block_layout(chapter.get("block_layout", {}))
 	renderer.setup(grid)
+	_sync_building_view()
 	# 范围/光标标记走注入模式：坐标/排序/高度由 renderer 提供（同 B1 的注入方式）
 	range_overlay = RangeOverlay.new()
 	add_child(range_overlay)
@@ -834,11 +839,21 @@ func _key_route() -> Dictionary:
 func _rotate_camera(step: int) -> void:
 	if not _b1_mode:
 		board.camera.rotate_step(step)
+		_sync_building_view()
 
 
 func _reset_camera_rotation() -> void:
 	if not _b1_mode:
 		board.camera.reset_rotation()
+		_sync_building_view()
+
+
+## 建筑前背图按目标四向视角切换；地形几何与站立高度保持原有契约。
+func _sync_building_view() -> void:
+	if renderer == null or board == null or board.camera == null:
+		return
+	var quadrant := roundi((float(board.camera.target_yaw_radians) - PI * 0.25) / (PI * 0.5))
+	renderer.set_camera_quadrant(posmod(quadrant, 4))
 
 
 func _handle_mouse_button_input(mb: InputEventMouseButton) -> void:

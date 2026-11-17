@@ -184,6 +184,8 @@ var _asset_panel: AssetLibraryPanel
 var _selected_asset: Dictionary = {}
 ## 素材方块选中（asset_id，列表在【地形】Tab）；与素材 Tab / 地形调色板选中互斥，非空时画笔=ASSET 放置
 var _selected_block_asset := ""
+## 建筑预放置朝向（T 键循环 0..3；放置与预览共用，不影响已放置建筑）
+var _building_rotation := 0
 var _block_asset_buttons: Dictionary = {}  # asset_id -> Button
 ## 下载完成待刷缩略图的素材集合 + 0.3s 合批定时器（见 _on_block_asset_ready）
 var _pending_asset_thumbs: Dictionary = {}
@@ -609,6 +611,23 @@ func _clear_asset_selection() -> void:
 
 func _on_asset_library_changed() -> void:
 	MapEditorAssetsScript.on_asset_library_changed(self)
+
+
+## 建筑门面：朝向循环（T）/ 整栋删除（橡皮与删除路径共用）/ 预览驱动（悬停、选中变化）
+func _rotate_building_intent() -> void:
+	MapEditorModelOpsScript.rotate_building_intent(self)
+
+
+func _remove_building_at(cell: Vector2i) -> bool:
+	return MapEditorModelOpsScript.remove_building_at(self, cell)
+
+
+func _update_building_preview(cell: Vector2i) -> void:
+	MapEditorCellToolsScript.update_building_preview(self, cell)
+
+
+func _clear_building_preview() -> void:
+	MapEditorCellToolsScript.clear_building_preview(self)
 
 
 func _on_tab_changed(_idx: int) -> void:

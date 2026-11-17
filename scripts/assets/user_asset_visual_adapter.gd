@@ -35,7 +35,7 @@ const PLACEHOLDER_H := 48
 const BAKED_DIR := "baked"
 
 ## 烘焙管线版本：归一化/裁剪规则变更时 +1，使旧烘焙图自然失效重烘（文件名含版本）。
-const BAKED_VERSION := 2
+const BAKED_VERSION := 3
 
 var root: String = "user://custom_assets"
 
@@ -128,14 +128,38 @@ func bake_image(descriptor: Dictionary, image: Image) -> Image:
 			var normed: Image = img.duplicate()
 			normed.resize(nw, nh, Image.INTERPOLATE_NEAREST)
 			img = normed
-	# 3) 缩放（非 1 时最近邻；duplicate 后 resize，不改入参，目标至少 1x1）
-	var scale := float(render.get("scale", 1.0))
-	if absf(scale - 1.0) > 0.001 and scale > 0.0:
-		var tw := maxi(1, roundi(img.get_width() * scale))
-		var th := maxi(1, roundi(img.get_height() * scale))
-		var scaled: Image = img.duplicate()
-		scaled.resize(tw, th, Image.INTERPOLATE_NEAREST)
-		img = scaled
+	# 3) 建筑按底座可见宽度标定：投影目标宽 = 16 * (fw + fh)，scale 在其上再乘。
+	# 不裁掉透明留白，也不限制高度；pivot 仍在烘焙后的内容包围盒上计算。
+	var is_building := String(descriptor.get("kind", "")) == "building"
+	if is_building:
+		var building_fp: Dictionary = render.get("footprint", {})
+		var building_fw := clampi(int(building_fp.get("w", 1)), 1, 8)
+		var building_fh := clampi(int(building_fp.get("h", 1)), 1, 8)
+		var building_bounds := _opaque_bounds(img)
+		var content_width := float(img.get_width())
+		if building_bounds.has_all(["min_x", "max_x"]):
+			content_width = float(int(building_bounds["max_x"]) - int(building_bounds["min_x"]) + 1)
+		var ground_width := maxf(0.0, float(render.get("ground_width_px", 0.0)))
+		var source_width := ground_width if ground_width > 0.0 else content_width
+		var target_width := 16.0 * float(building_fw + building_fh)
+		var building_scale := float(render.get("scale", 1.0))
+		if source_width > 0.0 and building_scale > 0.0:
+			var fit := target_width / source_width * building_scale
+			var bw := maxi(1, roundi(img.get_width() * fit))
+			var bh := maxi(1, roundi(img.get_height() * fit))
+			if bw != img.get_width() or bh != img.get_height():
+				var building_img: Image = img.duplicate()
+				building_img.resize(bw, bh, Image.INTERPOLATE_NEAREST)
+				img = building_img
+	# 4) 旧 terrain/plant 缩放保持不变（建筑已在上面合并 render.scale）。
+	else:
+		var scale := float(render.get("scale", 1.0))
+		if absf(scale - 1.0) > 0.001 and scale > 0.0:
+			var tw := maxi(1, roundi(img.get_width() * scale))
+			var th := maxi(1, roundi(img.get_height() * scale))
+			var scaled: Image = img.duplicate()
+			scaled.resize(tw, th, Image.INTERPOLATE_NEAREST)
+			img = scaled
 	return img
 
 
@@ -163,7 +187,7 @@ func _visual_from_image(descriptor: Dictionary, img: Image) -> Dictionary:
 		min_y = float(bounds["min_y"])
 		span_y = float(bounds["max_y"] - bounds["min_y"] + 1)
 	var offset := Vector2(w * 0.5 - (min_x + px * span_x), h * 0.5 - (min_y + py * span_y))
-	return {
+	var visual := {
 		"texture": ImageTexture.create_from_image(img),
 		"render_offset": offset,
 		"canvas_size": Vector2(w, h),
@@ -171,6 +195,16 @@ func _visual_from_image(descriptor: Dictionary, img: Image) -> Dictionary:
 		"kind": String(descriptor.get("kind", Catalog.KIND_TERRAIN)),
 		"missing": false,
 	}
+	if String(descriptor.get("kind", "")) == "building":
+		var footprint: Dictionary = render.get("footprint", {"w": 1, "h": 1})
+		visual["footprint"] = {
+			"w": clampi(int(footprint.get("w", 1)), 1, 8),
+			"h": clampi(int(footprint.get("h", 1)), 1, 8),
+		}
+		visual["back_mode"] = String(render.get("back_mode", "single"))
+		visual["back_asset_id"] = String(render.get("back_asset_id", ""))
+		visual["ground_width_px"] = maxf(0.0, float(render.get("ground_width_px", 0.0)))
+	return visual
 
 
 ## 解析 asset_id → visual（离线：只读 root/library.json 与 blob 文件）。
@@ -299,6 +333,120 @@ func visual_for_entries(props: Array, tile_overrides: Dictionary) -> Array:
 	return out
 
 
+## 读取原始库描述符。建筑新字段尚未被旧 Catalog 规范化时，预览仍须拿到完整配置。
+func library_descriptor(asset_id: String) -> Dictionary:
+	if asset_id.is_empty() or not FileAccess.file_exists(root + "/library.json"):
+		return {}
+	var parser := JSON.new()
+	if parser.parse(FileAccess.get_file_as_string(root + "/library.json")) != OK:
+		return {}
+	var data: Variant = parser.data
+	if not (data is Dictionary):
+		return {}
+	for raw in (data as Dictionary).get("assets", []):
+		if raw is Dictionary and String((raw as Dictionary).get("id", "")) == asset_id:
+			return (raw as Dictionary).duplicate(true)
+	return {}
+
+
+## 建筑快照解析：descriptor 参与缓存键，且直接按快照烘焙，避免同 id 的当前库配置串图。
+func resolve_snapshot(descriptor: Dictionary) -> Dictionary:
+	if descriptor.is_empty():
+		return placeholder_visual("")
+	var aid := String(descriptor.get("id", ""))
+	if aid.is_empty():
+		return placeholder_visual("")
+	var descriptor_json := JSON.stringify(descriptor)
+	var cache_key := "s:%s:%s" % [aid, descriptor_json.sha256_text()]
+	if _cache.has(cache_key):
+		_touch(cache_key)
+		return _cache[cache_key]
+	var img := _load_blob_image(String(descriptor.get("sha256", "")))
+	if img == null or img.is_empty():
+		var missing := placeholder_visual(aid)
+		_put(cache_key, missing)
+		return missing
+	img = bake_image(descriptor, img)
+	var visual := _visual_from_image(descriptor, img)
+	_put(cache_key, visual)
+	return visual
+
+
+## 输出 renderer.set_building_visuals() 的单实例建筑条目。
+## user_assets 是 document.buildings 对应的快照；编辑器新预览可传空表以读当前素材库。
+func visual_for_buildings(buildings: Array, user_assets: Dictionary = {}) -> Array:
+	var entries: Array = []
+	for raw in buildings:
+		if not raw is Dictionary:
+			continue
+		var building: Dictionary = raw
+		var aid := String(building.get("asset_id", ""))
+		if aid.is_empty():
+			continue
+		var cell := Vector2i(int(building.get("x", -1)), int(building.get("y", -1)))
+		if cell.x < 0 or cell.y < 0:
+			continue
+		var descriptor: Dictionary = user_assets.get(aid, {})
+		var use_library := bool(building.get("use_library", false))
+		if use_library:
+			descriptor = {}
+		var front := _building_visual(aid, descriptor)
+		if front.is_empty():
+			continue
+		var mode := String(front.get("back_mode", "single"))
+		var back_id := String(front.get("back_asset_id", ""))
+		var back: Dictionary = {}
+		if mode == "front_back" and not back_id.is_empty():
+			var back_descriptor: Dictionary = user_assets.get(back_id, {})
+			if use_library:
+				back_descriptor = {}
+			back = _building_visual(back_id, back_descriptor)
+			if bool(back.get("missing", true)):
+				back = {}
+		entries.append({
+			"cell": cell,
+			"instance_id": String(building.get("instance_id", "")),
+			"asset_id": aid,
+			"rotation": posmod(int(building.get("rotation", 0)), 4),
+			"layer": "building",
+			"visual": front,
+			"back_visual": back,
+		})
+	return entries
+
+
+func _building_visual(aid: String, descriptor: Dictionary) -> Dictionary:
+	var visual: Dictionary = {}
+	var source := descriptor
+	if source.is_empty():
+		var raw := library_descriptor(aid)
+		if String(raw.get("kind", "")) == "building":
+			source = raw
+	if not source.is_empty():
+		visual = resolve_snapshot(source).duplicate()
+	else:
+		visual = resolve(aid).duplicate()
+	if visual.is_empty():
+		return {}
+	# 占位图也补齐元数据，渲染通路不需要特殊分支。
+	var render: Dictionary = source.get("render", {})
+	if source.is_empty():
+		visual["back_mode"] = String(visual.get("back_mode", "single"))
+		visual["back_asset_id"] = String(visual.get("back_asset_id", ""))
+		return visual
+	visual["kind"] = "building"
+	visual["asset_id"] = aid
+	visual["back_mode"] = String(render.get("back_mode", "single"))
+	visual["back_asset_id"] = String(render.get("back_asset_id", ""))
+	visual["ground_width_px"] = maxf(0.0, float(render.get("ground_width_px", 0.0)))
+	var footprint: Dictionary = render.get("footprint", {"w": 1, "h": 1})
+	visual["footprint"] = {
+		"w": clampi(int(footprint.get("w", 1)), 1, 8),
+		"h": clampi(int(footprint.get("h", 1)), 1, 8),
+	}
+	return visual
+
+
 ## 当前缓存条目数（测试用）
 func cache_size() -> int:
 	return _cache.size()
@@ -314,6 +462,10 @@ func clear_cache(asset_id: String = "") -> void:
 	for key in ["v:" + asset_id, "p:" + asset_id]:
 		_cache.erase(key)
 		_lru.erase(key)
+	for key in _cache.keys():
+		if String(key).begins_with("s:" + asset_id + ":"):
+			_cache.erase(key)
+			_lru.erase(key)
 
 
 func _load_blob_image(sha: String) -> Image:

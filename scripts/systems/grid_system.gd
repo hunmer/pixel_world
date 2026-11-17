@@ -10,6 +10,9 @@
 class_name GridSystem
 extends RefCounted
 
+# 显式 preload（class_name 全局注册在编辑器缓存未刷新时可能 unknown identifier）
+const BuildingLayoutScript = preload("res://scripts/core/building_layout.gd")
+
 var width: int
 var height: int
 # tiles[y][x] = TileData dict（拷贝自 TerrainData.TERRAIN）
@@ -18,6 +21,8 @@ var tiles: Array = []
 var units: Dictionary = {}
 # cell_to_unit[y][x] = unitId or null
 var cell_to_unit: Array = []
+# 建筑占用格：{"x,y" -> instance_id}（apply_buildings 派生；阻挡移动/寻路，不挡攻击射程）
+var building_cells: Dictionary = {}
 
 
 func _init(w: int, h: int, terrain: Array) -> void:
@@ -40,6 +45,28 @@ func in_bounds(x: int, y: int) -> bool:
 	return x >= 0 and y >= 0 and x < width and y < height
 
 
+## 注入建筑占用（文档 buildings + 素材快照派生；battle/runner 两条构建链路共用）。
+## 替换语义：整体覆盖既有占用（编辑器撤销/重复重建不残留幽灵占用）。
+## 越界格忽略（文档校验已拒绝越界）。
+func apply_buildings(buildings: Array, assets: Dictionary) -> void:
+	building_cells = BuildingLayoutScript.occupancy(buildings, assets)
+
+
+## 该格是否被建筑占用（阻挡站立/移动/寻路；不支持登楼）。
+func is_building_cell(x: int, y: int) -> bool:
+	return building_cells.has("%d,%d" % [x, y])
+
+
+## 该格是否可站立（可通行地形且无建筑占用）；单位放置/传送/增援落点共用。
+func can_stand(x: int, y: int) -> bool:
+	if not in_bounds(x, y):
+		return false
+	if is_building_cell(x, y):
+		return false
+	var tile: Dictionary = tiles[y][x]
+	return bool(tile.get(&"walkable", false))
+
+
 func tile_at(x: int, y: int) -> Dictionary:
 	if not in_bounds(x, y):
 		return {}
@@ -56,8 +83,13 @@ func unit_at(x: int, y: int) -> Dictionary:
 
 
 ## 注册/移动单位到指定位置
+## 目标格被建筑占用时拒绝落子（防御：正常链路已被 loader 校验与移动阻挡拦截；
+## 传送/推退等直接调用方若违规，单位留在原地并告警）
 func place_unit(unit: Dictionary, x: int, y: int) -> void:
 	var pos: Vector2i = unit[&"position"]
+	if is_building_cell(x, y):
+		push_warning("[grid] 单位 %s 试图落位建筑格 (%d,%d)，已拒绝" % [str(unit.get(&"id", "?")), x, y])
+		return
 	if in_bounds(pos.x, pos.y):
 		cell_to_unit[pos.y][pos.x] = null
 	unit[&"position"] = Vector2i(x, y)
@@ -100,6 +132,8 @@ func compute_move_range(
 			var nx: int = cur[&"x"] + d[0]
 			var ny: int = cur[&"y"] + d[1]
 			if not in_bounds(nx, ny):
+				continue
+			if building_cells.has(_key(nx, ny)):
 				continue
 			var tile: Dictionary = tiles[ny][nx]
 			if not tile[&"walkable"]:
@@ -181,6 +215,8 @@ func find_path(start: Vector2i, goal: Vector2i, move_type: StringName, max_cost:
 			var nx: int = cp.x + delta[0]
 			var ny: int = cp.y + delta[1]
 			if not in_bounds(nx, ny):
+				continue
+			if building_cells.has(_key(nx, ny)):
 				continue
 			var tile: Dictionary = tiles[ny][nx]
 			if not tile[&"walkable"]:

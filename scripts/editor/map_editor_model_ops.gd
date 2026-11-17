@@ -95,11 +95,103 @@ static func apply_asset_tool(ed, cell: Vector2i) -> void:
 			ed._set_prop_asset(cell, "")
 		else:
 			ed._set_prop_asset(cell, asset_id)
+	elif String(d.get("kind", "")) == BattlefieldDocScript.ASSET_KIND_BUILDING:
+		apply_building_tool(ed, cell)
 	else:
 		if BattlefieldDocScript.tile_override_at(ed.model, cell) == asset_id:
 			ed._set_tile_override(cell, "")
 		else:
 			ed._set_tile_override(cell, asset_id)
+
+
+## 组装建筑放置用的素材快照 {asset_id: descriptor}：主素材 + render.back_asset_id
+## 背面依赖（渲染 front_back 模式离线自包含；服务缺失/素材未就绪时返回空表，
+## 占用校验会回退 1x1 并 warning，不会静默放错位置）。
+static func building_assets_snapshot(ed, asset_id: String) -> Dictionary:
+	var snapshot: Dictionary = {}
+	if ed._asset_service == null:
+		return snapshot
+	var main: Variant = ed._asset_service.find_by_id(asset_id)
+	if main is Dictionary and not (main as Dictionary).is_empty():
+		snapshot[asset_id] = main
+		var back_id := String(
+			((main as Dictionary).get("render", {}) as Dictionary).get("back_asset_id", ""))
+		if not back_id.is_empty() and not snapshot.has(back_id):
+			var back: Variant = ed._asset_service.find_by_id(back_id)
+			if back is Dictionary and not (back as Dictionary).is_empty():
+				snapshot[back_id] = back
+	return snapshot
+
+
+## 建筑放置 / 命中同素材建筑再点整栋删除（拖动路径只放置不删除）。
+## 命中其他建筑只提示不覆盖；空位放置走 can_place 全规则校验
+## （界内/底面等高/建筑不重叠/不压单位），rotation 用 ed._building_rotation。
+static func apply_building_tool(ed, cell: Vector2i) -> void:
+	var d: Dictionary = ed._active_asset()
+	var asset_id := String(d.get("id", ""))
+	if asset_id.is_empty():
+		return
+	var hit := BattlefieldDocScript.building_at(ed.model, cell)
+	if not hit.is_empty():
+		if String(hit.get("asset_id", "")) == asset_id:
+			if BattlefieldDocScript.remove_building(ed.model, String(hit["instance_id"])):
+				ed._refresh_canvas()
+				ed._status("删除建筑 %s @(%d,%d)" % [asset_id, cell.x, cell.y])
+				print("[editor] 建筑删除 asset=%s cell=%s" % [asset_id, str(cell)])  # L1 埋点
+		else:
+			ed._status("(%d,%d) 已有其他建筑 %s" % [cell.x, cell.y, String(hit.get("asset_id", ""))], true)
+		return
+	var snapshot := building_assets_snapshot(ed, asset_id)
+	var result: Dictionary = BattlefieldDocScript.add_building(
+		ed.model, asset_id, cell, int(ed._building_rotation), snapshot)
+	if not bool(result.get("ok", false)):
+		ed._status(String(result.get("error", "建筑放置失败")), true)
+		return
+	ed._refresh_canvas()
+	ed._status("放置建筑 %s r=%d @(%d,%d)" % [asset_id, int(ed._building_rotation), cell.x, cell.y])
+	print("[editor] 建筑放置 asset=%s cell=%s rotation=%d" % [asset_id, str(cell), int(ed._building_rotation)])  # L1 埋点
+
+
+## 删除命中格所在建筑（整栋）；无建筑时静默（橡皮路径复用）
+static func remove_building_at(ed, cell: Vector2i) -> bool:
+	var entry := BattlefieldDocScript.building_at(ed.model, cell)
+	if entry.is_empty():
+		return false
+	var removed := BattlefieldDocScript.remove_building(ed.model, String(entry["instance_id"]))
+	if removed:
+		ed._refresh_canvas()
+		ed._status("删除建筑 %s @(%d,%d)" % [String(entry.get("asset_id", "")), cell.x, cell.y])
+	return removed
+
+
+## T 键意图：选中建筑素材 → 循环预放置朝向并刷新预览；
+## 否则旋转选中格/悬停格上的已放置建筑（整栋，一步历史）。
+static func rotate_building_intent(ed) -> void:
+	var d: Dictionary = ed._active_asset()
+	var asset_id := String(d.get("id", ""))
+	if String(d.get("kind", "")) == BattlefieldDocScript.ASSET_KIND_BUILDING and not asset_id.is_empty():
+		ed._building_rotation = (int(ed._building_rotation) + 1) % 4
+		ed._status("建筑朝向 r=%d（T 切换）" % int(ed._building_rotation))
+		ed._update_building_preview(
+			ed._canvas.hover_cell if ed._canvas != null else Vector2i(-1, -1))
+		return
+	var cell2: Vector2i = ed._canvas.selected_cell if ed._canvas != null else Vector2i(-1, -1)
+	if cell2.x < 0 and ed._canvas != null:
+		cell2 = ed._canvas.hover_cell
+	if cell2.x < 0:
+		ed._status("先选中或悬停一个建筑再旋转", true)
+		return
+	var entry := BattlefieldDocScript.building_at(ed.model, cell2)
+	if entry.is_empty():
+		ed._status("(%d,%d) 没有建筑" % [cell2.x, cell2.y], true)
+		return
+	ed._push_undo("旋转建筑")
+	var err := BattlefieldDocScript.rotate_building(ed.model, cell2)
+	if not err.is_empty():
+		ed._status(err, true)
+		return
+	ed._refresh_canvas()
+	ed._status("旋转建筑 %s → r=%d" % [String(entry.get("asset_id", "")), (int(entry.get("rotation", 0)) + 1) % 4])
 
 
 ## 设置地形图例字符（含画笔/橡皮/拖动路径）
@@ -131,6 +223,11 @@ static func place_unit(ed, cell: Vector2i, faction: String, class_id: String, le
 	var terrain := BattlefieldDocScript.glyph_to_terrain((ed.model.rows[cell.y] as String).substr(cell.x, 1))
 	if not BattlefieldLoaderScript._is_standable(terrain):
 		ed._status("%s 不可站人（%s）" % [BattlefieldDocScript.TERRAIN_CN[terrain], str(cell)], true)
+		return false
+	var building_hit := BattlefieldDocScript.building_at(ed.model, cell)
+	if not building_hit.is_empty():
+		ed._status("该格被建筑 %s 占用，不能放置单位（先移除建筑）" % [
+			String(building_hit.get("instance_id", "?"))], true)
 		return false
 	ed._remove_unit_at(cell)
 	var cn := ProfessionDataScript.profession_name(StringName(class_id))

@@ -154,6 +154,11 @@ static func unhandled_input(ed, event: InputEvent) -> void:
 			if ed.get_viewport() != null:
 				ed.get_viewport().set_input_as_handled()
 			ed._canvas.rotate_view(1)
+		elif not ctrl and key.keycode == KEY_T:
+			# 建筑朝向：选中建筑素材=循环预放置 rotation；否则旋转已放置建筑（整栋）
+			if ed.get_viewport() != null:
+				ed.get_viewport().set_input_as_handled()
+			ed._rotate_building_intent()
 		elif not ctrl and key.keycode == KEY_R:
 			if ed.get_viewport() != null:
 				ed.get_viewport().set_input_as_handled()

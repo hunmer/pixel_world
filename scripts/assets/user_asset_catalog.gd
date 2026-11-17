@@ -19,11 +19,17 @@ const SCHEMA_VERSION := 1
 
 const KIND_TERRAIN := "terrain"
 const KIND_PLANT := "plant"
-const KINDS: PackedStringArray = [KIND_TERRAIN, KIND_PLANT]
+const KIND_BUILDING := "building"
+const KINDS: PackedStringArray = [KIND_TERRAIN, KIND_PLANT, KIND_BUILDING]
 
 const RENDER_MODE_FULL := "full"
 const RENDER_MODE_CROP := "crop"
 const RENDER_MODES: PackedStringArray = [RENDER_MODE_FULL, RENDER_MODE_CROP]
+
+## 建筑背面模式：single=四视角恒前图；front_back=相机象限 2/3 切背面（缺背兜底前图）
+const BACK_MODE_SINGLE := "single"
+const BACK_MODE_FRONT_BACK := "front_back"
+const BACK_MODES: PackedStringArray = [BACK_MODE_SINGLE, BACK_MODE_FRONT_BACK]
 
 ## 单图字节上限（网络与本地导入共用防御；服务层可收紧不可放宽）
 const MAX_IMAGE_BYTES := 32 * 1024 * 1024
@@ -35,6 +41,7 @@ const TEMP_SUFFIX := ".tmp"
 
 
 ## 渲染元数据默认值：整图、底部中心锚点、原始比例、占 1 逻辑格。
+## building 追加：单面（无背面）、不引用背面素材、ground_width_px=0（自动标定）。
 static func default_render() -> Dictionary:
 	return {
 		"mode": RENDER_MODE_FULL,
@@ -42,6 +49,9 @@ static func default_render() -> Dictionary:
 		"pivot": {"x": 0.5, "y": 1.0},
 		"scale": 1.0,
 		"footprint": {"w": 1, "h": 1},
+		"back_mode": BACK_MODE_SINGLE,
+		"back_asset_id": "",
+		"ground_width_px": 0.0,
 	}
 
 
@@ -173,6 +183,22 @@ static func _validate_render(render: Variant, ctx: String, img_w: int, img_h: in
 		var fh := int((fp as Dictionary).get("h", 0))
 		if fw < 1 or fh < 1 or fw > 8 or fh > 8:
 			errors.append("%s: render.footprint 必须是 1..8 的整数格，实际 %dx%d" % [ctx, fw, fh])
+	# building 背面/地面标定（旧 terrain/plant 素材缺省合法：single + 空 + 0）
+	var back_mode := str(r.get("back_mode", BACK_MODE_SINGLE))
+	if not BACK_MODES.has(back_mode):
+		errors.append("%s: render.back_mode 必须是 %s 之一，实际 %s" % [ctx, "/".join(BACK_MODES), back_mode])
+	var back_asset_id := str(r.get("back_asset_id", ""))
+	if not back_asset_id.is_empty() and not _is_valid_id(back_asset_id):
+		errors.append("%s: render.back_asset_id 必须是合法素材 id 或空串，实际 %s" % [ctx, back_asset_id])
+	if back_mode == BACK_MODE_FRONT_BACK and back_asset_id.is_empty():
+		errors.append("%s: render.back_mode=front_back 时必须给出 back_asset_id（引用库中另一素材）" % ctx)
+	# single 时残留的 back_asset_id 不报错：加载/更新路径强制清空（见 enforce_single_back），
+	# 保证快照与 adapter 读到的数据恒一致（single 永不携带背面引用）
+	var ground_width: Variant = r.get("ground_width_px", 0.0)
+	if typeof(ground_width) != TYPE_FLOAT and typeof(ground_width) != TYPE_INT:
+		errors.append("%s: render.ground_width_px 必须是数字，实际 %s" % [ctx, str(ground_width)])
+	elif float(ground_width) < 0.0:
+		errors.append("%s: render.ground_width_px 必须 ≥0（0=自动按内容宽标定），实际 %.1f" % [ctx, float(ground_width)])
 	return errors
 
 
@@ -271,8 +297,19 @@ static func _normalize_descriptor(d: Dictionary) -> Dictionary:
 	render["scale"] = float(render.get("scale", 1.0))
 	var fp: Dictionary = render.get("footprint", {})
 	render["footprint"] = {"w": int(fp.get("w", 1)), "h": int(fp.get("h", 1))}
+	render["back_mode"] = str(render.get("back_mode", BACK_MODE_SINGLE))
+	render["back_asset_id"] = str(render.get("back_asset_id", ""))
+	render["ground_width_px"] = float(render.get("ground_width_px", 0.0))
+	enforce_single_back(render)
 	out["render"] = render
 	return out
+
+
+## single 模式强制清空背面引用（就地修改）：back_mode 切回 single 时旧 back_asset_id
+## 不残留——加载归一化与素材更新共用，保证库文件/快照恒一致。
+static func enforce_single_back(render: Dictionary) -> void:
+	if String(render.get("back_mode", BACK_MODE_SINGLE)) == BACK_MODE_SINGLE:
+		render["back_asset_id"] = ""
 
 
 ## 加载库文件：主文件 → .bak 回退。返回 {ok, library, error, used_backup}。

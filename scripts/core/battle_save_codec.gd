@@ -11,6 +11,7 @@ const VERSION := 1
 
 ## 块布局归一化走既有模块，保证与编辑器保存路径同一形状
 const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
+const BuildingLayoutScript = preload("res://scripts/core/building_layout.gd")
 
 const UNIT_INT_FIELDS := ["level", "exp", "hp", "mp"]
 const UNIT_BOOL_FIELDS := ["hasMoved", "hasActed", "isDead"]
@@ -313,6 +314,17 @@ static func validate_chapter(chapter: Dictionary) -> String:
 		if not bool(norm_res.get("ok", false)):
 			return "block_layout 校验失败: %s" % String(norm_res.get("error", ""))
 		chapter["block_layout"] = norm_res["layout"]
+	# 建筑层（可选）：占用派生校验（与 loader 同规则；缺素材快照回退 1x1）
+	if chapter.has("buildings"):
+		var buildings: Variant = chapter["buildings"]
+		if not buildings is Array:
+			return "buildings 不是数组"
+		var layout_err: String = BuildingLayoutScript.validate_entries(
+			buildings, int(width), int(height),
+			chapter.get("user_assets", {}), occupied
+		)
+		if not layout_err.is_empty():
+			return "buildings 校验失败: %s" % layout_err
 	return ""
 
 

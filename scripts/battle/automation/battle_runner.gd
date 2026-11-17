@@ -53,6 +53,8 @@ func _run(scenario: Dictionary) -> Dictionary:
 	seed(int(scenario["seed"]))
 	# 2) 战场构建（与 battle.gd _ready 相同：GridSystem + place 全部单位）
 	_grid = GridSystem.new(int(_chapter["width"]), int(_chapter["height"]), _chapter["map"])
+	# 2b) 建筑占用（无 buildings 键的旧文档为空表，安全跳过）
+	_grid.apply_buildings(_chapter.get("buildings", []), _chapter.get("user_assets", {}))
 	for u in (_chapter["playerUnits"] as Array):
 		_grid.place_unit(u, (u[&"position"] as Vector2i).x, (u[&"position"] as Vector2i).y)
 	for u in (_chapter["enemyUnits"] as Array):

@@ -78,6 +78,9 @@ static func _find_spot(grid: GridSystem, origin: Vector2i) -> Vector2i:
 static func _cell_free(grid: GridSystem, cell: Vector2i) -> bool:
 	if not grid.in_bounds(cell.x, cell.y):
 		return false
+	# 建筑占用格不可刷入（与单位放置/传送共用 is_building_cell 阻挡语义）
+	if grid.is_building_cell(cell.x, cell.y):
+		return false
 	if not grid.unit_at(cell.x, cell.y).is_empty():
 		return false
 	var tile: Dictionary = grid.tile_at(cell.x, cell.y)

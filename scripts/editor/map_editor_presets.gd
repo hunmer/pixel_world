@@ -10,6 +10,7 @@ class_name MapEditorPresets
 extends RefCounted
 
 const RegionClipboardScript = preload("res://scripts/editor/region_clipboard.gd")
+const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 
 
 ## 刷新预设列表；select_id 非空则选中该项（保存后选中新项）
@@ -57,8 +58,11 @@ static func on_save_preset_pressed(ed) -> void:
 	refresh_preset_list(ed, String(result.id))
 	if ed._preset_name_edit != null:
 		ed._preset_name_edit.text = "预设 %d" % (ed._preset_store.count() + 1)
-	ed._status("已保存预设「%s」（%d×%d）" % [preset_name.strip_edges(), int(payload.w), int(payload.h)])
-	print("[editor] 保存预设 id=%s name=%s %d×%d" % [String(result.id), preset_name.strip_edges(), int(payload.w), int(payload.h)])  # L1 埋点
+	var b_note := ""
+	if not BattlefieldDocScript.buildings_fully_within(ed.model, bounds[0], bounds[1]).is_empty():
+		b_note = "（区域内建筑不随预设保存，请用区域复制/剪切带走）"
+	ed._status("已保存预设「%s」（%d×%d）%s" % [preset_name.strip_edges(), int(payload.w), int(payload.h), b_note])
+	print("[editor] 保存预设 id=%s name=%s %d×%d%s" % [String(result.id), preset_name.strip_edges(), int(payload.w), int(payload.h), b_note])  # L1 埋点
 
 
 ## 填入选区：以选区 2D 左上角为原点按预设尺寸回写五层；越界仅报错，成功一步历史

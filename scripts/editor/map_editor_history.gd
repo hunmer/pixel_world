@@ -7,7 +7,7 @@ class_name MapEditorHistory
 extends RefCounted
 
 
-## 快照内容五件套（rows/units/props/tile_overrides/block_layout）+ 尺寸 + 标签。
+## 快照内容六件套（rows/units/props/tile_overrides/block_layout/buildings）+ 尺寸 + 标签。
 static func snapshot(model: Dictionary, label: String = "") -> Dictionary:
 	var units := []
 	for u in model.units:
@@ -15,24 +15,29 @@ static func snapshot(model: Dictionary, label: String = "") -> Dictionary:
 	var props := []
 	for p in model.get("props", []):
 		props.append((p as Dictionary).duplicate())
+	var buildings := []
+	for b in model.get("buildings", []):
+		buildings.append((b as Dictionary).duplicate())
 	return {
 		"rows": (model.rows as Array).duplicate(),
 		"units": units,
 		"props": props,
 		"tile_overrides": (model.get("tile_overrides", {}) as Dictionary).duplicate(true),
 		"block_layout": (model.get("block_layout", {}) as Dictionary).duplicate(true),
+		"buildings": buildings,
 		"width": int(model.width),
 		"height": int(model.height),
 		"label": label,
 	}
 
 
-## 等价比较仅看内容五件套（不含尺寸/标签）。
+## 等价比较仅看内容六件套（不含尺寸/标签）。
 static func state_equal(snap: Dictionary, other: Dictionary) -> bool:
 	return snap.rows == other.rows and snap.units == other.units \
 		and snap.get("props", []) == other.get("props", []) \
 		and snap.get("tile_overrides", {}) == other.get("tile_overrides", {}) \
-		and snap.get("block_layout", {}) == other.get("block_layout", {})
+		and snap.get("block_layout", {}) == other.get("block_layout", {}) \
+		and snap.get("buildings", []) == other.get("buildings", [])
 
 
 ## 恢复快照到 model（从快照再深拷贝，栈内条目保持原样可重复恢复）。返回恢复后的尺寸。
@@ -46,6 +51,10 @@ static func restore_into(model: Dictionary, snap: Dictionary) -> Vector2i:
 	for p in snap.get("props", []):
 		props.append((p as Dictionary).duplicate())
 	model.props = props
+	var buildings := []
+	for b in snap.get("buildings", []):
+		buildings.append((b as Dictionary).duplicate())
+	model["buildings"] = buildings
 	model["tile_overrides"] = (snap.get("tile_overrides", {}) as Dictionary).duplicate(true)
 	model["block_layout"] = (snap.get("block_layout", {}) as Dictionary).duplicate(true)
 	model.width = int(snap.width)

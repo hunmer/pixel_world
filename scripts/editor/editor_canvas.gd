@@ -77,6 +77,9 @@ var _paste_region: Dictionary = {}
 ## 正式放置操作生成的显示副本；权威模型和撤销历史保持不变。
 var _placement_model: Dictionary = {}
 var _placement_cell_count := 0
+## 建筑预览不是正式 model.buildings；instance_id 固定保留字，退出素材工具时清除。
+var _building_preview: Dictionary = {}
+var _building_quadrant := -1
 var _unit_markers: Array[UnitSprite3D] = []
 var _dragging := false
 var _panning := false
@@ -184,6 +187,8 @@ func _render_model(document: Dictionary) -> void:
 	_renderer.set_custom_assets(
 		asset_adapter.visual_for_entries(document.get("props", []), document.get("tile_overrides", {}))
 	)  # 用户素材视觉层（props 的 asset_id + tile_overrides）
+	_sync_building_quadrant()
+	_renderer.set_building_visuals(_building_entries_for(document), false)
 	_renderer.set_block_layout(document.get("block_layout", {}))
 	_renderer.setup(_build_grid(document))
 	_rebuild_unit_markers()
@@ -244,6 +249,45 @@ func _visual_or_empty(asset_id: String) -> Dictionary:
 	if asset_id.is_empty():
 		return {}
 	return asset_adapter.resolve(asset_id)
+
+
+## 建筑素材悬停预览：与正式建筑共用 adapter → renderer 单实例通路。
+func set_building_preview(asset_id: String, origin: Vector2i, rotation: int = 0) -> void:
+	if asset_id.is_empty() or origin.x < 0 or origin.y < 0:
+		clear_building_preview()
+		return
+	_building_preview = {
+		"instance_id": "__building_preview__",
+		"asset_id": asset_id,
+		"x": origin.x,
+		"y": origin.y,
+		"rotation": posmod(rotation, 4),
+		"use_library": true,
+	}
+	asset_preview_visual = {}
+	_sync_building_visuals()
+
+
+func clear_building_preview() -> void:
+	if _building_preview.is_empty():
+		return
+	_building_preview = {}
+	_sync_building_visuals()
+
+
+func _sync_building_visuals() -> void:
+	if _renderer == null:
+		return
+	_renderer.set_building_visuals(_building_entries_for(_display_model()))
+
+
+func _building_entries_for(document: Dictionary) -> Array:
+	if document.is_empty():
+		return []
+	var buildings: Array = document.get("buildings", []).duplicate(true)
+	if not _building_preview.is_empty():
+		buildings.append(_building_preview.duplicate(true))
+	return asset_adapter.visual_for_buildings(buildings, document.get("user_assets", {}))
 
 
 ## 容器尺寸变化（含首次布局 0->实际值）-> 重居中，保持地图可见。
@@ -328,11 +372,13 @@ func _gui_input(event: InputEvent) -> void:
 func rotate_view(direction: int) -> void:
 	if _board != null and _board.camera != null:
 		_board.camera.rotate_step(direction)
+		_sync_building_quadrant()
 
 
 func reset_view() -> void:
 	if _board != null and _board.camera != null:
 		_board.camera.reset_rotation()
+		_sync_building_quadrant()
 
 
 ## 滚轮缩放一步：factor<1 = 放大（B2 battle.gd 语义）。anchor 为画布局部坐标。
@@ -383,6 +429,7 @@ func _process(_delta: float) -> void:
 	if _board == null or _board.camera == null or _renderer == null:
 		return
 	var cam := _board.camera
+	_sync_building_quadrant()
 	var view := {
 		"yaw": cam.yaw_radians,
 		"elev": cam.elevation_radians,
@@ -396,6 +443,23 @@ func _process(_delta: float) -> void:
 		_update_selection_marker()
 		_update_region_marker()
 		_update_paste_marker()
+
+
+func _sync_building_quadrant() -> void:
+	if _board == null or _board.camera == null or _renderer == null:
+		return
+	var quadrant := _target_camera_quadrant()
+	if quadrant == _building_quadrant:
+		return
+	_building_quadrant = quadrant
+	_renderer.set_camera_quadrant(quadrant)
+
+
+func _target_camera_quadrant() -> int:
+	if _board == null or _board.camera == null:
+		return 0
+	var relative: float = _board.camera.target_yaw_radians - IsoProjection.CAMERA_YAW
+	return posmod(int(roundf(relative / (PI * 0.5))), 4)
 
 
 func _update_hover_marker() -> void:
@@ -606,6 +670,7 @@ func set_paste_preview(min_cell: Vector2i, max_cell: Vector2i, valid: bool) -> v
 
 ## 在独立副本执行正式 write；地形、素材、植物、单位与岸线均由正式渲染器生成。
 func set_placement_preview(payload: Dictionary, origin: Vector2i) -> void:
+	clear_building_preview()
 	var candidate: Dictionary = model.duplicate(true)
 	var result: Dictionary = RegionClipboardScript.write(candidate, payload, origin)
 	if not bool(result.get("ok", false)):
@@ -674,8 +739,12 @@ func _rebuild_unit_markers() -> void:
 	_clear_unit_markers()
 	for u: Dictionary in _display_model().units:
 		# 编辑器文档只存放置数据；适配战场显示所需字段，不生成战斗数值或修改文档。
+		# 旧/自定义职业可能没有任何立绘；UnitSprite3D 要求 portrait 非空，显示层回退默认职业。
+		var class_id := StringName(String(u.get("class", "swordsman")))
+		if not CharacterSheet.sheet_exists(class_id) and not ProfessionVisual.portrait_exists(class_id):
+			class_id = &"swordsman"
 		var visual_unit: Dictionary = {
-			classId = StringName(String(u.get("class", "swordsman"))),
+			classId = class_id,
 			faction = StringName(String(u.get("faction", "player"))),
 			level = int(u.get("level", 1)),
 			position = Vector2i(int(u.x), int(u.y)),

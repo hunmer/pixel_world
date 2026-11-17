@@ -28,6 +28,12 @@
 ##       { "turn": 2,                     #   第 N 轮敌方回合开始时刷入（≥1）
 ##         "units": [ { "class": "berserker", "level": 2 } ],   # 格式同 enemyUnits（无 x/y）
 ##         "positions": [ { "x": 0, "y": 2 } ] }                # 与 units 等长的落点数组
+##     ],
+##     "buildings": [                     # 可选建筑层（用户素材 building 类实例）：
+##       { "instance_id": "b1",           #   实例 ID（非空、唯一）
+##         "asset_id": "tower_a",         #   引用 user_assets 快照中的建筑素材
+##         "x": 2, "y": 3,               #   旋转后占用矩形左上格
+##         "rotation": 0 }               #   0..3（90°步，奇数交换占用 w/h）
 ##     ]
 ##   }
 ##
@@ -44,6 +50,7 @@ class_name BattlefieldLoader
 extends RefCounted
 
 const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
+const BuildingLayoutScript = preload("res://scripts/core/building_layout.gd")
 
 ## 战场 JSON 目录
 const BATTLEFIELD_DIR := "res://data/battlefields"
@@ -200,6 +207,11 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 	var reinforcements := _parse_reinforcements(d, map, width, height, occupied)
 	if not bool(reinforcements.get("ok", false)):
 		return { "ok": false, "error": reinforcements.get("error", "") }
+	# 5d) 建筑层（可选 "buildings"）：[{instance_id,asset_id,x,y,rotation}]；
+	# 占用由素材快照 render.footprint 派生，与初始单位/增援落点冲突即整体拒绝。
+	var buildings := _parse_buildings(d, width, height, user_assets, occupied)
+	if not bool(buildings.get("ok", false)):
+		return { "ok": false, "error": buildings.get("error", "") }
 	# 6) 组装 chapter（无 blockTitles → battle.gd 走 terrain fallback 渲染）
 	var chapter := {
 		"id": StringName(String(info["id"])),
@@ -221,6 +233,8 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 		chapter["victory"] = victory["victory"]
 	if not (reinforcements["waves"] as Array).is_empty():
 		chapter["reinforcements"] = reinforcements["waves"]
+	if not (buildings["entries"] as Array).is_empty():
+		chapter["buildings"] = buildings["entries"]
 	return { "ok": true, "chapter": chapter, "info": info }
 
 
@@ -513,6 +527,43 @@ static func _parse_reinforcements(
 			return { "ok": false, "error": parsed.get("error", "") }
 		waves.append({ &"turn": rturn, &"units": parsed["units"] })
 	return { "ok": true, "waves": waves }
+
+
+## 建筑层解析（可选 "buildings"）：[{instance_id,asset_id,x,y,rotation}]。
+## rotation 缺省 0；x/y/rotation 接受 JSON 整值（int 或整值 float）。
+## 校验（BuildingLayout.validate_entries 共用规则）：instance_id 非空唯一、asset_id 非空、
+## rotation 0..3、旋转后占用矩形全格界内、建筑间不重叠、不与单位/增援落点冲突。
+## 素材快照缺该 asset_id 时占用回退 1x1（BuildingLayout 内 warning，引用不丢失）。
+## 返回 { ok, entries } 或 { ok:false, error }。
+static func _parse_buildings(
+	d: Dictionary, width: int, height: int, user_assets: Dictionary, occupied: Dictionary
+) -> Dictionary:
+	if not d.has("buildings"):
+		return { "ok": true, "entries": [] }
+	var raw = d["buildings"]
+	if not (raw is Array):
+		return { "ok": false, "error": "\"buildings\" 必须是数组（[{instance_id,asset_id,x,y,rotation}]）" }
+	var entries: Array = []
+	var count: int = (raw as Array).size()
+	for i in range(count):
+		var e = (raw as Array)[i]
+		if not (e is Dictionary):
+			return { "ok": false, "error": "buildings[%d] 必须是对象" % i }
+		var src: Dictionary = e
+		for key in ["x", "y", "rotation"]:
+			if not _is_json_int(src.get(key, 0)):
+				return { "ok": false, "error": "buildings[%d] 的 \"%s\" 必须是整数" % [i, key] }
+		entries.append({
+			"instance_id": String(src.get("instance_id", "")),
+			"asset_id": String(src.get("asset_id", "")),
+			"x": int(src.get("x", 0)),
+			"y": int(src.get("y", 0)),
+			"rotation": int(src.get("rotation", 0)),
+		})
+	var err: String = BuildingLayoutScript.validate_entries(entries, width, height, user_assets, occupied)
+	if not err.is_empty():
+		return { "ok": false, "error": err }
+	return { "ok": true, "entries": entries }
 
 
 ## terrain 是否可站立（与 world_to_chapter._is_standable 同一规则）

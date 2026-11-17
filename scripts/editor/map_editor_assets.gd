@@ -10,15 +10,20 @@ extends RefCounted
 
 const UserAssetCatalogScript = preload("res://scripts/assets/user_asset_catalog.gd")
 const MapEditorOverlaysScript = preload("res://scripts/editor/map_editor_overlays.gd")
+const MapEditorCellToolsScript = preload("res://scripts/editor/map_editor_cell_tools.gd")
+const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 
 
 ## 素材面板选中变化：写入选中态并同步画布预览格
+## （建筑素材不进前景槽——画布点击走整栋放置，T 换朝向）
 static func on_asset_selected(ed, descriptor: Dictionary) -> void:
 	ed._selected_asset = descriptor
 	if String(descriptor.get("kind", "")) == UserAssetCatalogScript.KIND_TERRAIN:
 		ed._set_block_slot("fg", {"kind": "asset", "id": String(descriptor.get("id", "")), "z": int(ed._block_fg.z)})
 	ed._clear_block_asset_selection()  # 与方块页选中互斥
+	if String(descriptor.get("kind", "")) == BattlefieldDocScript.ASSET_KIND_BUILDING:
+		ed._status("建筑素材 %s（点击画布放置整栋，T 换朝向，再点删除）" % String(descriptor.get("id", "")))
 	update_asset_preview(ed)
 
 
@@ -163,12 +168,20 @@ static func on_asset_library_changed(ed) -> void:
 	ed._refresh_canvas()
 
 
-## 画布预览格跟随素材选中（地块/植物素材统一走 adapter.resolve 烘焙视觉）
+## 画布预览格跟随素材选中（地块/植物素材统一走 adapter.resolve 烘焙视觉；
+## 建筑素材关闭单格预览防双预览，改走整栋放置预览——跟随悬停格）
 static func update_asset_preview(ed) -> void:
 	if ed._canvas == null:
 		return
 	var d := active_asset(ed)
 	if d.is_empty():
 		ed._canvas.asset_preview_visual = {}
+		MapEditorCellToolsScript.clear_building_preview(ed)
 		return
+	if String(d.get("kind", "")) == BattlefieldDocScript.ASSET_KIND_BUILDING:
+		ed._canvas.asset_preview_visual = {}  # 建筑不走单格贴图预览
+		MapEditorCellToolsScript.update_building_preview(
+			ed, ed._canvas.hover_cell)
+		return
+	MapEditorCellToolsScript.clear_building_preview(ed)  # 非建筑素材不占建筑预览
 	ed._canvas.asset_preview_visual = ed._asset_adapter.resolve(String(d.get("id", "")))

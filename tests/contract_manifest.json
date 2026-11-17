@@ -26,7 +26,7 @@
     "animals": 4,
     "battle-logic": 9,
     "presentation": 7,
-    "battle-3d-editor": 12,
+    "battle-3d-editor": 13,
     "battle-automation": 2,
     "battle-presentation": 5,
     "battle-persistence": 2,
@@ -41,12 +41,42 @@
     "world-3d": 5,
     "fx": 1,
     "ui": 2,
-    "user-assets": 5,
+    "user-assets": 7,
     "world-camera": 1,
     "world-battle-bridge": 1,
     "simulation": 1
   },
   "contracts": [
+    {
+      "name": "building_layout",
+      "path": "tests/building_layout_contract.gd",
+      "group": "user-assets",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-17 建筑契约：整值JSON往返、旋转占地、越界与重叠拒绝、缺素材回退、寻路绕行、出生增援阻挡及存档往返；独立headless验证"
+    },
+    {
+      "name": "building_visual",
+      "path": "tests/building_visual_contract.gd",
+      "group": "user-assets",
+      "tags": ["scene", "render"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-17 无截图数值契约：建筑面板、底座标定缩放、单实例与地形共存、前背切换和缺图回退、四向锚点投影、放置预览；真实美术效果待人工验收"
+    },
+    {
+      "name": "map_editor_building",
+      "path": "tests/map_editor_building_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": ["scene"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-17 建筑编辑契约：多格放置与旋转、等高和冲突拒绝、整体删除、撤销重做、区域复制移动、缩图及保存加载"
+    },
     {
       "name": "campaign_ui",
       "path": "tests/campaign_ui_contract.gd",

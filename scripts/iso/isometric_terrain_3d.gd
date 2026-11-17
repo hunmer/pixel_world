@@ -510,8 +510,14 @@ func _append_prop(props: Dictionary, cell: Vector2i, block: Dictionary) -> void:
 			"cells": [],
 			"metas": [],
 		}
-	var anchor := IsoProjection.grid_to_world(cell, float(block.get("level", 0)))
-	var center := anchor + _screen_offset_world(block.get("render_offset", Vector2.ZERO))
+	var grid_anchor: Variant = block.get("grid_anchor", null)
+	var anchor := (
+		IsoProjection.visual_to_world(grid_anchor as Vector2, float(block.get("level", 0)))
+		if grid_anchor is Vector2
+		else IsoProjection.grid_to_world(cell, float(block.get("level", 0)))
+	)
+	var center := anchor + _screen_offset_world(
+		block.get("render_offset", Vector2.ZERO), block.get("camera_right", Vector3.ZERO))
 	(props[key]["transforms"] as Array).append(Transform3D(Basis.IDENTITY, center))
 	(props[key]["colors"] as Array).append(tint)
 	(props[key]["cells"] as Array).append(cell)
@@ -694,9 +700,11 @@ func _atlas_uv(texture: Texture2D, uv: Vector2) -> Vector2:
 	return uv / atlas.get_size()
 
 
-func _screen_offset_world(offset_value: Variant) -> Vector3:
+func _screen_offset_world(offset_value: Variant, right_value: Variant = null) -> Vector3:
 	var offset: Vector2 = offset_value if offset_value is Vector2 else Vector2.ZERO
 	var right := Vector3(IsoProjection.GRID_STEP, 0, -IsoProjection.GRID_STEP)
+	if right_value is Vector3 and not (right_value as Vector3).is_zero_approx():
+		right = right_value as Vector3
 	return right * (offset.x / IsoProjection.TILE_PIXELS) + Vector3.UP * (
 		-offset.y / (IsoProjection.TILE_PIXELS * cos(IsoProjection.CAMERA_ELEVATION))
 	)

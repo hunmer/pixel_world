@@ -37,6 +37,10 @@ signal library_changed
 const Catalog := preload("res://scripts/assets/user_asset_catalog.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
+const PixelSpinBoxScript = preload("res://ui/components/pixel_spin_box.gd")
+const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
+const KIND_BUILDING := "building"
 
 ## 每帧最多烘焙的真实预览数（懒队列限速：解码是同步磁盘 IO + CPU，避免卡帧）
 const PREVIEW_BUDGET_PER_FRAME := 4
@@ -80,9 +84,17 @@ var _crop_w: SpinBox
 var _crop_h: SpinBox
 var _pivot_x: SpinBox
 var _pivot_y: SpinBox
+var _pivot_label: Label
 var _scale_box: SpinBox
 var _fp_w: SpinBox
 var _fp_h: SpinBox
+var _ground_width_row: HBoxContainer
+var _ground_width_box: SpinBox
+var _back_mode_row: HBoxContainer
+var _back_mode_option: OptionButton
+var _back_asset_row: HBoxContainer
+var _back_asset_option: OptionButton
+var _building_hint_label: Label
 var _apply_btn: Button
 var _hide_btn: Button
 
@@ -92,6 +104,7 @@ var _clear_confirm: ConfirmationDialog
 
 var _selected_id := ""
 var _selected_index := -1
+var _detail_kind := ""
 var _syncing_detail := false
 ## asset_id -> AssetList 行号（懒预览回写与重选恢复用）
 var _cells: Dictionary = {}
@@ -153,11 +166,13 @@ func _build_ui() -> void:
 	import_row.add_theme_constant_override("separation", 4)
 	_import_kind = UIFactoryScript.option_button()
 	_import_kind.name = "ImportKind"
-	_import_kind.tooltip_text = "选择本地导入素材的类型（地块 / 植物）"
+	_import_kind.tooltip_text = "选择本地导入素材的类型（地块 / 植物 / 建筑）"
 	_import_kind.add_item("地块")
 	_import_kind.set_item_metadata(0, Catalog.KIND_TERRAIN)
 	_import_kind.add_item("植物")
 	_import_kind.set_item_metadata(1, Catalog.KIND_PLANT)
+	_import_kind.add_item("建筑")
+	_import_kind.set_item_metadata(2, KIND_BUILDING)
 	import_row.add_child(_import_kind)
 	_import_btn = UIFactoryScript.button("本地图片…", _on_import_pressed)
 	_import_btn.name = "ImportButton"
@@ -188,6 +203,8 @@ func _build_ui() -> void:
 	_kind_filter.set_item_metadata(0, Catalog.KIND_TERRAIN)
 	_kind_filter.add_item("植物")
 	_kind_filter.set_item_metadata(1, Catalog.KIND_PLANT)
+	_kind_filter.add_item("建筑")
+	_kind_filter.set_item_metadata(2, KIND_BUILDING)
 	_kind_filter.item_selected.connect(func(_i: int): _page = 0; _rebuild_grid())
 	filter_row.add_child(_kind_filter)
 	_source_filter = UIFactoryScript.option_button()
@@ -332,7 +349,9 @@ func _build_detail_box() -> void:
 	var pivot_row := HBoxContainer.new()
 	pivot_row.name = "PivotRow"
 	pivot_row.add_theme_constant_override("separation", 4)
-	pivot_row.add_child(UIFactoryScript.label("轴心", 11, UIThemeScript.TEXT_DIM))
+	_pivot_label = UIFactoryScript.label("轴心", 11, UIThemeScript.TEXT_DIM)
+	_pivot_label.name = "PivotLabel"
+	pivot_row.add_child(_pivot_label)
 	_pivot_x = _spin(0.0, 1.0, 0.05, 0.5)
 	_pivot_x.name = "PivotX"
 	pivot_row.add_child(_pivot_x)
@@ -348,6 +367,54 @@ func _build_detail_box() -> void:
 	pivot_row.add_child(_fp_h)
 	_detail_box.add_child(pivot_row)
 	UIFactoryScript.center_row(pivot_row)
+
+	# 建筑：原图坐标中的底座可见宽度。0=alpha 内容宽；缩放 = 16*(w+h)/此宽度。
+	_ground_width_row = PixelHBoxScript.new()
+	_ground_width_row.name = "BuildingGroundWidthRow"
+	_ground_width_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	_ground_width_row.add_child(UIFactoryScript.label(
+		"底座宽", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM))
+	_ground_width_box = _spin(0.0, 16384.0, 1.0, 0.0)
+	_ground_width_box.name = "GroundWidthSpin"
+	_ground_width_box.suffix = "px"
+	_ground_width_box.tooltip_text = "裁切后原图的底座可见宽度；0=自动取 alpha 内容宽"
+	_ground_width_row.add_child(_ground_width_box)
+	_detail_box.add_child(_ground_width_row)
+	UIFactoryScript.center_row(_ground_width_row)
+
+	_back_mode_row = PixelHBoxScript.new()
+	_back_mode_row.name = "BuildingBackModeRow"
+	_back_mode_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	_back_mode_row.add_child(UIFactoryScript.label(
+		"图向", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM))
+	_back_mode_option = UIFactoryScript.option_button()
+	_back_mode_option.name = "BackModeOption"
+	_back_mode_option.add_item("单图四向")
+	_back_mode_option.set_item_metadata(0, "single")
+	_back_mode_option.add_item("前 / 背图")
+	_back_mode_option.set_item_metadata(1, "front_back")
+	_back_mode_option.item_selected.connect(_on_back_mode_selected)
+	_back_mode_row.add_child(_back_mode_option)
+	_detail_box.add_child(_back_mode_row)
+	UIFactoryScript.center_row(_back_mode_row)
+
+	_back_asset_row = PixelHBoxScript.new()
+	_back_asset_row.name = "BuildingBackAssetRow"
+	_back_asset_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	_back_asset_row.add_child(UIFactoryScript.label(
+		"背图", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM))
+	_back_asset_option = UIFactoryScript.option_button()
+	_back_asset_option.name = "BackAssetOption"
+	_back_asset_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_back_asset_row.add_child(_back_asset_option)
+	_detail_box.add_child(_back_asset_row)
+	UIFactoryScript.center_row(_back_asset_row)
+
+	_building_hint_label = UIFactoryScript.label(
+		"建筑轴心是底座中心；旋转奇数象限交换占地宽/深，缺背图自动用前图。",
+		ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
+	_building_hint_label.name = "BuildingHintLabel"
+	_detail_box.add_child(_building_hint_label)
 
 	var action_row := HBoxContainer.new()
 	action_row.name = "DetailActionRow"
@@ -391,7 +458,7 @@ func _build_dialogs() -> void:
 
 
 func _spin(min_v: float, max_v: float, step: float, value: float) -> SpinBox:
-	var s := SpinBox.new()
+	var s := PixelSpinBoxScript.new()
 	s.min_value = min_v
 	s.max_value = max_v
 	s.step = step
@@ -691,19 +758,56 @@ func deselect() -> void:
 		_detail_box.visible = false
 
 
+func _rebuild_back_asset_options(selected_back: String) -> void:
+	_back_asset_option.clear()
+	_back_asset_option.add_item("未设置（回退正面）")
+	_back_asset_option.set_item_metadata(0, "")
+	var rows: Array = service.list_assets() if service != null else []
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return String(a.get("name", a.get("id", ""))).naturalnocasecmp_to(
+			String(b.get("name", b.get("id", "")))) < 0)
+	for raw in rows:
+		if not raw is Dictionary:
+			continue
+		var d: Dictionary = raw
+		var aid := String(d.get("id", ""))
+		if aid == _selected_id or String(d.get("kind", "")) != KIND_BUILDING:
+			continue
+		var index := _back_asset_option.item_count
+		_back_asset_option.add_item(String(d.get("name", aid)))
+		_back_asset_option.set_item_metadata(index, aid)
+		if aid == selected_back:
+			_back_asset_option.select(index)
+
+
+func _on_back_mode_selected(_index: int) -> void:
+	if _back_mode_option == null or _back_asset_row == null:
+		return
+	var front_back := String(_back_mode_option.get_selected_metadata()) == "front_back"
+	_back_asset_row.visible = _detail_kind == KIND_BUILDING and front_back
+	_back_asset_option.disabled = not front_back
+
+
 func _fill_detail(desc: Dictionary) -> void:
 	_syncing_detail = true
+	var source := desc
+	if String(desc.get("kind", "")) == KIND_BUILDING and adapter != null:
+		var raw := adapter.library_descriptor(String(desc.get("id", "")))
+		if not raw.is_empty():
+			source = raw
+	_detail_kind = String(source.get("kind", ""))
+	var is_building := _detail_kind == KIND_BUILDING
 	_detail_box.visible = true
-	_detail_title.text = "选中：%s（%s）" % [desc.get("name", ""), desc.get("id", "")]
-	_name_edit.text = String(desc.get("name", ""))
+	_detail_title.text = "选中：%s（%s）" % [source.get("name", ""), source.get("id", "")]
+	_name_edit.text = String(source.get("name", ""))
 	var tag_parts := PackedStringArray()
-	for t in desc.get("tags", []):
+	for t in source.get("tags", []):
 		tag_parts.append(String(t))
 	_tags_edit.text = ", ".join(tag_parts)
-	var render: Dictionary = desc.get("render", Catalog.default_render())
+	var render: Dictionary = source.get("render", Catalog.default_render())
 	_mode_option.select(0 if String(render.get("mode", "full")) == Catalog.RENDER_MODE_FULL else 1)
-	var img_w := int(desc.get("width", 0))
-	var img_h := int(desc.get("height", 0))
+	var img_w := int(source.get("width", 0))
+	var img_h := int(source.get("height", 0))
 	_crop_x.max_value = maxf(img_w, 1)
 	_crop_y.max_value = maxf(img_h, 1)
 	_crop_w.max_value = maxf(img_w, 1)
@@ -726,6 +830,16 @@ func _fill_detail(desc: Dictionary) -> void:
 	var fp: Dictionary = render.get("footprint", {"w": 1, "h": 1})
 	_fp_w.value = int(fp.get("w", 1))
 	_fp_h.value = int(fp.get("h", 1))
+	_ground_width_row.visible = is_building
+	_ground_width_box.value = float(render.get("ground_width_px", 0.0))
+	_back_mode_row.visible = is_building
+	_back_mode_option.select(1 if String(render.get("back_mode", "single")) == "front_back" else 0)
+	_rebuild_back_asset_options(String(render.get("back_asset_id", "")))
+	_on_back_mode_selected(_back_mode_option.selected)
+	var pivot_label := _pivot_label
+	if pivot_label != null:
+		pivot_label.text = "底座中心" if is_building else "轴心"
+	_building_hint_label.visible = is_building
 	_syncing_detail = false
 
 
@@ -743,6 +857,15 @@ func _on_apply_pressed() -> void:
 	if mode == Catalog.RENDER_MODE_CROP:
 		render["crop"] = {"x": int(_crop_x.value), "y": int(_crop_y.value),
 			"w": int(_crop_w.value), "h": int(_crop_h.value)}
+	if _detail_kind == KIND_BUILDING:
+		var front_back := String(_back_mode_option.get_selected_metadata()) == "front_back"
+		render["ground_width_px"] = float(_ground_width_box.value)
+		render["back_mode"] = "front_back" if front_back else "single"
+		render["back_asset_id"] = (
+			String(_back_asset_option.get_selected_metadata())
+			if front_back and _back_asset_option.selected >= 0
+			else ""
+		)
 	var tags: Array = []
 	for t in _tags_edit.text.split(",", false):
 		var ts := t.strip_edges()
@@ -755,7 +878,7 @@ func _on_apply_pressed() -> void:
 	}
 	var res: Dictionary = service.update_asset(_selected_id, changes)
 	if bool(res.get("ok", false)):
-		adapter.clear_cache(_selected_id)  # render 变了，旧缓存与烘焙图作废
+		adapter.clear_cache()  # 前/背图任一配置变化都可能影响多个建筑快照
 		adapter.invalidate_baked(_selected_id)
 		_status("已更新素材 %s" % _selected_id)
 		library_changed.emit()
@@ -822,6 +945,17 @@ func _on_import_pressed() -> void:
 	_file_dialog.popup_centered_ratio(0.72)
 
 
+func _kind_display_name(kind: String) -> String:
+	match kind:
+		Catalog.KIND_TERRAIN:
+			return "地块"
+		Catalog.KIND_PLANT:
+			return "植物"
+		KIND_BUILDING:
+			return "建筑"
+	return "素材"
+
+
 func _on_files_selected(paths: PackedStringArray) -> void:
 	var kind := str(_import_kind.get_selected_metadata())
 	var ok_count := 0
@@ -835,7 +969,7 @@ func _on_files_selected(paths: PackedStringArray) -> void:
 	if ok_count > 0:
 		adapter.clear_cache()
 		_rebuild_tag_filter()
-		_status("导入完成：%d 个素材（%s）" % [ok_count, "地块" if kind == Catalog.KIND_TERRAIN else "植物"])
+		_status("导入完成：%d 个素材（%s）" % [ok_count, _kind_display_name(kind)])
 		library_changed.emit()
 		_rebuild_grid()
 	else:

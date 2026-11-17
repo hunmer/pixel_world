@@ -9,6 +9,7 @@ class_name MapEditorCellTools
 extends RefCounted
 
 const MapEditorUnitsScript = preload("res://scripts/editor/map_editor_units.gd")
+const MapEditorModelOpsScript = preload("res://scripts/editor/map_editor_model_ops.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 
 
@@ -111,10 +112,13 @@ static func on_cell_dragged(ed, cell: Vector2i) -> void:
 	elif tool == ed.Tool.ASSET:
 		ed._apply_asset_tool(cell)
 	elif tool == ed.Tool.ERASE:
-		ed._set_glyph(cell, ".")
-		ed._set_prop(cell, "")
-		ed._set_tile_override(cell, "")
-		ed._set_prop_asset(cell, "")
+		if ed._remove_building_at(cell):
+			pass  # 建筑整栋删除优先
+		else:
+			ed._set_glyph(cell, ".")
+			ed._set_prop(cell, "")
+			ed._set_tile_override(cell, "")
+			ed._set_prop_asset(cell, "")
 	elif tool == ed.Tool.HEIGHT_UP or tool == ed.Tool.HEIGHT_DOWN:
 		apply_height_brush(ed, cell, tool)
 
@@ -150,6 +154,14 @@ static func on_cell_released(ed, cell: Vector2i) -> void:
 	ed._commit_region_move(bounds, cell - grab, false)
 
 
+## 素材工具的撤销标签：建筑素材单独成标签（放置/删除/旋转语义不同）
+static func undo_label_for_asset(ed) -> String:
+	var d: Dictionary = ed._active_asset()
+	if String(d.get("kind", "")) == BattlefieldDocScript.ASSET_KIND_BUILDING:
+		return "建筑"
+	return "素材"
+
+
 static func apply_tool(ed, cell: Vector2i) -> void:
 	var tool := active_tool(ed)
 	if tool == ed.Tool.UNIT or (tool == ed.Tool.SELECT and ed._selection_mode == &"single"):
@@ -170,7 +182,7 @@ static func apply_tool(ed, cell: Vector2i) -> void:
 	var names := {
 		ed.Tool.PAINT: "画笔", ed.Tool.FILL: "填充", ed.Tool.ERASE: "橡皮", ed.Tool.UNIT: "角色",
 		ed.Tool.PLANT: "植物", ed.Tool.HEIGHT_UP: "地形上升", ed.Tool.HEIGHT_DOWN: "地形下降",
-		ed.Tool.ASSET: "素材", ed.Tool.REPLACE: "替换方块", ed.Tool.PICK: "吸管",
+		ed.Tool.ASSET: undo_label_for_asset(ed), ed.Tool.REPLACE: "替换方块", ed.Tool.PICK: "吸管",
 	}
 	var undo_label: String = names[tool]
 	ed._push_undo(undo_label)  # 按下一次=一步；后续拖动不再入栈（整笔一笔撤销）
@@ -200,7 +212,11 @@ static func apply_tool(ed, cell: Vector2i) -> void:
 
 
 ## 高度画笔只改 block_layout.z；单笔每格至多执行一次，边界由文档 schema 限制。
+## 建筑占用格拒绝改高：破坏底面等高（保存由 validate_buildings 拦，这里编辑期就反馈）。
 static func apply_height_brush(ed, cell: Vector2i, tool: int) -> void:
+	if not BattlefieldDocScript.building_at(ed.model, cell).is_empty():
+		ed._status("该格被建筑占用，不能单独改高度（先移除/移走建筑）", true)
+		return
 	if ed._height_stroke_cells.has(cell):
 		return
 	ed._height_stroke_cells[cell] = true
@@ -234,12 +250,43 @@ static func on_hover_changed(ed, cell: Vector2i) -> void:
 		ed._update_paste_preview(cell)  # 粘贴预览跟随悬停格
 	if ed._place_mode:
 		ed._update_place_preview(cell)  # 放置预览跟随悬停格
+	update_building_preview(ed, cell)  # 建筑放置预览（未选建筑素材时内部自清）
 	if cell.x >= 0:
 		update_cell_info(ed, cell)
 	elif ed._canvas.selected_cell.x >= 0:
 		update_cell_info(ed, ed._canvas.selected_cell)
 	else:
 		update_cell_info(ed, Vector2i(-1, -1))
+
+
+## 建筑放置预览清理（canvas 新接口 has_method 防护——与视觉层并行开发时序解耦）
+static func clear_building_preview(ed) -> void:
+	if ed._canvas != null and ed._canvas.has_method("clear_building_preview"):
+		ed._canvas.clear_building_preview()
+
+
+## 建筑放置预览：选中建筑素材 + 悬停有效格 → 先全规则校验
+## （界内/底面等高/建筑不重叠/不压单位，占用经素材快照 footprint 派生），
+## 合法才 set_building_preview，非法/出界/未选建筑 → 清预览。
+static func update_building_preview(ed, cell: Vector2i) -> void:
+	if ed._canvas == null or not ed._canvas.has_method("set_building_preview"):
+		return
+	var d: Dictionary = ed._active_asset()
+	var asset_id := String(d.get("id", ""))
+	var is_building: bool = String(d.get("kind", "")) == BattlefieldDocScript.ASSET_KIND_BUILDING \
+		and not asset_id.is_empty()
+	var in_bounds: bool = cell.x >= 0 and cell.y >= 0 \
+		and cell.x < int(ed.model.width) and cell.y < int(ed.model.height)
+	if not is_building or not in_bounds:
+		clear_building_preview(ed)
+		return
+	var snapshot: Dictionary = MapEditorModelOpsScript.building_assets_snapshot(ed, asset_id)
+	var err := BattlefieldDocScript.can_place_building(
+		ed.model, asset_id, cell, int(ed._building_rotation), snapshot)
+	if not err.is_empty():
+		clear_building_preview(ed)
+		return
+	ed._canvas.set_building_preview(asset_id, cell, int(ed._building_rotation))
 
 
 static func update_cell_info(ed, cell: Vector2i) -> void:
@@ -269,6 +316,11 @@ static func on_block_z_changed(ed, value: float) -> void:
 	if ed._syncing_block_z or ed._canvas.selected_cell.x < 0:
 		return
 	var cell: Vector2i = ed._canvas.selected_cell
+	# 建筑占用格拒绝改高（底面必须等高）；不入历史，回滚 SpinBox 显示
+	if not BattlefieldDocScript.building_at(ed.model, cell).is_empty():
+		ed._status("该格被建筑占用，不能单独改高度（先移除/移走建筑）", true)
+		sync_block_panel(ed)
+		return
 	ed._push_undo("方块高度")
 	if not BattlefieldDocScript.set_cell_z(ed.model, cell, int(value)):
 		return

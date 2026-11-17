@@ -3,7 +3,8 @@
 ## 编辑器模型（Dictionary）：
 ##   { id:String, name:String, description:String, hosting:bool,
 ##     width:int, height:int, rows:Array[String]（图例行，与 BattlefieldLoader.DEFAULT_LEGEND 一致）,
-##     units:Array[{ class:String, name:String, level:int, x:int, y:int, faction:"player"|"enemy" }] }
+##     units:Array[{ class:String, name:String, level:int, x:int, y:int, faction:"player"|"enemy" }],
+##     buildings:Array[{ instance_id:String, asset_id:String, x:int, y:int, rotation:int }]（建筑层，整栋条目） }
 ##
 ## 与 scripts/core/battlefield_loader.gd 的 JSON schema 互转；保存前用 loader 做权威校验。
 ## 全部纯静态，可 headless 契约测试（tests/map_editor_contract.gd）。
@@ -13,6 +14,10 @@ extends RefCounted
 
 const BattlefieldLoaderScript = preload("res://scripts/core/battlefield_loader.gd")
 const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
+const BuildingLayoutScript = preload("res://scripts/core/building_layout.gd")
+
+## 建筑类用户素材 kind（与素材契约一致；字符串字面量避免与素材目录常量的编译时序耦合）
+const ASSET_KIND_BUILDING := "building"
 
 const MIN_SIZE := 4
 const MAX_SIZE := 40
@@ -92,6 +97,7 @@ static func create_empty(w: int = DEFAULT_WIDTH, h: int = DEFAULT_HEIGHT) -> Dic
 		"rows": rows,
 		"units": [],
 		"props": [],  # 植物层 [{x,y,texture}]，与地形解耦（一格至多一株）
+		"buildings": [],  # 建筑层 [{instance_id,asset_id,x,y,rotation}]（整栋条目，占用由 footprint 派生）
 		"block_layout": BlockLayoutScript.create(w, h),
 		"tile_overrides": {},  # 地块视觉覆盖层 {"x,y": {asset_id}}——逻辑地形不变
 		"user_assets": {},     # 引用的用户素材描述符快照 {asset_id: descriptor}（保存时从素材库拷贝）
@@ -147,6 +153,8 @@ static func resize(model: Dictionary, w: int, h: int) -> Dictionary:
 		for y in range(mini(int(model.height), h)):
 			for x in range(mini(int(model.width), w)):
 				set_cell_z(out, Vector2i(x, y), cell_z(model, Vector2i(x, y)))
+	# 建筑整栋保留/剔除：占用格全部落在新界内才保留（不静默切碎）
+	prune_buildings_outside(out, w, h)
 	return out
 
 
@@ -316,6 +324,228 @@ static func set_tile_override(model: Dictionary, cell: Vector2i, asset_id: Strin
 	return true
 
 
+## ---- 建筑层（buildings）--------------------------------------------------
+## 建筑是跨格整体条目 [{instance_id,asset_id,x,y,rotation}]：占用格由素材
+## descriptor.render.footprint 派生（BuildingLayout），底面必须等高、不与
+## 单位/其他建筑重叠。编辑永远整栋进行（放置/删除/旋转/区域操作不切碎）。
+
+## 建筑条目列表（模型缺 buildings 键时返回空数组，不写回模型）
+static func building_entries(model: Dictionary) -> Array:
+	return model.get("buildings", []) as Array
+
+
+## 占用映射 {"x,y" -> instance_id}（占用格由素材快照 footprint 派生）
+static func building_occupancy(model: Dictionary) -> Dictionary:
+	return BuildingLayoutScript.occupancy(building_entries(model), model.get("user_assets", {}) as Dictionary)
+
+
+## 命中格所在建筑条目（无则 {}）
+static func building_at(model: Dictionary, cell: Vector2i) -> Dictionary:
+	for e in building_entries(model):
+		for c in BuildingLayoutScript.occupied_cells(e, model.get("user_assets", {}) as Dictionary):
+			if c == cell:
+				return e
+	return {}
+
+
+## 合并素材快照：模型已有快照 + 待放置素材（预览/首放时 user_assets 可能还没有该素材）
+static func _merged_assets(model: Dictionary, assets_snapshot: Dictionary) -> Dictionary:
+	var merged: Dictionary = (model.get("user_assets", {}) as Dictionary).duplicate(true)
+	for aid in assets_snapshot.keys():
+		merged[String(aid)] = (assets_snapshot[aid] as Dictionary).duplicate(true)
+	return merged
+
+
+## 单位占用映射 {"x,y" -> true}（建筑不得压单位）
+static func _unit_occupancy(model: Dictionary) -> Dictionary:
+	var occupied: Dictionary = {}
+	for u in model.get("units", []) as Array:
+		occupied[BuildingLayoutScript.cell_key(int(u.x), int(u.y))] = true
+	return occupied
+
+
+## 校验放置：返回错误文案（"" = 可放）。
+## assets_snapshot 非空时参与占用派生（含待放素材，含 render.back_asset_id 依赖）。
+static func can_place_building(
+	model: Dictionary, asset_id: String, origin: Vector2i, rotation: int, assets_snapshot: Dictionary = {}
+) -> String:
+	if asset_id.is_empty():
+		return "缺少建筑素材"
+	if rotation < 0 or rotation > 3:
+		return "建筑 rotation 越界: %d（0..3）" % rotation
+	var entry := {
+		"instance_id": "?", "asset_id": asset_id,
+		"x": origin.x, "y": origin.y, "rotation": rotation,
+	}
+	var assets := _merged_assets(model, assets_snapshot)
+	var cells := BuildingLayoutScript.occupied_cells(entry, assets)
+	var w := int(model.width)
+	var h := int(model.height)
+	# 界内
+	for cell in cells:
+		if cell.x < 0 or cell.y < 0 or cell.x >= w or cell.y >= h:
+			return "建筑占用 (%d,%d) 越界（地图 %d×%d）" % [cell.x, cell.y, w, h]
+	# 底面等高（不支持登楼，建筑整体坐在同一高度平面）
+	var z_base := cell_z(model, cells[0])
+	for cell in cells:
+		if cell_z(model, cell) != z_base:
+			return "建筑底面不等高（%d,%d z=%d ≠ %d,%d z=%d）" % [
+				cells[0].x, cells[0].y, z_base, cell.x, cell.y, cell_z(model, cell)]
+	# 建筑间不重叠（与新楼同一份 merged 解释：库 footprint 变更后不出现新旧混用）
+	var occupied_buildings := BuildingLayoutScript.occupancy(
+		building_entries(model), assets)
+	for cell in cells:
+		var k := BuildingLayoutScript.cell_key(cell.x, cell.y)
+		if occupied_buildings.has(k):
+			return "建筑占用 (%d,%d) 与 %s 重叠" % [cell.x, cell.y, String(occupied_buildings[k])]
+	# 不压单位
+	var units := _unit_occupancy(model)
+	for cell in cells:
+		if units.has(BuildingLayoutScript.cell_key(cell.x, cell.y)):
+			return "建筑占用 (%d,%d) 与单位冲突" % [cell.x, cell.y]
+	return ""
+
+
+## 生成下一个不冲突的 instance_id（b001 递增，跳过已用）
+static func _next_building_id(model: Dictionary) -> String:
+	var used: Dictionary = {}
+	for e in building_entries(model):
+		used[String(e.get("instance_id", ""))] = true
+	var n := 1
+	while used.has("b%03d" % n):
+		n += 1
+	return "b%03d" % n
+
+
+## 放置建筑：校验通过后追加条目，并把 assets_snapshot（主素材+背面依赖）
+## 深拷入 user_assets。返回 {ok:true, entry} 或 {ok:false, error}。
+static func add_building(
+	model: Dictionary, asset_id: String, origin: Vector2i, rotation: int, assets_snapshot: Dictionary
+) -> Dictionary:
+	var err := can_place_building(model, asset_id, origin, rotation, assets_snapshot)
+	if not err.is_empty():
+		return { "ok": false, "error": err }
+	var entry := {
+		"instance_id": _next_building_id(model),
+		"asset_id": asset_id,
+		"x": origin.x, "y": origin.y,
+		"rotation": rotation,
+	}
+	# 快照提交前模拟：既有楼按新 footprint 重解释后仍需全体合法（界内/等高/重叠/压单位），
+	# 失败则拒绝放置且不改动模型（防止"放置成功、保存才拒"的编辑态漂移）。
+	if not assets_snapshot.is_empty():
+		var merged := _merged_assets(model, assets_snapshot)
+		var sim: Dictionary = model.duplicate(true)
+		if not sim.has("buildings"):
+			sim["buildings"] = []
+		(sim["buildings"] as Array).append(entry.duplicate())
+		sim["user_assets"] = merged.duplicate(true)
+		var sim_err := validate_buildings(sim)
+		if not sim_err.is_empty():
+			return { "ok": false, "error": "素材占地已变化，落快照会使既有建筑非法：%s" % sim_err }
+		model["user_assets"] = merged
+	if not model.has("buildings"):
+		model["buildings"] = []
+	(model["buildings"] as Array).append(entry)
+	return { "ok": true, "entry": entry.duplicate() }
+
+
+## 按 instance_id 删除整栋建筑；返回是否删到
+static func remove_building(model: Dictionary, instance_id: String) -> bool:
+	var entries := building_entries(model)
+	for i in range(entries.size()):
+		if String((entries[i] as Dictionary).get("instance_id", "")) == instance_id:
+			entries.remove_at(i)
+			return true
+	return false
+
+
+## 删除命中格所在建筑（整栋）；返回是否删到
+static func remove_building_at(model: Dictionary, cell: Vector2i) -> bool:
+	var entry := building_at(model, cell)
+	if entry.is_empty():
+		return false
+	return remove_building(model, String(entry["instance_id"]))
+
+
+## 旋转命中格所在建筑 90°（rotation+1 回环），目标位置非法时拒绝；
+## 返回错误文案（"" = 成功）。旋转可能改变占用格，全部规则重校验。
+static func rotate_building(model: Dictionary, cell: Vector2i) -> String:
+	var entry := building_at(model, cell)
+	if entry.is_empty():
+		return "(%d,%d) 没有建筑" % [cell.x, cell.y]
+	var instance_id := String(entry["instance_id"])
+	var new_entry := (entry as Dictionary).duplicate(true)
+	new_entry["rotation"] = (int(entry.get("rotation", 0)) + 1) % 4
+	# 先摘除自己再校验（避免自重叠误报）
+	remove_building(model, instance_id)
+	var err := can_place_building(
+		model, String(new_entry["asset_id"]),
+		Vector2i(int(new_entry["x"]), int(new_entry["y"])), int(new_entry["rotation"]))
+	if not err.is_empty():
+		(model["buildings"] as Array).append(entry)  # 恢复原朝向
+		return "旋转失败：%s" % err
+	(model["buildings"] as Array).append(new_entry)
+	return ""
+
+
+## 完全落在闭区间矩形 [min_cell, max_cell]（含边界）内的建筑条目列表。
+## 区域复制/剪切/移动只作用于整栋：跨界（部分占用在矩形外）的建筑不算在内。
+static func buildings_fully_within(model: Dictionary, min_cell: Vector2i, max_cell: Vector2i) -> Array:
+	var result: Array = []
+	for e in building_entries(model):
+		var inside := true
+		for c in BuildingLayoutScript.occupied_cells(e, model.get("user_assets", {}) as Dictionary):
+			if c.x < min_cell.x or c.y < min_cell.y or c.x > max_cell.x or c.y > max_cell.y:
+				inside = false
+				break
+		if inside:
+			result.append((e as Dictionary).duplicate(true))
+	return result
+
+
+## 建筑整栋剔除：占用格全部落在 w×h 界内才保留（resize 用）。
+## 返回删除的栋数；不静默切碎——任何一格出界整栋删。
+static func prune_buildings_outside(model: Dictionary, w: int, h: int) -> int:
+	var kept: Array = []
+	var removed := 0
+	for e in building_entries(model):
+		var inside := true
+		for c in BuildingLayoutScript.occupied_cells(e, model.get("user_assets", {}) as Dictionary):
+			if c.x < 0 or c.y < 0 or c.x >= w or c.y >= h:
+				inside = false
+				break
+		if inside:
+			kept.append(e)
+		else:
+			removed += 1
+	if model.has("buildings") or removed > 0:
+		model["buildings"] = kept
+	return removed
+
+
+## 建筑层校验（保存前本地反馈；权威校验是 loader 回读）。
+## BuildingLayout.validate_entries：id 唯一/界内/不重叠/不压单位；
+## 追加底面等高：占用格 block_layout z 必须全等（放置时已保证，
+## 旧档手工改高/库 footprint 变更后可能破坏）。
+static func validate_buildings(model: Dictionary) -> String:
+	var entries := building_entries(model)
+	var base_err := BuildingLayoutScript.validate_entries(
+		entries, int(model.width), int(model.height),
+		model.get("user_assets", {}) as Dictionary, _unit_occupancy(model))
+	if not base_err.is_empty():
+		return base_err
+	for e in entries:
+		var z_ref := -1
+		for c: Vector2i in BuildingLayoutScript.occupied_cells(e, model.get("user_assets", {}) as Dictionary):
+			var z := cell_z(model, c)
+			if z_ref < 0:
+				z_ref = z
+			elif z != z_ref:
+				return "建筑 %s 底面不等高（z=%d 与 z=%d）" % [String(e.get("instance_id", "?")), z_ref, z]
+	return ""
+
+
 ## 模型 -> 战场 JSON dict（loader schema：rows + 显式 legend + 双阵营单位）
 static func to_json_dict(model: Dictionary) -> Dictionary:
 	var players: Array = []
@@ -371,6 +601,19 @@ static func to_json_dict(model: Dictionary) -> Dictionary:
 			if not aid.is_empty():
 				joverrides[key] = { "asset_id": aid }
 		out["tile_overrides"] = joverrides
+	# 建筑层（可选字段：空则不写，保持旧 JSON 兼容）
+	var buildings: Array = model.get("buildings", [])
+	if not buildings.is_empty():
+		var jbuildings: Array = []
+		for b in buildings:
+			jbuildings.append({
+				"instance_id": String(b.get("instance_id", "")),
+				"asset_id": String(b.get("asset_id", "")),
+				"x": int(b.get("x", 0)),
+				"y": int(b.get("y", 0)),
+				"rotation": int(b.get("rotation", 0)),
+			})
+		out["buildings"] = jbuildings
 	# 引用素材描述符快照（可选字段：空则不写；运行时纹理不序列化，只存纯 JSON 描述）
 	var user_assets: Dictionary = model.get("user_assets", {})
 	if not user_assets.is_empty():
@@ -443,6 +686,24 @@ static func from_json_dict(d: Dictionary) -> Dictionary:
 		if int(parts[0]) < 0 or int(parts[1]) < 0:
 			continue
 		overrides[key] = { "asset_id": aid }
+	# 建筑层（可选；宽松解析：非 Dict/缺 id/缺 asset 跳过，rotation 折叠到 0..3
+	# （posmod 4：wrapi(x,0,3) 是半开区间会把合法 3 折成 0）；
+	# 越界条目保留，由 validate_buildings/loader 报错，不静默丢弃）
+	var buildings: Array = []
+	for b in d.get("buildings", []):
+		if not (b is Dictionary):
+			continue
+		var bid := String(b.get("instance_id", ""))
+		var baid := String(b.get("asset_id", ""))
+		if bid.is_empty() or baid.is_empty():
+			continue
+		buildings.append({
+			"instance_id": bid,
+			"asset_id": baid,
+			"x": int(b.get("x", 0)),
+			"y": int(b.get("y", 0)),
+			"rotation": posmod(int(b.get("rotation", 0)), 4),
+		})
 	# 引用素材描述符快照（可选；形状宽松：只要键是 asset_id 的 Dictionary 就收）
 	var user_assets: Dictionary = {}
 	var raw_assets: Variant = d.get("user_assets", {})
@@ -461,6 +722,7 @@ static func from_json_dict(d: Dictionary) -> Dictionary:
 		"rows": rows,
 		"units": units,
 		"props": props,
+		"buildings": buildings,
 		"tile_overrides": overrides,
 		"user_assets": user_assets,
 	}
@@ -510,6 +772,9 @@ static func quick_validate(model: Dictionary) -> String:
 		var layout_error := validate_block_layout(model)
 		if not layout_error.is_empty():
 			return layout_error
+	var buildings_error := validate_buildings(model)
+	if not buildings_error.is_empty():
+		return buildings_error
 	return ""
 
 

@@ -26,12 +26,16 @@ static func load_candidate(path: String) -> Dictionary:
 	var layout_error := BattlefieldDocScript.validate_block_layout(candidate)
 	if not layout_error.is_empty():
 		return { "ok": false, "error": layout_error }
+	var buildings_error := BattlefieldDocScript.validate_buildings(candidate)
+	if not buildings_error.is_empty():
+		return { "ok": false, "error": buildings_error }
 	return { "ok": true, "model": candidate }
 
 
 ## 保存前从素材库拷贝被引用素材的描述符快照进 model.user_assets：
 ## B2 渲染离线读档自包含（user_assets 缺失时按 id 回退库+占位）；
-## 库中已隐藏/删除的素材保留模型里的旧快照，保证存档与历史引用不丢
+## 库中已隐藏/删除的素材保留模型里的旧快照，保证存档与历史引用不丢。
+## 建筑素材连带 render.back_asset_id 背面依赖一并快照（front_back 模式离线可渲染）。
 static func sync_user_assets(model: Dictionary, service) -> void:
 	var referenced := {}
 	for p in model.get("props", []):
@@ -45,6 +49,22 @@ static func sync_user_assets(model: Dictionary, service) -> void:
 		if not tid.is_empty():
 			referenced[tid] = true
 	var lib: Dictionary = model.get("user_assets", {})
+	for b in model.get("buildings", []):
+		var baid := String((b as Dictionary).get("asset_id", ""))
+		if baid.is_empty():
+			continue
+		referenced[baid] = true
+		# 背面依赖：优先库中最新 descriptor，库无则模型旧快照（back 素材被隐藏时不丢引用）
+		var render: Variant = null
+		var in_lib: Variant = service.find_by_id(baid)
+		if in_lib is Dictionary:
+			render = (in_lib as Dictionary).get("render", null)
+		elif lib.has(baid):
+			render = (lib[baid] as Dictionary).get("render", null)
+		if render is Dictionary:
+			var back_id := String((render as Dictionary).get("back_asset_id", ""))
+			if not back_id.is_empty():
+				referenced[back_id] = true
 	for aid: String in referenced:
 		var d: Variant = service.find_by_id(aid)
 		if d is Dictionary:
@@ -96,6 +116,7 @@ static func apply_load(ed, path: String) -> Dictionary:
 	ed._height_box.value = ed.model.height
 	ed._syncing_boxes = false
 	ed._refresh_canvas()
+	ed._clear_building_preview()  # 跨模型建筑预览不成立
 	ed._clipboard.clear()  # 跨模型粘贴语义不成立：读取即清剪贴板/取消预览
 	ed._cancel_paste()
 	ed._cancel_place_mode()  # 跨模型粘贴语义不成立：读取退出放置
