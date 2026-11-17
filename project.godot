@@ -40,6 +40,10 @@ window/stretch/aspect="expand"
 
 enabled=PackedStringArray("res://addons/breakpoint_mcp/plugin.cfg", "res://addons/panku_console/plugin.cfg", "res://addons/pixelfx/plugin.cfg")
 
+[gui]
+
+theme/custom="res://assets/fonts/pixel_theme.tres"
+
 [input]
 
 confirm={
