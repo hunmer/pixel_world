@@ -83,10 +83,16 @@ var _block_layout: Dictionary = {}
 ## layer="tile"：整图替换该格地块视觉（隐藏常规柱/装饰，避免与预渲染场景块重复叠画），
 ##               逻辑地形/高度/拾取不变；layer="prop"：素材植物块替代该格装饰物选取。
 var _asset_overrides: Dictionary = {}
-## 单实例建筑：每项 {cell,instance_id,asset_id,rotation,visual,back_visual}。
+## 单实例建筑：每项 {cell,instance_id,asset_id,rotation,visual}。
 ## 只挂在占地包围矩形 origin 格，grid_anchor 指向整片占地中心，绝不逐格复制。
 var _building_visuals: Array = []
 var _camera_quadrant := 0
+var _building_occlusion := preload("res://scripts/iso/building_occlusion_controller.gd").new()
+var _interior_view: Node3D = null
+var _interior_dirty: bool = true
+var _interior_revealed: Dictionary = {}
+## 调试断言入口：缩放展示状态不会写回地图或修改碰撞。
+var interior_revealed_count: int = 0
 
 ## ---- 材质/贴图缓存（battle 与 editor 场景共享，静态避免重复加载） ----
 static var _shared_registry: TerrainMaterialRegistry = null
@@ -112,6 +118,63 @@ func _ready() -> void:
 	if _active_camera() != null:
 		_ensure_terrain_3d()
 
+## 编辑器与常规战场共用：已放置单位被建筑遮住时保持可见。
+func _process(delta: float) -> void:
+	_sync_interiors()
+	if _terrain_3d == null:
+		return
+	var targets: Array[Sprite3D] = []
+	if not _building_visuals.is_empty():
+		for node: Node in get_tree().get_nodes_in_group("building_occlusion_units"):
+			if node is UnitSprite3D and node.get_viewport() == get_viewport() and is_instance_valid(node.portrait):
+				targets.append(node.portrait)
+	_building_occlusion.update(delta, _terrain_3d, _active_camera(), targets)
+
+
+## 缩放带滞回：放大至 reveal_zoom 展开，缩小至 hide_zoom 合上。
+## 只在状态变化时重建外观 origin，格子碰撞始终由 BuildingInterior 决定。
+func _sync_interiors() -> void:
+	var camera := _active_camera()
+	if camera == null or grid == null:
+		return
+	if _interior_view == null:
+		_interior_view = preload("res://scripts/iso/building_interior_view.gd").new()
+		_interior_view.name = "BuildingInteriors"
+		add_child(_interior_view)
+	if _interior_dirty:
+		_interior_view.rebuild(_building_visuals, self)
+		_interior_dirty = false
+	var zoom_value: Variant = camera.get("zoom")
+	var zoom := float(zoom_value) if zoom_value != null else 1.0
+	var next: Dictionary = {}
+	var affected: Dictionary = {}
+	interior_revealed_count = 0
+	for raw in _building_visuals:
+		var entry: Dictionary = raw
+		var interior: Dictionary = entry.get("visual", {}).get("interior", {})
+		var id := String(entry.get("instance_id", ""))
+		if not bool(interior.get("enabled", false)):
+			if bool(_interior_revealed.get(id, false)):
+				affected[_building_cell(entry)] = true
+			continue
+		var was := bool(_interior_revealed.get(id, false))
+		var reveal := zoom > float(interior.get("hide_zoom", 1.5)) if was else zoom >= float(interior.get("reveal_zoom", 1.8))
+		next[id] = reveal
+		if reveal:
+			interior_revealed_count += 1
+		if reveal != was:
+			affected[_building_cell(entry)] = true
+			print_verbose("[building-interior] %s revealed=%s zoom=%.2f" % [id, reveal, zoom])
+	_interior_revealed = next
+	_interior_view.set_revealed(next)
+	for cell: Vector2i in affected:
+		refresh_cell(cell.x, cell.y)
+
+
+func interior_states_snapshot() -> Dictionary:
+	return _interior_revealed.duplicate()
+
+
 func _ensure_terrain_3d() -> void:
 	if _terrain_3d != null:
 		return
@@ -123,6 +186,7 @@ func _ensure_terrain_3d() -> void:
 ## 构建整张地图的地形柱。grid: GridSystem。
 func setup(p_grid: GridSystem) -> void:
 	grid = p_grid
+	_interior_dirty = true
 	_clear_columns()
 	if grid == null:
 		return
@@ -207,16 +271,17 @@ func set_custom_assets(entries: Array) -> void:
 		_asset_overrides[cell] = rec
 
 
-## 注入单实例建筑；默认只重建受影响的 origin 格，整图 setup 前可传 refresh_existing=false。
+## 注入单实例建筑；更新占地内植物遮盖，整图 setup 前可传 refresh_existing=false。
 func set_building_visuals(entries: Array, refresh_existing := true) -> void:
 	var affected := {}
 	for old_entry in _building_visuals:
 		if old_entry is Dictionary:
-			affected[_building_cell(old_entry)] = true
+			_mark_building_cells(affected, old_entry)
 	_building_visuals = entries.duplicate(true)
+	_interior_dirty = true
 	for new_entry in _building_visuals:
 		if new_entry is Dictionary:
-			affected[_building_cell(new_entry)] = true
+			_mark_building_cells(affected, new_entry)
 	if not refresh_existing or grid == null:
 		return
 	for cell in affected:
@@ -224,7 +289,7 @@ func set_building_visuals(entries: Array, refresh_existing := true) -> void:
 			refresh_cell(cell.x, cell.y)
 
 
-## 四向相机象限：相对实例 rotation 后 0/1 前图、2/3 背图，缺背自动回前图。
+## 四向相机象限：按相机与建筑旋转差选择精灵帧。
 func set_camera_quadrant(quadrant: int) -> void:
 	var next := posmod(quadrant, 4)
 	if next == _camera_quadrant:
@@ -461,6 +526,11 @@ func _build_column(cell: Vector2i) -> void:
 
 
 func _commit_column(cell: Vector2i, blocks: Array[Dictionary], height: int) -> void:
+	if _inside_enterable_house(cell):
+		# 房屋覆盖地面的植物只隐藏显示，地图中的原始数据保留。
+		for index in range(blocks.size() - 1, -1, -1):
+			if StringName(blocks[index].get("occluder_class", &"")) == &"prop":
+				blocks.remove_at(index)
 	_append_building_blocks(cell, blocks)
 	if _active_camera() != null:
 		_ensure_terrain_3d()
@@ -632,7 +702,37 @@ func _asset_block_for(cell: Vector2i, visual: Dictionary, top_aligned := false) 
 	return block
 
 
-## 建筑只追加在 origin 列，并保留列里已有地形/植物 blocks。
+func _mark_building_cells(affected: Dictionary, entry: Dictionary) -> void:
+	var origin := _building_cell(entry)
+	affected[origin] = true
+	var visual: Dictionary = entry.get("visual", {})
+	if not bool(visual.get("interior", {}).get("enabled", false)):
+		return
+	var footprint: Dictionary = visual.get("footprint", {})
+	var size := Vector2i(int(footprint.get("w", 1)), int(footprint.get("h", 1)))
+	if posmod(int(entry.get("rotation", 0)), 2) == 1:
+		size = Vector2i(size.y, size.x)
+	for y in size.y:
+		for x in size.x:
+			affected[origin + Vector2i(x, y)] = true
+
+
+func _inside_enterable_house(cell: Vector2i) -> bool:
+	for raw in _building_visuals:
+		var entry: Dictionary = raw
+		var visual: Dictionary = entry.get("visual", {})
+		if not bool(visual.get("interior", {}).get("enabled", false)):
+			continue
+		var footprint: Dictionary = visual.get("footprint", {})
+		var size := Vector2i(int(footprint.get("w", 1)), int(footprint.get("h", 1)))
+		if posmod(int(entry.get("rotation", 0)), 2) == 1:
+			size = Vector2i(size.y, size.x)
+		if Rect2i(_building_cell(entry), size).has_point(cell):
+			return true
+	return false
+
+
+## 建筑只追加在 origin 列，并保留列里已有地形 blocks。
 func _append_building_blocks(cell: Vector2i, blocks: Array[Dictionary]) -> void:
 	for raw in _building_visuals:
 		if not raw is Dictionary:
@@ -640,16 +740,17 @@ func _append_building_blocks(cell: Vector2i, blocks: Array[Dictionary]) -> void:
 		var entry: Dictionary = raw
 		if _building_cell(entry) != cell:
 			continue
+		if bool(_interior_revealed.get(String(entry.get("instance_id", "")), false)):
+			continue
 		var front: Dictionary = entry.get("visual", {})
 		if front.is_empty():
 			continue
 		var rotation := posmod(int(entry.get("rotation", 0)), 4)
-		var visual := front
-		var mode := String(front.get("back_mode", "single"))
-		var back: Dictionary = entry.get("back_visual", {})
-		var relative := posmod(_camera_quadrant - rotation, 4)
-		if mode == "front_back" and relative >= 2 and not back.is_empty():
-			visual = back
+		var relative: int = posmod(_camera_quadrant - rotation, 4)
+		var directions: Array = front.get("directions", [])
+		if directions.size() != 4:
+			continue
+		var visual: Dictionary = directions[relative]
 		var block := _building_block_for(cell, visual, front, entry, rotation)
 		if not block.is_empty():
 			blocks.append(block)
@@ -683,10 +784,11 @@ func _building_block_for(
 	block["occluder_class"] = &"prop"
 	block["asset_id"] = String(visual.get("asset_id", ""))
 	block["building"] = true
+	block["display_scale"] = float(visual.get("display_scale", 1.0))
 	block["building_instance_id"] = String(entry.get("instance_id", ""))
 	block["building_rotation"] = rotation
 	block["grid_anchor"] = anchor
-	block["back_mode"] = String(front.get("back_mode", "single"))
+	block["building_direction"] = posmod(_camera_quadrant - rotation, 4)
 	# 3D billboard 的屏幕横轴随目标象限旋转；旧 flora 仍走固定轴，不改变其契约。
 	var base_right := Vector3(IsoProjection.GRID_STEP, 0.0, -IsoProjection.GRID_STEP)
 	block["camera_right"] = Basis(Vector3.UP, float(_camera_quadrant) * PI * 0.5) * base_right

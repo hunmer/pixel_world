@@ -55,13 +55,12 @@ func _run() -> void:
 		quit(1)
 
 
-## 测试素材快照：BuildingLayout 只读 render.footprint
+## 使用合法四方向 sheet 快照；占用逻辑仍只读 footprint。
 static func _asset(id: String, w: int, h: int) -> Dictionary:
-	return {
-		"id": id,
-		"kind": "building",
-		"render": {"footprint": {"w": w, "h": h}},
-	}
+	var render := UserAssetCatalogScript.default_render()
+	render["direction_mode"] = "four_directions"
+	render["footprint"] = {"w": w, "h": h}
+	return UserAssetCatalogScript.make_descriptor(id, "building", id, [], "test.png", "", 100, 256, 64, render)
 
 
 static func _entry(instance_id: String, asset_id: String, x: int, y: int, rotation: int = 0) -> Dictionary:
@@ -447,79 +446,38 @@ static func _descriptor(id: String, kind: String, render: Dictionary) -> Diction
 
 
 func _test_catalog_building() -> void:
-	# building kind + 合法新字段（front_back + back_asset_id + ground_width_px）
-	var good := _descriptor("bld_a", "building", (UserAssetCatalogScript.default_render().duplicate(true) as Dictionary).merged({
-		"footprint": {"w": 2, "h": 2},
-		"back_mode": "front_back",
-		"back_asset_id": "bld_b",
-		"ground_width_px": 1150.0,
-	}, true))
-	var errs: Array[String] = UserAssetCatalogScript.validate_descriptor(good, "test")
-	_expect(errs.is_empty(), "合法 building 描述符不应报错，实际: %s" % ", ".join(errs))
-	# single + 残留 back_asset_id → 不报错（自愈语义：加载/更新路径强制清空）
-	var single_with_back := good.duplicate(true)
-	(single_with_back["render"] as Dictionary)["back_mode"] = "single"
-	errs = UserAssetCatalogScript.validate_descriptor(single_with_back, "test")
-	_expect(errs.is_empty(), "single 携带残留 back_asset_id 应自愈放行（不报错），实际: %s" % ", ".join(errs))
-	# normalize 强制清空：single 时 back_asset_id 归一化为空串
-	var normalized: Dictionary = UserAssetCatalogScript._normalize_descriptor(single_with_back)
-	_expect(String((normalized["render"] as Dictionary).get("back_asset_id", "?")) == "",
-		"normalize 应强制清空 single 的 back_asset_id")
-	# parse_library_text 全链路自愈：库文件含 single+残留 id → 加载成功且清空
-	var lib_text := JSON.stringify({
-		"version": UserAssetCatalogScript.SCHEMA_VERSION,
-		"settings": {"source_url": ""},
-		"assets": [single_with_back],
-	})
-	var lib_res: Dictionary = UserAssetCatalogScript.parse_library_text(lib_text)
-	_expect(bool(lib_res.get("ok", false)), "含 single+残留 back_asset_id 的库应加载成功: %s" % str(lib_res.get("errors", [])))
-	if bool(lib_res.get("ok", false)):
-		var lib_assets: Array = (lib_res["library"] as Dictionary).get("assets", [])
-		_expect(lib_assets.size() == 1, "库应保留 1 条素材")
-		if lib_assets.size() == 1:
-			var healed: Dictionary = (lib_assets[0] as Dictionary).get("render", {})
-			_expect(String(healed.get("back_asset_id", "?")) == "",
-				"库加载归一化后 single 的 back_asset_id 应为空串")
-	# front_back 缺 back_asset_id → 拒绝
-	var front_no_back := good.duplicate(true)
-	(front_no_back["render"] as Dictionary)["back_asset_id"] = ""
-	errs = UserAssetCatalogScript.validate_descriptor(front_no_back, "test")
-	_expect(not errs.is_empty(), "front_back 缺 back_asset_id 应报错")
-	# back_mode 非法枚举 → 拒绝
-	var bad_mode := good.duplicate(true)
-	(bad_mode["render"] as Dictionary)["back_mode"] = "both"
-	errs = UserAssetCatalogScript.validate_descriptor(bad_mode, "test")
-	_expect(not errs.is_empty(), "back_mode=both 应报错")
-	# back_asset_id 非法 id → 拒绝
-	var bad_back_id := good.duplicate(true)
-	(bad_back_id["render"] as Dictionary)["back_asset_id"] = "UPPER!"
-	errs = UserAssetCatalogScript.validate_descriptor(bad_back_id, "test")
-	_expect(not errs.is_empty(), "back_asset_id 非法 id 应报错")
-	# ground_width_px 负数 → 拒绝
+	var render := UserAssetCatalogScript.default_render()
+	render["direction_mode"] = "four_directions"
+	render["footprint"] = {"w": 2, "h": 2}
+	render["ground_width_px"] = 40.0
+	var good := _descriptor("bld_a", "building", render)
+	good["width"] = 256
+	_expect(UserAssetCatalogScript.validate_descriptor(good, "test").is_empty(), "四方向 sheet building 应通过")
+	_expect(UserAssetCatalogScript.is_four_direction_building(good), "轻量筛选接受四方向 sheet")
+	for field in ["direction_mode", "mode", "crop", "back_mode", "back_asset_id"]:
+		var bad := good.duplicate(true)
+		match field:
+			"direction_mode": bad["render"].erase(field)
+			"mode": bad["render"][field] = "crop"
+			"crop": bad["render"][field] = {"x": 0, "y": 0, "w": 64, "h": 64}
+			"back_mode": bad["render"][field] = "single"
+			"back_asset_id": bad["render"][field] = ""
+		_expect(not UserAssetCatalogScript.validate_descriptor(bad, "test").is_empty(), "建筑拒绝旧字段/非法 " + field)
+	for size in [Vector2(64, 64), Vector2(256, 65), Vector2(0, 0), Vector2(256.5, 64)]:
+		var bad := good.duplicate(true)
+		bad["width"] = size.x
+		bad["height"] = size.y
+		_expect(not UserAssetCatalogScript.validate_descriptor(bad, "test").is_empty(), "建筑拒绝非4:1/未知/非整数尺寸 " + str(size))
 	var neg_gw := good.duplicate(true)
-	(neg_gw["render"] as Dictionary)["ground_width_px"] = -5.0
-	errs = UserAssetCatalogScript.validate_descriptor(neg_gw, "test")
-	_expect(not errs.is_empty(), "ground_width_px 负数应报错")
-	# ground_width_px int 也接受（JSON int）
+	neg_gw["render"]["ground_width_px"] = -5.0
+	_expect(not UserAssetCatalogScript.validate_descriptor(neg_gw, "test").is_empty(), "ground_width_px 负数拒绝")
 	var int_gw := good.duplicate(true)
-	(int_gw["render"] as Dictionary)["ground_width_px"] = 1150
-	errs = UserAssetCatalogScript.validate_descriptor(int_gw, "test")
-	_expect(errs.is_empty(), "ground_width_px int 1150 应接受，实际: %s" % ", ".join(errs))
-	# 旧 terrain 描述符（render 无任何新字段）仍合法
-	var legacy := _descriptor("old_grass", "terrain", {
-		"mode": "full",
-		"crop": null,
-		"pivot": {"x": 0.5, "y": 0.5},
-		"scale": 1.0,
-		"footprint": {"w": 1, "h": 1},
-	})
-	errs = UserAssetCatalogScript.validate_descriptor(legacy, "test")
-	_expect(errs.is_empty(), "旧 terrain 描述符（缺省新字段）应兼容通过，实际: %s" % ", ".join(errs))
-	# default_render 含新字段缺省值且合法
+	int_gw["render"]["ground_width_px"] = 40
+	_expect(UserAssetCatalogScript.validate_descriptor(int_gw, "test").is_empty(), "ground_width_px 整数接受")
+	for kind in ["terrain", "plant"]:
+		var legacy := _descriptor("old_grass", kind, UserAssetCatalogScript.default_render())
+		_expect(UserAssetCatalogScript.validate_descriptor(legacy, "test").is_empty(), "旧 " + kind + " 素材继续通过")
 	var defaults := UserAssetCatalogScript.default_render()
-	_expect(String(defaults.get("back_mode", "")) == "single", "default_render.back_mode 应为 single")
-	_expect(String(defaults.get("back_asset_id", "?")) == "", "default_render.back_asset_id 应为空串")
-	_expect(float(defaults.get("ground_width_px", -1.0)) == 0.0, "default_render.ground_width_px 应为 0.0")
-	var with_default := _descriptor("bld_d", "building", defaults)
-	errs = UserAssetCatalogScript.validate_descriptor(with_default, "test")
-	_expect(errs.is_empty(), "default_render 构造的 building 描述符应通过，实际: %s" % ", ".join(errs))
+	_expect(not defaults.has("back_mode") and not defaults.has("back_asset_id"), "默认 render 不生成旧前背字段")
+	var constructed := UserAssetCatalogScript.make_descriptor("bld_d", "building", "sheet", [], "sheet.png", "", 100, 256, 64)
+	_expect(UserAssetCatalogScript.validate_descriptor(constructed, "test").is_empty(), "默认 building 构建注入四方向模式")

@@ -212,6 +212,10 @@ static func _build_chapter(d: Dictionary, file_id: String) -> Dictionary:
 	var buildings := _parse_buildings(d, width, height, user_assets, occupied)
 	if not bool(buildings.get("ok", false)):
 		return { "ok": false, "error": buildings.get("error", "") }
+	var ground_error: String = BuildingLayoutScript.validate_interior_ground(buildings["entries"], user_assets,
+		func(cell: Vector2i) -> int: return building_ground_level(map, block_layout, cell))
+	if not ground_error.is_empty():
+		return {"ok": false, "error": ground_error}
 	# 6) 组装 chapter（无 blockTitles → battle.gd 走 terrain fallback 渲染）
 	var chapter := {
 		"id": StringName(String(info["id"])),
@@ -572,3 +576,16 @@ static func _is_standable(t: StringName) -> bool:
 	if not bool(tile.get(&"walkable", false)):
 		return false
 	return int(tile[&"move_cost"].get(&"foot", 99)) < 99
+
+
+## 与现有战场柱顶站立高度一致；显式布局直接采用 z。
+static func building_ground_level(map: Array, layout: Dictionary, cell: Vector2i) -> int:
+	if not layout.is_empty():
+		return BlockLayoutScript.z_at(layout, cell)
+	var terrain: StringName = map[cell.y][cell.x]
+	match terrain:
+		&"water": return 1
+		&"mountain": return 4
+		&"wall": return 3
+		&"fort", &"rocky": return 2
+	return 1

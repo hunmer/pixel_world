@@ -4,7 +4,7 @@
 ## 覆盖：doc 层放置/占用/校验（等高、越界、重叠、单位、rotation）、
 ##       整栋删除/旋转回环、validate_buildings 含等高、JSON 往返、
 ##       resize 整栋剔除、load_candidate 坏建筑拒载、user_assets 快照
-##       （含背面依赖、库缺失时旧快照兜底）、ed 层工具分发（放置/再点删除/
+##       （四方向单素材、库缺失时旧快照兜底）、ed 层工具分发（放置/再点删除/
 ##       高度编辑拦截/预览驱动）、区域复制/剪切/粘贴/移动的建筑整栋语义
 ##       （不静默切碎、instance_id 保持、平移预校验原子拒绝）。
 
@@ -33,13 +33,11 @@ func _expect(cond: bool, msg: String) -> void:
 		quit(1)
 
 
-## 构造建筑素材描述符（快照形：kind/render.footprint，可带背面依赖）
-func _desc(w: int, h: int, back_id: String = "") -> Dictionary:
-	var render := { "footprint": { "w": w, "h": h } }
-	if not back_id.is_empty():
-		render["back_mode"] = "front_back"
-		render["back_asset_id"] = back_id
-	return { "kind": "building", "render": render }
+## 占用契约只需四方向素材的尺寸与占地。
+func _desc(w: int, h: int) -> Dictionary:
+	return {"kind": "building", "width": 400, "height": 100,
+		"render": {"direction_mode": "four_directions", "mode": "full", "crop": null,
+			"footprint": {"w": w, "h": h}}}
 
 
 func _cells_of(model: Dictionary, entry: Dictionary) -> Array:
@@ -102,14 +100,13 @@ func _run() -> void:
 		"底面不等高拒绝")
 	BattlefieldDocScript.set_cell_z(m, Vector2i(7, 6), 0)
 
-	# ---- 3. user_assets 快照：背面依赖 + 库缺失旧快照兜底 ----
+	# ---- 3. user_assets 快照：单个四方向素材 + 库缺失旧快照兜底 ----
 	var m3: Dictionary = BattlefieldDocScript.create_empty(10, 8)
-	var snap: Dictionary = { "tower": _desc(2, 2, "back") }
-	snap["back"] = _desc(1, 1)
+	var snap: Dictionary = { "tower": _desc(2, 2) }
 	var r3: Dictionary = BattlefieldDocScript.add_building(m3, "tower", Vector2i(0, 0), 0, snap)
 	_expect(bool(r3.get("ok", false)), "快照放置成功")
-	_expect((m3.user_assets as Dictionary).has("tower") and (m3.user_assets as Dictionary).has("back"),
-		"快照含主素材与背面依赖")
+	_expect((m3.user_assets as Dictionary).has("tower") and m3.user_assets.size() == 1,
+		"快照仅含自包含四方向素材")
 	# 快照维持：service 为 null → snapshot={} → 用模型旧快照同 footprint 放置
 	var r3b: Dictionary = BattlefieldDocScript.add_building(m3, "tower", Vector2i(4, 0), 0, {})
 	_expect(bool(r3b.get("ok", false)), "库缺失时模型旧快照兜底放置成功")

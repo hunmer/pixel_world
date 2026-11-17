@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Texture2D" path="res://.tmp/watchtower_p30/prefab.png" id="1_tex"]
+
+[node name="tower" type="StaticBody2D"]
+collision_layer = 1
+collision_mask = 0
+
+[node name="Collision" type="CollisionPolygon2D" parent="."]
+polygon = PackedVector2Array(0, -58.11, 116.22, 0, 0, 58.11, -116.22, 0)
+
+[node name="Sprite" type="Sprite2D" parent="."]
+offset = Vector2(0.01, -165.4)
+texture = ExtResource("1_tex")
+
+[node name="遮挡层" type="Area2D" parent="."]
+
+[node name="Polygon1" type="CollisionPolygon2D" parent="遮挡层"]
+polygon = PackedVector2Array(-1.49, -388.9, 1.51, -388.9, 11.51, -383.9, 13.51, -376.9, 109.51, -328.9, 112.51, -330.9, 117.51, -330.9, 127.51, -325.9, 127.51, -314.9, 122.51, -311.9, 145.51, -300.9, 144.51, -292.9, 114.51, -278.9, 114.51, -14.9, 120.51, -12.9, 120.51, -8.9, 116.51, -7.9, 116.51, 0.1, 1.51, -57.9, -1.49, -57.9, -115.49, 0.1, -116.49, -7.9, -120.49, -8.9, -120.49, -12.9, -114.49, -14.9, -114.49, -278.9, -144.49, -292.9, -145.49, -300.9, -122.49, -311.9, -127.49, -314.9, -127.49, -325.9, -117.49, -330.9, -112.49, -330.9, -109.49, -328.9, -83.49, -341.9, -13.49, -376.9, -12.49, -382.9)

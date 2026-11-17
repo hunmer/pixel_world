@@ -65,6 +65,10 @@ const _LABEL_Y := 66.0
 
 static var _white_texture: ImageTexture = null
 
+func _enter_tree() -> void:
+	add_to_group("building_occlusion_units")
+
+
 func is_world_mode() -> bool:
 	return _world != null
 

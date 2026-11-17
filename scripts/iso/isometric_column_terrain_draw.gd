@@ -266,11 +266,8 @@ static func draw_cached_plan(
 		) + Vector2(block["render_offset"])
 		if kind == &"texture":
 			var texture: Texture2D = block["texture"]
-			canvas.draw_texture(
-				texture,
-				center - texture.get_size() * 0.5,
-				block["modulate"]
-			)
+			var display_size := texture.get_size() * float(block.get("display_scale", 1.0))
+			canvas.draw_texture_rect(texture, Rect2(center - display_size * 0.5, display_size), false, block["modulate"])
 		else:
 			ctx["water_effects"].call(center, block)
 	canvas.draw_set_transform(Vector2.ZERO)
@@ -302,7 +299,8 @@ static func draw_dynamic_column(
 		) + Vector2(block["render_offset"])
 		var draw_modulate: Color = block["modulate"]
 		draw_modulate.a *= float(occlusion_alphas.get(index, 1.0))
-		var draw_position := center - texture.get_size() * 0.5
+		var display_size := texture.get_size() * float(block.get("display_scale", 1.0))
+		var draw_position := center - display_size * 0.5
 		var water_part: StringName = block.get("water_part", &"")
 		var cutaway_shade := float(cutaway_shades.get(index, 0.0))
 		var projected_terrain := is_projected_terrain(block) and (
@@ -347,7 +345,7 @@ static func draw_dynamic_column(
 					ctx
 				)
 			else:
-				canvas.draw_texture(texture, draw_position, draw_modulate)
+				canvas.draw_texture_rect(texture, Rect2(draw_position, display_size), false, draw_modulate)
 		if cutaway_shade > 0.0:
 			# 白色 alpha mask 让深灰以真实颜色覆盖，而不是简单乘暗后仍偏绿/偏棕。
 			# 保留一部分原贴图，形成可辨认材质的深灰不可通行剖面。
@@ -365,10 +363,8 @@ static func draw_dynamic_column(
 					ctx
 				)
 			else:
-				canvas.draw_texture(
-					texture_mask.call(texture),
-					draw_position,
-					shade_color
+				canvas.draw_texture_rect(
+					texture_mask.call(texture), Rect2(draw_position, display_size), false, shade_color
 				)
 		if water_part == &"surface":
 			projected_batch.flush(canvas, mesh_cache, sector, index, screen_y_offset)

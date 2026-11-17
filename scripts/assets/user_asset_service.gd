@@ -75,6 +75,9 @@ func _ready() -> void:
 	var res := Catalog.load_library(library_path)
 	if bool(res["ok"]):
 		library = res["library"]
+		var legacy_count: int = (library.get("legacy_buildings", []) as Array).size()
+		if legacy_count > 0:
+			push_warning("[UserAsset] 已隔离保留 %d 条旧建筑；请重新导入 4:1 四方向横排 sheet，其他素材正常可用" % legacy_count)
 	elif FileAccess.file_exists(library_path) or FileAccess.file_exists(library_path + Catalog.BACKUP_SUFFIX):
 		push_warning("[UserAsset] 库文件无效，暂用内存默认库（磁盘文件保留未动）: %s" % res["error"])
 
@@ -180,9 +183,14 @@ func import_image_bytes(bytes: PackedByteArray, source_name: String,
 	if img.get_width() > Catalog.MAX_SIDE_PIXELS or img.get_height() > Catalog.MAX_SIDE_PIXELS:
 		return {"ok": false, "error": "image_dimensions_exceed: %dx%d" % [img.get_width(), img.get_height()]}
 
+	if kind == Catalog.KIND_BUILDING and img.get_width() != img.get_height() * 4:
+		return {"ok": false, "error": "building_requires_four_direction_sheet: 必须是 4:1 四方向横排 sheet（四个等大正方形帧）"}
 	var sha := compute_sha256_hex(bytes)
 	var existing: Variant = find_by_sha(sha)
 	if existing is Dictionary:
+		if kind == Catalog.KIND_BUILDING and (str(existing.get("kind", "")) != Catalog.KIND_BUILDING \
+				or not Catalog.validate_descriptor(existing, "import_dedup", max_image_bytes).is_empty()):
+			return {"ok": false, "error": "building_content_already_imported_as_other_kind"}
 		return {"ok": true, "asset_id": str(existing["id"]), "deduped": true,
 			"sha256": sha, "width": int(existing["width"]), "height": int(existing["height"])}
 
@@ -382,8 +390,6 @@ func update_asset(asset_id: String, changes: Dictionary) -> Dictionary:
 			assets[idx] = before
 			return {"ok": false, "error": "render_must_be_dictionary"}
 		var render_copy: Dictionary = (render as Dictionary).duplicate(true)
-		# single 切回时强制清空背面引用（不残留旧 id；与库加载归一化同规则）
-		Catalog.enforce_single_back(render_copy)
 		d["render"] = render_copy
 	if changes.has("saved"):
 		d["saved"] = bool(changes["saved"])
@@ -578,7 +584,7 @@ func _handle_manifest_body(body: PackedByteArray) -> void:
 		if not (raw_entry is Dictionary):
 			continue
 		var desc := _descriptor_from_manifest_entry(raw_entry, manifest_url)
-		if desc.is_empty():
+		if desc.is_empty() or not Catalog.validate_descriptor(desc, "manifest", max_image_bytes).is_empty():
 			continue
 		var asset_id := str(desc["id"])
 		var idx := _index_of_id(asset_id)
@@ -587,6 +593,8 @@ func _handle_manifest_body(body: PackedByteArray) -> void:
 			added += 1
 		else:
 			var merged := _merge_net_descriptor((library["assets"] as Array)[idx], desc)
+			if not Catalog.validate_descriptor(merged["value"], "manifest_merge", max_image_bytes).is_empty():
+				continue
 			(library["assets"] as Array)[idx] = merged["value"]
 			if bool(merged["changed"]):
 				updated += 1
@@ -616,6 +624,15 @@ func _handle_image_body(rec: Dictionary, body: PackedByteArray) -> void:
 		return
 	if img.get_width() > Catalog.MAX_SIDE_PIXELS or img.get_height() > Catalog.MAX_SIDE_PIXELS:
 		asset_failed.emit(asset_id, "image_dimensions_exceed: %dx%d" % [img.get_width(), img.get_height()])
+		return
+	var candidate: Dictionary = d.duplicate(true)
+	candidate["sha256"] = sha
+	candidate["bytes"] = body.size()
+	candidate["width"] = img.get_width()
+	candidate["height"] = img.get_height()
+	var validation_errors := Catalog.validate_descriptor(candidate, "download", max_image_bytes)
+	if not validation_errors.is_empty():
+		asset_failed.emit(asset_id, "download_descriptor_invalid: %s" % "; ".join(validation_errors))
 		return
 	var blob_path := blob_path_for_sha(sha)
 	if not FileAccess.file_exists(blob_path):
@@ -790,8 +807,14 @@ static func _descriptor_from_manifest_entry(entry: Dictionary, manifest_url: Str
 	if byte_count < 0:
 		byte_count = 0
 
+	var render: Dictionary = {}
+	if kind == Catalog.KIND_BUILDING and entry.get("render", {}) is Dictionary:
+		render = entry.get("render", {})
+	# 网络建筑必须显式声明新契约；本地导入才自动注入方向模式。
+	if kind == Catalog.KIND_BUILDING and render.is_empty():
+		return {}
 	return Catalog.make_descriptor(slugify(file_name.get_basename()), kind,
-		display_name, tags, url, sha, byte_count, w, h)
+		display_name, tags, url, sha, byte_count, w, h, render)
 
 
 ## 相对 URL 归一化（仅拼目录，不做文件系统访问）；已是 http(s) 原样返回。

@@ -30,12 +30,11 @@ func _run() -> void:
 			ed._tabs.current_tab = index
 			break
 	var asset_id := String(ed._builtin_building_id)
-	_expect(not asset_id.is_empty() and ed._building_buttons.has(asset_id), "地形建筑分组自动提供石墙")
-	var front: Dictionary = ed._asset_service.find_by_id(asset_id)
-	var back_id := String(front.get("render", {}).get("back_asset_id", ""))
-	_expect(not back_id.is_empty() and not ed._building_buttons.has(back_id), "背面依赖不作为独立建筑展示")
+	_expect(not asset_id.is_empty() and ed._building_buttons.has(asset_id), "地形建筑分组自动提供四方向瞭望塔")
+	var descriptor: Dictionary = ed._asset_service.find_by_id(asset_id)
+	_expect(preload("res://scripts/assets/user_asset_catalog.gd").is_four_direction_building(descriptor), "内置建筑严格符合四帧契约")
 	var button: Button = ed._building_buttons.get(asset_id)
-	_expect(button != null and button.icon != null and button.text == "石墙", "石墙按钮有真实缩略图和名称")
+	_expect(button != null and button.icon != null and button.text == String(descriptor.get("name", "")), "建筑按钮有单帧缩略图并保留素材名称")
 	ed._canvas.hover_cell = Vector2i(1, 1)
 	button.pressed.emit()
 	_expect(ed._building_place_mode and button.button_pressed, "单击按钮进入建筑放置且同步选中态")

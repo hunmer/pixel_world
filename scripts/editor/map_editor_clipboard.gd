@@ -85,7 +85,7 @@ static func commit_region_move(ed, bounds: Array, delta: Vector2i, translate_sel
 	for b in moved_buildings:
 		BattlefieldDocScript.remove_building(sim, String((b as Dictionary).get("instance_id", "")))
 	# 计划占用 = sim 剩余建筑（跨界留在原地）+ 随移建筑平移后的占用
-	var planned_occ := BattlefieldDocScript.building_occupancy(sim)
+	var planned_occ := BattlefieldDocScript.building_blocking_occupancy(sim)
 	for b in moved_buildings:
 		var mb: Dictionary = b as Dictionary
 		var nb := mb.duplicate(true)
@@ -98,7 +98,7 @@ static func commit_region_move(ed, bounds: Array, delta: Vector2i, translate_sel
 		if not berr.is_empty():
 			ed._status("移动失败：建筑 %s %s" % [String(mb.get("instance_id", "")), berr], true)
 			return
-		for cell in BuildingLayoutScript.occupied_cells(nb, sim.get("user_assets", {}) as Dictionary):
+		for cell in BuildingLayoutScript.blocking_cells(nb, sim.get("user_assets", {}) as Dictionary):
 			planned_occ[BuildingLayoutScript.cell_key(cell.x, cell.y)] = String(mb.get("instance_id", ""))
 	# sim.units 已被 move 平移到目标位：逐个对照计划占用
 	for unit_value in sim.get("units", []) as Array:
@@ -249,7 +249,7 @@ static func update_paste_preview(ed, hover: Vector2i) -> void:
 
 ## 粘贴 payload.units 平移目标格 vs 模型既有建筑占用；返回冲突格描述（"" = 无冲突）
 static func _units_conflict_buildings(model: Dictionary, payload: Dictionary, origin: Vector2i) -> String:
-	var occ := BattlefieldDocScript.building_occupancy(model)
+	var occ := BattlefieldDocScript.building_blocking_occupancy(model)
 	var hits: Array = []
 	for unit_value in payload.get("units", []) as Array:
 		var unit: Dictionary = unit_value

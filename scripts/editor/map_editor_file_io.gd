@@ -35,7 +35,7 @@ static func load_candidate(path: String) -> Dictionary:
 ## 保存前从素材库拷贝被引用素材的描述符快照进 model.user_assets：
 ## B2 渲染离线读档自包含（user_assets 缺失时按 id 回退库+占位）；
 ## 库中已隐藏/删除的素材保留模型里的旧快照，保证存档与历史引用不丢。
-## 建筑素材连带 render.back_asset_id 背面依赖一并快照（front_back 模式离线可渲染）。
+## 每栋建筑只引用一个自包含的四方向精灵图描述符。
 static func sync_user_assets(model: Dictionary, service) -> void:
 	var referenced := {}
 	for p in model.get("props", []):
@@ -54,17 +54,6 @@ static func sync_user_assets(model: Dictionary, service) -> void:
 		if baid.is_empty():
 			continue
 		referenced[baid] = true
-		# 背面依赖：优先库中最新 descriptor，库无则模型旧快照（back 素材被隐藏时不丢引用）
-		var render: Variant = null
-		var in_lib: Variant = service.find_by_id(baid)
-		if in_lib is Dictionary:
-			render = (in_lib as Dictionary).get("render", null)
-		elif lib.has(baid):
-			render = (lib[baid] as Dictionary).get("render", null)
-		if render is Dictionary:
-			var back_id := String((render as Dictionary).get("back_asset_id", ""))
-			if not back_id.is_empty():
-				referenced[back_id] = true
 	for aid: String in referenced:
 		var d: Variant = service.find_by_id(aid)
 		if d is Dictionary:

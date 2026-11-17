@@ -607,14 +607,14 @@
 	},
 	"buildings": [
 		{
-			"asset_id": "citywall_1to9",
+			"asset_id": "medieval_watchtower_3a44869debc9",
 			"instance_id": "demo_tower_1",
 			"rotation": 0,
 			"x": 4,
 			"y": 4
 		}
 	],
-	"description": "真实高塔、2×2占地；请验收落地锚点、四向展示、编辑与阻挡。标定值尚待视觉确认。",
+	"description": "原始四方向横排精灵图、2×2占地；yaw45/pitch30，底座232.44px，单帧地基中心(259.49,416.90)。请人工检查落地与遮挡。",
 	"enemyUnits": [
 		{
 			"class": "berserker",
@@ -641,7 +641,7 @@
 		"w": "water",
 		"~": "water"
 	},
-	"name": "建筑视觉验收：石塔",
+	"name": "建筑视觉验收：中世纪瞭望塔",
 	"playerUnits": [
 		{
 			"class": "swordsman",
@@ -664,65 +664,36 @@
 		"............"
 	],
 	"user_assets": {
-		"citywall_1to9": {
-			"bytes": 5396820,
-			"height": 2816,
-			"id": "citywall_1to9",
-			"image": "citywall_1to9.png",
+		"medieval_watchtower_3a44869debc9": {
+			"bytes": 699172,
+			"height": 512,
+			"id": "medieval_watchtower_3a44869debc9",
+			"image": "res://assets/buildings/medieval_watchtower/sheet.png",
 			"kind": "building",
-			"name": "石塔（视觉验收）",
+			"name": "中世纪瞭望塔",
 			"render": {
-				"back_asset_id": "citywall_1to9_back",
-				"back_mode": "front_back",
 				"crop": null,
+				"direction_mode": "four_directions",
 				"footprint": {
 					"h": 2,
 					"w": 2
 				},
-				"ground_width_px": 1150.0,
+				"ground_width_px": 232.44195804706,
 				"mode": "full",
 				"pivot": {
-					"x": 0.425,
-					"y": 0.9
+					"x": 0.506825880574282,
+					"y": 0.814265764998474
 				},
+				"pivot_space": "frame",
 				"scale": 1.0
 			},
 			"saved": true,
-			"sha256": "a5dd6cf208854e96b7df3626662a9c135e5cb88cb2550d6350243a93cda6903f",
+			"sha256": "3a44869debc92e0d7bbdd3811320e1500611cb549021b355ca9eeee60cb5a377",
 			"tags": [
-				"citywall"
+				"builtin",
+				"watchtower"
 			],
-			"width": 1584
-		},
-		"citywall_1to9_back": {
-			"bytes": 5083798,
-			"height": 2816,
-			"id": "citywall_1to9_back",
-			"image": "citywall_1to9_back.png",
-			"kind": "building",
-			"name": "石塔背面（视觉验收）",
-			"render": {
-				"back_asset_id": "",
-				"back_mode": "single",
-				"crop": null,
-				"footprint": {
-					"h": 2,
-					"w": 2
-				},
-				"ground_width_px": 1150.0,
-				"mode": "full",
-				"pivot": {
-					"x": 0.575,
-					"y": 0.9
-				},
-				"scale": 1.0
-			},
-			"saved": true,
-			"sha256": "79ed6bfc47a40b0cadf542cb24f269fd9c5b5ced1c96c6f06419c0a778cb546c",
-			"tags": [
-				"citywall"
-			],
-			"width": 1584
+			"width": 2048
 		}
 	}
 }

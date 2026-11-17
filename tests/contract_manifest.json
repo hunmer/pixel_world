@@ -26,7 +26,7 @@
     "animals": 4,
     "battle-logic": 9,
     "presentation": 7,
-    "battle-3d-editor": 14,
+    "battle-3d-editor": 17,
     "battle-automation": 2,
     "battle-presentation": 5,
     "battle-persistence": 2,
@@ -41,7 +41,7 @@
     "world-3d": 5,
     "fx": 1,
     "ui": 2,
-    "user-assets": 8,
+    "user-assets": 9,
     "world-camera": 1,
     "world-battle-bridge": 1,
     "simulation": 1
@@ -76,6 +76,53 @@
       "parallel_safe": false,
       "fast_flag_safe": false,
       "evidence": "2026-11-17 建筑契约：整值JSON往返、旋转占地、越界与重叠拒绝、缺素材回退、寻路绕行、出生增援阻挡及存档往返；独立headless验证"
+    },
+    {
+      "name": "builtin_house_assets",
+      "path": "tests/builtin_house_assets_contract.gd",
+      "group": "user-assets",
+      "tags": [
+        "pure"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-18 PASS 24项：真实CLI四向房屋、单条幂等注册、用户标定保留、自包含快照与地基对齐"
+    },
+    {
+      "name": "building_interior",
+      "path": "tests/building_interior_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "scene"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-18 单层室内：布局与连门校验、四向旋转、墙家具阻挡、进门寻路、单位放置、地面高度与保存加载"
+    },
+    {
+      "name": "building_interior_visual",
+      "path": "tests/building_interior_visual_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": [
+        "scene",
+        "render"
+      ],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-18 PASS 209项：真实房屋4旋转×4相机、真实地板低墙家具、门格对齐、外观移除恢复、zoom1.8/1.5滞回与重建清理"
+    },
+    {
+      "name": "building_occlusion",
+      "path": "tests/building_occlusion_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": ["scene", "render"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-18 headless PASS 37项：真实四方向瞭望塔与UnitSprite目标组，常规renderer帧驱动淡化/恢复、多角色、透明角、重建及特写锁优先"
     },
     {
       "name": "building_visual",

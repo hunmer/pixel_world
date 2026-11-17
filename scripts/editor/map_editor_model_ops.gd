@@ -104,22 +104,14 @@ static func apply_asset_tool(ed, cell: Vector2i) -> void:
 			ed._set_tile_override(cell, asset_id)
 
 
-## 组装建筑放置用的素材快照 {asset_id: descriptor}：主素材 + render.back_asset_id
-## 背面依赖（渲染 front_back 模式离线自包含；服务缺失/素材未就绪时返回空表，
-## 占用校验会回退 1x1 并 warning，不会静默放错位置）。
+## 四方向精灵图自包含，建筑放置只保存主素材快照。
 static func building_assets_snapshot(ed, asset_id: String) -> Dictionary:
 	var snapshot: Dictionary = {}
 	if ed._asset_service == null:
 		return snapshot
-	var main: Variant = ed._asset_service.find_by_id(asset_id)
-	if main is Dictionary and not (main as Dictionary).is_empty():
-		snapshot[asset_id] = main
-		var back_id := String(
-			((main as Dictionary).get("render", {}) as Dictionary).get("back_asset_id", ""))
-		if not back_id.is_empty() and not snapshot.has(back_id):
-			var back: Variant = ed._asset_service.find_by_id(back_id)
-			if back is Dictionary and not (back as Dictionary).is_empty():
-				snapshot[back_id] = back
+	var descriptor: Variant = ed._asset_service.find_by_id(asset_id)
+	if descriptor is Dictionary and UserAssetCatalogScript.is_four_direction_building(descriptor):
+		snapshot[asset_id] = descriptor
 	return snapshot
 
 
@@ -225,7 +217,7 @@ static func place_unit(ed, cell: Vector2i, faction: String, class_id: String, le
 		ed._status("%s 不可站人（%s）" % [BattlefieldDocScript.TERRAIN_CN[terrain], str(cell)], true)
 		return false
 	var building_hit := BattlefieldDocScript.building_at(ed.model, cell)
-	if not building_hit.is_empty():
+	if BattlefieldDocScript.building_blocks_cell(ed.model, cell):
 		ed._status("该格被建筑 %s 占用，不能放置单位（先移除建筑）" % [
 			String(building_hit.get("instance_id", "?"))], true)
 		return false

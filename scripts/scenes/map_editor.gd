@@ -275,11 +275,14 @@ func _init_asset_service() -> void:
 	_builtin_building_id = String(builtins.get("asset_id", ""))
 	if not bool(builtins.get("ok", false)):
 		push_warning("内置建筑加载失败：%s" % String(builtins.get("error", "未知错误")))
+	var house: Dictionary = preload("res://scripts/assets/builtin_house_assets.gd").ensure(_asset_service)
+	if not bool(house.get("ok", false)):
+		push_warning("内置房屋加载失败：%s" % String(house.get("error", "未知错误")))
 	_asset_adapter = UserAssetVisualAdapterScript.new()
-	if bool(builtins.get("changed", false)):
-		for asset_id: String in [_builtin_building_id, String(builtins.get("back_asset_id", ""))]:
-			if not asset_id.is_empty():
-				_asset_adapter.invalidate_baked(asset_id)
+	if bool(house.get("changed", false)):
+		_asset_adapter.invalidate_baked(String(house.get("asset_id", "")))
+	if bool(builtins.get("changed", false)) and not _builtin_building_id.is_empty():
+		_asset_adapter.invalidate_baked(_builtin_building_id)
 	# 下载完成 → 方块页「素材方块」网格补入新下载的方块（只重建该网格，不动画布）
 	_asset_service.asset_ready.connect(_on_block_asset_ready)
 

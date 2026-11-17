@@ -1,0 +1,140 @@
+{
+  "tool": "topdown-building-studio-cli",
+  "toolVersion": "1.2",
+  "version": 1,
+  "generatedAt": "2026-11-17T17:25:08.765Z",
+  "style": {
+    "id": "castle_medieval",
+    "name": "中世纪城堡",
+    "geometry": "gothic",
+    "source": "custom-atlas",
+    "atlasSize": 512,
+    "overrides": [],
+    "palette": {
+      "roof": "#cccccc",
+      "wood": "#cccccc",
+      "wall": "#cccccc",
+      "stone": "#cccccc",
+      "trim": "#cccccc",
+      "glass": "#cccccc",
+      "cloth": "#cccccc",
+      "metal": "#cccccc",
+      "shadow": "#cccccc",
+      "accent": "#cccccc",
+      "door": "#56372b",
+      "window": "#dfbe79",
+      "roof_edge": "#556b71",
+      "wall_base": "#7e8783",
+      "sign": "#633f31",
+      "shutter": "#b6543e"
+    }
+  },
+  "profile": {
+    "style": "castle_medieval",
+    "typeId": "watchtower",
+    "kind": 0,
+    "categoryId": "defense",
+    "shapeSeed": 60421,
+    "detailSeed": 101,
+    "appearanceSeed": 101,
+    "params": {
+      "width": 4,
+      "depth": 4,
+      "floors": 3,
+      "pitch": 32,
+      "eave": 0.55,
+      "windows": 2,
+      "roof": 0,
+      "porch": true,
+      "balcony": true,
+      "ornament": true,
+      "height": 8,
+      "bays": 3
+    }
+  },
+  "view": {
+    "pitch": 30,
+    "projection": "orthographic",
+    "projectionRequested": "orthographic",
+    "fov": 50,
+    "fovLimit": false,
+    "canvas": [
+      512,
+      512
+    ],
+    "directions": 4,
+    "baseYaw": 45,
+    "scaleMode": "auto",
+    "pixelsPerMeter": 48,
+    "padding": 8,
+    "orthoSize": 13.207976580815643
+  },
+  "render": {
+    "outline": 0,
+    "outlineInner": 0,
+    "outlineOuter": 0,
+    "outlineSilhouette": 0,
+    "outlineColor": "#140f0d",
+    "outlineColorOuter": "#140f0d",
+    "outlineColorSilhouette": "#140f0d",
+    "outlineSemantics": {
+      "inner": "几何内侧（按部件分界）",
+      "outer": "部件外扩（可压到别的部件）",
+      "silhouette": "整栋剪影外扩到背景"
+    },
+    "antialias": true,
+    "background": "transparent"
+  },
+  "parts": {},
+  "look": 0,
+  "outputFolder": "4fed27c02007c01d",
+  "config": {
+    "styleId": "castle_medieval",
+    "categoryId": "defense",
+    "typeId": "watchtower",
+    "look": 0,
+    "shapeSeed": 60421,
+    "detailSeed": 101,
+    "appearanceSeed": 101,
+    "params": {
+      "width": 4,
+      "depth": 4,
+      "floors": 3,
+      "pitch": 32,
+      "eave": 0.55,
+      "windows": 2,
+      "roof": 0,
+      "porch": true,
+      "balcony": true,
+      "ornament": true,
+      "height": 8,
+      "bays": 3
+    },
+    "view": {
+      "pitch": 30,
+      "projection": 0,
+      "directions": 2,
+      "baseYaw": 45,
+      "fov": 50,
+      "pixelSize": 3,
+      "scaleMode": 0,
+      "pixelsPerMeter": 48,
+      "padding": 8
+    },
+    "render": {
+      "outlineInner": 0,
+      "outlineOuter": 0,
+      "outlineSilhouette": 0,
+      "antialias": true,
+      "background": 0,
+      "backgroundColor": "#2a2e33",
+      "outlineColor": "#140f0d",
+      "outlineColorOuter": "#140f0d",
+      "outlineColorSilhouette": "#140f0d",
+      "depthThreshold": 0.15,
+      "normalThreshold": 0.3
+    },
+    "partOverrides": {}
+  },
+  "note": "无光照渲染：颜色只来自材质图集 × 顶点染色；几何移植自 Godot addon hd2d_scene_tools（v5 配方）。"
+}

@@ -5,7 +5,7 @@
 ##              asset_id: String, kind: String, missing: bool }
 ## 烘焙规则（预览与战场落地同一条路径，保证所见即所得）：
 ##   render.crop  → 先按 Rect2i 裁切原图（mode="crop" 时生效）
-##   render.scale → 非 1 时最近邻 resize（像素风不插值）
+##   render.scale → 建筑保留源纹理并缩放显示几何；其他素材最近邻 resize
 ##   render.pivot → render_offset = (W*(0.5-pivot.x), H*(0.5-pivot.y))，W/H 为烘焙后画布尺寸
 ##                  （与 battlefield_renderer._prop_for 的底缘对齐公式一致：满图 pivot=(0.5,1) → offset=(0,-H/2)）
 ##
@@ -35,7 +35,7 @@ const PLACEHOLDER_H := 48
 const BAKED_DIR := "baked"
 
 ## 烘焙管线版本：归一化/裁剪规则变更时 +1，使旧烘焙图自然失效重烘（文件名含版本）。
-const BAKED_VERSION := 3
+const BAKED_VERSION := 5
 
 var root: String = "user://custom_assets"
 
@@ -76,6 +76,8 @@ func _opaque_bounds(img: Image) -> Dictionary:
 ## 纯函数烘焙：descriptor.render（crop/scale/pivot）+ 源图 → visual。
 ## 不修改入参 image 与 descriptor；规则与预览/落地共用。
 func build_visual(descriptor: Dictionary, image: Image) -> Dictionary:
+	if String(descriptor.get("kind", "")) == "building" and not Catalog.is_four_direction_building(descriptor):
+		return placeholder_visual(String(descriptor.get("id", "")))
 	return _visual_from_image(descriptor, bake_image(descriptor, image))
 
 
@@ -128,31 +130,8 @@ func bake_image(descriptor: Dictionary, image: Image) -> Image:
 			var normed: Image = img.duplicate()
 			normed.resize(nw, nh, Image.INTERPOLATE_NEAREST)
 			img = normed
-	# 3) 建筑按底座可见宽度标定：投影目标宽 = 16 * (fw + fh)，scale 在其上再乘。
-	# 不裁掉透明留白，也不限制高度；pivot 仍在烘焙后的内容包围盒上计算。
-	var is_building := String(descriptor.get("kind", "")) == "building"
-	if is_building:
-		var building_fp: Dictionary = render.get("footprint", {})
-		var building_fw := clampi(int(building_fp.get("w", 1)), 1, 8)
-		var building_fh := clampi(int(building_fp.get("h", 1)), 1, 8)
-		var building_bounds := _opaque_bounds(img)
-		var content_width := float(img.get_width())
-		if building_bounds.has_all(["min_x", "max_x"]):
-			content_width = float(int(building_bounds["max_x"]) - int(building_bounds["min_x"]) + 1)
-		var ground_width := maxf(0.0, float(render.get("ground_width_px", 0.0)))
-		var source_width := ground_width if ground_width > 0.0 else content_width
-		var target_width := 16.0 * float(building_fw + building_fh)
-		var building_scale := float(render.get("scale", 1.0))
-		if source_width > 0.0 and building_scale > 0.0:
-			var fit := target_width / source_width * building_scale
-			var bw := maxi(1, roundi(img.get_width() * fit))
-			var bh := maxi(1, roundi(img.get_height() * fit))
-			if bw != img.get_width() or bh != img.get_height():
-				var building_img: Image = img.duplicate()
-				building_img.resize(bw, bh, Image.INTERPOLATE_NEAREST)
-				img = building_img
-	# 4) 旧 terrain/plant 缩放保持不变（建筑已在上面合并 render.scale）。
-	else:
+	# 建筑保留源分辨率，显示缩放在 visual/quad 上处理，避免预先丢失细节。
+	if String(descriptor.get("kind", "")) != "building":
 		var scale := float(render.get("scale", 1.0))
 		if absf(scale - 1.0) > 0.001 and scale > 0.0:
 			var tw := maxi(1, roundi(img.get_width() * scale))
@@ -165,6 +144,37 @@ func bake_image(descriptor: Dictionary, image: Image) -> Image:
 
 ## 烘焙后的图 → visual：pivot 内容锚定偏移 + 元数据（无像素处理，纯算术）。
 func _visual_from_image(descriptor: Dictionary, img: Image) -> Dictionary:
+	if String(descriptor.get("kind", "")) == "building":
+		if not Catalog.is_four_direction_building(descriptor) or img.get_width() != img.get_height() * 4:
+			return placeholder_visual(String(descriptor.get("id", "")))
+		var frames: Array[Dictionary] = []
+		var frame_descriptor: Dictionary = descriptor.duplicate(true)
+		frame_descriptor["kind"] = Catalog.KIND_PLANT
+		frame_descriptor["render"] = preload("res://scripts/assets/builtin_building_assets.gd").corrected_render(descriptor)
+		var building_render: Dictionary = frame_descriptor["render"]
+		var footprint: Dictionary = building_render.get("footprint", {})
+		var first: Image = img.get_region(Rect2i(0, 0, img.get_height(), img.get_height()))
+		var bounds: Dictionary = _opaque_bounds(first)
+		var content_width: float = float(bounds.get("max_x", img.get_height() - 1)) - float(bounds.get("min_x", 0)) + 1.0
+		var ground_width: float = float(building_render.get("ground_width_px", 0.0))
+		var source_width: float = ground_width if ground_width > 0.0 else content_width
+		var target_width: float = 16.0 * float(clampi(int(footprint.get("w", 1)), 1, 8) + clampi(int(footprint.get("h", 1)), 1, 8))
+		var display_scale: float = target_width / source_width * float(building_render.get("scale", 1.0))
+		for direction: int in 4:
+			var frame: Image = img.get_region(Rect2i(direction * img.get_height(), 0, img.get_height(), img.get_height()))
+			var frame_visual: Dictionary = _visual_from_image(frame_descriptor, frame)
+			frame_visual["display_scale"] = display_scale
+			frame_visual["render_offset"] *= display_scale
+			frame_visual["canvas_size"] *= display_scale
+			frame_visual["kind"] = "building"
+			frame_visual["direction"] = direction
+			frames.append(frame_visual)
+		var building: Dictionary = frames[0].duplicate()
+		building["directions"] = frames
+		building["direction_mode"] = "four_directions"
+		building["footprint"] = descriptor.get("render", {}).get("footprint", {"w": 1, "h": 1})
+		building["interior"] = building_render.get("interior", {}).duplicate(true)
+		return building
 	var render: Dictionary = descriptor.get("render", {})
 	if render.is_empty():
 		render = Catalog.default_render()
@@ -181,7 +191,7 @@ func _visual_from_image(descriptor: Dictionary, img: Image) -> Dictionary:
 	var span_x := w
 	var min_y := 0.0
 	var span_y := h
-	if bounds.has_all(["min_x", "max_x", "min_y", "max_y"]):
+	if render.get("pivot_space", "content") != "frame" and bounds.has_all(["min_x", "max_x", "min_y", "max_y"]):
 		min_x = float(bounds["min_x"])
 		span_x = float(bounds["max_x"] - bounds["min_x"] + 1)
 		min_y = float(bounds["min_y"])
@@ -195,15 +205,6 @@ func _visual_from_image(descriptor: Dictionary, img: Image) -> Dictionary:
 		"kind": String(descriptor.get("kind", Catalog.KIND_TERRAIN)),
 		"missing": false,
 	}
-	if String(descriptor.get("kind", "")) == "building":
-		var footprint: Dictionary = render.get("footprint", {"w": 1, "h": 1})
-		visual["footprint"] = {
-			"w": clampi(int(footprint.get("w", 1)), 1, 8),
-			"h": clampi(int(footprint.get("h", 1)), 1, 8),
-		}
-		visual["back_mode"] = String(render.get("back_mode", "single"))
-		visual["back_asset_id"] = String(render.get("back_asset_id", ""))
-		visual["ground_width_px"] = maxf(0.0, float(render.get("ground_width_px", 0.0)))
 	return visual
 
 
@@ -361,7 +362,7 @@ func resolve_snapshot(descriptor: Dictionary) -> Dictionary:
 	if _cache.has(cache_key):
 		_touch(cache_key)
 		return _cache[cache_key]
-	var img := _load_blob_image(String(descriptor.get("sha256", "")))
+	var img := _load_descriptor_image(descriptor)
 	if img == null or img.is_empty():
 		var missing := placeholder_visual(aid)
 		_put(cache_key, missing)
@@ -393,16 +394,6 @@ func visual_for_buildings(buildings: Array, user_assets: Dictionary = {}) -> Arr
 		var front := _building_visual(aid, descriptor)
 		if front.is_empty():
 			continue
-		var mode := String(front.get("back_mode", "single"))
-		var back_id := String(front.get("back_asset_id", ""))
-		var back: Dictionary = {}
-		if mode == "front_back" and not back_id.is_empty():
-			var back_descriptor: Dictionary = user_assets.get(back_id, {})
-			if use_library:
-				back_descriptor = {}
-			back = _building_visual(back_id, back_descriptor)
-			if bool(back.get("missing", true)):
-				back = {}
 		entries.append({
 			"cell": cell,
 			"instance_id": String(building.get("instance_id", "")),
@@ -410,41 +401,28 @@ func visual_for_buildings(buildings: Array, user_assets: Dictionary = {}) -> Arr
 			"rotation": posmod(int(building.get("rotation", 0)), 4),
 			"layer": "building",
 			"visual": front,
-			"back_visual": back,
 		})
 	return entries
 
 
 func _building_visual(aid: String, descriptor: Dictionary) -> Dictionary:
-	var visual: Dictionary = {}
-	var source := descriptor
-	if source.is_empty():
-		var raw := library_descriptor(aid)
-		if String(raw.get("kind", "")) == "building":
-			source = raw
-	if not source.is_empty():
-		visual = resolve_snapshot(source).duplicate()
-	else:
-		visual = resolve(aid).duplicate()
-	if visual.is_empty():
+	var source: Dictionary = descriptor if not descriptor.is_empty() else library_descriptor(aid)
+	if not Catalog.is_four_direction_building(source):
 		return {}
-	# 占位图也补齐元数据，渲染通路不需要特殊分支。
-	var render: Dictionary = source.get("render", {})
-	if source.is_empty():
-		visual["back_mode"] = String(visual.get("back_mode", "single"))
-		visual["back_asset_id"] = String(visual.get("back_asset_id", ""))
-		return visual
+	var visual: Dictionary = resolve_snapshot(source).duplicate()
 	visual["kind"] = "building"
 	visual["asset_id"] = aid
-	visual["back_mode"] = String(render.get("back_mode", "single"))
-	visual["back_asset_id"] = String(render.get("back_asset_id", ""))
-	visual["ground_width_px"] = maxf(0.0, float(render.get("ground_width_px", 0.0)))
-	var footprint: Dictionary = render.get("footprint", {"w": 1, "h": 1})
-	visual["footprint"] = {
-		"w": clampi(int(footprint.get("w", 1)), 1, 8),
-		"h": clampi(int(footprint.get("h", 1)), 1, 8),
-	}
+	visual["footprint"] = source.get("render", {}).get("footprint", {"w": 1, "h": 1})
+	visual["direction_mode"] = "four_directions"
+	if bool(visual.get("missing", false)):
+		var frames: Array[Dictionary] = []
+		for direction: int in 4:
+			var frame: Dictionary = visual.duplicate()
+			frame["direction"] = direction
+			frames.append(frame)
+		visual["directions"] = frames
 	return visual
+
 
 
 ## 当前缓存条目数（测试用）
@@ -466,6 +444,22 @@ func clear_cache(asset_id: String = "") -> void:
 		if String(key).begins_with("s:" + asset_id + ":"):
 			_cache.erase(key)
 			_lru.erase(key)
+
+
+func _load_descriptor_image(descriptor: Dictionary) -> Image:
+	var sha: String = String(descriptor.get("sha256", ""))
+	var image: Image = _load_blob_image(sha)
+	if image != null:
+		return image
+	# 内置示例的资源随游戏分发；不依赖用户库已初始化，仍核对快照内容哈希。
+	var source: String = String(descriptor.get("image", ""))
+	if source.begins_with("res://assets/buildings/") and FileAccess.file_exists(source):
+		var bytes: PackedByteArray = FileAccess.get_file_as_bytes(source)
+		if ServiceScript.compute_sha256_hex(bytes) == sha:
+			image = Image.new()
+			if not ServiceScript.decode_image_bytes(bytes, image).is_empty():
+				return image
+	return null
 
 
 func _load_blob_image(sha: String) -> Image:
@@ -509,7 +503,7 @@ func _load_baked_or_blob(descriptor: Dictionary) -> Image:
 		var baked := Image.new()
 		if baked.load(baked_path) == OK:
 			return baked
-	var img := _load_blob_image(String(descriptor.get("sha256", "")))
+	var img := _load_descriptor_image(descriptor)
 	if img == null:
 		return null
 	img = bake_image(descriptor, img)

@@ -148,9 +148,10 @@ func _collect_occluders(viewport_height: float, uses_sheet: bool) -> Dictionary:
 			var block: Dictionary = block_value
 			# camera_back（镜头 +Z）指向观察者：点积越小越远离镜头。
 			# 锚点比人物更远离镜头 → 不可能遮挡（深度测试已保证它画在人物后面）。
-			if camera_back.dot(block["anchor"]) < player_depth - PLAYER_PROP_OCCLUSION_DEPTH_MARGIN:
+			var depth_point: Vector3 = block["center"] if bool(block.get("building", false)) else block["anchor"]
+			if camera_back.dot(depth_point) < player_depth - PLAYER_PROP_OCCLUSION_DEPTH_MARGIN:
 				continue
-			var block_half := (block["size_px"] as Vector2) / IsoProjection.TILE_PIXELS * 0.5 * px_per_world
+			var block_half := (block["size_px"] as Vector2) * float(block.get("display_scale", 1.0)) / IsoProjection.TILE_PIXELS * 0.5 * px_per_world
 			var block_rect := Rect2(
 				_cam.unproject_position(block["center"]) - block_half,
 				block_half * 2.0

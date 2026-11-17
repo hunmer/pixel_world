@@ -26,10 +26,8 @@ const RENDER_MODE_FULL := "full"
 const RENDER_MODE_CROP := "crop"
 const RENDER_MODES: PackedStringArray = [RENDER_MODE_FULL, RENDER_MODE_CROP]
 
-## 建筑背面模式：single=四视角恒前图；front_back=相机象限 2/3 切背面（缺背兜底前图）
-const BACK_MODE_SINGLE := "single"
-const BACK_MODE_FRONT_BACK := "front_back"
-const BACK_MODES: PackedStringArray = [BACK_MODE_SINGLE, BACK_MODE_FRONT_BACK]
+## 建筑仅支持横排四方向 sheet，四帧均为等大正方形。
+const DIRECTION_MODE_FOUR_DIRECTIONS := "four_directions"
 
 ## 单图字节上限（网络与本地导入共用防御；服务层可收紧不可放宽）
 const MAX_IMAGE_BYTES := 32 * 1024 * 1024
@@ -41,7 +39,7 @@ const TEMP_SUFFIX := ".tmp"
 
 
 ## 渲染元数据默认值：整图、底部中心锚点、原始比例、占 1 逻辑格。
-## building 追加：单面（无背面）、不引用背面素材、ground_width_px=0（自动标定）。
+## ground_width_px=0 自动按单帧内容宽标定；building 由构建入口追加 direction_mode。
 static func default_render() -> Dictionary:
 	return {
 		"mode": RENDER_MODE_FULL,
@@ -49,8 +47,6 @@ static func default_render() -> Dictionary:
 		"pivot": {"x": 0.5, "y": 1.0},
 		"scale": 1.0,
 		"footprint": {"w": 1, "h": 1},
-		"back_mode": BACK_MODE_SINGLE,
-		"back_asset_id": "",
 		"ground_width_px": 0.0,
 	}
 
@@ -59,6 +55,9 @@ static func default_render() -> Dictionary:
 static func make_descriptor(id: String, kind: String, name: String,
 		tags: Array, image: String, sha256: String, bytes: int,
 		width: int, height: int, render: Dictionary = {}) -> Dictionary:
+	var resolved_render := render.duplicate(true) if not render.is_empty() else default_render()
+	if kind == KIND_BUILDING and render.is_empty():
+		resolved_render["direction_mode"] = DIRECTION_MODE_FOUR_DIRECTIONS
 	return {
 		"id": id,
 		"kind": kind,
@@ -69,8 +68,28 @@ static func make_descriptor(id: String, kind: String, name: String,
 		"bytes": bytes,
 		"width": width,
 		"height": height,
-		"render": render if not render.is_empty() else default_render(),
+		"render": resolved_render,
 	}
+
+
+## 轻量建筑筛选：供面板/adapter 使用，不要求 sha 或其余描述符字段。
+static func is_four_direction_building(descriptor: Dictionary) -> bool:
+	if str(descriptor.get("kind", "")) != KIND_BUILDING:
+		return false
+	var width: Variant = descriptor.get("width", 0)
+	var height: Variant = descriptor.get("height", 0)
+	if not (width is int or width is float) or not (height is int or height is float):
+		return false
+	if not is_finite(float(width)) or not is_finite(float(height)):
+		return false
+	if float(width) != int(width) or float(height) != int(height):
+		return false
+	if int(height) <= 0 or int(width) != int(height) * 4:
+		return false
+	var render: Variant = descriptor.get("render", null)
+	return render is Dictionary and render.get("direction_mode", "") == DIRECTION_MODE_FOUR_DIRECTIONS \
+		and render.get("mode", "") == RENDER_MODE_FULL and render.get("crop", null) == null \
+		and not render.has("back_mode") and not render.has("back_asset_id")
 
 
 ## 校验单个描述符，返回错误列表（空 = 通过）。ctx 用于错误消息定位。
@@ -129,6 +148,17 @@ static func validate_descriptor(d: Dictionary, ctx: String,
 	if d.has("saved") and typeof(d["saved"]) != TYPE_BOOL:
 		errors.append("%s(%s): saved 必须是布尔值（用户保存标记）" % [ctx, asset_id])
 	errors.append_array(_validate_render(d.get("render", null), "%s(%s)" % [ctx, asset_id], w, h))
+	if kind == KIND_BUILDING:
+		if not is_four_direction_building(d):
+			errors.append("%s(%s): building 必须是 4:1 四方向横排 sheet（四个等大正方形帧），实际 %dx%d" % [ctx, asset_id, w, h])
+		var render: Variant = d.get("render", null)
+		if render is Dictionary:
+			if render.get("direction_mode", "") != DIRECTION_MODE_FOUR_DIRECTIONS:
+				errors.append("%s(%s): building render.direction_mode 必须为 four_directions" % [ctx, asset_id])
+			if render.get("mode", "") != RENDER_MODE_FULL or render.get("crop", null) != null:
+				errors.append("%s(%s): building 必须 mode=full 且 crop=null" % [ctx, asset_id])
+			if render.has("back_mode") or render.has("back_asset_id"):
+				errors.append("%s(%s): building 不再支持 back_mode/back_asset_id，请导入四方向横排 sheet" % [ctx, asset_id])
 	return errors
 
 
@@ -162,6 +192,8 @@ static func _validate_render(render: Variant, ctx: String, img_w: int, img_h: in
 	elif mode == RENDER_MODE_CROP:
 		errors.append("%s: render.mode=crop 时 crop 必须是有效矩形" % ctx)
 
+	if r.get("pivot_space", "content") not in ["content", "frame"]:
+		errors.append("%s: render.pivot_space 必须为 content|frame" % ctx)
 	var pivot: Variant = r.get("pivot", null)
 	if not (pivot is Dictionary):
 		errors.append("%s: render.pivot 必须是 {x,y} 对象" % ctx)
@@ -183,17 +215,10 @@ static func _validate_render(render: Variant, ctx: String, img_w: int, img_h: in
 		var fh := int((fp as Dictionary).get("h", 0))
 		if fw < 1 or fh < 1 or fw > 8 or fh > 8:
 			errors.append("%s: render.footprint 必须是 1..8 的整数格，实际 %dx%d" % [ctx, fw, fh])
-	# building 背面/地面标定（旧 terrain/plant 素材缺省合法：single + 空 + 0）
-	var back_mode := str(r.get("back_mode", BACK_MODE_SINGLE))
-	if not BACK_MODES.has(back_mode):
-		errors.append("%s: render.back_mode 必须是 %s 之一，实际 %s" % [ctx, "/".join(BACK_MODES), back_mode])
-	var back_asset_id := str(r.get("back_asset_id", ""))
-	if not back_asset_id.is_empty() and not _is_valid_id(back_asset_id):
-		errors.append("%s: render.back_asset_id 必须是合法素材 id 或空串，实际 %s" % [ctx, back_asset_id])
-	if back_mode == BACK_MODE_FRONT_BACK and back_asset_id.is_empty():
-		errors.append("%s: render.back_mode=front_back 时必须给出 back_asset_id（引用库中另一素材）" % ctx)
-	# single 时残留的 back_asset_id 不报错：加载/更新路径强制清空（见 enforce_single_back），
-	# 保证快照与 adapter 读到的数据恒一致（single 永不携带背面引用）
+	if r.has("interior"):
+		var interior_error: String = preload("res://scripts/core/building_interior.gd").validate(r["interior"], r.get("footprint", {}))
+		if not interior_error.is_empty():
+			errors.append("%s: %s" % [ctx, interior_error])
 	var ground_width: Variant = r.get("ground_width_px", 0.0)
 	if typeof(ground_width) != TYPE_FLOAT and typeof(ground_width) != TYPE_INT:
 		errors.append("%s: render.ground_width_px 必须是数字，实际 %s" % [ctx, str(ground_width)])
@@ -214,7 +239,7 @@ static func default_library(source_url: String) -> Dictionary:
 
 ## 解析库 JSON 文本 → {ok, library, errors}。成功时 library 为归一化后的规范库。
 ## version 超前拒绝加载（防止半加载新版本数据）；逐条校验任一失败整体拒绝。
-static func parse_library_text(text: String) -> Dictionary:
+static func parse_library_text(text: String, quarantine_legacy_buildings: bool = false) -> Dictionary:
 	var errors: Array[String] = []
 	var parser := JSON.new()
 	var err := parser.parse(text)
@@ -244,6 +269,11 @@ static func parse_library_text(text: String) -> Dictionary:
 		assets_raw = []
 
 	var assets: Array = []
+	var legacy_raw: Variant = raw.get("legacy_buildings", [])
+	if not legacy_raw is Array:
+		errors.append("legacy_buildings 必须是数组")
+		legacy_raw = []
+	var legacy_buildings: Array = (legacy_raw as Array).duplicate(true)
 	var seen_ids := {}
 	for i in (assets_raw as Array).size():
 		var entry: Variant = (assets_raw as Array)[i]
@@ -252,6 +282,10 @@ static func parse_library_text(text: String) -> Dictionary:
 			errors.append("%s: 条目必须是对象" % ctx)
 			continue
 		var d: Dictionary = entry
+		# 兼容仅发生于磁盘库加载：旧建筑原样隔离，绝不伪造四方向元数据。
+		if quarantine_legacy_buildings and is_legacy_building(d):
+			legacy_buildings.append(d.duplicate(true))
+			continue
 		var asset_errors := validate_descriptor(d, ctx)
 		if not asset_errors.is_empty():
 			errors.append_array(asset_errors)
@@ -269,6 +303,8 @@ static func parse_library_text(text: String) -> Dictionary:
 	var library := default_library(source_url)
 	library["updated_ms"] = int(raw.get("updated_ms", 0))
 	library["assets"] = assets
+	if not legacy_buildings.is_empty():
+		library["legacy_buildings"] = legacy_buildings
 	return {"ok": true, "library": library, "errors": []}
 
 
@@ -297,19 +333,18 @@ static func _normalize_descriptor(d: Dictionary) -> Dictionary:
 	render["scale"] = float(render.get("scale", 1.0))
 	var fp: Dictionary = render.get("footprint", {})
 	render["footprint"] = {"w": int(fp.get("w", 1)), "h": int(fp.get("h", 1))}
-	render["back_mode"] = str(render.get("back_mode", BACK_MODE_SINGLE))
-	render["back_asset_id"] = str(render.get("back_asset_id", ""))
 	render["ground_width_px"] = float(render.get("ground_width_px", 0.0))
-	enforce_single_back(render)
 	out["render"] = render
 	return out
 
 
-## single 模式强制清空背面引用（就地修改）：back_mode 切回 single 时旧 back_asset_id
-## 不残留——加载归一化与素材更新共用，保证库文件/快照恒一致。
-static func enforce_single_back(render: Dictionary) -> void:
-	if String(render.get("back_mode", BACK_MODE_SINGLE)) == BACK_MODE_SINGLE:
-		render["back_asset_id"] = ""
+## 识别旧建筑契约；只用于库加载隔离，不用于放宽描述符/快照校验。
+static func is_legacy_building(d: Dictionary) -> bool:
+	if str(d.get("kind", "")) != KIND_BUILDING:
+		return false
+	var render: Variant = d.get("render", {})
+	return render is Dictionary and (render.get("direction_mode", "") != DIRECTION_MODE_FOUR_DIRECTIONS \
+		or render.has("back_mode") or render.has("back_asset_id"))
 
 
 ## 加载库文件：主文件 → .bak 回退。返回 {ok, library, error, used_backup}。
@@ -317,12 +352,12 @@ static func enforce_single_back(render: Dictionary) -> void:
 static func load_library(path: String) -> Dictionary:
 	var primary_error := "库文件不存在: %s" % path
 	if FileAccess.file_exists(path):
-		var res := parse_library_text(FileAccess.get_file_as_string(path))
+		var res := parse_library_text(FileAccess.get_file_as_string(path), true)
 		if bool(res["ok"]):
 			return {"ok": true, "library": res["library"], "error": "", "used_backup": false}
 		primary_error = _join_errors(res["errors"])
 	if FileAccess.file_exists(path + BACKUP_SUFFIX):
-		var bak := parse_library_text(FileAccess.get_file_as_string(path + BACKUP_SUFFIX))
+		var bak := parse_library_text(FileAccess.get_file_as_string(path + BACKUP_SUFFIX), true)
 		if bool(bak["ok"]):
 			return {"ok": true, "library": bak["library"], "error": "", "used_backup": true}
 		return {"ok": false, "library": {},

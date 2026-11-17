@@ -14,6 +14,7 @@ extends RefCounted
 
 ## 占用矩形边长上限（与素材契约 render.footprint 1..8 一致）
 const MAX_FOOTPRINT: int = 8
+const Interior = preload("res://scripts/core/building_interior.gd")
 
 
 ## 归一化占用 key："x,y"（与 GridSystem._key 一致；occupied 可传 Vector2i 或 String key）
@@ -89,6 +90,24 @@ static func occupancy(entries: Array, assets: Dictionary) -> Dictionary:
 	return result
 
 
+## 与 footprint 占地分离：旧建筑全阻挡，可进入建筑仅墙/家具阻挡。
+static func blocking_cells(entry: Dictionary, assets: Dictionary) -> Array[Vector2i]:
+	var descriptor: Dictionary = assets.get(String(entry.get("asset_id", "")), {})
+	if Interior.enabled(descriptor):
+		var render: Dictionary = descriptor.get("render", {})
+		if Interior.validate(render.get("interior"), render.get("footprint", {})).is_empty():
+			return Interior.blocking_cells(entry, descriptor)
+	return occupied_cells(entry, assets)
+
+
+static func blocking_occupancy(entries: Array, assets: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for entry: Dictionary in entries:
+		for cell: Vector2i in blocking_cells(entry, assets):
+			result[cell_key(cell.x, cell.y)] = String(entry.get("instance_id", ""))
+	return result
+
+
 ## 归一化既有占用集合的 key（接受 Vector2i key 或 "x,y" 字符串 key 的 Dictionary）。
 static func _occupied_has(occupied: Dictionary, cell: Vector2i) -> bool:
 	var k := cell_key(cell.x, cell.y)
@@ -122,6 +141,12 @@ static func validate_entries(
 		var asset_id := String(entry.get("asset_id", ""))
 		if asset_id.is_empty():
 			return "建筑 %s 缺 asset_id" % instance_id
+		var descriptor: Dictionary = assets.get(asset_id, {})
+		var render: Dictionary = descriptor.get("render", {})
+		if render.has("interior"):
+			var interior_error: String = Interior.validate(render["interior"], render.get("footprint", {}))
+			if not interior_error.is_empty():
+				return "建筑 %s %s" % [instance_id, interior_error]
 		# rotation 整数 0..3（接受 JSON 整值 float：1.0 合法、1.5 拒绝）
 		var rotation_value: Variant = as_json_int(entry.get("rotation", 0))
 		if rotation_value == null:
@@ -135,6 +160,7 @@ static func validate_entries(
 		if x_value == null or y_value == null:
 			return "建筑 %s x/y 必须是整数" % instance_id
 		# 旋转后矩形全格界内 + 不重叠 + 不与既有占用冲突
+		var blocked: Array[Vector2i] = blocking_cells(entry, assets)
 		var cells := occupied_cells(entry, assets)
 		for cell in cells:
 			if cell.x < 0 or cell.y < 0 or cell.x >= width or cell.y >= height:
@@ -146,8 +172,23 @@ static func validate_entries(
 				return "建筑 %s 与 %s 占用重叠于 (%d,%d)" % [
 					instance_id, String(seen_cells[k]), cell.x, cell.y
 				]
-			if _occupied_has(occupied, cell):
+			if blocked.has(cell) and _occupied_has(occupied, cell):
 				return "建筑 %s 占用 (%d,%d) 与单位/增援冲突" % [instance_id, cell.x, cell.y]
 			seen_cells[k] = instance_id
 		index += 1
+	return ""
+
+
+## 进入式房屋必须整体位于同一实际站立高度；不替换底层地形通行属性。
+static func validate_interior_ground(entries: Array, assets: Dictionary, level_for_cell: Callable) -> String:
+	for entry: Dictionary in entries:
+		if not Interior.enabled(assets.get(String(entry.get("asset_id", "")), {})):
+			continue
+		var first: Variant = null
+		for cell: Vector2i in occupied_cells(entry, assets):
+			var level: int = int(level_for_cell.call(cell))
+			if first == null:
+				first = level
+			elif int(first) != level:
+				return "可进入建筑 %s 底面站立高度不等" % String(entry.get("instance_id", "?"))
 	return ""

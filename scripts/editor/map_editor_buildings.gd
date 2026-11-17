@@ -1,7 +1,7 @@
 ## map_editor_buildings.gd — 地形页建筑素材分组、缩略图与选中回显
 ##
 ## 全部 static，ed=map_editor 实例。列表与缩略图共用场景持有的素材服务/适配器；
-## 背面依赖只作为正面建筑的渲染资源，不作为独立可放置素材重复列出。
+## 建筑只列出横排四方向精灵图，缩略图使用第零帧。
 
 class_name MapEditorBuildings
 extends RefCounted
@@ -47,16 +47,6 @@ static func rebuild(ed) -> void:
 	ed._building_buttons.clear()
 
 	var assets: Array = ed._asset_service.list_assets()
-	var back_asset_ids: Dictionary = {}
-	for raw in assets:
-		if not raw is Dictionary:
-			continue
-		var descriptor: Dictionary = raw
-		if String(descriptor.get("kind", "")) != "building":
-			continue
-		var back_id := String(descriptor.get("render", {}).get("back_asset_id", ""))
-		if not back_id.is_empty():
-			back_asset_ids[back_id] = true
 
 	var buildings: Array[Dictionary] = []
 	for raw in assets:
@@ -66,7 +56,10 @@ static func rebuild(ed) -> void:
 		var asset_id := String(descriptor.get("id", ""))
 		if String(descriptor.get("kind", "")) != "building" or asset_id.is_empty():
 			continue
-		if back_asset_ids.has(asset_id):
+		if not preload("res://scripts/assets/user_asset_catalog.gd").is_four_direction_building(descriptor):
+			continue
+		# 已替换的内置45度版本保留磁盘记录，但不重复出现在建筑按钮中。
+		if descriptor.get("sha256", "") == "956fc2d219552da57a22cfb776c1cbdf7657018bf4200520ee32fb2459cd7817" and "builtin" in descriptor.get("tags", []):
 			continue
 		buildings.append(descriptor)
 	var builtin_id := String(ed._builtin_building_id)
@@ -95,8 +88,6 @@ static func rebuild(ed) -> void:
 static func _building_button(ed, descriptor: Dictionary, visual: Dictionary) -> Button:
 	var asset_id := String(descriptor.get("id", ""))
 	var display_name := String(descriptor.get("name", asset_id))
-	if asset_id == String(ed._builtin_building_id):
-		display_name = "石墙"
 	var button: Button = UIFactoryScript.button("", Callable(), "", false)
 	button.toggle_mode = true
 	if ed._terrain_group != null:
@@ -105,6 +96,9 @@ static func _building_button(ed, descriptor: Dictionary, visual: Dictionary) -> 
 	button.text = display_name
 	button.clip_text = true
 	button.tooltip_text = "%s（%s）" % [display_name, asset_id]
+	var interior: Dictionary = descriptor.get("render", {}).get("interior", {})
+	if bool(interior.get("enabled", false)):
+		button.tooltip_text += "\n可进入房屋：门与地板可通行，墙和家具阻挡。\n滚轮放大查看室内，缩小恢复外观；T 旋转整栋。"
 	button.set_meta("kind", "building")
 	button.set_meta("asset_id", asset_id)
 	var texture: Variant = visual.get("texture")

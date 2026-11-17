@@ -49,7 +49,7 @@ func in_bounds(x: int, y: int) -> bool:
 ## 替换语义：整体覆盖既有占用（编辑器撤销/重复重建不残留幽灵占用）。
 ## 越界格忽略（文档校验已拒绝越界）。
 func apply_buildings(buildings: Array, assets: Dictionary) -> void:
-	building_cells = BuildingLayoutScript.occupancy(buildings, assets)
+	building_cells = BuildingLayoutScript.blocking_occupancy(buildings, assets)
 
 
 ## 该格是否被建筑占用（阻挡站立/移动/寻路；不支持登楼）。

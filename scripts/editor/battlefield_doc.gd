@@ -339,6 +339,15 @@ static func building_occupancy(model: Dictionary) -> Dictionary:
 	return BuildingLayoutScript.occupancy(building_entries(model), model.get("user_assets", {}) as Dictionary)
 
 
+## 单位碰撞专用映射；建筑选择/重叠继续使用 building_occupancy 全占地。
+static func building_blocking_occupancy(model: Dictionary) -> Dictionary:
+	return BuildingLayoutScript.blocking_occupancy(building_entries(model), model.get("user_assets", {}))
+
+
+static func building_blocks_cell(model: Dictionary, cell: Vector2i) -> bool:
+	return building_blocking_occupancy(model).has(BuildingLayoutScript.cell_key(cell.x, cell.y))
+
+
 ## 命中格所在建筑条目（无则 {}）
 static func building_at(model: Dictionary, cell: Vector2i) -> Dictionary:
 	for e in building_entries(model):
@@ -378,6 +387,12 @@ static func can_place_building(
 		"x": origin.x, "y": origin.y, "rotation": rotation,
 	}
 	var assets := _merged_assets(model, assets_snapshot)
+	var descriptor: Dictionary = assets.get(asset_id, {})
+	var render: Dictionary = descriptor.get("render", {})
+	if render.has("interior"):
+		var interior_error: String = BuildingLayoutScript.Interior.validate(render["interior"], render.get("footprint", {}))
+		if not interior_error.is_empty():
+			return interior_error
 	var cells := BuildingLayoutScript.occupied_cells(entry, assets)
 	var w := int(model.width)
 	var h := int(model.height)
@@ -398,9 +413,13 @@ static func can_place_building(
 		var k := BuildingLayoutScript.cell_key(cell.x, cell.y)
 		if occupied_buildings.has(k):
 			return "建筑占用 (%d,%d) 与 %s 重叠" % [cell.x, cell.y, String(occupied_buildings[k])]
+	var ground_error: String = BuildingLayoutScript.validate_interior_ground([entry], assets,
+		func(cell: Vector2i) -> int: return _building_ground_level(model, cell))
+	if not ground_error.is_empty():
+		return ground_error
 	# 不压单位
 	var units := _unit_occupancy(model)
-	for cell in cells:
+	for cell in BuildingLayoutScript.blocking_cells(entry, assets):
 		if units.has(BuildingLayoutScript.cell_key(cell.x, cell.y)):
 			return "建筑占用 (%d,%d) 与单位冲突" % [cell.x, cell.y]
 	return ""
@@ -535,6 +554,10 @@ static func validate_buildings(model: Dictionary) -> String:
 		model.get("user_assets", {}) as Dictionary, _unit_occupancy(model))
 	if not base_err.is_empty():
 		return base_err
+	var ground_error: String = BuildingLayoutScript.validate_interior_ground(entries, model.get("user_assets", {}),
+		func(cell: Vector2i) -> int: return _building_ground_level(model, cell))
+	if not ground_error.is_empty():
+		return ground_error
 	for e in entries:
 		var z_ref := -1
 		for c: Vector2i in BuildingLayoutScript.occupied_cells(e, model.get("user_assets", {}) as Dictionary):
@@ -846,3 +869,11 @@ static func save_model(model: Dictionary) -> Dictionary:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
 			return { "ok": false, "error": "落盘失败: %s" % path }
 	return { "ok": true, "path": path }
+
+
+static func _building_ground_level(model: Dictionary, cell: Vector2i) -> int:
+	var layout: Dictionary = model.get("block_layout", {})
+	if not layout.is_empty():
+		return BlockLayoutScript.z_at(layout, cell)
+	var terrain: StringName = glyph_to_terrain(String(model.rows[cell.y]).substr(cell.x, 1))
+	return BattlefieldLoaderScript.building_ground_level([[terrain]], {}, Vector2i.ZERO)

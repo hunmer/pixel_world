@@ -1,91 +1,71 @@
-## prepare_building_demo.gd — 用真实塔楼准备建筑视觉验收地图（不启动游戏、不截图）。
-## 用法：godot --headless --path . --script res://tools/prepare_building_demo.gd
-## 可选：-- --back=<背面图片路径>；默认使用工程内配套背图，--single 可生成单图示例。
+## prepare_building_demo.gd — 直接构造四向建筑示例快照，不读取或写入用户素材库。
+## godot --headless --path . --script res://tools/prepare_building_demo.gd -- --sheet=<4:1横排PNG>
 extends SceneTree
 
-const ServiceScript = preload("res://scripts/assets/user_asset_service.gd")
-const DocScript = preload("res://scripts/editor/battlefield_doc.gd")
-const SOURCE := "res://meowa_tiles/generated/citywall_1to9.png"
-const BACK_SOURCE := "res://meowa_tiles/generated/citywall_1to9_back.png"
+const Builtin = preload("res://scripts/assets/builtin_building_assets.gd")
+const Catalog = preload("res://scripts/assets/user_asset_catalog.gd")
+const Service = preload("res://scripts/assets/user_asset_service.gd")
+const Doc = preload("res://scripts/editor/battlefield_doc.gd")
+const Loader = preload("res://scripts/core/battlefield_loader.gd")
+const OUTPUT := "res://data/battlefields/building_demo.json"
 
 func _initialize() -> void:
 	call_deferred("_prepare")
 
 func _prepare() -> void:
-	var service = ServiceScript.new()
-	root.add_child(service)
-	await process_frame
-	var imported: Dictionary = service.import_local_file(SOURCE, "building", [], "石塔（视觉验收）")
-	if not _require(bool(imported.get("ok", false)), "塔楼导入失败：%s" % imported):
-		return
-	var asset_id := String(imported["asset_id"])
-	var front: Dictionary = (service.find_by_id(asset_id) as Dictionary).duplicate(true)
-	var render: Dictionary = front.get("render", {}).duplicate(true)
-	# 初始标定值；未进行视觉验收，最终可在素材面板里微调。
-	render.merge({"footprint": {"w": 2, "h": 2}, "ground_width_px": 1150.0,
-		"pivot": {"x": 0.425, "y": 0.9}, "scale": 1.0,
-		"back_mode": "single", "back_asset_id": ""}, true)
-	front["kind"] = "building"
-	front["render"] = render
-	var snapshots: Dictionary = {asset_id: front}
-	var back_path := BACK_SOURCE if FileAccess.file_exists(BACK_SOURCE) else ""
+	var sheet := Builtin.SHEET_PNG
 	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--back="):
-			back_path = argument.trim_prefix("--back=")
-		elif argument == "--single":
-			back_path = ""
-	if not back_path.is_empty():
-		var back_import: Dictionary = service.import_local_file(back_path, "building", [], "石塔背面（视觉验收）")
-		if not _require(bool(back_import.get("ok", false)), "背面导入失败：%s" % back_import):
+		if argument.begins_with("--sheet=") and not argument.trim_prefix("--sheet=").is_empty():
+			sheet = argument.trim_prefix("--sheet=")
+		else:
+			_fail("只接受 --sheet=<四方向横排图>；旧 --single / --back 已停用：%s" % argument)
 			return
-		var back_id := String(back_import["asset_id"])
-		if not _require(back_id != asset_id, "背面必须使用另一张图片，不能把正面冒充背面"):
-			return
-		var back: Dictionary = (service.find_by_id(back_id) as Dictionary).duplicate(true)
-		back["kind"] = "building"
-		var back_render := render.duplicate(true)
-		# 配套背图与正面同为 1584×2816；木棚在左，底座中心在内容包围盒内右移。
-		back_render["pivot"] = {"x": 0.575, "y": 0.9}
-		back["render"] = back_render
-		snapshots[back_id] = back
-		if not bool(back_import.get("deduped", false)):
-			var back_updated: Dictionary = service.update_asset(back_id, {"kind": "building", "render": back_render})
-			if not _require(bool(back_updated.get("ok", false)), "背面配置保存失败：%s" % back_updated):
-				return
-		render["back_mode"] = "front_back"
-		render["back_asset_id"] = back_id
-	# 新素材同步标定；已存在素材保留标定，但更新前背关联，让新放置的石塔也能切图。
-	if not bool(imported.get("deduped", false)) or not back_path.is_empty():
-		var library_render := render.duplicate(true)
-		if bool(imported.get("deduped", false)):
-			library_render = (service.find_by_id(asset_id) as Dictionary).get("render", {}).duplicate(true)
-			library_render["back_mode"] = render["back_mode"]
-			library_render["back_asset_id"] = render["back_asset_id"]
-		var updated: Dictionary = service.update_asset(asset_id, {"kind": "building", "render": library_render})
-		if not _require(bool(updated.get("ok", false)), "素材配置保存失败：%s" % updated):
-			return
-	var model: Dictionary = DocScript.create_empty(12, 10)
+	# 快照的离线取图仅支持随项目分发的建筑源目录；先归一化以拒绝 ../ 越界。
+	sheet = sheet.simplify_path()
+	if not sheet.begins_with("res://assets/buildings/"):
+		_fail("--sheet 必须位于 res://assets/buildings/ 内并随项目分发；外部路径无法保证示例离线显示")
+		return
+	var bytes := FileAccess.get_file_as_bytes(sheet)
+	var image := Image.new()
+	if Service.decode_image_bytes(bytes, image).is_empty() or image.get_height() <= 0 or image.get_width() != image.get_height() * 4:
+		_fail("建筑必须是四个等大正方形帧组成的 4:1 横排 sheet")
+		return
+	var sha := Service.compute_sha256_hex(bytes)
+	var asset_id := "medieval_watchtower_" + sha.substr(0, 12)
+	var render := Catalog.default_render()
+	Builtin._apply_default_render(render)
+	var descriptor := Catalog.make_descriptor(asset_id, "building", Builtin.DISPLAY_NAME,
+		["builtin", "watchtower"], sheet, sha, bytes.size(), image.get_width(), image.get_height(), render)
+	descriptor["saved"] = true
+	var errors := Catalog.validate_descriptor(descriptor, "building_demo")
+	if not errors.is_empty():
+		_fail("素材校验失败：%s" % " ; ".join(errors))
+		return
+	var model: Dictionary = Doc.create_empty(12, 10)
 	model["id"] = "building_demo"
-	model["name"] = "建筑视觉验收：石塔"
-	model["description"] = "真实高塔、2×2占地；请验收落地锚点、四向展示、编辑与阻挡。标定值尚待视觉确认。"
-	model["user_assets"] = snapshots
+	model["name"] = "建筑视觉验收：中世纪瞭望塔"
+	model["description"] = "原始四方向横排精灵图、2×2占地；yaw45/pitch30，底座232.44px，单帧地基中心(259.49,416.90)。请人工检查落地与遮挡。"
+	model["user_assets"] = {asset_id: descriptor}
 	model["buildings"] = [{"instance_id": "demo_tower_1", "asset_id": asset_id,
 		"x": 4, "y": 4, "rotation": 0}]
 	model["units"] = [
 		{"class": "swordsman", "name": "验收友军", "level": 3, "x": 2, "y": 5, "faction": "player"},
 		{"class": "berserker", "name": "验收敌军", "level": 3, "x": 9, "y": 5, "faction": "enemy"}]
-	var result: Dictionary = DocScript.save_model(model)
-	if not _require(bool(result.get("ok", false)), "示例地图保存失败：%s" % result):
+	var document := Doc.to_json_dict(model)
+	var validated := Loader.load_battlefield_inline(document, "building_demo")
+	if not bool(validated.get("ok", false)):
+		_fail("示例校验失败：%s" % validated.get("error", ""))
 		return
-	print("[BuildingDemo] PASS：", result)
-	print("[BuildingDemo] 素材类型：", render["back_mode"], "；请从编辑器加载 building_demo，视觉效果待人工验收。")
-	service.queue_free()
-	await process_frame
+	# 专用生成文件可覆盖；不调用 save_model，避免 .bak 和 user:// 回退。
+	var output := FileAccess.open(OUTPUT, FileAccess.WRITE)
+	if output == null:
+		_fail("无法写入专用示例：%s" % OUTPUT)
+		return
+	output.store_string(JSON.stringify(document, "\t") + "\n")
+	output.close()
+	print("BUILDING_DEMO_PASS: ", OUTPUT, " sheet_sha256=", sha)
 	quit(0)
 
-func _require(condition: bool, message: String) -> bool:
-	if condition:
-		return true
+func _fail(message: String) -> void:
 	push_error("[BuildingDemo] " + message)
 	quit(1)
-	return false

@@ -90,10 +90,6 @@ var _fp_w: SpinBox
 var _fp_h: SpinBox
 var _ground_width_row: HBoxContainer
 var _ground_width_box: SpinBox
-var _back_mode_row: HBoxContainer
-var _back_mode_option: OptionButton
-var _back_asset_row: HBoxContainer
-var _back_asset_option: OptionButton
 var _building_hint_label: Label
 var _apply_btn: Button
 var _hide_btn: Button
@@ -166,7 +162,7 @@ func _build_ui() -> void:
 	import_row.add_theme_constant_override("separation", 4)
 	_import_kind = UIFactoryScript.option_button()
 	_import_kind.name = "ImportKind"
-	_import_kind.tooltip_text = "选择本地导入素材的类型（地块 / 植物 / 建筑）"
+	_import_kind.tooltip_text = "选择本地导入素材的类型；建筑必须为 4:1 四方向横排 sheet"
 	_import_kind.add_item("地块")
 	_import_kind.set_item_metadata(0, Catalog.KIND_TERRAIN)
 	_import_kind.add_item("植物")
@@ -368,7 +364,7 @@ func _build_detail_box() -> void:
 	_detail_box.add_child(pivot_row)
 	UIFactoryScript.center_row(pivot_row)
 
-	# 建筑：原图坐标中的底座可见宽度。0=alpha 内容宽；缩放 = 16*(w+h)/此宽度。
+	# 建筑：单帧 alpha 内容 bbox 中的底座可见宽度，0 自动取该帧内容宽。
 	_ground_width_row = PixelHBoxScript.new()
 	_ground_width_row.name = "BuildingGroundWidthRow"
 	_ground_width_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
@@ -377,41 +373,13 @@ func _build_detail_box() -> void:
 	_ground_width_box = _spin(0.0, 16384.0, 1.0, 0.0)
 	_ground_width_box.name = "GroundWidthSpin"
 	_ground_width_box.suffix = "px"
-	_ground_width_box.tooltip_text = "裁切后原图的底座可见宽度；0=自动取 alpha 内容宽"
+	_ground_width_box.tooltip_text = "单帧内容 bbox 内的底座可见宽度；0=自动取该帧 alpha 内容宽"
 	_ground_width_row.add_child(_ground_width_box)
 	_detail_box.add_child(_ground_width_row)
 	UIFactoryScript.center_row(_ground_width_row)
 
-	_back_mode_row = PixelHBoxScript.new()
-	_back_mode_row.name = "BuildingBackModeRow"
-	_back_mode_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
-	_back_mode_row.add_child(UIFactoryScript.label(
-		"图向", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM))
-	_back_mode_option = UIFactoryScript.option_button()
-	_back_mode_option.name = "BackModeOption"
-	_back_mode_option.add_item("单图四向")
-	_back_mode_option.set_item_metadata(0, "single")
-	_back_mode_option.add_item("前 / 背图")
-	_back_mode_option.set_item_metadata(1, "front_back")
-	_back_mode_option.item_selected.connect(_on_back_mode_selected)
-	_back_mode_row.add_child(_back_mode_option)
-	_detail_box.add_child(_back_mode_row)
-	UIFactoryScript.center_row(_back_mode_row)
-
-	_back_asset_row = PixelHBoxScript.new()
-	_back_asset_row.name = "BuildingBackAssetRow"
-	_back_asset_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
-	_back_asset_row.add_child(UIFactoryScript.label(
-		"背图", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM))
-	_back_asset_option = UIFactoryScript.option_button()
-	_back_asset_option.name = "BackAssetOption"
-	_back_asset_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_back_asset_row.add_child(_back_asset_option)
-	_detail_box.add_child(_back_asset_row)
-	UIFactoryScript.center_row(_back_asset_row)
-
 	_building_hint_label = UIFactoryScript.label(
-		"建筑轴心是底座中心；旋转奇数象限交换占地宽/深，缺背图自动用前图。",
+		"建筑须为四方向横排 sheet（4:1，四个等大正方形帧）；轴心和底座宽按单帧内容 bbox 标定。",
 		ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
 	_building_hint_label.name = "BuildingHintLabel"
 	_detail_box.add_child(_building_hint_label)
@@ -758,36 +726,6 @@ func deselect() -> void:
 		_detail_box.visible = false
 
 
-func _rebuild_back_asset_options(selected_back: String) -> void:
-	_back_asset_option.clear()
-	_back_asset_option.add_item("未设置（回退正面）")
-	_back_asset_option.set_item_metadata(0, "")
-	var rows: Array = service.list_assets() if service != null else []
-	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return String(a.get("name", a.get("id", ""))).naturalnocasecmp_to(
-			String(b.get("name", b.get("id", "")))) < 0)
-	for raw in rows:
-		if not raw is Dictionary:
-			continue
-		var d: Dictionary = raw
-		var aid := String(d.get("id", ""))
-		if aid == _selected_id or String(d.get("kind", "")) != KIND_BUILDING:
-			continue
-		var index := _back_asset_option.item_count
-		_back_asset_option.add_item(String(d.get("name", aid)))
-		_back_asset_option.set_item_metadata(index, aid)
-		if aid == selected_back:
-			_back_asset_option.select(index)
-
-
-func _on_back_mode_selected(_index: int) -> void:
-	if _back_mode_option == null or _back_asset_row == null:
-		return
-	var front_back := String(_back_mode_option.get_selected_metadata()) == "front_back"
-	_back_asset_row.visible = _detail_kind == KIND_BUILDING and front_back
-	_back_asset_option.disabled = not front_back
-
-
 func _fill_detail(desc: Dictionary) -> void:
 	_syncing_detail = true
 	var source := desc
@@ -832,14 +770,19 @@ func _fill_detail(desc: Dictionary) -> void:
 	_fp_h.value = int(fp.get("h", 1))
 	_ground_width_row.visible = is_building
 	_ground_width_box.value = float(render.get("ground_width_px", 0.0))
-	_back_mode_row.visible = is_building
-	_back_mode_option.select(1 if String(render.get("back_mode", "single")) == "front_back" else 0)
-	_rebuild_back_asset_options(String(render.get("back_asset_id", "")))
-	_on_back_mode_selected(_back_mode_option.selected)
+	_mode_option.disabled = is_building
+	if is_building:
+		_mode_option.select(0)
+	_crop_x.get_parent().visible = not is_building
+	var pivot_space_label := "单帧画布" if render.get("pivot_space", "content") == "frame" else "单帧 alpha 内容 bbox"
+	_pivot_x.tooltip_text = pivot_space_label + "内的归一化底座中心 X" if is_building else "归一化轴心 X"
+	_pivot_y.tooltip_text = pivot_space_label + "内的归一化底座中心 Y" if is_building else "归一化轴心 Y"
 	var pivot_label := _pivot_label
 	if pivot_label != null:
 		pivot_label.text = "底座中心" if is_building else "轴心"
 	_building_hint_label.visible = is_building
+	if is_building:
+		_building_hint_label.text = "四方向横排图；当前底座中心相对于%s，底座宽按单帧像素标定。" % pivot_space_label
 	_syncing_detail = false
 
 
@@ -858,14 +801,14 @@ func _on_apply_pressed() -> void:
 		render["crop"] = {"x": int(_crop_x.value), "y": int(_crop_y.value),
 			"w": int(_crop_w.value), "h": int(_crop_h.value)}
 	if _detail_kind == KIND_BUILDING:
-		var front_back := String(_back_mode_option.get_selected_metadata()) == "front_back"
+		render["mode"] = Catalog.RENDER_MODE_FULL
+		render["crop"] = null
 		render["ground_width_px"] = float(_ground_width_box.value)
-		render["back_mode"] = "front_back" if front_back else "single"
-		render["back_asset_id"] = (
-			String(_back_asset_option.get_selected_metadata())
-			if front_back and _back_asset_option.selected >= 0
-			else ""
-		)
+		render["direction_mode"] = Catalog.DIRECTION_MODE_FOUR_DIRECTIONS
+		var selected: Dictionary = service.find_by_id(_selected_id)
+		render["pivot_space"] = selected.get("render", {}).get("pivot_space", "content")
+		if selected.get("render", {}).has("interior"):
+			render["interior"] = selected["render"]["interior"].duplicate(true)
 	var tags: Array = []
 	for t in _tags_edit.text.split(",", false):
 		var ts := t.strip_edges()
@@ -878,7 +821,7 @@ func _on_apply_pressed() -> void:
 	}
 	var res: Dictionary = service.update_asset(_selected_id, changes)
 	if bool(res.get("ok", false)):
-		adapter.clear_cache()  # 前/背图任一配置变化都可能影响多个建筑快照
+		adapter.clear_cache()  # 标定变化使建筑各方向缓存失效
 		adapter.invalidate_baked(_selected_id)
 		_status("已更新素材 %s" % _selected_id)
 		library_changed.emit()

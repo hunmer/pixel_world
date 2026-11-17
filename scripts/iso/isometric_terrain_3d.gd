@@ -500,10 +500,12 @@ func _append_prop(props: Dictionary, cell: Vector2i, block: Dictionary) -> void:
 		return
 	var region := _texture_region(texture)
 	var tint: Color = block.get("modulate", Color.WHITE)
-	var key := "%d:%s" % [atlas.get_instance_id(), str(region)]
+	var display_scale: float = float(block.get("display_scale", 1.0))
+	var key := "%d:%s:%s" % [atlas.get_instance_id(), str(region), str(display_scale)]
 	if not props.has(key):
 		props[key] = {
 			"atlas": atlas,
+			"display_scale": display_scale,
 			"region": region,
 			"transforms": [],
 			"colors": [],
@@ -518,6 +520,8 @@ func _append_prop(props: Dictionary, cell: Vector2i, block: Dictionary) -> void:
 	)
 	var center := anchor + _screen_offset_world(
 		block.get("render_offset", Vector2.ZERO), block.get("camera_right", Vector3.ZERO))
+	if bool(block.get("building", false)):
+		center += _building_depth_offset(texture, center, anchor, block.get("camera_right", Vector3.ZERO), display_scale)
 	(props[key]["transforms"] as Array).append(Transform3D(Basis.IDENTITY, center))
 	(props[key]["colors"] as Array).append(tint)
 	(props[key]["cells"] as Array).append(cell)
@@ -525,6 +529,8 @@ func _append_prop(props: Dictionary, cell: Vector2i, block: Dictionary) -> void:
 		"texture": texture,
 		"origin_px": region.position,
 		"size_px": region.size,
+		"display_scale": display_scale,
+		"building": bool(block.get("building", false)),
 		"center": center,
 		"anchor": anchor,
 		"tint": tint,
@@ -556,7 +562,7 @@ func _commit_prop_group(chunk: Node3D, group: Dictionary) -> void:
 	if transforms.is_empty():
 		return
 	var quad := QuadMesh.new()
-	quad.size = (group["region"] as Rect2).size / IsoProjection.TILE_PIXELS
+	quad.size = (group["region"] as Rect2).size * float(group.get("display_scale", 1.0)) / IsoProjection.TILE_PIXELS
 	var material := _prop_material(group["atlas"], group["region"])
 	quad.material = material
 	var multimesh := MultiMesh.new()
@@ -577,6 +583,8 @@ func _commit_prop_group(chunk: Node3D, group: Dictionary) -> void:
 			"texture": meta["texture"],
 			"origin_px": meta["origin_px"],
 			"size_px": meta["size_px"],
+			"display_scale": meta.get("display_scale", 1.0),
+			"building": meta.get("building", false),
 			"center": meta["center"],
 			"anchor": meta["anchor"],
 			"tint": meta["tint"],
@@ -603,7 +611,7 @@ func _ensure_fade_layer() -> Node3D:
 func _make_prop_proxy(entry: Dictionary) -> Sprite3D:
 	var sprite := Sprite3D.new()
 	sprite.texture = entry["texture"]
-	sprite.pixel_size = 1.0 / IsoProjection.TILE_PIXELS
+	sprite.pixel_size = float(entry.get("display_scale", 1.0)) / IsoProjection.TILE_PIXELS
 	sprite.position = entry["center"]
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
@@ -753,3 +761,20 @@ func _prop_material(atlas: Texture2D, region: Rect2) -> StandardMaterial3D:
 	material.uv1_scale = Vector3(region.size.x / atlas.get_width(), region.size.y / atlas.get_height(), 1.0)
 	_materials[key] = material
 	return material
+
+
+## 底座中心以下的 billboard 像素原本穿入地面。沿正交视线移到地面前方，
+## 屏幕投影与锚点不动，保留深度测试（高地与其他物体仍能遮挡）。
+func _building_depth_offset(texture: Texture2D, center: Vector3, anchor: Vector3, camera_right: Vector3, display_scale: float = 1.0) -> Vector3:
+	var image := texture.get_image()
+	if image == null or camera_right.is_zero_approx():
+		return Vector3.ZERO
+	var opaque := image.get_used_rect()
+	if opaque.size == Vector2i.ZERO:
+		return Vector3.ZERO
+	var bottom_px := float(opaque.end.y) - float(image.get_height()) * 0.5
+	var elevation := IsoProjection.CAMERA_ELEVATION
+	var lowest_y := center.y - bottom_px * display_scale / IsoProjection.TILE_PIXELS * cos(elevation)
+	var lift := maxf(0.0, anchor.y - lowest_y) + 0.001
+	var toward_camera := camera_right.normalized().cross(Vector3.UP) * cos(elevation) + Vector3.UP * sin(elevation)
+	return toward_camera * (lift / sin(elevation))

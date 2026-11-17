@@ -28,6 +28,8 @@ func _run() -> void:
 	_test_save_load_roundtrip()
 	_test_backup_fallback()
 	_test_save_failure_keeps_old()
+	_test_legacy_building_quarantine()
+	_test_building_import()
 	_cleanup_tmp()
 	if failures.is_empty():
 		print("USER_ASSET_CATALOG_CONTRACT_OK (%d checks)" % checks)
@@ -331,3 +333,55 @@ func _test_save_failure_keeps_old() -> void:
 	# 失败后不应留下 tmp 残留
 	_expect(not FileAccess.file_exists(LIB_PATH + Catalog.TEMP_SUFFIX),
 		"保存失败后不应残留 .tmp")
+
+
+func _test_legacy_building_quarantine() -> void:
+	var old := _good_descriptor()
+	old["id"] = "old_building"
+	old["kind"] = "building"
+	old["render"]["back_mode"] = "front_back"
+	old["render"]["back_asset_id"] = "old_back"
+	old["custom_metadata"] = {"keep": [1, "original"]}
+	var lib := Catalog.default_library("http://127.0.0.1:8076/blocks.json")
+	lib["assets"] = [_good_descriptor(), old]
+	var text := JSON.stringify(lib)
+	_expect(not Catalog.parse_library_text(text)["ok"], "严格解析拒绝旧建筑")
+	var f := FileAccess.open(LIB_PATH, FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+	var loaded := Catalog.load_library(LIB_PATH)
+	_expect(loaded["ok"], "混有旧建筑的本地库仍可打开")
+	if not loaded["ok"]:
+		return
+	var back: Dictionary = loaded["library"]
+	_expect(back["assets"].size() == 1, "旧建筑从活动资产隔离，terrain保留")
+	_expect(JSON.stringify(back["legacy_buildings"][0]) == JSON.stringify(JSON.parse_string(JSON.stringify(old))), "隔离原样保留旧描述符和额外字段")
+	_expect(Catalog.save_library(LIB_PATH, back)["ok"], "隔离库可以再次保存")
+	var reloaded := Catalog.load_library(LIB_PATH)
+	_expect(reloaded["ok"] and reloaded["library"]["legacy_buildings"].size() == 1, "保存回读隔离建筑无丢失无重复")
+	_expect(JSON.stringify(reloaded["library"]["legacy_buildings"][0]) == JSON.stringify(JSON.parse_string(JSON.stringify(old))), "保存回读原样保留旧描述符")
+
+
+func _test_building_import() -> void:
+	var service_script := preload("res://scripts/assets/user_asset_service.gd")
+	var svc := service_script.new(TMP_DIR + "/import")
+	var square := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	square.fill(Color.WHITE)
+	var rejected: Dictionary = svc.import_image_bytes(square.save_png_to_buffer(), "single.png", "building")
+	_expect(not rejected["ok"] and svc.asset_count() == 0, "本地建筑导入拒绝单图且不入库")
+	var sheet := Image.create(64, 16, false, Image.FORMAT_RGBA8)
+	sheet.fill(Color.WHITE)
+	var data := sheet.save_png_to_buffer()
+	var imported: Dictionary = svc.import_image_bytes(data, "sheet.png", "building")
+	_expect(imported["ok"], "本地建筑导入接受4:1 sheet")
+	if imported["ok"]:
+		var descriptor: Dictionary = svc.find_by_id(imported["asset_id"])
+		_expect(Catalog.is_four_direction_building(descriptor), "本地导入自动注入四方向full/crop null")
+		var duplicate: Dictionary = svc.import_image_bytes(data, "again.png", "building")
+		_expect(duplicate["ok"] and duplicate["deduped"] and svc.asset_count() == 1, "合法建筑重复导入正确去重")
+	var terrain: Dictionary = svc.import_image_bytes(square.save_png_to_buffer(), "terrain.png", "terrain")
+	_expect(terrain["ok"], "terrain继续接受单张非4:1图片")
+	var invalid := Image.create(65, 16, false, Image.FORMAT_RGBA8)
+	invalid.fill(Color.WHITE)
+	_expect(not svc.import_image_bytes(invalid.save_png_to_buffer(), "bad_ratio.png", "building")["ok"], "建筑拒绝非整数等宽帧比例")
+	svc.free()
