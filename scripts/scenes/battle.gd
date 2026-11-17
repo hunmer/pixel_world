@@ -37,6 +37,7 @@ const BattleResultStageScript = preload("res://scripts/battle/battle_result_stag
 const BattlePrefPanelScript = preload("res://scripts/battle/battle_pref_panel.gd")
 const BattleSaveScript = preload("res://scripts/battle/battle_save.gd")
 const BattleCameraKickScript = preload("res://scripts/battle/battle_camera_kick.gd")
+const LevelUpPresentationScript = preload("res://scripts/battle/level_up_presentation.gd")
 const CampaignBattleBridgeScript = preload("res://scripts/battle/campaign_battle_bridge.gd")
 
 var action_anim: Node = null
@@ -85,6 +86,9 @@ var _unit_sprites: Dictionary = {}  # unitId -> UnitSprite3D
 var range_overlay: RangeOverlay = null
 # 屏幕空间 UI（HUD + 菜单/面板/预览/横幅）
 var battle_ui: BattleUI = null
+# 场内升级薄演出弹窗（挂 battle_ui 顶层；只消费 resolver.gain_exp 的 levels）
+# 类型用 preload 常量注解：新 class_name 未入 .godot 全局类缓存前 headless 也能解析。
+var _level_up: LevelUpPresentationScript = null
 
 # 状态机
 enum Mode { IDLE, UNIT_SELECTED, MOVING, MENU, ENEMY_TURN, ANIMATING }
@@ -499,6 +503,12 @@ func _build_ui() -> void:
 	battle_ui.presentation_sound_requested.connect(_on_presentation_sound)
 	_inject_battle_ui_callables()
 	battle_ui.build(_on_end_turn, _toggle_hosting, _open_pref_panel)
+	# 升级薄演出：挂 battle_ui 顶层（build 后加入 → 绘制序在菜单/预览/结算演出之上），
+	# 音效信号复用结算演出的真实素材链（_on_presentation_sound → BattleSfx）。
+	_level_up = LevelUpPresentationScript.new()
+	_level_up.name = "LevelUpPresentation"
+	battle_ui.add_child(_level_up)
+	_level_up.sound_requested.connect(_on_presentation_sound)
 
 
 ## 把 battle.gd 的方法注入 battle_ui（让它能回交战斗演出 / 状态机修改 / 胜负判定，
@@ -1256,6 +1266,8 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 	for victim in outcome[&"deaths"]:
 		_on_unit_death(victim)
 	atk_us.update_state()
+	# 升级薄演出：结算/死亡收尾后、on_done 返还控制与终局判定前，按 exp.levels 播放。
+	await _present_level_up(attacker, outcome.get(&"exp", {}))
 
 
 # ============================================================
@@ -1315,6 +1327,8 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 	# 死亡收尾（isDead 已由 resolver 置位，这里补 grid 移除 + 演出）
 	for victim in outcome[&"deaths"]:
 		_on_unit_death(victim)
+	# 升级薄演出：死亡收尾后、返还控制与终局判定前，按 exp.levels 播放。
+	await _present_level_up(caster, outcome.get(&"exp", {}))
 	mode = Mode.IDLE
 	_check_battle_end()
 	return true
@@ -1389,11 +1403,27 @@ func _on_unit_death(u: Dictionary) -> void:
 ## 这里保留薄包装：刷新立绘状态，供残留的动态调用兼容。
 func _gain_exp(u: Dictionary, amount: int) -> Dictionary:
 	var info: Dictionary = BattleActionResolver.gain_exp(u, amount)
-	if not (info.get(&"exp", {}).get(&"levels", []) as Array).is_empty():
+	# gain_exp 顶层返回 {amount,gained,levels}；levels 在顶层而非 exp 子字典。
+	if not (info.get(&"levels", []) as Array).is_empty():
 		Sfx.play(&"ui_levelup")
 	if _unit_sprites.has(u.id):
 		(_unit_sprites[u.id] as UnitSprite3D).update_state()
 	return info
+
+
+## 升级薄演出入口（普攻/技能结算后统一走这里）：exp_info 为 resolver 返回的
+## 顶层 exp 字典 {amount,gained,levels}；空 levels 不展示，options.skip（敌方/
+## 托管跳过演出）只发音效不弹窗。await 到弹窗收尾，保证回合状态机不被卡死。
+func _present_level_up(u: Dictionary, exp_info: Dictionary) -> void:
+	if exp_info.is_empty():
+		return
+	var levels: Array = exp_info.get(&"levels", [])
+	if levels.is_empty() or _level_up == null or not is_inside_tree():
+		return
+	var options := turn_director.get_action_anim_options(u.id)
+	print("[levelup] unit=%s levels=%d skip=%s" % [
+		String(u.get(&"name", u.id)), levels.size(), str(bool(options.get(&"skip", false)))])
+	await _level_up.play(u, levels, options)
 
 
 # ============================================================
@@ -1540,6 +1570,11 @@ func _restore_result_visuals() -> void:
 
 
 func _on_presentation_sound(cue: StringName) -> void:
+	# 探针观测点（纯 meta，不影响真实播放链）：按 cue 计数 + 记录最近 cue。
+	var counts: Dictionary = get_meta(&"presentation_sfx_counts", {})
+	counts[cue] = int(counts.get(cue, 0)) + 1
+	set_meta(&"presentation_sfx_counts", counts)
+	set_meta(&"presentation_sfx_last", cue)
 	_sfx.on_presentation_sound(cue)
 
 
@@ -1588,6 +1623,9 @@ func _alive_count(faction: StringName) -> int:
 func _exit_tree() -> void:
 	if is_instance_valid(_immersive_camera):
 		_immersive_camera.cancel()
+	# 升级薄演出：作废在途弹窗时间轴，避免退出战斗后残留 finished/协程。
+	if is_instance_valid(_level_up):
+		_level_up.cancel()
 	# 防御：加载遮罩只在战斗演出预热窗口内使用，任何退出路径（胜/负/切场景/异常）都不残留。
 	LoadingScreen.hide_loading()
 	# 防御：退出战斗（含 B1 就地模式）时恢复全部常驻血条。

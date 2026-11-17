@@ -79,11 +79,12 @@ func open_unit_detail(u: Dictionary) -> void:
 		18, FACTION_COLOR.get(u.faction, Color.WHITE))
 	vbox.add_child(title)
 
-	# 状态行：HP/MP/经验
+	# 状态行：HP/MP/经验（EXP 分母 = WeaponData.exp_to_next(level)，与升级判定同源）
 	vbox.add_child(UIFactoryScript.outline_label(
-		"HP %d / %d    MP %d / %d    EXP %d" % [
+		"HP %d / %d    MP %d / %d    EXP %d / %d" % [
 			int(u.hp), int(s.hp), int(u.get(&"mp", 0)), int(s.get(&"mp", 0)),
-			int(u.get(&"exp", 0))], 14, Color(0.92, 0.95, 0.98)))
+			int(u.get(&"exp", 0)), WeaponData.exp_to_next(int(u.level))],
+		14, Color(0.92, 0.95, 0.98)))
 
 	# 全部基础属性
 	vbox.add_child(UIFactoryScript.outline_label(
