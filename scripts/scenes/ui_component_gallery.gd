@@ -3,9 +3,12 @@
 ## 只展示真实组件、短名称、必要操作标签与真实值；API、继承、资源路径与用法
 ## 说明全部放 ui/README.md，界面不写教学文字、帮助页、描述段落或说明 tooltip。
 ##
-## 页签：按钮 / 卡片 / 输入 / 数值 / 媒体 / 菜单 / 布局。PixelButton、PixelTabs、PixelPanel、
+## 页签：按钮 / 卡片 / 输入 / 数值 / 媒体 / 菜单 / 布局 / 鼠标 / 边框 / 名牌。PixelButton、PixelTabs、PixelPanel、
 ## 六类输入数值组件与图片 / 图标 / 多行文本 / 动作菜单 / 弹层 / 音频 / 视频容器
-## 在同一画廊真实交互；布局页真实摆出六个 Pixel 布局容器（HBox/VBox/Grid/Margin/Center/Scroll）。
+## 在同一画廊真实交互；布局页真实摆出六个 Pixel 布局容器（HBox/VBox/Grid/Margin/Center/Scroll）；
+## 鼠标页展示 GameCursor 指针库全部素材，悬停即预览，并可切换箭头三色风格；
+## 边框页展示 PixelFrame 装饰框（frames 九宫格素材），内容驱动框体自动拉宽拉长；
+## 名牌页展示 PixelNameplate 名牌底板（nameplates 素材），高度锁定、宽度随内容自动拉宽。
 ## F6 独立运行，不依赖战斗参数，不修改默认启动；ESC 退出。
 extends Control
 
@@ -34,13 +37,15 @@ const PixelGridScript = preload("res://ui/components/pixel_grid.gd")
 const PixelMarginScript = preload("res://ui/components/pixel_margin.gd")
 const PixelCenterScript = preload("res://ui/components/pixel_center.gd")
 const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
+const PixelFrameScript = preload("res://ui/components/pixel_frame.gd")
+const PixelNameplateScript = preload("res://ui/components/pixel_nameplate.gd")
 
 ## 反馈面板最多保留的历史条数（超出丢弃最早一条，避免长时间点击后无限增长）。
 const FEEDBACK_MAX_LINES := 60
 ## 右侧反馈卡片的窄窗口最小宽度。
 const SIDE_MIN_WIDTH := 360
 ## 页签标题：只保留短组件类别。
-const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单", "布局"]
+const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单", "布局", "鼠标", "边框", "名牌"]
 ## 数值页滑块 / 数值框 / 进度条的共用范围。
 const DEMO_VALUE_MAX: float = 100.0
 
@@ -76,6 +81,20 @@ var _demo_text_area: TextEdit
 var _demo_dropdown: MenuButton
 var _demo_popup: PopupPanel
 var _open_popup_button: Button
+var _arrow_style_buttons: Dictionary = {}
+
+## 边框页演示状态：当前素材 key 序号 / 已追加行数 / 演示框与内部文本引用。
+var _frame_demo_frame: PanelContainer
+var _frame_demo_text: Label
+var _frame_demo_status_label: Label
+var _frame_demo_key_index: int = 0
+var _frame_demo_added_lines: int = 0
+
+var _nameplate_demo_plate: PanelContainer
+var _nameplate_demo_label: Label
+var _nameplate_demo_status_label: Label
+var _nameplate_demo_key_index: int = 0
+var _nameplate_demo_exclaims: int = 0
 
 
 func _ready() -> void:
@@ -125,6 +144,9 @@ func _build_ui() -> void:
 	_build_media_page()
 	_build_menu_page()
 	_build_layout_page()
+	_build_cursor_page()
+	_build_frame_page()
+	_build_nameplate_page()
 
 	var feedback_card := _make_card("反馈", "")
 	feedback_card.custom_minimum_size = Vector2(SIDE_MIN_WIDTH, 0)
@@ -492,6 +514,284 @@ func _make_layout_chip(chip_text: String) -> Label:
 	return chip
 
 
+## 第 8 页：GameCursor 指针库全部素材（悬停预览）+ 箭头三色风格切换。
+func _build_cursor_page() -> void:
+	var page: VBoxContainer = _tabs.call("add_pixel_tab", DEMO_TAB_TITLES[7]) as VBoxContainer
+	page.add_theme_constant_override("separation", 12)
+
+	var cursor_card := _make_card("指针", "")
+	var grid := PixelGridScript.new() as GridContainer
+	grid.name = "CursorGrid"
+	grid.columns = 5
+	for item: Dictionary in GameCursor.CURSOR_LIBRARY:
+		grid.add_child(_make_cursor_cell(item))
+	_card_slot(cursor_card).add_child(grid)
+	page.add_child(cursor_card)
+
+	var style_card := _make_card("箭头风格", "")
+	var style_row := HBoxContainer.new()
+	style_row.add_theme_constant_override("separation", 10)
+	for style_name: String in ["white", "blue", "gold"]:
+		var btn := _make_pixel_button(_arrow_style_label(style_name), 1, "")
+		btn.name = "ArrowStyle_" + style_name
+		btn.toggle_mode = true
+		btn.set_pressed_no_signal(style_name == GameCursor.get_arrow_style())
+		# 按钮引用与回调在构建时绑定（同一批生成，无需进 _connect_signals）。
+		_arrow_style_buttons[style_name] = btn
+		btn.toggled.connect(_on_arrow_style_toggled.bind(style_name))
+		style_row.add_child(btn)
+	_card_slot(style_card).add_child(style_row)
+	page.add_child(style_card)
+
+
+## 单个指针格：PixelImage 原尺寸展示 + 短标签；悬停即预览该指针，移出恢复。
+func _make_cursor_cell(item: Dictionary) -> Control:
+	var cell := PanelContainer.new()
+	cell.name = "CursorCell"
+	cell.custom_minimum_size = Vector2(84, 0)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	var icon := PixelImageScript.new() as Control
+	icon.name = "CursorIcon"
+	icon.set("texture", item["texture"])
+	icon.set("image_size", Vector2i(32, 32))
+	box.add_child(icon)
+	var caption := UIFactoryScript.label(item["label"], 11, UIThemeScript.TEXT_MAIN)
+	caption.name = "CursorLabel"
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(caption)
+	cell.add_child(box)
+	cell.mouse_entered.connect(_on_cursor_cell_entered.bind(item))
+	cell.mouse_exited.connect(_on_cursor_cell_exited)
+	return cell
+
+
+func _arrow_style_label(style_name: String) -> String:
+	return {"white": "白", "blue": "蓝", "gold": "金"}.get(style_name, style_name)
+
+
+func _on_cursor_cell_entered(item: Dictionary) -> void:
+	GameCursor.preview_cursor(item["texture"], item["hotspot"])
+	_status_label.text = "指针：%s" % item["label"]
+
+
+func _on_cursor_cell_exited() -> void:
+	GameCursor.restore_cursor()
+
+
+func _on_arrow_style_toggled(toggled_on: bool, style_name: String) -> void:
+	if not toggled_on:
+		# 当前激活风格不允许点击取消，保持按下。
+		if style_name == GameCursor.get_arrow_style():
+			(_arrow_style_buttons[style_name] as Button).set_pressed_no_signal(true)
+		return
+	GameCursor.set_arrow_style(style_name)
+	for other: String in _arrow_style_buttons:
+		(_arrow_style_buttons[other] as Button).set_pressed_no_signal(other == style_name)
+	_status_label.text = "箭头：%s" % _arrow_style_label(style_name)
+	_log_feedback("箭头风格 → %s" % _arrow_style_label(style_name))
+
+
+## 第 9 页：PixelFrame 装饰框（frames 九宫格素材）+ 内容驱动自适应演示。
+func _build_frame_page() -> void:
+	var page: VBoxContainer = _tabs.call("add_pixel_tab", DEMO_TAB_TITLES[8]) as VBoxContainer
+	page.add_theme_constant_override("separation", 12)
+
+	var demo_card := _make_card("自适应演示", "")
+	var demo_row := HBoxContainer.new()
+	demo_row.name = "FrameDemoRow"
+	demo_row.add_theme_constant_override("separation", 12)
+	_frame_demo_frame = PixelFrameScript.new() as PanelContainer
+	_frame_demo_frame.name = "FrameDemoFrame"
+	_frame_demo_frame.set("frame_key", "panel")
+	_frame_demo_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_frame_demo_frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_frame_demo_text = UIFactoryScript.label("内容决定框体：点右侧「追加一行」，框随内容自动拉长。", 12, UIThemeScript.TEXT_MAIN)
+	_frame_demo_text.name = "FrameDemoText"
+	_frame_demo_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_frame_demo_text.custom_minimum_size = Vector2(160, 0)
+	_frame_demo_frame.add_child(_frame_demo_text)
+	demo_row.add_child(_frame_demo_frame)
+	demo_row.add_child(_build_frame_demo_controls())
+	_card_slot(demo_card).add_child(demo_row)
+	page.add_child(demo_card)
+
+	var gallery_card := _make_card("素材图鉴", "")
+	var gallery := VBoxContainer.new()
+	gallery.name = "FrameGallery"
+	gallery.add_theme_constant_override("separation", 10)
+	for key: String in PixelFrameScript.FRAME_TEXTURES.keys():
+		gallery.add_child(_make_frame_gallery_row(key))
+	_card_slot(gallery_card).add_child(gallery)
+	page.add_child(gallery_card)
+
+
+## 演示框右侧控制列：切换素材 / 追加一行 / 清空 + 状态行。
+func _build_frame_demo_controls() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.name = "FrameDemoControls"
+	box.add_theme_constant_override("separation", 8)
+	var next_btn := _make_pixel_button("切换素材", 1, "cog")
+	next_btn.name = "FrameStyleNextButton"
+	next_btn.pressed.connect(_on_frame_style_next)
+	box.add_child(next_btn)
+	var add_btn := _make_pixel_button("追加一行", 0, "play")
+	add_btn.name = "FrameLineAddButton"
+	add_btn.pressed.connect(_on_frame_line_add)
+	box.add_child(add_btn)
+	var clear_btn := _make_pixel_button("清空", 2, "skull")
+	clear_btn.name = "FrameLineClearButton"
+	clear_btn.pressed.connect(_on_frame_line_clear)
+	box.add_child(clear_btn)
+	_frame_demo_status_label = UIFactoryScript.label(_frame_demo_status(), 11, UIThemeScript.TEXT_DIM)
+	_frame_demo_status_label.name = "FrameDemoStatus"
+	box.add_child(_frame_demo_status_label)
+	return box
+
+
+## 素材图鉴行：整行一个 PixelFrame，框内短说明（key 中文名 + 素材原始尺寸）。
+func _make_frame_gallery_row(key: String) -> Control:
+	var frame := PixelFrameScript.new() as PanelContainer
+	frame.name = "Frame_" + key
+	frame.set("frame_key", key)
+	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var tex: Texture2D = PixelFrameScript.FRAME_TEXTURES[key]
+	var text := UIFactoryScript.label(
+		"%s · %d×%d" % [PixelFrameScript.FRAME_LABELS[key], tex.get_width(), tex.get_height()],
+		12, UIThemeScript.TEXT_MAIN
+	)
+	text.name = "FrameLabel"
+	frame.add_child(text)
+	return frame
+
+
+func _frame_demo_status() -> String:
+	var key: String = PixelFrameScript.FRAME_TEXTURES.keys()[_frame_demo_key_index]
+	return "%s · 追加 %d 行" % [PixelFrameScript.FRAME_LABELS[key], _frame_demo_added_lines]
+
+
+func _on_frame_style_next() -> void:
+	_frame_demo_key_index = (_frame_demo_key_index + 1) % PixelFrameScript.FRAME_TEXTURES.size()
+	var key: String = PixelFrameScript.FRAME_TEXTURES.keys()[_frame_demo_key_index]
+	_frame_demo_frame.set("frame_key", key)
+	_frame_demo_status_label.text = _frame_demo_status()
+	_log_feedback("框体 → %s" % PixelFrameScript.FRAME_LABELS[key])
+
+
+func _on_frame_line_add() -> void:
+	_frame_demo_added_lines += 1
+	_frame_demo_text.text += "\n追加第 %d 行：框随内容自动拉长。" % _frame_demo_added_lines
+	_frame_demo_status_label.text = _frame_demo_status()
+
+
+func _on_frame_line_clear() -> void:
+	_frame_demo_added_lines = 0
+	_frame_demo_text.text = "内容决定框体：点右侧「追加一行」，框随内容自动拉长。"
+	_frame_demo_status_label.text = _frame_demo_status()
+
+
+## 第 10 页：PixelNameplate 名牌底板（nameplates 素材）+ 高度锁定、宽度随内容演示。
+func _build_nameplate_page() -> void:
+	var page: VBoxContainer = _tabs.call("add_pixel_tab", DEMO_TAB_TITLES[9]) as VBoxContainer
+	page.add_theme_constant_override("separation", 12)
+
+	var demo_card := _make_card("自适应演示", "")
+	var demo_row := HBoxContainer.new()
+	demo_row.name = "NameplateDemoRow"
+	demo_row.add_theme_constant_override("separation", 12)
+	_nameplate_demo_plate = PixelNameplateScript.new() as PanelContainer
+	_nameplate_demo_plate.name = "NameplateDemoFrame"
+	_nameplate_demo_plate.set("frame_key", PixelNameplateScript.NAMEPLATE_TEXTURES.keys()[0])
+	_nameplate_demo_plate.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_nameplate_demo_plate.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_nameplate_demo_label = UIFactoryScript.label("勇者 · Lv.12", 13, UIThemeScript.TEXT_MAIN)
+	_nameplate_demo_label.name = "NameplateDemoLabel"
+	_nameplate_demo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_nameplate_demo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_nameplate_demo_plate.add_child(_nameplate_demo_label)
+	demo_row.add_child(_nameplate_demo_plate)
+	demo_row.add_child(_build_nameplate_demo_controls())
+	_card_slot(demo_card).add_child(demo_row)
+	page.add_child(demo_card)
+
+	var gallery_card := _make_card("素材图鉴", "")
+	var gallery := VBoxContainer.new()
+	gallery.name = "NameplateGallery"
+	gallery.add_theme_constant_override("separation", 10)
+	for key: String in PixelNameplateScript.NAMEPLATE_TEXTURES.keys():
+		gallery.add_child(_make_nameplate_gallery_row(key))
+	_card_slot(gallery_card).add_child(gallery)
+	page.add_child(gallery_card)
+
+
+## 演示名牌右侧控制列：切换素材 / 追加称号 / 清空 + 状态行。
+func _build_nameplate_demo_controls() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.name = "NameplateDemoControls"
+	box.add_theme_constant_override("separation", 8)
+	var next_btn := _make_pixel_button("切换素材", 1, "cog")
+	next_btn.name = "NameplateStyleNextButton"
+	next_btn.pressed.connect(_on_nameplate_style_next)
+	box.add_child(next_btn)
+	var add_btn := _make_pixel_button("追加称号", 0, "play")
+	add_btn.name = "NameplateCharAddButton"
+	add_btn.pressed.connect(_on_nameplate_char_add)
+	box.add_child(add_btn)
+	var clear_btn := _make_pixel_button("清空", 2, "skull")
+	clear_btn.name = "NameplateCharClearButton"
+	clear_btn.pressed.connect(_on_nameplate_char_clear)
+	box.add_child(clear_btn)
+	_nameplate_demo_status_label = UIFactoryScript.label(_nameplate_demo_status(), 11, UIThemeScript.TEXT_DIM)
+	_nameplate_demo_status_label.name = "NameplateDemoStatus"
+	box.add_child(_nameplate_demo_status_label)
+	return box
+
+
+## 素材图鉴行：整行一个 PixelNameplate，框内示例名（key 中文名 + 素材原始尺寸）。
+func _make_nameplate_gallery_row(key: String) -> Control:
+	var plate := PixelNameplateScript.new() as PanelContainer
+	plate.name = "Nameplate_" + key
+	plate.set("frame_key", key)
+	plate.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	plate.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var tex: Texture2D = PixelNameplateScript.NAMEPLATE_TEXTURES[key]
+	var text := UIFactoryScript.label(
+		"%s · %d×%d · 剑士 Lv.24" % [PixelNameplateScript.NAMEPLATE_LABELS[key], tex.get_width(), tex.get_height()],
+		12, UIThemeScript.TEXT_MAIN
+	)
+	text.name = "NameplateLabel"
+	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	plate.add_child(text)
+	return plate
+
+
+func _nameplate_demo_status() -> String:
+	var key: String = PixelNameplateScript.NAMEPLATE_TEXTURES.keys()[_nameplate_demo_key_index]
+	return "%s · 称号 %d" % [PixelNameplateScript.NAMEPLATE_LABELS[key], _nameplate_demo_exclaims]
+
+
+func _on_nameplate_style_next() -> void:
+	_nameplate_demo_key_index = (_nameplate_demo_key_index + 1) % PixelNameplateScript.NAMEPLATE_TEXTURES.size()
+	var key: String = PixelNameplateScript.NAMEPLATE_TEXTURES.keys()[_nameplate_demo_key_index]
+	_nameplate_demo_plate.set("frame_key", key)
+	_nameplate_demo_status_label.text = _nameplate_demo_status()
+	_log_feedback("名牌 → %s" % PixelNameplateScript.NAMEPLATE_LABELS[key])
+
+
+func _on_nameplate_char_add() -> void:
+	_nameplate_demo_exclaims += 1
+	_nameplate_demo_label.text += "!"
+	_nameplate_demo_status_label.text = _nameplate_demo_status()
+
+
+func _on_nameplate_char_clear() -> void:
+	_nameplate_demo_exclaims = 0
+	_nameplate_demo_label.text = "勇者 · Lv.12"
+	_nameplate_demo_status_label.text = _nameplate_demo_status()
+
+
 ## 右侧反馈卡片内容：状态行 + 富文本历史。
 func _build_feedback_body(slot: Container) -> void:
 	_status_label = UIFactoryScript.label("就绪", 13, UIThemeScript.TEXT_MAIN)
@@ -706,6 +1006,18 @@ func _reset_demo() -> void:
 	_demo_popup.hide()
 	_demo_audio.call("stop_sound")
 	_demo_video.call("stop_video")
+	GameCursor.set_arrow_style(GameCursor.DEFAULT_ARROW_STYLE)
+	GameCursor.restore_cursor()
+	for style_name: String in _arrow_style_buttons:
+		(_arrow_style_buttons[style_name] as Button).set_pressed_no_signal(
+			style_name == GameCursor.get_arrow_style()
+		)
+	_frame_demo_key_index = 0
+	_frame_demo_frame.set("frame_key", "panel")
+	_on_frame_line_clear()
+	_nameplate_demo_key_index = 0
+	_nameplate_demo_plate.set("frame_key", PixelNameplateScript.NAMEPLATE_TEXTURES.keys()[0])
+	_on_nameplate_char_clear()
 	_tabs.current_tab = 0
 	_status_label.text = "已重置"
 	_log_feedback("重置")

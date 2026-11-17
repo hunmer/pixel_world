@@ -300,7 +300,44 @@ add_child(popup)
 popup.call("open_for", some_button)   # 关闭后焦点自动回 some_button
 ```
 
-## 7. 布局容器（六个）
+## 7. 装饰框与名牌
+
+自绘「固定段 + 弹性段」面板底：角饰/徽章/端饰为固定保护区永不变形，拉伸量由弹性段
+等比分担；`@tool` 下编辑器内即所见即所得。共 3 个脚本：
+
+| 组件 | 基类 | 素材 | 导出/成员 | 说明 |
+| --- | --- | --- | --- | --- |
+| `PixelNinePatchFrame` | `PanelContainer` | —（基类） | `frame_key: String`、`get_content_slot()` | 分段九宫格基类，子类提供素材/固定段/标签表 |
+| `PixelFrame` | `PixelNinePatchFrame` | `assets/ui/frames/`（6 张） | `FRAME_TEXTURES`、`FRAME_LABELS`、`FRAME_FIXED_BANDS` | 装饰框：垂直中带拉伸，内容决定框体尺寸 |
+| `PixelNameplate` | `PixelNinePatchFrame` | `assets/ui/nameplates/`（3 张） | `NAMEPLATE_TEXTURES`、`NAMEPLATE_LABELS`、`NAMEPLATE_FIXED_BANDS`、`NOMINAL_SCALE`(0.4) | 名牌：高度锁定随高等比缩放，宽度随内容拉宽 |
+
+要点：
+
+- `frame_key` 未赋值/未知值回落到素材表首键；同值幂等不重绘。
+- 固定段表 `[起点, 终点)` 为源像素坐标，来自素材实测（角饰/徽章翼展/垂旗/名牌端饰）。
+- `PixelFrame` 最小尺寸 = 固定段和 + `CONTENT_PADDING`(48)×2；`PixelNameplate` 高锁定
+  `素材高 × NOMINAL_SCALE`(0.4)，内容边距左右避开徽章与端饰（装饰宽 × scale + 14）。
+- 名牌内容（如名字 Label）放 `get_content_slot()`（即组件自身），对齐方式自行居中。
+
+```gdscript
+const PixelFrameScript = preload("res://ui/components/pixel_frame.gd")
+const PixelNameplateScript = preload("res://ui/components/pixel_nameplate.gd")
+
+var frame: Control = PixelFrameScript.new()
+frame.set("frame_key", "dialogue")
+frame.add_child(some_content_label)
+
+var plate: Control = PixelNameplateScript.new()
+plate.set("frame_key", "silver")
+var name_label: Label = UIFactoryScript.label("勇者 · Lv.12", 13, Color.WHITE)
+name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+plate.add_child(name_label)
+```
+
+画廊「边框 / 名牌」页展示两个组件的自适应演示与素材图鉴。
+
+## 8. 布局容器（六个）
 
 六个 `@tool` 薄容器（`ui/components/pixel_*.gd`）：只提供 8/16/24 间距体系的默认值与
 滚动行为约定，不隐式添加子节点、不遮蔽原生属性；间距/边距 setter 非负夹紧且幂等。
@@ -336,7 +373,7 @@ body.add_child(my_row)                             # 行内用 PixelHBox（gap 1
 add_child(page)
 ```
 
-## 8. 与 UIFactory 的关系
+## 9. 与 UIFactory 的关系
 
 `PixelButton` 是「语义变体 + 图标尺寸」的封装；`UIFactory.button()` 是原生主题按钮工厂，
 两者可混用。`PixelTabs.add_pixel_tab` 直接复用 `UIFactory.add_tab`，节点命名/滚动容器
@@ -354,7 +391,7 @@ add_child(page)
 | `UIFactory.log_label()` | `RichTextLabel` | 名字固定 `LogLabel`，bbcode + 滚动跟随 |
 | `UIFactory.button(text, cb, icon_name)` | `Button` | 三态主题按钮 |
 
-## 9. 主题接入方式
+## 10. 主题接入方式
 
 组件默认在自身 `theme == null` 时创建一个 `ComponentTheme` 实例（实例隔离，互不影响）。
 如果希望整个界面共用一份主题：
@@ -367,7 +404,7 @@ $Root.theme = shared_theme   # 子控件继承；此时组件的 theme 非 null�
 注意：不要在多个界面之间共享同一个可变 `Theme` 并做 `set_*` 原地修改，否则会串样式；
 需要定制时新建一份。
 
-## 10. 已知限制
+## 11. 已知限制
 
 - 音效依赖音频设备；`--headless` 下 `AudioStreamPlayer` 不实际出声，契约用
   `hover_play_count` / `click_play_count` 与播放器配置断言，不等价于听感验收。
