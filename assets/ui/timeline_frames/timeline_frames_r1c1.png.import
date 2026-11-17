@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bf5q726k0wldf"
-path="res://.godot/imported/timeline_frames_r3c1.png-f8668738c1366f8f331a40d4dccc9a2e.ctex"
+uid="uid://br8xsogg7olge"
+path="res://.godot/imported/timeline_frames_r1c1.png-30f4631c4feef1d5dd8b13db5e4ad9be.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/tmp/timeline_frames/timeline_frames_r3c1.png"
-dest_files=["res://.godot/imported/timeline_frames_r3c1.png-f8668738c1366f8f331a40d4dccc9a2e.ctex"]
+source_file="res://assets/ui/timeline_frames/timeline_frames_r1c1.png"
+dest_files=["res://.godot/imported/timeline_frames_r1c1.png-30f4631c4feef1d5dd8b13db5e4ad9be.ctex"]
 
 [params]
 

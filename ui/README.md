@@ -310,6 +310,7 @@ popup.call("open_for", some_button)   # 关闭后焦点自动回 some_button
 | `PixelNinePatchFrame` | `PanelContainer` | —（基类） | `frame_key: String`、`get_content_slot()` | 分段九宫格基类，子类提供素材/固定段/标签表 |
 | `PixelFrame` | `PixelNinePatchFrame` | `assets/ui/frames/`（6 张） | `FRAME_TEXTURES`、`FRAME_LABELS`、`FRAME_FIXED_BANDS` | 装饰框：垂直中带拉伸，内容决定框体尺寸 |
 | `PixelNameplate` | `PixelNinePatchFrame` | `assets/ui/nameplates/`（3 张） | `NAMEPLATE_TEXTURES`、`NAMEPLATE_LABELS`、`NAMEPLATE_FIXED_BANDS`、`NOMINAL_SCALE`(0.4) | 名牌：高度锁定随高等比缩放，宽度随内容拉宽 |
+| `PixelAvatarFrame` | `PixelNinePatchFrame` | `assets/ui/timeline_frames/`（3 张） | `AVATAR_TEXTURES`、`AVATAR_LABELS`、`AVATAR_FIXED_BANDS`(全宽单段)、`NOMINAL_SCALE`(0.25) | 头像框：凸饰居四边中点，整图完全等比缩放（不拉宽不拉高），内容空心区留白 `CONTENT_INSET_SRC` |
 
 要点：
 

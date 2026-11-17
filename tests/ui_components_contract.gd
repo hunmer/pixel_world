@@ -53,7 +53,7 @@ const PixelCenterScript = preload("res://ui/components/pixel_center.gd")
 const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
 
 ## 画廊页签标题的期望值（与脚本内 DEMO_TAB_TITLES 保持一致，改名时必须同步）。
-const EXPECTED_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单", "布局"]
+const EXPECTED_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单", "布局", "鼠标", "边框", "名牌", "头像", "战棋"]
 
 var _failures: Array[String] = []
 var _checks: int = 0
@@ -1253,6 +1253,74 @@ func _test_gallery() -> void:
 		"滚动容器横向无可滚动范围"
 	)
 
+	# 战棋页：story/10_ui_ux.md 布局还原——HUD / 菜单 / 技能 / 预测 / 详情 / 整备 / 胜负 / 设置。
+	tabs.current_tab = 11
+	await process_frame
+	await process_frame
+	var battle_scroll: ScrollContainer = tabs.get_node("战棋Scroll") as ScrollContainer
+	_expect(battle_scroll != null, "战棋页包含纵向滚动外壳")
+	if battle_scroll == null:
+		return
+	var battle_cards: Array[String] = [
+		"BattleHudCard", "BattleMenuCard", "BattleSkillCard", "BattlePreviewCard",
+		"BattleDetailCard", "BattlePrepCard", "BattleVictoryCard", "BattleDefeatCard",
+		"BattleSettingsCard",
+	]
+	for card_name: String in battle_cards:
+		var battle_card: Control = gallery.find_child(card_name, true, false) as Control
+		_expect(battle_card != null, "战棋页包含 %s" % card_name)
+		if battle_card != null:
+			_expect(
+				battle_card.size.x > 0.0 and battle_card.size.y > 0.0,
+				"%s 有有效尺寸" % card_name
+			)
+	var menu_attack: Button = gallery.find_child("BattleMenuAttack", true, false) as Button
+	_expect(
+		menu_attack != null and menu_attack.get_script() == PixelButtonScript
+		and int(menu_attack.get("semantic")) == 0,
+		"战棋行动菜单推荐项为 PixelButton 主操作"
+	)
+	if menu_attack != null:
+		menu_attack.pressed.emit()
+		_expect(feedback.text.contains("攻击"), "战棋菜单按钮写入反馈")
+	var preview_hp: ProgressBar = gallery.find_child("BattlePreviewAttackerHp", true, false) as ProgressBar
+	_expect(
+		preview_hp != null and preview_hp.get_script() == PixelProgressBarScript
+		and int(preview_hp.value) == 22 and int(preview_hp.max_value) == 24,
+		"战斗预测攻方 HP 条 22/24"
+	)
+	var detail_stats: GridContainer = gallery.find_child("BattleDetailStats", true, false) as GridContainer
+	_expect(
+		detail_stats != null and detail_stats.columns == 4 and detail_stats.get_child_count() == 8,
+		"单位详情属性网格四列八项"
+	)
+	var prep_tabs: TabContainer = gallery.find_child("BattlePrepTabs", true, false) as TabContainer
+	_expect(
+		prep_tabs != null and prep_tabs.get_tab_count() == 5
+		and prep_tabs.get_tab_title(0) == "编队" and prep_tabs.get_tab_title(4) == "物品",
+		"战前整备中栏五个页签"
+	)
+	var victory_title: Label = gallery.find_child("BattleVictoryTitle", true, false) as Label
+	_expect(
+		victory_title != null and victory_title.text == "胜 利",
+		"胜利结算标题大字「胜 利」"
+	)
+	var defeat_title: Label = gallery.find_child("BattleDefeatTitle", true, false) as Label
+	_expect(
+		defeat_title != null and defeat_title.text == "全军覆没",
+		"失败标题大字「全军覆没」"
+	)
+	for slider_name: String in ["BattleSettingsMaster", "BattleSettingsMusic", "BattleSettingsSfx"]:
+		var volume_slider: HSlider = gallery.find_child(slider_name, true, false) as HSlider
+		_expect(
+			volume_slider != null and volume_slider.get_script() == PixelSliderScript,
+			"战棋设置 %s 为 PixelSlider" % slider_name
+		)
+	_expect(
+		battle_scroll.get_h_scroll_bar().max_value - battle_scroll.get_h_scroll_bar().page <= 1.0,
+		"战棋页横向无滚动范围"
+	)
+
 	# 演示页无教学/说明性文本：标题、短标签与真实值之外不应出现说明文案或路径。
 	var forbidden: Array[String] = ["说明", "用法", "API", "继承", "res://", "点击可", "示例"]
 	for control: Node in gallery.find_children("*", "Label", true, false):
@@ -1321,6 +1389,13 @@ func _test_gallery() -> void:
 		_expect(
 			layout_center.size.y >= 64.0 and layout_center_child.size.x > 0.0,
 			"居中容器在 %dx%d 有有效尺寸" % [target.x, target.y]
+		)
+		tabs.current_tab = 11
+		await process_frame
+		await process_frame
+		_expect(
+			battle_scroll.size.x > 0.0 and battle_scroll.size.y > 0.0,
+			"战棋页在 %dx%d 有有效尺寸" % [target.x, target.y]
 		)
 		tabs.current_tab = 0
 		await process_frame

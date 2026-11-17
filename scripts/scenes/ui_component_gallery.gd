@@ -9,6 +9,9 @@
 ## 鼠标页展示 GameCursor 指针库全部素材，悬停即预览，并可切换箭头三色风格；
 ## 边框页展示 PixelFrame 装饰框（frames 九宫格素材），内容驱动框体自动拉宽拉长；
 ## 名牌页展示 PixelNameplate 名牌底板（nameplates 素材），高度锁定、宽度随内容自动拉宽。
+## 头像页展示 PixelAvatarFrame 头像边框（timeline_frames 素材），整框等比缩放、四档尺寸演示。
+## 战棋页还原 story/10_ui_ux.md 的战棋界面（顶部 HUD / 行动菜单 / 技能面板 / 战斗预测 / 单位详情 /
+## 战前整备 / 胜负结算 / 设置），story 专属色板以 UITheme 常量近似，不引入新颜色。
 ## F6 独立运行，不依赖战斗参数，不修改默认启动；ESC 退出。
 extends Control
 
@@ -39,15 +42,18 @@ const PixelCenterScript = preload("res://ui/components/pixel_center.gd")
 const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
 const PixelFrameScript = preload("res://ui/components/pixel_frame.gd")
 const PixelNameplateScript = preload("res://ui/components/pixel_nameplate.gd")
+const PixelAvatarScript = preload("res://ui/components/pixel_avatar_frame.gd")
 
 ## 反馈面板最多保留的历史条数（超出丢弃最早一条，避免长时间点击后无限增长）。
 const FEEDBACK_MAX_LINES := 60
 ## 右侧反馈卡片的窄窗口最小宽度。
 const SIDE_MIN_WIDTH := 360
 ## 页签标题：只保留短组件类别。
-const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单", "布局", "鼠标", "边框", "名牌"]
+const DEMO_TAB_TITLES: Array[String] = ["按钮", "卡片", "输入", "数值", "媒体", "菜单", "布局", "鼠标", "边框", "名牌", "头像", "战棋"]
 ## 数值页滑块 / 数值框 / 进度条的共用范围。
 const DEMO_VALUE_MAX: float = 100.0
+## 头像页尺寸演示的四档边长（px）。
+const AVATAR_SIZES: Array[int] = [80, 105, 128, 160]
 
 var _tabs: TabContainer
 var _feedback_log: RichTextLabel
@@ -83,6 +89,17 @@ var _demo_popup: PopupPanel
 var _open_popup_button: Button
 var _arrow_style_buttons: Dictionary = {}
 
+## GameCursor autoload 的运行时引用：契约用 --script(SceneTree) 模式运行时注册单例，
+## 但编译期不注册单例标识符，直接写 GameCursor.xxx 会让画廊在该模式下无法编译。
+## 一律经 _gc() 运行时解析，并用 call/get 做动态访问（静态类型 Node 上无这些成员）。
+var _game_cursor: Node = null
+
+
+func _gc() -> Node:
+	if _game_cursor == null:
+		_game_cursor = get_tree().root.get_node_or_null("GameCursor")
+	return _game_cursor
+
 ## 边框页演示状态：当前素材 key 序号 / 已追加行数 / 演示框与内部文本引用。
 var _frame_demo_frame: PanelContainer
 var _frame_demo_text: Label
@@ -95,6 +112,23 @@ var _nameplate_demo_label: Label
 var _nameplate_demo_status_label: Label
 var _nameplate_demo_key_index: int = 0
 var _nameplate_demo_exclaims: int = 0
+## 头像页演示状态：当前素材 key 序号 / 尺寸档序号 / 演示框与内部文字引用。
+var _avatar_demo_frame: PanelContainer
+var _avatar_demo_label: Label
+var _avatar_demo_status_label: Label
+var _avatar_demo_key_index: int = 0
+var _avatar_demo_size_index: int = 2
+
+## 战棋页演示状态：设置控件 / 编队勾选，供重置复位。
+var _battle_master_slider: HSlider
+var _battle_music_slider: HSlider
+var _battle_sfx_slider: HSlider
+var _battle_size_option: OptionButton
+var _battle_colorblind_option: OptionButton
+var _battle_autosave_option: OptionButton
+var _battle_auto_battle_switch: CheckButton
+var _battle_deploy_checks: Array[CheckButton] = []
+var _battle_deploy_counter: Label
 
 
 func _ready() -> void:
@@ -147,6 +181,8 @@ func _build_ui() -> void:
 	_build_cursor_page()
 	_build_frame_page()
 	_build_nameplate_page()
+	_build_avatar_page()
+	_build_battle_page()
 
 	var feedback_card := _make_card("反馈", "")
 	feedback_card.custom_minimum_size = Vector2(SIDE_MIN_WIDTH, 0)
@@ -523,7 +559,8 @@ func _build_cursor_page() -> void:
 	var grid := PixelGridScript.new() as GridContainer
 	grid.name = "CursorGrid"
 	grid.columns = 5
-	for item: Dictionary in GameCursor.CURSOR_LIBRARY:
+	var cursor_library: Array = _gc().get("CURSOR_LIBRARY") if _gc() != null else []
+	for item: Dictionary in cursor_library:
 		grid.add_child(_make_cursor_cell(item))
 	_card_slot(cursor_card).add_child(grid)
 	page.add_child(cursor_card)
@@ -531,11 +568,12 @@ func _build_cursor_page() -> void:
 	var style_card := _make_card("箭头风格", "")
 	var style_row := HBoxContainer.new()
 	style_row.add_theme_constant_override("separation", 10)
+	var active_style: String = _gc().call("get_arrow_style") if _gc() != null else "white"
 	for style_name: String in ["white", "blue", "gold"]:
 		var btn := _make_pixel_button(_arrow_style_label(style_name), 1, "")
 		btn.name = "ArrowStyle_" + style_name
 		btn.toggle_mode = true
-		btn.set_pressed_no_signal(style_name == GameCursor.get_arrow_style())
+		btn.set_pressed_no_signal(style_name == active_style)
 		# 按钮引用与回调在构建时绑定（同一批生成，无需进 _connect_signals）。
 		_arrow_style_buttons[style_name] = btn
 		btn.toggled.connect(_on_arrow_style_toggled.bind(style_name))
@@ -571,21 +609,25 @@ func _arrow_style_label(style_name: String) -> String:
 
 
 func _on_cursor_cell_entered(item: Dictionary) -> void:
-	GameCursor.preview_cursor(item["texture"], item["hotspot"])
+	if _gc() != null:
+		_gc().call("preview_cursor", item["texture"], item["hotspot"])
 	_status_label.text = "指针：%s" % item["label"]
 
 
 func _on_cursor_cell_exited() -> void:
-	GameCursor.restore_cursor()
+	if _gc() != null:
+		_gc().call("restore_cursor")
 
 
 func _on_arrow_style_toggled(toggled_on: bool, style_name: String) -> void:
+	if _gc() == null:
+		return
 	if not toggled_on:
 		# 当前激活风格不允许点击取消，保持按下。
-		if style_name == GameCursor.get_arrow_style():
+		if style_name == _gc().call("get_arrow_style"):
 			(_arrow_style_buttons[style_name] as Button).set_pressed_no_signal(true)
 		return
-	GameCursor.set_arrow_style(style_name)
+	_gc().call("set_arrow_style", style_name)
 	for other: String in _arrow_style_buttons:
 		(_arrow_style_buttons[other] as Button).set_pressed_no_signal(other == style_name)
 	_status_label.text = "箭头：%s" % _arrow_style_label(style_name)
@@ -792,6 +834,127 @@ func _on_nameplate_char_clear() -> void:
 	_nameplate_demo_status_label.text = _nameplate_demo_status()
 
 
+## 第 11 页：PixelAvatarFrame 头像边框（timeline_frames 素材）+ 四档尺寸等比演示。
+func _build_avatar_page() -> void:
+	var page: VBoxContainer = _tabs.call("add_pixel_tab", DEMO_TAB_TITLES[10]) as VBoxContainer
+	page.add_theme_constant_override("separation", 12)
+
+	var demo_card := _make_card("尺寸演示", "")
+	var demo_row := HBoxContainer.new()
+	demo_row.name = "AvatarDemoRow"
+	demo_row.add_theme_constant_override("separation", 12)
+	_avatar_demo_frame = PixelAvatarScript.new() as PanelContainer
+	_avatar_demo_frame.name = "AvatarDemoFrame"
+	_avatar_demo_frame.set("frame_key", PixelAvatarScript.AVATAR_TEXTURES.keys()[0])
+	_avatar_demo_frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_avatar_demo_frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_avatar_demo_label = UIFactoryScript.label("头像", 13, UIThemeScript.TEXT_MAIN)
+	_avatar_demo_label.name = "AvatarDemoLabel"
+	_avatar_demo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_avatar_demo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_avatar_demo_frame.add_child(_avatar_demo_label)
+	demo_row.add_child(_avatar_demo_frame)
+	# 组件 _ready 的 _refresh 会重算 custom_minimum_size，且 _ready 要等整棵子树
+	# 入树才触发，任何提前设值都会被覆盖回名义 min；首个尺寸档延迟到帧末设置。
+	_apply_avatar_size.call_deferred()
+	demo_row.add_child(_build_avatar_demo_controls())
+	_card_slot(demo_card).add_child(demo_row)
+	page.add_child(demo_card)
+
+	var gallery_card := _make_card("素材图鉴", "")
+	var gallery := VBoxContainer.new()
+	gallery.name = "AvatarGallery"
+	gallery.add_theme_constant_override("separation", 10)
+	for key: String in PixelAvatarScript.AVATAR_TEXTURES.keys():
+		gallery.add_child(_make_avatar_gallery_row(key))
+	_card_slot(gallery_card).add_child(gallery)
+	page.add_child(gallery_card)
+
+
+## 尺寸演示右侧控制列：切换素材 / 放大 / 缩小 + 状态行。
+func _build_avatar_demo_controls() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.name = "AvatarDemoControls"
+	box.add_theme_constant_override("separation", 8)
+	var next_btn := _make_pixel_button("切换素材", 1, "cog")
+	next_btn.name = "AvatarStyleNextButton"
+	next_btn.pressed.connect(_on_avatar_style_next)
+	box.add_child(next_btn)
+	var up_btn := _make_pixel_button("放大", 0, "star")
+	up_btn.name = "AvatarSizeUpButton"
+	up_btn.pressed.connect(_on_avatar_size_up)
+	box.add_child(up_btn)
+	var down_btn := _make_pixel_button("缩小", 1, "target")
+	down_btn.name = "AvatarSizeDownButton"
+	down_btn.pressed.connect(_on_avatar_size_down)
+	box.add_child(down_btn)
+	_avatar_demo_status_label = UIFactoryScript.label(_avatar_demo_status(), 12, UIThemeScript.TEXT_DIM)
+	_avatar_demo_status_label.name = "AvatarDemoStatus"
+	box.add_child(_avatar_demo_status_label)
+	return box
+
+
+## 素材图鉴行：名义尺寸头像框 + key 中文名与素材原始尺寸。
+func _make_avatar_gallery_row(key: String) -> Control:
+	var row := HBoxContainer.new()
+	row.name = "Avatar_" + key
+	row.add_theme_constant_override("separation", 12)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var frame := PixelAvatarScript.new() as PanelContainer
+	frame.name = "AvatarFrame_" + key
+	frame.set("frame_key", key)
+	frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var tex: Texture2D = PixelAvatarScript.AVATAR_TEXTURES[key]
+	frame.custom_minimum_size = tex.get_size() * PixelAvatarScript.NOMINAL_SCALE
+	var text := UIFactoryScript.label("头像", 13, UIThemeScript.TEXT_MAIN)
+	text.name = "AvatarLabel"
+	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	frame.add_child(text)
+	row.add_child(frame)
+	var desc := UIFactoryScript.label(
+		"%s · %d×%d" % [PixelAvatarScript.AVATAR_LABELS[key], tex.get_width(), tex.get_height()],
+		12, UIThemeScript.TEXT_MAIN
+	)
+	desc.name = "AvatarDesc"
+	desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(desc)
+	return row
+
+
+func _avatar_demo_status() -> String:
+	var key: String = PixelAvatarScript.AVATAR_TEXTURES.keys()[_avatar_demo_key_index]
+	return "%s · %dpx" % [PixelAvatarScript.AVATAR_LABELS[key], AVATAR_SIZES[_avatar_demo_size_index]]
+
+
+func _apply_avatar_size() -> void:
+	var px: int = AVATAR_SIZES[_avatar_demo_size_index]
+	_avatar_demo_frame.custom_minimum_size = Vector2(px, px)
+
+
+func _on_avatar_style_next() -> void:
+	_avatar_demo_key_index = (_avatar_demo_key_index + 1) % PixelAvatarScript.AVATAR_TEXTURES.size()
+	var key: String = PixelAvatarScript.AVATAR_TEXTURES.keys()[_avatar_demo_key_index]
+	_avatar_demo_frame.set("frame_key", key)
+	_avatar_demo_status_label.text = _avatar_demo_status()
+	_log_feedback("头像框 → %s" % PixelAvatarScript.AVATAR_LABELS[key])
+
+
+func _on_avatar_size_up() -> void:
+	_avatar_demo_size_index = mini(_avatar_demo_size_index + 1, AVATAR_SIZES.size() - 1)
+	_apply_avatar_size()
+	_avatar_demo_status_label.text = _avatar_demo_status()
+	_log_feedback("头像框尺寸 → %dpx" % AVATAR_SIZES[_avatar_demo_size_index])
+
+
+func _on_avatar_size_down() -> void:
+	_avatar_demo_size_index = maxi(_avatar_demo_size_index - 1, 0)
+	_apply_avatar_size()
+	_avatar_demo_status_label.text = _avatar_demo_status()
+	_log_feedback("头像框尺寸 → %dpx" % AVATAR_SIZES[_avatar_demo_size_index])
+
+
 ## 右侧反馈卡片内容：状态行 + 富文本历史。
 func _build_feedback_body(slot: Container) -> void:
 	_status_label = UIFactoryScript.label("就绪", 13, UIThemeScript.TEXT_MAIN)
@@ -972,6 +1135,518 @@ func _on_video_state_changed(state: String) -> void:
 	_log_feedback("视频 → %s" % state)
 
 
+## 第 12 页：战棋界面（story/10_ui_ux.md 布局还原；骨架 PixelMargin→PixelVBox→PixelHBox，
+## 溢出滚动由 add_tab 统一的「战棋Scroll」外壳承担，页内不再套第二层滚动容器）。
+func _build_battle_page() -> void:
+	var page: VBoxContainer = _tabs.call("add_pixel_tab", DEMO_TAB_TITLES[11]) as VBoxContainer
+
+	var margin := PixelMarginScript.new() as MarginContainer
+	margin.name = "BattleMargin"
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page.add_child(margin)
+
+	var column := PixelVBoxScript.new() as VBoxContainer
+	column.name = "BattleColumn"
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_MD)
+	margin.add_child(column)
+
+	column.add_child(_battle_row([
+		_build_battle_hud_card(), _build_battle_menu_card(), _build_battle_skill_card(),
+	]))
+	column.add_child(_battle_row([_build_battle_preview_card(), _build_battle_detail_card()]))
+	column.add_child(_battle_row([_build_battle_prep_card(), _build_battle_victory_card()]))
+	column.add_child(_battle_row([_build_battle_defeat_card(), _build_battle_settings_card()]))
+
+
+## 战棋页一行卡片：PixelHBox + 卡片均分，竖向收缩避免行内拉高。
+func _battle_row(cards: Array) -> HBoxContainer:
+	var row := PixelHBoxScript.new() as HBoxContainer
+	row.name = "BattleRow"
+	row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_MD)
+	for card: PanelContainer in cards:
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		row.add_child(card)
+	return row
+
+
+## 顶部 HUD：回合阶段 + 友军/敌军存活计数 + 任务目标。
+func _build_battle_hud_card() -> PanelContainer:
+	var card := _make_card("顶部 HUD", "")
+	card.name = "BattleHudCard"
+	var slot := _card_slot(card)
+	var row := HBoxContainer.new()
+	row.name = "BattleHudRow"
+	row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_SM)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var phase := UIFactoryScript.label("回合 #3 · 玩家阶段", ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
+	phase.name = "BattleHudPhase"
+	row.add_child(phase)
+	row.add_child(_battle_force_counter("友军", 6, 8))
+	row.add_child(_battle_force_counter("敌军", 4, 7))
+	var objective := UIFactoryScript.label("▶ 解救村民(0/2)", ComponentThemeScript.FONT_BODY, UIThemeScript.ACCENT)
+	objective.name = "BattleHudObjective"
+	row.add_child(objective)
+	slot.add_child(row)
+	return card
+
+
+## 友军/敌军计数：短标签 + PixelProgressBar 存活比例。
+func _battle_force_counter(force_name: String, alive: int, total: int) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.name = force_name + "Counter"
+	box.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	box.add_child(
+		UIFactoryScript.label("%s %d/%d" % [force_name, alive, total], ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
+	)
+	var bar := PixelProgressBarScript.new() as ProgressBar
+	bar.max_value = total
+	bar.value = alive
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(64, 8)
+	box.add_child(bar)
+	return box
+
+
+## 行动菜单：推荐项置顶（主操作），其余次操作，Esc 撤销收尾。
+func _build_battle_menu_card() -> PanelContainer:
+	var card := _make_card("行动菜单", "")
+	card.name = "BattleMenuCard"
+	var slot := _card_slot(card)
+	var menu := VBoxContainer.new()
+	menu.name = "BattleMenuList"
+	menu.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	var entries: Array[Array] = [
+		["BattleMenuAttack", "★ 攻击（3 目标）", 0],
+		["BattleMenuSkill", "技能（2 可用）", 1],
+		["BattleMenuItem", "物品（1 可用）", 1],
+		["BattleMenuWait", "等待", 1],
+		["BattleMenuUndo", "✕ 撤销移动（Esc）", 1],
+	]
+	for entry: Array in entries:
+		var btn := _make_pixel_button(entry[1], entry[2], "")
+		btn.name = entry[0]
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_battle_menu_pressed.bind(entry[1]))
+		menu.add_child(btn)
+	slot.add_child(menu)
+	return card
+
+
+## 技能面板：标题含 MP 余量；可用技能主/次操作，无目标与 MP 不足的项灰显。
+func _build_battle_skill_card() -> PanelContainer:
+	var card := _make_card("技能面板", "")
+	card.name = "BattleSkillCard"
+	var slot := _card_slot(card)
+	var column := VBoxContainer.new()
+	column.name = "BattleSkillColumn"
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	column.add_child(
+		UIFactoryScript.label("技能 · 莉雅　MP 12/20", ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
+	)
+	var entries: Array[Array] = [
+		["BattleSkillFire", "★ 火球术　MP 6 · 射程 1-3 · 预伤 18-24", 0, false],
+		["BattleSkillFrost", "寒霜之触　MP 4 · 射程 1-2 · 预伤 10-14", 1, false],
+		["BattleSkillShield", "魔法护盾　MP 3（无目标）", 1, true],
+		["BattleSkillBlizzard", "暴风雪　MP 15（MP 不足）", 1, true],
+	]
+	for entry: Array in entries:
+		var btn := _make_pixel_button(entry[1], entry[2], "")
+		btn.name = entry[0]
+		btn.disabled = entry[3]
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if not btn.disabled:
+			btn.pressed.connect(_on_battle_menu_pressed.bind(entry[1]))
+		column.add_child(btn)
+	slot.add_child(column)
+	return card
+
+
+## 战斗预测：攻/守双列（HP 条 + 命中/伤害/必杀）+  weapon 克制与风险三色提示。
+func _build_battle_preview_card() -> PanelContainer:
+	var card := _make_card("战斗预测", "")
+	card.name = "BattlePreviewCard"
+	var slot := _card_slot(card)
+	var column := VBoxContainer.new()
+	column.name = "BattlePreviewColumn"
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_SM)
+	var grid := PixelGridScript.new() as GridContainer
+	grid.name = "BattlePreviewGrid"
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", ComponentThemeScript.SPACE_MD)
+	grid.add_theme_constant_override("v_separation", ComponentThemeScript.SPACE_XS)
+	grid.add_child(_battle_combatant_column(
+		"BattlePreviewAttacker", "⚔ 凯尔 [剑士]", 22, 24, ["命中 92%", "伤害 12 ×2双击", "必杀 7%"]
+	))
+	grid.add_child(_battle_combatant_column(
+		"BattlePreviewDefender", "🛡 敌兵 [枪兵]", 9, 18, ["反击命中 41%", "反击伤害 4"]
+	))
+	column.add_child(grid)
+	var tips := VBoxContainer.new()
+	tips.name = "BattlePreviewTips"
+	tips.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	tips.add_child(UIFactoryScript.label(
+		"▲ 剑 克 枪（+15% 命中 +3 伤害）", ComponentThemeScript.FONT_CAPTION, UIThemeScript.ACCENT
+	))
+	tips.add_child(UIFactoryScript.label(
+		"⚠ 敌人 HP 降至 0 → 可击杀", ComponentThemeScript.FONT_CAPTION, UIThemeScript.ERROR
+	))
+	tips.add_child(UIFactoryScript.label(
+		"⚠ 敌人射程 1，你移入后将受反击", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TOAST_COLOR
+	))
+	column.add_child(tips)
+	slot.add_child(column)
+	return card
+
+
+## 攻方/守方一列：名字 + HP 条 + 数值行。
+func _battle_combatant_column(
+	node_name: String, header: String, cur: float, maxv: float, lines: Array
+) -> VBoxContainer:
+	var column := VBoxContainer.new()
+	column.name = node_name
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	column.add_child(UIFactoryScript.label(header, ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN))
+	var bar := PixelProgressBarScript.new() as ProgressBar
+	bar.name = node_name + "Hp"
+	bar.max_value = maxv
+	bar.value = cur
+	bar.show_percentage = false
+	column.add_child(bar)
+	column.add_child(
+		UIFactoryScript.label("HP %d/%d" % [int(cur), int(maxv)], ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
+	)
+	for line_text: String in lines:
+		column.add_child(UIFactoryScript.label(line_text, ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN))
+	return column
+
+
+## 单位详情：名字 + 主角标签 / HP MP EXP 三条 / 属性四列网格 / 装备技能背包状态地形。
+func _build_battle_detail_card() -> PanelContainer:
+	var card := _make_card("单位详情", "")
+	card.name = "BattleDetailCard"
+	var slot := _card_slot(card)
+	var column := VBoxContainer.new()
+	column.name = "BattleDetailColumn"
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_SM)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	header.add_child(
+		UIFactoryScript.label("凯尔 [剑士·Lv5]", ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
+	)
+	header.add_child(UIFactoryScript.label("主角", ComponentThemeScript.FONT_CAPTION, UIThemeScript.ACCENT))
+	column.add_child(header)
+	column.add_child(_battle_bar_row("BattleDetailHp", "HP", 22, 24))
+	column.add_child(_battle_bar_row("BattleDetailMp", "MP", 0, 0))
+	column.add_child(_battle_bar_row("BattleDetailExp", "EXP", 74, 100))
+	var stats := PixelGridScript.new() as GridContainer
+	stats.name = "BattleDetailStats"
+	stats.columns = 4
+	stats.add_theme_constant_override("h_separation", ComponentThemeScript.SPACE_XS)
+	stats.add_theme_constant_override("v_separation", ComponentThemeScript.SPACE_XS)
+	for stat_pair: Array in [
+		["力", 9], ["速", 8], ["技", 7], ["运", 6], ["防", 5], ["魔防", 2], ["移动", 5], ["射程", 1],
+	]:
+		stats.add_child(_battle_stat_cell(stat_pair[0], stat_pair[1]))
+	column.add_child(stats)
+	for line_text: String in [
+		"装备：铁剑（攻击+5）· 皮甲（防御+2）",
+		"技能：火球术（冷却 0）· 连击",
+		"背包：生命药剂 ×2",
+		"状态：力 +3（2 回合）",
+		"地形：森林 防御+2 回避+15",
+	]:
+		column.add_child(UIFactoryScript.label(line_text, ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN))
+	slot.add_child(column)
+	return card
+
+
+## HP/MP/EXP 行：短标签 + PixelProgressBar（拉伸）+ 当前/上限文本；maxv<=0 时按空条处理。
+func _battle_bar_row(node_name: String, stat_name: String, cur: float, maxv: float) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	row.add_child(
+		UIFactoryScript.label(stat_name, ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
+	)
+	var bar := PixelProgressBarScript.new() as ProgressBar
+	bar.name = node_name
+	bar.max_value = maxv if maxv > 0.0 else 1.0
+	bar.value = cur if maxv > 0.0 else 0.0
+	bar.show_percentage = false
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(bar)
+	row.add_child(
+		UIFactoryScript.label(
+			"%d/%d" % [int(cur), int(maxv)], ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN
+		)
+	)
+	return row
+
+
+## 单个属性格：居中短标签，最小宽度对齐四列网格。
+func _battle_stat_cell(stat_name: String, stat_value: int) -> Label:
+	var cell := UIFactoryScript.label(
+		"%s %d" % [stat_name, stat_value], ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN
+	)
+	cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cell.custom_minimum_size = Vector2(56, 0)
+	return cell
+
+
+## 战前整备：左栏编队勾选（联动上场计数）/ 中栏五个 Tab / 右栏选中单位详情。
+func _build_battle_prep_card() -> PanelContainer:
+	var card := _make_card("战前整备", "")
+	card.name = "BattlePrepCard"
+	var slot := _card_slot(card)
+	var row := HBoxContainer.new()
+	row.name = "BattlePrepRow"
+	row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_SM)
+
+	var roster := VBoxContainer.new()
+	roster.name = "BattlePrepRoster"
+	roster.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	_battle_deploy_checks.clear()
+	var names := ["凯尔", "莉雅", "希尔德", "艾尔文", "瑟兰"]
+	for i: int in names.size():
+		var check := PixelCheckButtonScript.new() as CheckButton
+		check.text = names[i]
+		check.set_pressed_no_signal(i < 3)
+		check.toggled.connect(_on_battle_deploy_toggled)
+		_battle_deploy_checks.append(check)
+		roster.add_child(check)
+	_battle_deploy_counter = UIFactoryScript.label("上场 3/6", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN)
+	roster.add_child(_battle_deploy_counter)
+	row.add_child(roster)
+
+	var prep_tabs := PixelTabsScript.new() as TabContainer
+	prep_tabs.name = "BattlePrepTabs"
+	prep_tabs.custom_minimum_size = Vector2(150, 0)
+	for tab_title: String in ["编队", "装备", "技能", "转职", "物品"]:
+		var tab_page: VBoxContainer = prep_tabs.call("add_pixel_tab", tab_title) as VBoxContainer
+		tab_page.add_child(
+			UIFactoryScript.label("%s · 凯尔" % tab_title, ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
+		)
+	row.add_child(prep_tabs)
+
+	var detail := VBoxContainer.new()
+	detail.name = "BattlePrepDetail"
+	detail.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	for line_text: String in ["选中：凯尔 [剑士]", "Lv 5 · HP 22/24", "MP 0/0 · 移动 5", "装备：铁剑"]:
+		detail.add_child(UIFactoryScript.label(line_text, ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN))
+	row.add_child(detail)
+	slot.add_child(row)
+	return card
+
+
+## 胜利结算：标题大字 + 三条经验（进度条 + 升级注记）+ 掉落/存活/下一关 + 三个去向按钮。
+func _build_battle_victory_card() -> PanelContainer:
+	var card := _make_card("胜利结算", "")
+	card.name = "BattleVictoryCard"
+	var slot := _card_slot(card)
+	var column := VBoxContainer.new()
+	column.name = "BattleVictoryColumn"
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_SM)
+	var title := UIFactoryScript.outline_label("胜 利", ComponentThemeScript.FONT_TITLE, UIThemeScript.TOAST_COLOR, 4)
+	title.name = "BattleVictoryTitle"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(title)
+	column.add_child(_battle_exp_row("BattleVictoryExpKai", "凯尔", 48, "Lv5→6！（力+1 速+1）", 48))
+	column.add_child(_battle_exp_row("BattleVictoryExpLia", "莉雅", 32, "Lv4→5", 32))
+	column.add_child(_battle_exp_row("BattleVictoryExpHild", "希尔德", 30, "经验 +30", 30))
+	column.add_child(
+		UIFactoryScript.label("掉落：铁枪 ×1 · 源脉药剂 ×1 · 100 金币", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN)
+	)
+	column.add_child(
+		UIFactoryScript.label("队员：✓ 全员存活", ComponentThemeScript.FONT_CAPTION, UIThemeScript.ACCENT)
+	)
+	column.add_child(
+		UIFactoryScript.label("下一关：第 2 章 · 雾岭哨站", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
+	)
+	var buttons := HBoxContainer.new()
+	buttons.name = "BattleVictoryButtons"
+	buttons.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	var primary := _make_pixel_button("继续剧情", 0, "")
+	primary.name = "BattleVictoryPrimary"
+	buttons.add_child(primary)
+	var to_prep := _make_pixel_button("回整备", 1, "")
+	to_prep.name = "BattleVictoryToPrep"
+	buttons.add_child(to_prep)
+	var save := _make_pixel_button("存档", 1, "")
+	save.name = "BattleVictorySave"
+	buttons.add_child(save)
+	for child: Button in buttons.get_children():
+		child.pressed.connect(_on_battle_result_pressed.bind(child.text))
+	column.add_child(buttons)
+	slot.add_child(column)
+	return card
+
+
+## 单条经验行：名字 + PixelProgressBar + 增量与升级注记。
+func _battle_exp_row(
+	node_name: String, who: String, gain: int, note: String, fill: float
+) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	var name_label := UIFactoryScript.label(who, ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN)
+	name_label.custom_minimum_size = Vector2(56, 0)
+	row.add_child(name_label)
+	var bar := PixelProgressBarScript.new() as ProgressBar
+	bar.name = node_name
+	bar.max_value = 100.0
+	bar.value = fill
+	bar.show_percentage = false
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(bar)
+	row.add_child(
+		UIFactoryScript.label("+%d %s" % [gain, note], ComponentThemeScript.FONT_CAPTION, UIThemeScript.ACCENT)
+	)
+	return row
+
+
+## 失败：血红大字 + 败因 + 三个去向按钮 + 自动存档提示。
+func _build_battle_defeat_card() -> PanelContainer:
+	var card := _make_card("失败", "")
+	card.name = "BattleDefeatCard"
+	var slot := _card_slot(card)
+	var column := VBoxContainer.new()
+	column.name = "BattleDefeatColumn"
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_SM)
+	var title := UIFactoryScript.outline_label("全军覆没", ComponentThemeScript.FONT_TITLE, UIThemeScript.ERROR, 4)
+	title.name = "BattleDefeatTitle"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(title)
+	column.add_child(
+		UIFactoryScript.label("主角凯尔已倒下，战局无可挽回。", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
+	)
+	var buttons := HBoxContainer.new()
+	buttons.name = "BattleDefeatButtons"
+	buttons.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	var retry := _make_pixel_button("重试本关", 0, "")
+	retry.name = "BattleDefeatRetry"
+	buttons.add_child(retry)
+	var load := _make_pixel_button("读档", 1, "")
+	load.name = "BattleDefeatLoad"
+	buttons.add_child(load)
+	var to_title := _make_pixel_button("回主菜单", 1, "")
+	to_title.name = "BattleDefeatToTitle"
+	buttons.add_child(to_title)
+	for child: Button in buttons.get_children():
+		child.pressed.connect(_on_battle_result_pressed.bind(child.text))
+	column.add_child(buttons)
+	column.add_child(
+		UIFactoryScript.label("💡 上次自动存档：回合 #4（2 分钟前）", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TOAST_COLOR)
+	)
+	slot.add_child(column)
+	return card
+
+
+## 设置：三个下拉 + 托管开关 + 三条音量滑块。
+func _build_battle_settings_card() -> PanelContainer:
+	var card := _make_card("设置", "")
+	card.name = "BattleSettingsCard"
+	var slot := _card_slot(card)
+	var column := VBoxContainer.new()
+	column.name = "BattleSettingsColumn"
+	column.add_theme_constant_override("separation", ComponentThemeScript.SPACE_SM)
+
+	_battle_size_option = _battle_option_row(column, "BattleSettingsSize", "文字大小", ["标准", "大", "特大"])
+	_battle_colorblind_option = _battle_option_row(
+		column, "BattleSettingsColorblind", "色盲模式", ["关闭", "红绿", "蓝黄"]
+	)
+	_battle_autosave_option = _battle_option_row(column, "BattleSettingsAutosave", "自动存档", ["每回合", "每章", "关闭"])
+
+	var auto_row := HBoxContainer.new()
+	auto_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	auto_row.add_child(UIFactoryScript.label("托管默认", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	auto_row.add_child(spacer)
+	_battle_auto_battle_switch = PixelCheckButtonScript.new() as CheckButton
+	_battle_auto_battle_switch.name = "BattleSettingsAutoBattle"
+	_battle_auto_battle_switch.toggled.connect(_on_battle_auto_battle_toggled)
+	auto_row.add_child(_battle_auto_battle_switch)
+	column.add_child(auto_row)
+
+	_battle_master_slider = _battle_volume_row(column, "BattleSettingsMaster", "主音量", 80.0)
+	_battle_music_slider = _battle_volume_row(column, "BattleSettingsMusic", "音乐", 60.0)
+	_battle_sfx_slider = _battle_volume_row(column, "BattleSettingsSfx", "音效", 70.0)
+
+	slot.add_child(column)
+	return card
+
+
+## 设置页一行下拉：标签 + 弹簧 + PixelOptionButton，选择写入反馈。
+func _battle_option_row(
+	parent: Container, node_name: String, row_label: String, items: Array
+) -> OptionButton:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	row.add_child(UIFactoryScript.label(row_label, ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+	var option := PixelOptionButtonScript.new() as OptionButton
+	option.name = node_name
+	for item_text: String in items:
+		option.add_item(item_text)
+	option.item_selected.connect(_on_battle_option_selected.bind(row_label))
+	row.add_child(option)
+	parent.add_child(row)
+	return option
+
+
+## 设置页一行滑块：标签 + PixelSlider（拉伸），改动写入状态行。
+func _battle_volume_row(parent: Container, node_name: String, bus_label: String, initial: float) -> HSlider:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
+	row.add_child(UIFactoryScript.label(bus_label, ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_MAIN))
+	var slider := PixelSliderScript.new() as HSlider
+	slider.name = node_name
+	slider.min_value = 0.0
+	slider.max_value = 100.0
+	slider.step = 1.0
+	slider.value = initial
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.value_changed.connect(_on_battle_volume_changed.bind(bus_label))
+	row.add_child(slider)
+	parent.add_child(row)
+	return slider
+
+
+func _on_battle_menu_pressed(which: String) -> void:
+	_status_label.text = "战棋菜单：%s" % which
+	_log_feedback("战棋菜单 → %s" % which)
+
+
+func _on_battle_result_pressed(which: String) -> void:
+	_status_label.text = "结算：%s" % which
+	_log_feedback("结算 → %s" % which)
+
+
+## 编队勾选联动「上场 n/6」计数。
+func _on_battle_deploy_toggled(_toggled_on: bool) -> void:
+	var count := 0
+	for check: CheckButton in _battle_deploy_checks:
+		if check.button_pressed:
+			count += 1
+	_battle_deploy_counter.text = "上场 %d/6" % count
+	_status_label.text = "编队：上场 %d/6" % count
+
+
+func _on_battle_option_selected(which: String, index: int) -> void:
+	_status_label.text = "设置：%s → 第 %d 项" % [which, index + 1]
+	_log_feedback("设置 %s → 第 %d 项" % [which, index + 1])
+
+
+func _on_battle_auto_battle_toggled(toggled_on: bool) -> void:
+	_status_label.text = "托管默认：%s" % ("开" if toggled_on else "关")
+	_log_feedback("托管默认 → %s" % ("开" if toggled_on else "关"))
+
+
+func _on_battle_volume_changed(bus_name: String, value: float) -> void:
+	_status_label.text = "%s：%d" % [bus_name, roundi(value)]
+
+
 ## 统一开关所有演示用 PixelButton 的悬停/点击音效（按脚本识别，不动其他按钮）。
 func _apply_sfx_enabled(enabled: bool) -> void:
 	for btn: Button in find_children("*", "Button", true, false):
@@ -1006,18 +1681,34 @@ func _reset_demo() -> void:
 	_demo_popup.hide()
 	_demo_audio.call("stop_sound")
 	_demo_video.call("stop_video")
-	GameCursor.set_arrow_style(GameCursor.DEFAULT_ARROW_STYLE)
-	GameCursor.restore_cursor()
-	for style_name: String in _arrow_style_buttons:
-		(_arrow_style_buttons[style_name] as Button).set_pressed_no_signal(
-			style_name == GameCursor.get_arrow_style()
-		)
+	if _gc() != null:
+		_gc().call("set_arrow_style", _gc().get("DEFAULT_ARROW_STYLE"))
+		_gc().call("restore_cursor")
+		for style_name: String in _arrow_style_buttons:
+			(_arrow_style_buttons[style_name] as Button).set_pressed_no_signal(
+				style_name == _gc().call("get_arrow_style")
+			)
 	_frame_demo_key_index = 0
 	_frame_demo_frame.set("frame_key", "panel")
 	_on_frame_line_clear()
 	_nameplate_demo_key_index = 0
 	_nameplate_demo_plate.set("frame_key", PixelNameplateScript.NAMEPLATE_TEXTURES.keys()[0])
 	_on_nameplate_char_clear()
+	_avatar_demo_key_index = 0
+	_avatar_demo_size_index = 2
+	_avatar_demo_frame.set("frame_key", PixelAvatarScript.AVATAR_TEXTURES.keys()[0])
+	_apply_avatar_size()
+	_avatar_demo_status_label.text = _avatar_demo_status()
+	_battle_master_slider.set_value_no_signal(80.0)
+	_battle_music_slider.set_value_no_signal(60.0)
+	_battle_sfx_slider.set_value_no_signal(70.0)
+	_battle_size_option.select(0)
+	_battle_colorblind_option.select(0)
+	_battle_autosave_option.select(0)
+	_battle_auto_battle_switch.set_pressed_no_signal(false)
+	for i: int in _battle_deploy_checks.size():
+		_battle_deploy_checks[i].set_pressed_no_signal(i < 3)
+	_battle_deploy_counter.text = "上场 3/6"
 	_tabs.current_tab = 0
 	_status_label.text = "已重置"
 	_log_feedback("重置")
