@@ -1,7 +1,9 @@
 ## campaign_contract.gd — 冒险模式数据层契约测试
 ##
 ## 覆盖：配置装载/校验、档案创建/列表/加载、出征部署（全员出征/补位/防重/解锁/
-## 补给/落盘失败取消）、胜/败/弃结算（经验导入/复活/回收/奖励/幂等/原子性）、
+## 补给/落盘失败取消）、胜/败/弃结算（经验导入/复活/回收/奖励/幂等/原子性、
+## 胜利升级差分 level_ups 按 id 对位快照：from/to/stat_deltas、失败撤退不产生、
+## 落盘失败不发布、幂等重放回带）、
 ## 快照回滚、存档往返、JSON 损坏与结构损坏回退、新版本拒绝（不回退备份）、
 ## 损坏档删除、重命名/删除、手动保存、中断标记、断档解锁、落盘故障重试、
 ## 备份保护自愈（损坏主档+合法备份下落盘失败仍有好档）、最近使用标记、目录隔离。
@@ -44,6 +46,7 @@ func _run() -> void:
 	_test_deploy_full_roster_error()
 	_test_settle_win_first()
 	_test_settle_win_repeat_and_idempotent()
+	_test_settle_win_level_ups()
 	_test_lose_and_abandon()
 	_test_unlock_progression_and_full_deploy()
 	_test_isolation()
@@ -267,6 +270,14 @@ func _test_settle_win_first() -> void:
 		"win: 奖励物品应为 1×hpPotion")
 	_expect(int(receipt.gold_after) == 200 and int(receipt.gold_before) == 0, "win: 金币入账应正确")
 	_expect(int(receipt.items_recovered) == 7, "win: 应回收 7 件（4hp+3mp），实际 %d" % int(receipt.items_recovered))
+	var level_ups: Array = receipt.level_ups
+	_expect(level_ups.size() == 1 and String(level_ups[0].id) == "r_0"
+		and int(level_ups[0].from_level) == int(units[0].level) - 1
+		and int(level_ups[0].to_level) == int(units[0].level),
+		"win: 升级差分应按 id 记 r_0 from→to")
+	var win_deltas: Dictionary = level_ups[0].stat_deltas if level_ups.size() == 1 else {}
+	_expect(int(win_deltas.get("str", 0)) == 1 and win_deltas.size() == 1,
+		"win: stat_deltas 应恰为 str+1，实际 %s" % str(win_deltas))
 	var profile: Dictionary = session.get_profile()
 	_expect(int(profile.gold) == 200, "win: 档案金币应为 200")
 	_expect(profile.completed_levels.has(L0), "win: 应记录通关")
@@ -292,8 +303,10 @@ func _test_settle_win_first() -> void:
 	_expect(has_reward, "win: 奖励 hpPotion 应为满充 3")
 	var last: Dictionary = session.get_last_result()
 	_expect(last.get("ok", false) and str(last.result) == "win", "win: get_last_result 应返回胜利结果")
+	_expect((last.level_ups as Array).size() == 1, "win: last_result 应带 level_ups")
 	var replay: Dictionary = session.settle_battle(token, &"win", chapter)
 	_expect(replay.ok and bool(replay.already_settled), "win: 重复结算应幂等回显")
+	_expect((replay.level_ups as Array).size() == 1, "win: 幂等重放应回带 level_ups")
 	_expect(int(session.get_profile().gold) == 200, "win: 重复结算不应重复发奖")
 	session.clear_last_result()
 	_expect(session.get_last_result().is_empty(), "win: clear_last_result 应清空")
@@ -317,6 +330,61 @@ func _test_settle_win_repeat_and_idempotent() -> void:
 	_expect(int(receipt.gold) == 50, "repeat: 重复奖励应为 50")
 	_expect(int(session.get_profile().gold) == 250, "repeat: 金币累计应为 250")
 	_expect(receipt.items.is_empty(), "repeat: 重复胜利无物品奖励")
+	_expect((receipt.level_ups as Array).is_empty(), "repeat: 无升级时 level_ups 应为空数组")
+
+
+## 胜利升级差分专项：Lv N→N+1 的 settle，receipt.level_ups 按 id 含
+## from/to_level 与 stat_deltas（stats 上限差）；只涨经验未升级不列；
+## 队伍等级/经验与磁盘读档一致；同 token 幂等重放回带同一差分。
+func _test_settle_win_level_ups() -> void:
+	var session := _begin("level_ups")
+	session.create_profile("成长队")
+	var prepared: Dictionary = session.prepare_battle(L0)
+	_expect(prepared.ok, "level_ups: 出征应成功")
+	if not prepared.ok:
+		return
+	var chapter: Dictionary = prepared.chapter
+	var units: Array = chapter.playerUnits
+	var from_level := int(units[0].level)
+	var to_level := from_level + 1
+	units[0]["level"] = to_level
+	units[0]["exp"] = 40
+	units[0].stats["str"] = int(units[0].stats.get("str", 0)) + 1
+	units[0].stats["spd"] = int(units[0].stats.get("spd", 0)) + 1
+	units[1]["exp"] = int(units[1].exp) + 20
+	var token := str(prepared.token)
+	var receipt: Dictionary = session.settle_battle(token, &"win", chapter)
+	_expect(receipt.ok, "level_ups: 胜利结算应成功，实际 %s" % str(receipt.error))
+	if not receipt.ok:
+		return
+	_expect(receipt.has("level_ups"), "level_ups: 胜利 receipt 应带 level_ups 键")
+	var level_ups: Array = receipt.level_ups
+	_expect(level_ups.size() == 1, "level_ups: 只涨经验的 r_1 不应列入，实际 %d 条" % level_ups.size())
+	if level_ups.size() == 1:
+		var entry: Dictionary = level_ups[0]
+		_expect(String(entry.id) == "r_0", "level_ups: 应按 id 记 r_0，实际 %s" % String(entry.id))
+		_expect(int(entry.from_level) == from_level and int(entry.to_level) == to_level,
+			"level_ups: from/to 应为 %d→%d，实际 %s→%s"
+			% [from_level, to_level, str(entry.from_level), str(entry.to_level)])
+		var deltas: Dictionary = entry.stat_deltas
+		_expect(int(deltas.get("str", 0)) == 1 and int(deltas.get("spd", 0)) == 1 and deltas.size() == 2,
+			"level_ups: stat_deltas 应恰为 str+1/spd+1，实际 %s" % str(deltas))
+	var roster: Array = session.get_profile().roster
+	_expect(int(roster[0].level) == to_level and int(roster[0].exp) == 40,
+		"level_ups: 档案 r_0 应保留新等级与经验")
+	_expect(int(roster[1].exp) == int(units[1].exp), "level_ups: r_1 经验应保留（未升级不丢经验）")
+	var last: Dictionary = session.get_last_result()
+	_expect((last.level_ups as Array).size() == 1, "level_ups: last_result 应带差分供 Hub 展示")
+	var replay: Dictionary = session.settle_battle(token, &"win", chapter)
+	_expect(replay.ok and bool(replay.already_settled) and (replay.level_ups as Array).size() == 1,
+		"level_ups: 幂等重放应回带同一差分")
+	var fresh := _mk_session()
+	var loaded: Dictionary = fresh.load_profile(str(session.get_profile().id))
+	_expect(loaded.ok, "level_ups: 读档应成功")
+	var disk_roster: Array = fresh.get_profile().roster
+	_expect(disk_roster.size() == roster.size() and int(disk_roster[0].level) == to_level
+		and int(disk_roster[0].exp) == 40 and int(disk_roster[1].exp) == int(units[1].exp),
+		"level_ups: 磁盘队伍等级/经验应与内存一致")
 
 
 func _win_once(session: SessionScript, level_id: String) -> void:
@@ -346,6 +414,7 @@ func _test_lose_and_abandon() -> void:
 		var receipt: Dictionary = session.settle_battle(str(prepared.token), StringName(mode), {})
 		_expect(receipt.ok, "%s: 结算应成功，实际 %s" % [mode, str(receipt.error)])
 		_expect(bool(receipt.restored), "%s: 应标记已恢复" % mode)
+		_expect(not receipt.has("level_ups"), "%s: 失败/撤退 receipt 不应带 level_ups" % mode)
 		_expect(int(session.get_profile().gold) == 0, "%s: 不应发奖" % mode)
 		_expect(session.get_profile().completed_levels.is_empty(), "%s: 不应记录通关" % mode)
 		var roster: Array = session.get_profile().roster
@@ -355,6 +424,7 @@ func _test_lose_and_abandon() -> void:
 		_expect(_count_items(inv, "hpPotion") == 4 and _count_items(inv, "mpPotion") == 4,
 			"%s: 库存应回退出征前，实际 %s" % [mode, _inv_str(inv)])
 		_expect(str(session.get_last_result().result) == mode, "%s: last_result 应记录" % mode)
+		_expect(not session.get_last_result().has("level_ups"), "%s: last_result 不应带 level_ups" % mode)
 		var fresh := _mk_session()
 		fresh.load_profile(str(session.get_profile().id))
 		var fp: Dictionary = fresh.get_profile()
@@ -693,14 +763,16 @@ func _test_persist_failure() -> void:
 	faulty.fail_saves = false
 	var prepared: Dictionary = session.prepare_battle(L0)
 	_expect(prepared.ok, "persist: 修复后出征应成功")
-	# 3) 胜利落盘失败 → retryable、内存不动、attempt 仍挂起
+	# 3) 胜利落盘失败 → retryable、内存不动、attempt 仍挂起；level_ups 不发布
 	faulty.fail_saves = true
 	var chapter: Dictionary = prepared.chapter
 	var units: Array = chapter.playerUnits
 	units[0]["exp"] = int(units[0].exp) + 10
+	units[0]["level"] = int(units[0].level) + 1
 	var token := str(prepared.token)
 	var failed: Dictionary = session.settle_battle(token, &"win", chapter)
 	_expect(not failed.ok and bool(failed.get("retryable", false)), "persist: 胜利落盘失败应可重试")
+	_expect(not failed.has("level_ups"), "persist: 落盘失败不发布 level_ups")
 	_expect(int(session.get_profile().gold) == 0, "persist: 失败时不应入账")
 	_expect(session.get_profile().completed_levels.is_empty(), "persist: 失败时不应记通关")
 	var still_pending: Dictionary = session.prepare_battle(L0)
@@ -711,13 +783,16 @@ func _test_persist_failure() -> void:
 	_expect(receipt.ok, "persist: 修复后重试应成功，实际 %s" % str(receipt.error))
 	if receipt.ok:
 		_expect(int(session.get_profile().gold) == 200, "persist: 重试后应恰好入账一次")
+		_expect((receipt.level_ups as Array).size() == 1, "persist: 重试成功后才发布 level_ups")
 		var replay: Dictionary = session.settle_battle(token, &"win", chapter)
 		_expect(replay.ok and bool(replay.already_settled) and int(session.get_profile().gold) == 200,
 			"persist: 再次重放不应重复入账")
-	# 磁盘健康：新会话可读
+	# 磁盘健康：新会话可读，升级已落盘
 	var fresh := _mk_session()
 	var rel: Dictionary = fresh.load_profile(pid)
 	_expect(rel.ok and int(fresh.get_profile().gold) == 200, "persist: 最终磁盘态应健康")
+	_expect(rel.ok and int(fresh.get_profile().roster[0].level) == int(units[0].level),
+		"persist: 磁盘应保留升级后等级")
 
 
 # ============================================================

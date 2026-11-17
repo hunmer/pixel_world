@@ -4,12 +4,24 @@
 ## 文本；对缺失字段/未知类型给出可读回退，绝不抛错。所有会话调用统一经
 ## 本类入口，session 缺失/方法缺失/返回类型不符时回退成约定形状，
 ## 调用方只处理一种形态。
+## 角色行 unit_label 带 exp 时显示 EXP 当前/阈值（WeaponData.exp_to_next）；
+## level_up_lines 把胜利 receipt 的 level_ups 差分转成中文升级行。
 extends RefCounted
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const WeaponDataScript = preload("res://scripts/core/weapons.gd")
 
 ## 详情弹窗里跳过的内部键（只读查看其余全部键）。
 const DETAIL_SKIP_KEYS: Array[String] = ["token"]
+
+## 属性键 → 升级回显短名（str→力 等；未知键原样显示）。
+const STAT_LABELS := {
+	"hp": "HP", "mp": "MP", "str": "力", "mag": "魔", "skl": "技",
+	"spd": "速", "luk": "运", "def": "防", "res": "魔防",
+}
+
+## 升级行的成长固定输出序（与战斗侧属性展示一致）；不依赖输入字典插入顺序。
+const STAT_ORDER: Array[String] = ["hp", "mp", "str", "mag", "skl", "spd", "luk", "def", "res"]
 
 
 static func session_ready(session: Node) -> bool:
@@ -124,12 +136,19 @@ static func saved_later_than(a: Dictionary, b: Dictionary) -> bool:
 
 
 ## 角色行摘要：名称 + 白名单字段（缺失即跳过，字段名由数据层演进时自动降级）。
+## 带有效 exp（等级为数字）时追加 EXP 当前/阈值，阈值 = WeaponData.exp_to_next(level)；
+## 无 exp 键的旧形状单位不显示，保证向后兼容。
 static func unit_label(unit: Dictionary) -> String:
 	var label := as_text(unit.get("name", unit.get("id", null)), "未命名单位")
 	var parts: Array[String] = []
 	var level: Variant = unit.get("level", null)
 	if level != null:
 		parts.append("Lv%s" % as_text(level, "?"))
+	if unit.has("exp") and (level is int or level is float):
+		parts.append(
+			"EXP %s/%d"
+			% [as_text(unit.get("exp"), "?"), WeaponDataScript.exp_to_next(maxi(1, int(level)))]
+		)
 	if unit.has("hp"):
 		parts.append("HP %s/%s" % [as_text(unit.get("hp"), "?"), as_text(unit.get("max_hp"), "?")])
 	if unit.has("mp"):
@@ -165,6 +184,57 @@ static func items_line(items: Variant) -> String:
 			labels.append(item_label(item))
 		return "、".join(labels)
 	return as_text(items)
+
+
+## 胜利结算的升级行：每条 {id,name,from_level,to_level,stat_deltas} 一行
+## 「升级：罗兰 3→4（力+1 速+1）」，成长空则省略括号。成长按 STAT_ORDER
+## 固定序输出（未知键排序后追加），同一条差分永远得到同一段文本。
+## 旧 receipt 无 level_ups 键 → 返回空数组（调用方不追加任何行）。
+static func level_up_lines(level_ups: Variant) -> Array[String]:
+	var lines: Array[String] = []
+	if level_ups is not Array:
+		return lines
+	for entry: Variant in level_ups:
+		if entry is not Dictionary:
+			continue
+		var dict: Dictionary = entry
+		var unit_name := as_text(dict.get("name", dict.get("id", null)), "未知单位")
+		var from_level := as_int(dict.get("from_level", 0), 0)
+		var to_level := as_int(dict.get("to_level", 0), 0)
+		var growths: Array[String] = _stat_growth_labels(dict.get("stat_deltas", {}))
+		if growths.is_empty():
+			lines.append("升级：%s %d→%d" % [unit_name, from_level, to_level])
+		else:
+			lines.append("升级：%s %d→%d（%s）" % [unit_name, from_level, to_level, " ".join(growths)])
+	return lines
+
+
+## stat_deltas → 「力+1」标签列表：九属性按 STAT_ORDER 固定序（不依赖输入
+## 字典插入顺序），未知键按字典序稳定追加；零差分不显示。
+static func _stat_growth_labels(deltas: Variant) -> Array[String]:
+	var labels: Array[String] = []
+	if deltas is not Dictionary:
+		return labels
+	var deltas_dict: Dictionary = deltas
+	var handled := {}
+	for key: String in STAT_ORDER:
+		if not deltas_dict.has(key):
+			continue
+		handled[key] = true
+		var delta := as_int(deltas_dict[key], 0)
+		if delta != 0:
+			labels.append("%s%+d" % [String(STAT_LABELS.get(key, key)), delta])
+	var extra: Array[String] = []
+	for key: Variant in deltas_dict.keys():
+		var key_text := String(key)
+		if not handled.has(key_text):
+			extra.append(key_text)
+	extra.sort()
+	for key: String in extra:
+		var delta := as_int(deltas_dict[key], 0)
+		if delta != 0:
+			labels.append("%s%+d" % [String(STAT_LABELS.get(key, key)), delta])
+	return labels
 
 
 ## 详情弹窗正文：逐键只读展示，复杂值折叠成计数行。

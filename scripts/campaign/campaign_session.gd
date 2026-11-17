@@ -1,7 +1,8 @@
 ## campaign_session.gd — 冒险模式会话服务（autoload CampaignSession）
 ##
 ## 职责：多档案管理（创建/加载/重命名/删除/列表）、公共库存、线性关卡解锁、
-## 出征部署（prepare_battle，防重复出征）与战后结算（settle_battle，win/lose/abandon）。
+## 出征部署（prepare_battle，防重复出征）与战后结算（settle_battle，win/lose/abandon；
+## 胜利 receipt 附 level_ups 升级差分，按 id 对位出征前快照，等级提升才列）。
 ##
 ## 磁盘契约（user://campaign_saves/，经 CampaignProfileStore 原子写）：
 ## 磁盘永远是"安全态"——出征挂起时落盘的是出征前快照 + attempt 标记；胜利结算
@@ -410,6 +411,7 @@ func prepare_battle(level_id: String) -> Dictionary:
 ## 结算（幂等）：result 兼容 String/StringName 的 "win"/"lose"/"abandon"。
 ## - win：从终局 chapter（只读）吸收成长 -> 组装新态 -> 落盘成功才提交内存并清
 ##   attempt；落盘失败返回 {ok:false, retryable:true}，内存不动，可同 token 重试。
+##   成功 receipt 附 level_ups（_diff_level_ups 差分，失败/撤退不产生）。
 ## - lose/abandon：回滚出征前快照，重新落盘（标记自愈）。
 ## 同 token 重复结算返回缓存结果 + already_settled=true。
 func settle_battle(token: String, result: Variant, chapter: Dictionary = {}) -> Dictionary:
@@ -445,6 +447,10 @@ func _settle_win(token: String, level_id: String, level_name: String, chapter: D
 	var imported: Dictionary = Roster.import_victory(chapter, _state.roster)
 	if not imported.get("ok", false):
 		return {"ok": false, "error": str(imported.error)}
+	# 升级差分只在这里做（按 id 对位出征前快照 vs 吸收后队伍，不重放 RNG，
+	# 不侵入 Roster 吸收逻辑）；落盘失败路径不携带 level_ups —— 差分随成功
+	# payload 一起发布。
+	var level_ups: Array = _diff_level_ups(_attempt.snapshot.roster, imported.roster_new)
 	var first_clear: bool = not _state.completed_levels.has(level_id)
 	var rewards: Dictionary = CampaignConfigScript.rewards_for(level_id, first_clear)
 	var gold_before := int(_state.gold)
@@ -505,6 +511,7 @@ func _settle_win(token: String, level_id: String, level_name: String, chapter: D
 		"gold_before": gold_before,
 		"gold_after": int(staged.gold),
 		"items_recovered": int(imported.recovered.size()),
+		"level_ups": level_ups,
 		"persisted": true,
 	}
 	_state = staged
@@ -539,6 +546,46 @@ func _settle_restore(token: String, result_str: String, level_id: String, level_
 	_last_result = payload
 	_emit_changed("settled")
 	return payload
+
+
+## 胜利结算的升级差分：按 id 对位出征前快照 roster 与吸收后 roster_new，
+## 只有等级提升的单位才列入（exp 变化未升级不列）。stat_deltas 取 stats
+## 上限差（新-旧，只含双方都有且非零的键）。宽松形状：非 Dictionary 单位、
+## 缺 id/level、对位缺失一律跳过，绝不抛错。
+func _diff_level_ups(before_roster: Array, after_roster: Array) -> Array:
+	var before_by_id := {}
+	for unit: Variant in before_roster:
+		if unit is Dictionary and (unit as Dictionary).has("id"):
+			before_by_id[String((unit as Dictionary).id)] = unit
+	var level_ups: Array = []
+	for unit: Variant in after_roster:
+		if unit is not Dictionary or not (unit as Dictionary).has("id"):
+			continue
+		var after_unit: Dictionary = unit
+		var before_unit: Variant = before_by_id.get(String(after_unit.id))
+		if before_unit is not Dictionary:
+			continue
+		var from_level := maxi(1, int((before_unit as Dictionary).get("level", 1)))
+		var to_level := maxi(1, int(after_unit.get("level", 1)))
+		if to_level <= from_level:
+			continue
+		var stat_deltas := {}
+		var before_stats: Dictionary = (before_unit as Dictionary).get("stats", {})
+		var after_stats: Dictionary = after_unit.get("stats", {})
+		for stat_key: Variant in after_stats.keys():
+			if not before_stats.has(stat_key):
+				continue
+			var delta := int(after_stats[stat_key]) - int(before_stats[stat_key])
+			if delta != 0:
+				stat_deltas[String(stat_key)] = delta
+		level_ups.append({
+			"id": String(after_unit.id),
+			"name": str(after_unit.get("name", (before_unit as Dictionary).get("name", after_unit.id))),
+			"from_level": from_level,
+			"to_level": to_level,
+			"stat_deltas": stat_deltas,
+		})
+	return level_ups
 
 
 # ============================================================

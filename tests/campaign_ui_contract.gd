@@ -193,6 +193,10 @@ func _run() -> void:
 	)
 	check(campaign.find_child("UnitRow_0", true, false) != null, "06 队伍行 0")
 	check(campaign.find_child("UnitRow_1", true, false) != null, "06 队伍行 1")
+	var unit_row_0: Button = campaign.find_child("UnitRow_0", true, false) as Button
+	check(unit_row_0.text.contains("EXP 40/140"), "06 队伍行显示 EXP 当前/阈值（40/140）")
+	var unit_row_1: Button = campaign.find_child("UnitRow_1", true, false) as Button
+	check(not unit_row_1.text.contains("EXP"), "06 无 exp 旧形状单位不显示 EXP（向后兼容）")
 	check(campaign.find_child("ItemRow_0", true, false) != null, "06 物品行 0")
 	check(campaign.find_child("RosterEmpty", true, false) == null, "06 非空队伍无占位提示")
 	var gold_caption: Label = campaign.find_child("GoldCaption", true, false) as Label
@@ -224,6 +228,11 @@ func _run() -> void:
 	check(message.text.find("获得金币：50") >= 0, "08 重复胜利金币=50")
 	check(message.text.find("首次通关") < 0, "08 非首胜不显示首通标记")
 	check(message.text.find("获得物品：无") >= 0, "08 重复胜利物品=无")
+	check(message.text.find("升级：剑士队长 2→3") >= 0, "08 胜利弹层含升级行")
+	check(
+		message.text.find("力+1 速+1") >= 0,
+		"08 升级行按固定属性序输出（反序输入仍力→速）"
+	)
 	(modal.find_child("Action_continue", true, false) as Button).pressed.emit()
 	await process_frame
 	check(stub.get_last_result().is_empty(), "08 结算展示后已 clear")
@@ -582,7 +591,7 @@ class StubSession extends Node:
 		profiles["b"] = _make_profile(
 			"b", "最近的档", 220, ["plains_skirmish", "river_crossing"], 900,
 			[
-				{"id": "hero", "name": "剑士队长", "level": 3, "hp": 30, "max_hp": 30, "mp": 10, "max_mp": 10},
+				{"id": "hero", "name": "剑士队长", "level": 3, "exp": 40, "hp": 30, "max_hp": 30, "mp": 10, "max_mp": 10},
 				{"id": "mage", "name": "见习法师", "level": 2, "hp": 18, "max_hp": 20, "mp": 14, "max_mp": 16},
 			],
 			[
@@ -730,6 +739,16 @@ class StubSession extends Node:
 				"gold": gold,
 				"items": items,
 				"first_clear": first_clear,
+				"level_ups": [
+					{
+						"id": "hero",
+						"name": "剑士队长",
+						"from_level": 2,
+						"to_level": 3,
+						# 故意反序插入（spd 在 str 前）：验证升级行按固定属性序输出。
+						"stat_deltas": {"spd": 1, "str": 1},
+					},
+				],
 			}
 			_emit()
 			return {"ok": true}

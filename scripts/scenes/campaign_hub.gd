@@ -1,7 +1,8 @@
 ## scripts/scenes/campaign_hub.gd — 冒险 Hub 屏（只读四数据 + 保存/出征入口）
 ##
 ## 四数据：金币、随身物品、角色队伍、关卡进度。胜利/失败/撤退后回到本屏
-## 时用 get_last_result 弹一次结算（并 clear_last_result，防重复入账展示）。
+## 时用 get_last_result 弹一次结算（并 clear_last_result，防重复入账展示）；
+## 胜利文案含 level_ups 升级行，角色行 unit_label 带 EXP 当前/阈值。
 ## 所有按钮走 UIFactory + PixelButton 语义变体；布局只用六薄容器。
 extends Control
 
@@ -305,6 +306,8 @@ func _present_last_result() -> void:
 			lines.append("获得物品：%s" % items_line)
 			if bool(result.get("first_clear", false)):
 				lines.append("首次通关！")
+			for line: String in CampaignFormatScript.level_up_lines(result.get("level_ups", [])):
+				lines.append(line)
 		"lose":
 			title = "战败"
 			lines.append("未发放奖励，队伍恢复出征前状态。")
