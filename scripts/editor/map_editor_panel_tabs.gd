@@ -19,6 +19,7 @@ const MapEditorUnitsScript = preload("res://scripts/editor/map_editor_units.gd")
 const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
 const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+const MapEditorBuildingsScript = preload("res://scripts/editor/map_editor_buildings.gd")
 
 const TEXT_MAIN := UIThemeScript.TEXT_MAIN
 const TEXT_DIM := UIThemeScript.TEXT_DIM
@@ -157,6 +158,8 @@ static func build_terrain_tab(ed, tab: VBoxContainer) -> void:
 		var tb := terrain_btn(ed, t, terrain_group)
 		tgrid.add_child(tb)
 		ed._terrain_buttons[t] = tb
+	# ---- 建筑组：整栋放置；背面依赖不单独列出 ----
+	MapEditorBuildingsScript.build(ed, tab)
 	# ---- 植物组：全部素材按目录分三小节（树木/植物/装饰）----
 	for group_title: String in BattlefieldDocScript.PLANT_DIRS:
 		tab.add_child(UIFactoryScript.label("%s（%d）" % [group_title, ed._prop_paths[group_title].size()], 12, TEXT_DIM))
@@ -324,9 +327,13 @@ static func build_asset_tab(ed, tab: VBoxContainer) -> void:
 	tab.add_child(ed._asset_panel)
 	# 素材页禁外层垂直滚动：面板撑满侧栏可用高度，AssetList 拿到全部剩余
 	# 高度（列表自身滚动）；其余 Tab 是表单，保留 add_tab 默认滚动行为。
+	# ScrollContainer 禁滚动轴不会自动拉伸子节点，必须让 Tab 容器
+	# （scroll 的唯一子节点）显式 EXPAND_FILL 才能填满视口。
 	var scroll := tab.get_parent() as ScrollContainer
 	if scroll != null:
 		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		tab.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ed._asset_panel.setup(ed._asset_service, ed._asset_adapter)
 
 

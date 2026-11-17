@@ -1,0 +1,48 @@
+--- current/scripts/editor/editor_canvas.gd
++++ recovered/scripts/editor/editor_canvas.gd
+@@ -249,6 +249,45 @@
+ 	if asset_id.is_empty():
+ 		return {}
+ 	return asset_adapter.resolve(asset_id)
++
++
++## 建筑素材悬停预览：与正式建筑共用 adapter → renderer 单实例通路。
++func set_building_preview(asset_id: String, origin: Vector2i, rotation: int = 0) -> void:
++	if asset_id.is_empty() or origin.x < 0 or origin.y < 0:
++		clear_building_preview()
++		return
++	_building_preview = {
++		"instance_id": "__building_preview__",
++		"asset_id": asset_id,
++		"x": origin.x,
++		"y": origin.y,
++		"rotation": posmod(rotation, 4),
++		"use_library": true,
++	}
++	asset_preview_visual = {}
++	_sync_building_visuals()
++
++
++func clear_building_preview() -> void:
++	if _building_preview.is_empty():
++		return
++	_building_preview = {}
++	_sync_building_visuals()
++
++
++func _sync_building_visuals() -> void:
++	if _renderer == null:
++		return
++	_renderer.set_building_visuals(_building_entries_for(_display_model()))
++
++
++func _building_entries_for(document: Dictionary) -> Array:
++	if document.is_empty():
++		return []
++	var buildings: Array = document.get("buildings", []).duplicate(true)
++	if not _building_preview.is_empty():
++		buildings.append(_building_preview.duplicate(true))
++	return asset_adapter.visual_for_buildings(buildings, document.get("user_assets", {}))
+ 
+ 
+ ## 建筑素材悬停预览：与正式建筑共用 adapter → renderer 单实例通路。

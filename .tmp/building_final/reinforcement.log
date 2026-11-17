@@ -1,0 +1,49 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[reinforcement_contract] start
+[loader parse]
+  [ok] 带 reinforcements 加载 ok
+  [ok] 两个波次解析
+  [ok] 波次 0：turn=2 units=2
+  [ok] 增援单位 id=u_r0_0 落点 (0,3)
+  [ok] 增援单位 faction=enemy level=2
+  [ok] 初始 enemyUnits 仍为 1（增援未提前入场）
+[loader reject]
+  [ok] 缺 turn 拒绝
+  [ok] turn<1 拒绝
+  [ok] 空 units 拒绝
+  [ok] positions 与 units 不等长拒绝
+  [ok] 未知职业拒绝
+  [ok] 坐标越界拒绝
+  [ok] reinforcements 非数组拒绝
+  [ok] 与初始单位重叠拒绝
+[loader compat]
+  [ok] 无 reinforcements 字段 = 不写入 chapter（旧战场兼容）
+  [ok] 演示战场 ambush_reinforce.json 加载 ok
+  [ok] 演示战场两波增援（第 2/3 轮）
+[spawner timing]
+  [ok] 第 1 轮无刷入（两波仍在）
+  [ok] 第 2 轮刷入 u_r0_0
+  [ok] 刷入后 enemyUnits=2
+  [ok] 刷入后 turn.units=3
+  [ok] 增援已放上 grid (0,2)
+  [ok] 波次 0 已消费
+  [ok] 迟到波次（turn<=N）补刷
+  [ok] 波次全部消费
+  [ok] 重复调用不重复刷（幂等）
+[spawner displaced]
+  [ok] 落点被占仍刷入（挪格兜底）
+  [ok] 增援挪到最近空格且已入 grid
+[runner e2e]
+  [ok] 增援场景运行 ok
+  [ok] 第 2 轮敌方相位发出 reinforce 事件
+  [ok] battle_start 快照不含未入场增援
+  [ok] T1 歼灭初始敌不提前判胜，第 3 轮防守胜
+  [ok] 第 3 轮结束时结算（turns=3）
+  [ok] 增援 u_r0_0 出现在最终单位集合
+REINFORCEMENT_CONTRACT_OK
+Panku Console Loaded!
+WARNING: 4 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)

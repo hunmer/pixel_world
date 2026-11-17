@@ -1,0 +1,254 @@
+[
+  {
+    "number": 1,
+    "block": "restore_b8",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "const BAKED_VERSION := 2",
+    "new": "const BAKED_VERSION := 3"
+  },
+  {
+    "number": 2,
+    "block": "restore_b8",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "\t# 3) 缩放（非 1 时最近邻；duplicate 后 resize，不改入参，目标至少 1x1）\n\tvar scale := float(render.get(\"scale\", 1.0))\n\tif absf(scale - 1.0) > 0.001 and scale > 0.0:\n\t\tvar tw := maxi(1, roundi(img.get_width() * scale))\n\t\tvar th := maxi(1, roundi(img.get_height() * scale))\n\t\tvar scaled: Image = img.duplicate()\n\t\tscaled.resize(tw, th, Image.INTERPOLATE_NEAREST)\n\t\timg = scaled\n\treturn img",
+    "new": "\t# 3) 建筑按底座可见宽度标定：投影目标宽 = 16 * (fw + fh)，scale 在其上再乘。\n\t# 不裁掉透明留白，也不限制高度；pivot 仍在烘焙后的内容包围盒上计算。\n\tvar is_building := String(descriptor.get(\"kind\", \"\")) == \"building\"\n\tif is_building:\n\t\tvar building_fp: Dictionary = render.get(\"footprint\", {})\n\t\tvar building_fw := clampi(int(building_fp.get(\"w\", 1)), 1, 8)\n\t\tvar building_fh := clampi(int(building_fp.get(\"h\", 1)), 1, 8)\n\t\tvar building_bounds := _opaque_bounds(img)\n\t\tvar content_width := float(img.get_width())\n\t\tif building_bounds.has_all([\"min_x\", \"max_x\"]):\n\t\t\tcontent_width = float(int(building_bounds[\"max_x\"]) - int(building_bounds[\"min_x\"]) + 1)\n\t\tvar ground_width := maxf(0.0, float(render.get(\"ground_width_px\", 0.0)))\n\t\tvar source_width := ground_width if ground_width > 0.0 else content_width\n\t\tvar target_width := 16.0 * float(building_fw + building_fh)\n\t\tvar building_scale := float(render.get(\"scale\", 1.0))\n\t\tif source_width > 0.0 and building_scale > 0.0:\n\t\t\tvar fit := target_width / source_width * building_scale\n\t\t\tvar bw := maxi(1, roundi(img.get_width() * fit))\n\t\t\tvar bh := maxi(1, roundi(img.get_height() * fit))\n\t\t\tif bw != img.get_width() or bh != img.get_height():\n\t\t\t\tvar building_img: Image = img.duplicate()\n\t\t\t\tbuilding_img.resize(bw, bh, Image.INTERPOLATE_NEAREST)\n\t\t\t\timg = building_img\n\t# 4) 旧 terrain/plant 缩放保持不变（建筑已在上面合并 render.scale）。\n\telse:\n\t\tvar scale := float(render.get(\"scale\", 1.0))\n\t\tif absf(scale - 1.0) > 0.001 and scale > 0.0:\n\t\t\tvar tw := maxi(1, roundi(img.get_width() * scale))\n\t\t\tvar th := maxi(1, roundi(img.get_height() * scale))\n\t\t\tvar scaled: Image = img.duplicate()\n\t\t\tscaled.resize(tw, th, Image.INTERPOLATE_NEAREST)\n\t\t\timg = scaled\n\treturn img"
+  },
+  {
+    "number": 3,
+    "block": "restore_b8",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "\treturn {\n\t\t\"texture\": ImageTexture.create_from_image(img),\n\t\t\"render_offset\": offset,\n\t\t\"canvas_size\": Vector2(w, h),\n\t\t\"asset_id\": String(descriptor.get(\"id\", \"\")),\n\t\t\"kind\": String(descriptor.get(\"kind\", Catalog.KIND_TERRAIN)),\n\t\t\"missing\": false,\n\t}",
+    "new": "\tvar visual := {\n\t\t\"texture\": ImageTexture.create_from_image(img),\n\t\t\"render_offset\": offset,\n\t\t\"canvas_size\": Vector2(w, h),\n\t\t\"asset_id\": String(descriptor.get(\"id\", \"\")),\n\t\t\"kind\": String(descriptor.get(\"kind\", Catalog.KIND_TERRAIN)),\n\t\t\"missing\": false,\n\t}\n\tif String(descriptor.get(\"kind\", \"\")) == \"building\":\n\t\tvar footprint: Dictionary = render.get(\"footprint\", {\"w\": 1, \"h\": 1})\n\t\tvisual[\"footprint\"] = {\n\t\t\t\"w\": clampi(int(footprint.get(\"w\", 1)), 1, 8),\n\t\t\t\"h\": clampi(int(footprint.get(\"h\", 1)), 1, 8),\n\t\t}\n\t\tvisual[\"back_mode\"] = String(render.get(\"back_mode\", \"single\"))\n\t\tvisual[\"back_asset_id\"] = String(render.get(\"back_asset_id\", \"\"))\n\t\tvisual[\"ground_width_px\"] = maxf(0.0, float(render.get(\"ground_width_px\", 0.0)))\n\treturn visual"
+  },
+  {
+    "number": 4,
+    "block": "restore_b9",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "\treturn entries\n\n\n## 使图片/烘焙缓存失效",
+    "new": "\treturn entries\n\n\n## 建筑快照解析：descriptor 本身参与缓存键，地图保存的背面依赖无需写全局素材库。\nfunc resolve_snapshot(descriptor: Dictionary) -> Dictionary:\n\tif descriptor.is_empty():\n\t\treturn placeholder_visual(\"\")\n\tvar aid := String(descriptor.get(\"id\", \"\"))\n\tif aid.is_empty():\n\t\treturn placeholder_visual(\"\")\n\tvar cache_key := \"s:%s:%s\" % [aid, JSON.stringify(descriptor)]\n\tif _cache.has(cache_key):\n\t\treturn _touch(cache_key)\n\tvar blob := \"%s/%s\" % [_root, String(descriptor.get(\"blob_path\", \"blobs/%s.png\" % aid))]\n\tvar img := _load_baked_or_blob(aid, descriptor, blob)\n\tif img == null or img.is_empty():\n\t\tvar missing := placeholder_visual(aid)\n\t\t_put(cache_key, missing)\n\t\treturn missing\n\tvar visual := _visual_from_image(descriptor, img)\n\t_put(cache_key, visual)\n\treturn visual\n\n\n## 输出 renderer.set_building_visuals() 的单实例建筑条目。\n## user_assets 是 document.buildings 对应的快照；编辑器新预览可传空表以读当前素材库。\nfunc visual_for_buildings(buildings: Array, user_assets: Dictionary = {}) -> Array:\n\tvar entries: Array = []\n\tfor raw in buildings:\n\t\tif not raw is Dictionary:\n\t\t\tcontinue\n\t\tvar building: Dictionary = raw\n\t\tvar aid := String(building.get(\"asset_id\", \"\"))\n\t\tif aid.is_empty():\n\t\t\tcontinue\n\t\tvar descriptor: Dictionary = user_assets.get(aid, {})\n\t\tvar front := _building_visual(aid, descriptor)\n\t\tif front.is_empty():\n\t\t\tcontinue\n\t\tvar mode := String(front.get(\"back_mode\", \"single\"))\n\t\tvar back_id := String(front.get(\"back_asset_id\", \"\"))\n\t\tvar back: Dictionary = {}\n\t\tif mode == \"front_back\" and not back_id.is_empty():\n\t\t\tvar back_descriptor: Dictionary = user_assets.get(back_id, {})\n\t\t\tback = _building_visual(back_id, back_descriptor)\n\t\t\tif bool(back.get(\"missing\", true)):\n\t\t\t\tback = {}\n\t\tentries.append({\n\t\t\t\"cell\": Vector2i(int(building.get(\"x\", 0)), int(building.get(\"y\", 0))),\n\t\t\t\"instance_id\": String(building.get(\"instance_id\", \"\")),\n\t\t\t\"asset_id\": aid,\n\t\t\t\"rotation\": posmod(int(building.get(\"rotation\", 0)), 4),\n\t\t\t\"layer\": \"building\",\n\t\t\t\"visual\": front,\n\t\t\t\"back_visual\": back,\n\t\t})\n\treturn entries\n\n\nfunc _building_visual(aid: String, descriptor: Dictionary) -> Dictionary:\n\tvar visual: Dictionary = {}\n\tif not descriptor.is_empty():\n\t\tvisual = resolve_snapshot(descriptor).duplicate()\n\telse:\n\t\tvisual = resolve(aid).duplicate()\n\tif visual.is_empty():\n\t\treturn {}\n\t# 占位图也补齐元数据，渲染通路不需要特殊分支。\n\tvar render: Dictionary = descriptor.get(\"render\", {})\n\tif descriptor.is_empty():\n\t\tvisual[\"back_mode\"] = String(visual.get(\"back_mode\", \"single\"))\n\t\tvisual[\"back_asset_id\"] = String(visual.get(\"back_asset_id\", \"\"))\n\t\treturn visual\n\tvisual[\"kind\"] = \"building\"\n\tvisual[\"asset_id\"] = aid\n\tvisual[\"back_mode\"] = String(render.get(\"back_mode\", \"single\"))\n\tvisual[\"back_asset_id\"] = String(render.get(\"back_asset_id\", \"\"))\n\tvisual[\"ground_width_px\"] = maxf(0.0, float(render.get(\"ground_width_px\", 0.0)))\n\treturn visual\n\n\n## 使图片/快照缓存失效；含 descriptor 哈希的 snapshot 键也按资产 id 清理。\nfunc clear_snapshot_caches() -> void:\n\tfor key in _cache.keys():\n\t\tif String(key).begins_with(\"s:\"):\n\t\t\t_cache.erase(key)"
+  },
+  {
+    "number": 5,
+    "block": "restore_b9",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "\treturn out\n\n\n## 当前缓存条目数（测试用）",
+    "new": "\treturn out\n\n\n## 建筑快照解析：descriptor 参与缓存键，且直接按快照烘焙，避免同 id 的当前库配置串图。\nfunc resolve_snapshot(descriptor: Dictionary) -> Dictionary:\n\tif descriptor.is_empty():\n\t\treturn placeholder_visual(\"\")\n\tvar aid := String(descriptor.get(\"id\", \"\"))\n\tif aid.is_empty():\n\t\treturn placeholder_visual(\"\")\n\tvar descriptor_json := JSON.stringify(descriptor)\n\tvar cache_key := \"s:%s:%s\" % [aid, descriptor_json.sha256_text()]\n\tif _cache.has(cache_key):\n\t\treturn _touch(cache_key)\n\tvar img := _load_blob_image(String(descriptor.get(\"sha256\", \"\")))\n\tif img == null or img.is_empty():\n\t\tvar missing := placeholder_visual(aid)\n\t\t_put(cache_key, missing)\n\t\treturn missing\n\timg = bake_image(descriptor, img)\n\tvar visual := _visual_from_image(descriptor, img)\n\t_put(cache_key, visual)\n\treturn visual\n\n\n## 输出 renderer.set_building_visuals() 的单实例建筑条目。\n## user_assets 是 document.buildings 对应的快照；编辑器新预览可传空表以读当前素材库。\nfunc visual_for_buildings(buildings: Array, user_assets: Dictionary = {}) -> Array:\n\tvar entries: Array = []\n\tfor raw in buildings:\n\t\tif not raw is Dictionary:\n\t\t\tcontinue\n\t\tvar building: Dictionary = raw\n\t\tvar aid := String(building.get(\"asset_id\", \"\"))\n\t\tif aid.is_empty():\n\t\t\tcontinue\n\t\tvar cell := Vector2i(int(building.get(\"x\", -1)), int(building.get(\"y\", -1)))\n\t\tif cell.x < 0 or cell.y < 0:\n\t\t\tcontinue\n\t\tvar descriptor: Dictionary = user_assets.get(aid, {})\n\t\tvar front := _building_visual(aid, descriptor)\n\t\tif front.is_empty():\n\t\t\tcontinue\n\t\tvar mode := String(front.get(\"back_mode\", \"single\"))\n\t\tvar back_id := String(front.get(\"back_asset_id\", \"\"))\n\t\tvar back: Dictionary = {}\n\t\tif mode == \"front_back\" and not back_id.is_empty():\n\t\t\tvar back_descriptor: Dictionary = user_assets.get(back_id, {})\n\t\t\tback = _building_visual(back_id, back_descriptor)\n\t\t\tif bool(back.get(\"missing\", true)):\n\t\t\t\tback = {}\n\t\tentries.append({\n\t\t\t\"cell\": cell,\n\t\t\t\"instance_id\": String(building.get(\"instance_id\", \"\")),\n\t\t\t\"asset_id\": aid,\n\t\t\t\"rotation\": posmod(int(building.get(\"rotation\", 0)), 4),\n\t\t\t\"layer\": \"building\",\n\t\t\t\"visual\": front,\n\t\t\t\"back_visual\": back,\n\t\t})\n\treturn entries\n\n\nfunc _building_visual(aid: String, descriptor: Dictionary) -> Dictionary:\n\tvar visual: Dictionary = {}\n\tif not descriptor.is_empty():\n\t\tvisual = resolve_snapshot(descriptor).duplicate()\n\telse:\n\t\tvisual = resolve(aid).duplicate()\n\tif visual.is_empty():\n\t\treturn {}\n\t# 占位图也补齐元数据，渲染通路不需要特殊分支。\n\tvar render: Dictionary = descriptor.get(\"render\", {})\n\tif descriptor.is_empty():\n\t\tvisual[\"back_mode\"] = String(visual.get(\"back_mode\", \"single\"))\n\t\tvisual[\"back_asset_id\"] = String(visual.get(\"back_asset_id\", \"\"))\n\t\treturn visual\n\tvisual[\"kind\"] = \"building\"\n\tvisual[\"asset_id\"] = aid\n\tvisual[\"back_mode\"] = String(render.get(\"back_mode\", \"single\"))\n\tvisual[\"back_asset_id\"] = String(render.get(\"back_asset_id\", \"\"))\n\tvisual[\"ground_width_px\"] = maxf(0.0, float(render.get(\"ground_width_px\", 0.0)))\n\treturn visual\n\n\n## 当前缓存条目数（测试用）"
+  },
+  {
+    "number": 7,
+    "block": "restore_b9",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "\tif _cache.has(cache_key):\n\t\treturn _touch(cache_key)\n\tvar img := _load_blob_image(String(descriptor.get(\"sha256\", \"\")))",
+    "new": "\tif _cache.has(cache_key):\n\t\t_touch(cache_key)\n\t\treturn _cache[cache_key]\n\tvar img := _load_blob_image(String(descriptor.get(\"sha256\", \"\")))"
+  },
+  {
+    "number": 8,
+    "block": "restore_b9",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "\tvisual[\"back_asset_id\"] = String(render.get(\"back_asset_id\", \"\"))\n\tvisual[\"ground_width_px\"] = maxf(0.0, float(render.get(\"ground_width_px\", 0.0)))\n\treturn visual",
+    "new": "\tvisual[\"back_asset_id\"] = String(render.get(\"back_asset_id\", \"\"))\n\tvisual[\"ground_width_px\"] = maxf(0.0, float(render.get(\"ground_width_px\", 0.0)))\n\tvar footprint: Dictionary = render.get(\"footprint\", {\"w\": 1, \"h\": 1})\n\tvisual[\"footprint\"] = {\n\t\t\"w\": clampi(int(footprint.get(\"w\", 1)), 1, 8),\n\t\t\"h\": clampi(int(footprint.get(\"h\", 1)), 1, 8),\n\t}\n\treturn visual"
+  },
+  {
+    "number": 10,
+    "block": "restore_b9",
+    "path": "scripts/iso/battlefield_renderer.gd",
+    "old": "\t\t_asset_overrides[cell] = rec\n\n\n## 单格设置/清除某层素材视觉覆盖",
+    "new": "\t\t_asset_overrides[cell] = rec\n\n\n## 注入单实例建筑；默认只重建受影响的 origin 格，整图 setup 前可传 refresh_existing=false。\nfunc set_building_visuals(entries: Array, refresh_existing := true) -> void:\n\tvar affected := {}\n\tfor old_entry in _building_visuals:\n\t\tif old_entry is Dictionary:\n\t\t\taffected[_building_cell(old_entry)] = true\n\t_building_visuals = entries.duplicate(true)\n\tfor new_entry in _building_visuals:\n\t\tif new_entry is Dictionary:\n\t\t\taffected[_building_cell(new_entry)] = true\n\tif not refresh_existing or grid == null:\n\t\treturn\n\tfor cell in affected:\n\t\tif cell is Vector2i and _columns.has(cell):\n\t\t\trefresh_cell(cell.x, cell.y)\n\n\n## 四向相机象限：相对实例 rotation 后 0/1 前图、2/3 背图，缺背自动回前图。\nfunc set_camera_quadrant(quadrant: int) -> void:\n\tvar next := posmod(quadrant, 4)\n\tif next == _camera_quadrant:\n\t\treturn\n\t_camera_quadrant = next\n\tif grid == null:\n\t\treturn\n\tvar affected := {}\n\tfor entry in _building_visuals:\n\t\tif entry is Dictionary:\n\t\t\tvar cell := _building_cell(entry)\n\t\t\taffected[cell] = true\n\tfor cell in affected:\n\t\tif _columns.has(cell):\n\t\t\trefresh_cell(cell.x, cell.y)\n\n\nfunc building_visuals_snapshot() -> Array:\n\treturn _building_visuals.duplicate(true)\n\n\nfunc _building_cell(entry: Dictionary) -> Vector2i:\n\tif entry.get(\"cell\", null) is Vector2i:\n\t\treturn entry[\"cell\"] as Vector2i\n\treturn Vector2i(int(entry.get(\"x\", -1)), int(entry.get(\"y\", -1)))"
+  },
+  {
+    "number": 11,
+    "block": "restore_b9",
+    "path": "scripts/iso/battlefield_renderer.gd",
+    "old": "func _commit_column(cell: Vector2i, blocks: Array[Dictionary], height: int) -> void:\n\tif _active_camera() != null:",
+    "new": "func _commit_column(cell: Vector2i, blocks: Array[Dictionary], height: int) -> void:\n\t_append_building_blocks(cell, blocks)\n\tif _active_camera() != null:"
+  },
+  {
+    "number": 13,
+    "block": "restore_b9",
+    "path": "scripts/iso/isometric_terrain_3d.gd",
+    "old": "\tvar anchor := IsoProjection.grid_to_world(cell, float(block.get(\"level\", 0)))\n\tvar center := anchor + _screen_offset_world(block.get(\"render_offset\", Vector2.ZERO))",
+    "new": "\tvar grid_anchor: Variant = block.get(\"grid_anchor\", null)\n\tvar anchor := (\n\t\tIsoProjection.visual_to_world(grid_anchor as Vector2, float(block.get(\"level\", 0)))\n\t\tif grid_anchor is Vector2\n\t\telse IsoProjection.grid_to_world(cell, float(block.get(\"level\", 0)))\n\t)\n\tvar center := anchor + _screen_offset_world(block.get(\"render_offset\", Vector2.ZERO))"
+  },
+  {
+    "number": 14,
+    "block": "restore_b9",
+    "path": "scripts/editor/editor_canvas.gd",
+    "old": "var _placement_cell_count := 0\nvar _unit_markers: Array[UnitSprite3D] = []",
+    "new": "var _placement_cell_count := 0\n## 建筑预览不是正式 model.buildings；instance_id 固定保留字，退出素材工具时清除。\nvar _building_preview: Dictionary = {}\nvar _building_quadrant := -1\nvar _unit_markers: Array[UnitSprite3D] = []"
+  },
+  {
+    "number": 15,
+    "block": "restore_b9",
+    "path": "scripts/editor/editor_canvas.gd",
+    "old": "\t)  # 用户素材视觉层（props 的 asset_id + tile_overrides）\n\t_renderer.set_block_layout(document.get(\"block_layout\", {}))",
+    "new": "\t)  # 用户素材视觉层（props 的 asset_id + tile_overrides）\n\t_sync_building_quadrant()\n\t_renderer.set_building_visuals(_building_entries_for(document), false)\n\t_renderer.set_block_layout(document.get(\"block_layout\", {}))"
+  },
+  {
+    "number": 17,
+    "block": "restore_b9",
+    "path": "scripts/editor/editor_canvas.gd",
+    "old": "func rotate_view(direction: int) -> void:\n\tif _board != null and _board.camera != null:\n\t\t_board.camera.rotate_step(direction)\n\n\nfunc reset_view() -> void:\n\tif _board != null and _board.camera != null:\n\t\t_board.camera.reset_rotation()",
+    "new": "func rotate_view(direction: int) -> void:\n\tif _board != null and _board.camera != null:\n\t\t_board.camera.rotate_step(direction)\n\t\t_sync_building_quadrant()\n\n\nfunc reset_view() -> void:\n\tif _board != null and _board.camera != null:\n\t\t_board.camera.reset_rotation()\n\t\t_sync_building_quadrant()"
+  },
+  {
+    "number": 18,
+    "block": "restore_b9",
+    "path": "scripts/editor/editor_canvas.gd",
+    "old": "\tvar cam := _board.camera\n\tvar view := {",
+    "new": "\tvar cam := _board.camera\n\t_sync_building_quadrant()\n\tvar view := {"
+  },
+  {
+    "number": 19,
+    "block": "restore_b9",
+    "path": "scripts/editor/editor_canvas.gd",
+    "old": "\t\t_update_paste_marker()\n\n\nfunc _update_hover_marker() -> void:",
+    "new": "\t\t_update_paste_marker()\n\n\nfunc _sync_building_quadrant() -> void:\n\tif _board == null or _board.camera == null or _renderer == null:\n\t\treturn\n\tvar quadrant := _target_camera_quadrant()\n\tif quadrant == _building_quadrant:\n\t\treturn\n\t_building_quadrant = quadrant\n\t_renderer.set_camera_quadrant(quadrant)\n\n\nfunc _target_camera_quadrant() -> int:\n\tif _board == null or _board.camera == null:\n\t\treturn 0\n\tvar relative: float = _board.camera.target_yaw_radians - IsoProjection.CAMERA_YAW\n\treturn posmod(int(roundf(relative / (PI * 0.5))), 4)\n\n\nfunc _update_hover_marker() -> void:"
+  },
+  {
+    "number": 20,
+    "block": "restore_b9",
+    "path": "scripts/editor/editor_canvas.gd",
+    "old": "func set_placement_preview(payload: Dictionary, origin: Vector2i) -> void:\n\tvar candidate: Dictionary = model.duplicate(true)",
+    "new": "func set_placement_preview(payload: Dictionary, origin: Vector2i) -> void:\n\tclear_building_preview()\n\tvar candidate: Dictionary = model.duplicate(true)"
+  },
+  {
+    "number": 21,
+    "block": "restore_b9",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "\t\tvar descriptor: Dictionary = user_assets.get(aid, {})\n\t\tvar front := _building_visual(aid, descriptor)",
+    "new": "\t\tvar descriptor: Dictionary = user_assets.get(aid, {})\n\t\tvar use_library := bool(building.get(\"use_library\", false))\n\t\tif use_library:\n\t\t\tdescriptor = {}\n\t\tvar front := _building_visual(aid, descriptor)"
+  },
+  {
+    "number": 22,
+    "block": "restore_b9",
+    "path": "scripts/assets/user_asset_visual_adapter.gd",
+    "old": "\t\tif mode == \"front_back\" and not back_id.is_empty():\n\t\t\tvar back_descriptor: Dictionary = user_assets.get(back_id, {})\n\t\t\tback = _building_visual(back_id, back_descriptor)",
+    "new": "\t\tif mode == \"front_back\" and not back_id.is_empty():\n\t\t\tvar back_descriptor: Dictionary = user_assets.get(back_id, {})\n\t\t\tif use_library:\n\t\t\t\tback_descriptor = {}\n\t\t\tback = _building_visual(back_id, back_descriptor)"
+  },
+  {
+    "number": 23,
+    "block": "restore_b10",
+    "path": "scripts/iso/battlefield_renderer.gd",
+    "old": "\treturn Vector2i(int(entry.get(\"x\", -1)), int(entry.get(\"y\", -1)))（不重建，随下一次 refresh_cell 生效）。",
+    "new": "\treturn Vector2i(int(entry.get(\"x\", -1)), int(entry.get(\"y\", -1)))\n\n\n## 单格设置/清除某层素材视觉覆盖（不重建，随下一次 refresh_cell 生效）。"
+  },
+  {
+    "number": 25,
+    "block": "restore_b10",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "var _pivot_x: SpinBox\nvar _pivot_y: SpinBox\nvar _scale_box: SpinBox\nvar _fp_w: SpinBox\nvar _fp_h: SpinBox\nvar _apply_btn: Button",
+    "new": "var _pivot_x: SpinBox\nvar _pivot_y: SpinBox\nvar _pivot_label: Label\nvar _scale_box: SpinBox\nvar _fp_w: SpinBox\nvar _fp_h: SpinBox\nvar _ground_width_row: HBoxContainer\nvar _ground_width_box: SpinBox\nvar _back_mode_row: HBoxContainer\nvar _back_mode_option: OptionButton\nvar _back_asset_row: HBoxContainer\nvar _back_asset_option: OptionButton\nvar _apply_btn: Button"
+  },
+  {
+    "number": 26,
+    "block": "restore_b10",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\t_import_kind.tooltip_text = \"选择本地导入素材的类型（地块 / 植物）\"\n\t_import_kind.add_item(\"地块\")\n\t_import_kind.set_item_metadata(0, Catalog.KIND_TERRAIN)\n\t_import_kind.add_item(\"植物\")\n\t_import_kind.set_item_metadata(1, Catalog.KIND_PLANT)",
+    "new": "\t_import_kind.tooltip_text = \"选择本地导入素材的类型（地块 / 植物 / 建筑）\"\n\t_import_kind.add_item(\"地块\")\n\t_import_kind.set_item_metadata(0, Catalog.KIND_TERRAIN)\n\t_import_kind.add_item(\"植物\")\n\t_import_kind.set_item_metadata(1, Catalog.KIND_PLANT)\n\t_import_kind.add_item(\"建筑\")\n\t_import_kind.set_item_metadata(2, KIND_BUILDING)"
+  },
+  {
+    "number": 27,
+    "block": "restore_b10",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\t_kind_filter.add_item(\"植物\")\n\t_kind_filter.set_item_metadata(1, Catalog.KIND_PLANT)\n\t_kind_filter.item_selected.connect(func(_i: int): _page = 0; _rebuild_grid())",
+    "new": "\t_kind_filter.add_item(\"植物\")\n\t_kind_filter.set_item_metadata(1, Catalog.KIND_PLANT)\n\t_kind_filter.add_item(\"建筑\")\n\t_kind_filter.set_item_metadata(2, KIND_BUILDING)\n\t_kind_filter.item_selected.connect(func(_i: int): _page = 0; _rebuild_grid())"
+  },
+  {
+    "number": 28,
+    "block": "restore_b10",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\tpivot_row.add_child(UIFactoryScript.label(\"轴心\", 11, UIThemeScript.TEXT_DIM))",
+    "new": "\t_pivot_label = UIFactoryScript.label(\"轴心\", 11, UIThemeScript.TEXT_DIM)\n\t_pivot_label.name = \"PivotLabel\"\n\tpivot_row.add_child(_pivot_label)"
+  },
+  {
+    "number": 30,
+    "block": "restore_b10",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "func _spin(min_v: float, max_v: float, step: float, value: float) -> SpinBox:\n\tvar s := SpinBox.new()",
+    "new": "func _spin(min_v: float, max_v: float, step: float, value: float) -> SpinBox:\n\tvar s := PixelSpinBoxScript.new()"
+  },
+  {
+    "number": 32,
+    "block": "restore_b11",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "var _selected_id: String = \"\"\nvar _syncing: bool = false",
+    "new": "var _selected_id: String = \"\"\nvar _detail_kind: String = \"\"\nvar _syncing: bool = false"
+  },
+  {
+    "number": 33,
+    "block": "restore_b11",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "var _selected_id := \"\"\nvar _selected_index := -1\nvar _syncing_detail := false",
+    "new": "var _selected_id := \"\"\nvar _selected_index := -1\nvar _detail_kind := \"\"\nvar _syncing_detail := false"
+  },
+  {
+    "number": 34,
+    "block": "restore_b14",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\tvar render: Dictionary = desc.get(\"render\", Catalog.default_render())\n\t_mode_option.select(0 if String(render.get(\"mode\", \"full\")) == Catalog.RENDER_MODE_FULL else 1)\n\tvar img_w := int(desc.get(\"width\", 0))\n\tvar img_h := int(desc.get(\"height\", 0))",
+    "new": "\tvar render: Dictionary = source.get(\"render\", Catalog.default_render())\n\t_mode_option.select(0 if String(render.get(\"mode\", \"full\")) == Catalog.RENDER_MODE_FULL else 1)\n\tvar img_w := int(source.get(\"width\", 0))\n\tvar img_h := int(source.get(\"height\", 0))"
+  },
+  {
+    "number": 35,
+    "block": "restore_b14",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\t_fp_w.value = int(fp.get(\"w\", 1))\n\t_fp_h.value = int(fp.get(\"h\", 1))\n\t_syncing_detail = false",
+    "new": "\t_fp_w.value = int(fp.get(\"w\", 1))\n\t_fp_h.value = int(fp.get(\"h\", 1))\n\t_ground_width_row.visible = is_building\n\t_ground_width_box.value = float(render.get(\"ground_width_px\", 0.0))\n\t_back_mode_row.visible = is_building\n\t_back_mode_option.select(1 if String(render.get(\"back_mode\", \"single\")) == \"front_back\" else 0)\n\t_rebuild_back_asset_options(String(render.get(\"back_asset_id\", \"\")))\n\t_on_back_mode_selected(_back_mode_option.selected)\n\tvar pivot_label := _pivot_row.get_child(0) as Label\n\tif pivot_label != null:\n\t\tpivot_label.text = \"底座中心\" if is_building else \"轴心\"\n\t_syncing_detail = false"
+  },
+  {
+    "number": 36,
+    "block": "restore_b14",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\tif mode == Catalog.RENDER_MODE_CROP:\n\t\trender[\"crop\"] = {\"x\": int(_crop_x.value), \"y\": int(_crop_y.value),\n\t\t\t\"w\": int(_crop_w.value), \"h\": int(_crop_h.value)}\n\tvar tags: Array = []",
+    "new": "\tif mode == Catalog.RENDER_MODE_CROP:\n\t\trender[\"crop\"] = {\"x\": int(_crop_x.value), \"y\": int(_crop_y.value),\n\t\t\t\"w\": int(_crop_w.value), \"h\": int(_crop_h.value)}\n\tif _detail_kind == KIND_BUILDING:\n\t\tvar front_back := String(_back_mode_option.get_selected_metadata()) == \"front_back\"\n\t\trender[\"ground_width_px\"] = float(_ground_width_box.value)\n\t\trender[\"back_mode\"] = \"front_back\" if front_back else \"single\"\n\t\trender[\"back_asset_id\"] = (\n\t\t\tString(_back_asset_option.get_selected_metadata())\n\t\t\tif front_back and _back_asset_option.selected >= 0\n\t\t\telse \"\"\n\t\t)\n\tvar tags: Array = []"
+  },
+  {
+    "number": 37,
+    "block": "restore_b14",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\tif bool(res.get(\"ok\", false)):\n\t\tadapter.clear_cache(_selected_id)  # render 变了，旧缓存与烘焙图作废\n\t\tadapter.invalidate_baked(_selected_id)",
+    "new": "\tif bool(res.get(\"ok\", false)):\n\t\tadapter.clear_cache()  # 前/背图任一配置变化都可能影响多个建筑快照\n\t\tadapter.invalidate_baked(_selected_id)"
+  },
+  {
+    "number": 38,
+    "block": "restore_b14",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\t\t_status(\"导入完成：%d 个素材（%s）\" % [ok_count, \"地块\" if kind == Catalog.KIND_TERRAIN else \"植物\"])",
+    "new": "\t\t_status(\"导入完成：%d 个素材（%s）\" % [ok_count, _kind_display_name(kind)])"
+  },
+  {
+    "number": 40,
+    "block": "restore_b14",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "var _back_asset_option: OptionButton\nvar _apply_btn: Button",
+    "new": "var _back_asset_option: OptionButton\nvar _building_hint_label: Label\nvar _apply_btn: Button"
+  },
+  {
+    "number": 42,
+    "block": "restore_b14",
+    "path": "scripts/editor/asset_library_panel.gd",
+    "old": "\tvar pivot_label := _pivot_row.get_child(0) as Label\n\tif pivot_label != null:\n\t\tpivot_label.text = \"底座中心\" if is_building else \"轴心\"",
+    "new": "\tvar pivot_label := _pivot_label\n\tif pivot_label != null:\n\t\tpivot_label.text = \"底座中心\" if is_building else \"轴心\"\n\t_building_hint_label.visible = is_building"
+  },
+  {
+    "number": 43,
+    "block": "restore_b15",
+    "path": "scripts/iso/isometric_terrain_3d.gd",
+    "old": "\tvar center := anchor + _screen_offset_world(render_offset)",
+    "new": "\tvar center := anchor + _screen_offset_world(render_offset, block.get(\"camera_right\", Vector3.ZERO))"
+  },
+  {
+    "number": 44,
+    "block": "restore_b15",
+    "path": "scripts/iso/isometric_terrain_3d.gd",
+    "old": "\tvar center := anchor + _screen_offset_world(block.get(\"render_offset\", Vector2.ZERO))",
+    "new": "\tvar center := anchor + _screen_offset_world(\n\t\tblock.get(\"render_offset\", Vector2.ZERO), block.get(\"camera_right\", Vector3.ZERO))"
+  },
+  {
+    "number": 45,
+    "block": "restore_b15",
+    "path": "scripts/iso/isometric_terrain_3d.gd",
+    "old": "func _screen_offset_world(offset_value: Variant) -> Vector3:\n\tvar offset: Vector2 = offset_value if offset_value is Vector2 else Vector2.ZERO\n\tvar right := Vector3(IsoProjection.GRID_STEP, 0, -IsoProjection.GRID_STEP)\n\treturn right * (offset.x / IsoProjection.TILE_PIXELS) + Vector3.UP * (",
+    "new": "func _screen_offset_world(offset_value: Variant, right_value: Variant = null) -> Vector3:\n\tvar offset: Vector2 = offset_value if offset_value is Vector2 else Vector2.ZERO\n\tvar right := Vector3(IsoProjection.GRID_STEP, 0, -IsoProjection.GRID_STEP)\n\tif right_value is Vector3 and not (right_value as Vector3).is_zero_approx():\n\t\tright = right_value as Vector3\n\treturn right * (offset.x / IsoProjection.TILE_PIXELS) + Vector3.UP * ("
+  }
+]

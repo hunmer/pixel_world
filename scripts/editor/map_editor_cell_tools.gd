@@ -52,6 +52,9 @@ static func on_cell_pressed(ed, cell: Vector2i, alt_pressed: bool = false, shift
 	if ed._alt_pick_active:
 		ed._pick_block(cell, shift_pressed or Input.is_key_pressed(KEY_SHIFT))
 		return
+	if ed.get("_building_place_mode") == true:
+		ed._commit_building_placement(cell)
+		return
 	if ed._place_mode:
 		ed._commit_place_preset(cell)  # 放置模式：点击=以该格为左上角放置
 		return
@@ -90,6 +93,8 @@ static func on_cell_pressed(ed, cell: Vector2i, alt_pressed: bool = false, shift
 
 
 static func on_cell_dragged(ed, cell: Vector2i) -> void:
+	if ed.get("_building_place_mode") == true or ed._place_mode or ed._paste_mode:
+		return  # 连续放置仅单击提交；拖动只更新悬停预览。
 	# 区域内按下后拖动 → 移动预览（绿=合法落点/红=越界）；仍不设区域端点（既有契约）
 	if ed._move_armed and ed._move_tool_active:
 		if cell != ed._move_preview:  # 移动工具：跨格才预览（跟随抓取偏移）
@@ -271,6 +276,14 @@ static func clear_building_preview(ed) -> void:
 static func update_building_preview(ed, cell: Vector2i) -> void:
 	if ed._canvas == null or not ed._canvas.has_method("set_building_preview"):
 		return
+	if ed.get("_place_mode") == true or ed.get("_paste_mode") == true or ed.get("_move_tool_active") == true:
+		clear_building_preview(ed)
+		return
+	var palette_mode: bool = ed.get("_building_place_mode") == true
+	if palette_mode and not ed._place_preview_enabled:
+		clear_building_preview(ed)
+		ed._canvas.clear_paste_preview()
+		return
 	var d: Dictionary = ed._active_asset()
 	var asset_id := String(d.get("id", ""))
 	var is_building: bool = String(d.get("kind", "")) == BattlefieldDocScript.ASSET_KIND_BUILDING \
@@ -279,10 +292,18 @@ static func update_building_preview(ed, cell: Vector2i) -> void:
 		and cell.x < int(ed.model.width) and cell.y < int(ed.model.height)
 	if not is_building or not in_bounds:
 		clear_building_preview(ed)
+		if palette_mode:
+			ed._canvas.clear_paste_preview()
 		return
 	var snapshot: Dictionary = MapEditorModelOpsScript.building_assets_snapshot(ed, asset_id)
 	var err := BattlefieldDocScript.can_place_building(
 		ed.model, asset_id, cell, int(ed._building_rotation), snapshot)
+	if palette_mode:
+		var assets: Dictionary = ed.model.get("user_assets", {}).duplicate(true)
+		assets.merge(snapshot, true)
+		var footprint: Vector2i = BattlefieldDocScript.BuildingLayoutScript.footprint_size(
+			{"asset_id": asset_id, "rotation": int(ed._building_rotation)}, assets)
+		ed._canvas.set_paste_preview(cell, cell + footprint - Vector2i.ONE, err.is_empty())
 	if not err.is_empty():
 		clear_building_preview(ed)
 		return

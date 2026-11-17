@@ -186,6 +186,10 @@ var _selected_asset: Dictionary = {}
 var _selected_block_asset := ""
 ## 建筑预放置朝向（T 键循环 0..3；放置与预览共用，不影响已放置建筑）
 var _building_rotation := 0
+var _building_place_mode := false
+var _building_grid: GridContainer
+var _building_buttons: Dictionary = {}
+var _builtin_building_id := ""
 var _block_asset_buttons: Dictionary = {}  # asset_id -> Button
 ## 下载完成待刷缩略图的素材集合 + 0.3s 合批定时器（见 _on_block_asset_ready）
 var _pending_asset_thumbs: Dictionary = {}
@@ -267,7 +271,15 @@ func _init_asset_service() -> void:
 	_asset_service = UserAssetServiceScript.new()
 	_asset_service.name = "UserAssetService"
 	add_child(_asset_service)
+	var builtins: Dictionary = preload("res://scripts/assets/builtin_building_assets.gd").ensure(_asset_service)
+	_builtin_building_id = String(builtins.get("asset_id", ""))
+	if not bool(builtins.get("ok", false)):
+		push_warning("内置建筑加载失败：%s" % String(builtins.get("error", "未知错误")))
 	_asset_adapter = UserAssetVisualAdapterScript.new()
+	if bool(builtins.get("changed", false)):
+		for asset_id: String in [_builtin_building_id, String(builtins.get("back_asset_id", ""))]:
+			if not asset_id.is_empty():
+				_asset_adapter.invalidate_baked(asset_id)
 	# 下载完成 → 方块页「素材方块」网格补入新下载的方块（只重建该网格，不动画布）
 	_asset_service.asset_ready.connect(_on_block_asset_ready)
 
@@ -869,8 +881,18 @@ func _commit_place_preset(cell: Vector2i) -> void:
 	MapEditorPresetsScript.commit_place_preset(self, cell)
 
 
+func _on_building_selected(asset_id: String) -> void:
+	MapEditorAssetsScript.on_building_selected(self, asset_id)
+
+
+func _commit_building_placement(cell: Vector2i) -> void:
+	MapEditorAssetsScript.commit_building_placement(self, cell)
+
+
 func _cancel_place_mode() -> void:
 	MapEditorPresetsScript.cancel_place_mode(self)
+	if _building_place_mode:
+		_clear_asset_selection()
 
 
 func _on_rename_preset_pressed() -> void:

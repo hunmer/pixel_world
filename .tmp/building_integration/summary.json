@@ -1,0 +1,268 @@
+{
+  "meta": {
+    "godot": "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+    "jobs": 1,
+    "timeout": 120.0,
+    "backend": "native",
+    "gdtest": null,
+    "fast_fps": null,
+    "disable_render_loop": false,
+    "run_env_skip": false,
+    "selected": 11,
+    "out_dir": "E:\\pixel_world\\.tmp\\building_integration",
+    "total_seconds": 149.4,
+    "runner": "tools/run_contracts.py"
+  },
+  "results": [
+    {
+      "name": "battle_movement",
+      "path": "res://tests/battle_movement_contract.gd",
+      "group": "battle-logic",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 13.56,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\battle_movement.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/battle_movement_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "battle_save",
+      "path": "res://tests/battle_save_contract.gd",
+      "group": "battle-persistence",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 1.02,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\battle_save.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/battle_save_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "battlefields",
+      "path": "res://tests/battlefields_contract.gd",
+      "group": "battle-3d-editor",
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 0.92,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\battlefields.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/battlefields_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "editor_region_clipboard",
+      "path": "res://tests/editor_region_clipboard_contract.gd",
+      "group": "battle-3d-editor",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 0.91,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\editor_region_clipboard.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/editor_region_clipboard_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "editor_selection",
+      "path": "res://tests/editor_selection_contract.gd",
+      "group": "battle-3d-editor",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 1.39,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\editor_selection.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/editor_selection_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "map_editor",
+      "path": "res://tests/map_editor_contract.gd",
+      "group": "battle-3d-editor",
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 1.09,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\map_editor.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/map_editor_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "map_editor_region_ops",
+      "path": "res://tests/map_editor_region_ops_contract.gd",
+      "group": "battle-3d-editor",
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 3.98,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\map_editor_region_ops.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/map_editor_region_ops_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "map_editor_ui",
+      "path": "res://tests/map_editor_ui_contract.gd",
+      "group": "battle-3d-editor",
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 3.14,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\map_editor_ui.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/map_editor_ui_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "user_asset_catalog",
+      "path": "res://tests/user_asset_catalog_contract.gd",
+      "group": "user-assets",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 0.94,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\user_asset_catalog.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/user_asset_catalog_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "user_asset_editor",
+      "path": "res://tests/user_asset_editor_contract.gd",
+      "group": "user-assets",
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 2.39,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\user_asset_editor.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/user_asset_editor_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "user_asset_runtime",
+      "path": "res://tests/user_asset_runtime_contract.gd",
+      "group": "user-assets",
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "status": "timeout",
+      "exit_code": 124,
+      "seconds": 120.09,
+      "log": "E:\\pixel_world\\.tmp\\building_integration\\user_asset_runtime.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/user_asset_runtime_contract.gd"
+      ],
+      "reason": "超过 120.0s 被杀（进程组 SIGKILL，退出码按旧约定记 124）",
+      "fast_flags_applied": false
+    }
+  ],
+  "summary": {
+    "total": 11,
+    "pass": 10,
+    "fail": 0,
+    "timeout": 1,
+    "environment-skip": 0,
+    "executor-error": 0
+  }
+}

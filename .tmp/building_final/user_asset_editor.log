@@ -1,0 +1,15 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+Panku Console Loaded!
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[editor] 保存战场: res://data/battlefields/contract_asset_map.json
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[editor] 保存战场: res://data/battlefields/contract_asset_map.json
+user_asset_editor_contract: 65 checks OK
+WARNING: 2 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)

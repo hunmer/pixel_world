@@ -68,7 +68,7 @@ static func refresh_canvas(ed) -> void:
 
 
 static func on_tool_changed(ed) -> void:
-	if ed._place_mode:
+	if ed._place_mode or (ed._building_place_mode and not ed._alt_pick_active):
 		ed._cancel_place_mode()  # 切工具退出放置模式
 	if ed.current_tool != ed.Tool.REPLACE and ed._replace_picker_dialog != null:
 		ed._replace_picker_dialog.cancel()

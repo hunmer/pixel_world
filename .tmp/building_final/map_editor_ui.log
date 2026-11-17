@@ -1,0 +1,70 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+Panku Console Loaded!
+[editor] 单格高度 cell=(1, 1) z=6
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[editor] 高度画笔 cell=(2, 2) z=1
+[editor] 高度画笔 cell=(3, 2) z=1
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[editor] 高度画笔 cell=(2, 2) z=2
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[editor] 读取战场: user://map_editor_ui_height_brush_contract.json
+[editor] 高度画笔 cell=(2, 2) z=1
+[editor] 高度画笔 cell=(2, 2) z=0
+[editor] 单格高度 cell=(2, 2) z=16
+[editor] 高度画笔 cell=(2, 2) z=15
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 9x7, 63 柱
+[editor] 生成地形 seed=undo_probe size=9x7
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[editor] 单格高度 cell=(0, 0) z=5
+[battlefield-render] 等距 3D 方块渲染完成: 11x9, 99 柱
+[battlefield-render] 等距 3D 方块渲染完成: 11x8, 88 柱
+[battlefield-render] 等距 3D 方块渲染完成: 11x9, 99 柱
+[battlefield-render] 等距 3D 方块渲染完成: 11x9, 99 柱
+[editor] 读取战场: user://map_editor_ui_block_layout_contract.json
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 生成地形 seed=sel_contract size=8x8
+[editor] 区域端点 pos1=(1, 1, 0) pos2=(1, 1, 0)
+[editor] 区域端点 pos1=(1, 1, 0) pos2=(4, 3, 0)
+[editor] 区域端点 pos1=(2, 2, 0) pos2=(2, 2, 0)
+[editor] 区域端点 pos1=(2, 2, 0) pos2=(4, 3, 0)
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 区域填充 kind=terrain id=water cells=10 volume=false z_hi=0 leveled=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 区域填充 kind=asset id=a_land cells=10 volume=false z_hi=0 leveled=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 素材洪水填充 asset=a_land cells=16
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 单格高度 cell=(6, 5) z=3
+[editor] 区域端点 pos1=(5, 4, 0) pos2=(5, 4, 0)
+[editor] 区域端点 pos1=(5, 4, 0) pos2=(7, 6, 0)
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 区域填充 kind=terrain id=water cells=9 volume=true z_hi=2 leveled=9
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+MAP_EDITOR_UI_CONTRACT_OK
+WARNING: 3 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)

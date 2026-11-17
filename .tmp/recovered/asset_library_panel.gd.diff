@@ -1,0 +1,85 @@
+--- current/scripts/editor/asset_library_panel.gd
++++ recovered/scripts/editor/asset_library_panel.gd
+@@ -37,6 +37,9 @@
+ const Catalog := preload("res://scripts/assets/user_asset_catalog.gd")
+ const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+ const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
++const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
++const PixelSpinBoxScript = preload("res://ui/components/pixel_spin_box.gd")
++const KIND_BUILDING := "building"
+ const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
+ const PixelSpinBoxScript = preload("res://ui/components/pixel_spin_box.gd")
+ const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
+@@ -367,6 +370,54 @@
+ 	pivot_row.add_child(_fp_h)
+ 	_detail_box.add_child(pivot_row)
+ 	UIFactoryScript.center_row(pivot_row)
++
++	# 建筑：原图坐标中的底座可见宽度。0=alpha 内容宽；缩放 = 16*(w+h)/此宽度。
++	_ground_width_row = HBoxContainer.new()
++	_ground_width_row.name = "BuildingGroundWidthRow"
++	_ground_width_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
++	_ground_width_row.add_child(UIFactoryScript.label(
++		"底座宽", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM))
++	_ground_width_box = _spin(0.0, 16384.0, 1.0, 0.0)
++	_ground_width_box.name = "GroundWidthSpin"
++	_ground_width_box.suffix = "px"
++	_ground_width_box.tooltip_text = "裁切后原图的底座可见宽度；0=自动取 alpha 内容宽"
++	_ground_width_row.add_child(_ground_width_box)
++	_detail_box.add_child(_ground_width_row)
++	UIFactoryScript.center_row(_ground_width_row)
++
++	_back_mode_row = HBoxContainer.new()
++	_back_mode_row.name = "BuildingBackModeRow"
++	_back_mode_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
++	_back_mode_row.add_child(UIFactoryScript.label(
++		"图向", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM))
++	_back_mode_option = UIFactoryScript.option_button()
++	_back_mode_option.name = "BackModeOption"
++	_back_mode_option.add_item("单图四向")
++	_back_mode_option.set_item_metadata(0, "single")
++	_back_mode_option.add_item("前 / 背图")
++	_back_mode_option.set_item_metadata(1, "front_back")
++	_back_mode_option.item_selected.connect(_on_back_mode_selected)
++	_back_mode_row.add_child(_back_mode_option)
++	_detail_box.add_child(_back_mode_row)
++	UIFactoryScript.center_row(_back_mode_row)
++
++	_back_asset_row = HBoxContainer.new()
++	_back_asset_row.name = "BuildingBackAssetRow"
++	_back_asset_row.add_theme_constant_override("separation", ComponentThemeScript.SPACE_XS)
++	_back_asset_row.add_child(UIFactoryScript.label(
++		"背图", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM))
++	_back_asset_option = UIFactoryScript.option_button()
++	_back_asset_option.name = "BackAssetOption"
++	_back_asset_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
++	_back_asset_row.add_child(_back_asset_option)
++	_detail_box.add_child(_back_asset_row)
++	UIFactoryScript.center_row(_back_asset_row)
++
++	_building_hint_label = UIFactoryScript.label(
++		"建筑轴心是底座中心；旋转奇数象限交换占地宽/深，缺背图自动用前图。",
++		ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM)
++	_building_hint_label.name = "BuildingHintLabel"
++	_detail_box.add_child(_building_hint_label)
+ 
+ 	# 建筑：原图坐标中的底座可见宽度。0=alpha 内容宽；缩放 = 16*(w+h)/此宽度。
+ 	_ground_width_row = PixelHBoxScript.new()
+@@ -956,6 +1007,17 @@
+ 	return "素材"
+ 
+ 
++func _kind_display_name(kind: String) -> String:
++	match kind:
++		Catalog.KIND_TERRAIN:
++			return "地块"
++		Catalog.KIND_PLANT:
++			return "植物"
++		KIND_BUILDING:
++			return "建筑"
++	return "素材"
++
++
+ func _on_files_selected(paths: PackedStringArray) -> void:
+ 	var kind := str(_import_kind.get_selected_metadata())
+ 	var ok_count := 0

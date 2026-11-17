@@ -1,0 +1,48 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[battlefield-render] 等距 3D 方块渲染完成: 4x3, 12 柱
+[DEBUG-unit-align] id=move_player name=移动测试 cell=(0, 0) screen=(427.9999, 571.9999) actual=(0.0, 0.360844, 0.0)
+[DEBUG-unit-align] id=move_enemy name=弓手 cell=(3, 1) screen=(491.9998, 635.9999) actual=(2.12132, 0.360844, 0.707107)
+[DEBUG-unit-align] id=move_enemy_2 name=弓手二 cell=(2, 2) screen=(427.9999, 635.9999) actual=(1.414214, 0.360844, 1.414214)
+[Battle] EncounterStart mode=b2_reveal
+[EncounterTransition] start mode=b2_reveal
+Panku Console Loaded!
+[EncounterTransition] finish mode=b2_reveal
+[BattlePresentation] standoff start units=3
+[BattlePresentation] standoff finish
+[result_presentation] opening units=3 boss=none
+[Battle] PresentationSound cue=nameplate (sfx)
+[Battle] PresentationSound cue=nameplate (sfx)
+[Battle] PresentationSound cue=nameplate (sfx)
+[result_presentation] finished kind=opening skipped=false
+[Battle] BattleReady units=3
+[turn] === 玩家回合 #1 开始 ===
+[dbg] 调试命令已注册：控制台按 ~ 呼出，dbg.help() 查看命令
+[side_panel] 窗口尺寸 → (1640, 800)（实际 (1640, 800)，屏幕 [P: (0, 0), S: (0, 0)]）
+[side_panel] 已接管 native_logger 屏幕日志（左上角覆盖关闭）
+[battle] B1 就地模式：world_origin=(-4, -4)
+[DEBUG-unit-align] id=u_player name=玩家英雄 cell=(4, 4) screen=(668.0, 399.9999) actual=(0.0, 4.330127, 0.0)
+[DEBUG-unit-align] id=u_enemy_0 name=敌兵1 cell=(8, 4) screen=(796.0, 483.9999) actual=(2.828427, 3.969283, 0.0)
+[DEBUG-unit-align] id=u_enemy_1 name=敌兵2 cell=(7, 1) screen=(859.9999, 439.9999) actual=(2.12132, 3.608439, -2.12132)
+[DEBUG-unit-align] id=u_enemy_2 name=敌兵3 cell=(1, 1) screen=(668.0, 344.0) actual=(-2.12132, 3.608439, -2.12132)
+[DEBUG-unit-align] id=u_enemy_3 name=敌兵4 cell=(0, 2) screen=(604.0, 343.9999) actual=(-2.828427, 3.608439, -1.414214)
+[Battle] EncounterStart mode=b1
+[EncounterTransition] start mode=b1
+[EncounterTransition] finish mode=b1
+[BattlePresentation] standoff start units=5
+[BattlePresentation] standoff finish
+[result_presentation] opening units=5 boss=none
+[Battle] PresentationSound cue=nameplate (sfx)
+[Battle] PresentationSound cue=nameplate (sfx)
+[Battle] PresentationSound cue=nameplate (sfx)
+[Battle] PresentationSound cue=nameplate (sfx)
+[Battle] PresentationSound cue=nameplate (sfx)
+[result_presentation] finished kind=opening skipped=false
+[Battle] BattleReady units=5
+[turn] === 玩家回合 #1 开始 ===
+[world] 战斗结束（contract）→ 恢复世界探索
+BATTLE_MOVEMENT_CONTRACT_OK
+WARNING: 8 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 2 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)

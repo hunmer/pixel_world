@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="pixel_world_contracts" tests="3" failures="0" skipped="0" time="2.7">
+<testsuite name="contract" tests="3" failures="0" skipped="0">
+	<testcase classname="pixel_world.pass" name="battle_save" time="1.09"/>
+	<testcase classname="pixel_world.pass" name="battlefields" time="0.81"/>
+	<testcase classname="pixel_world.pass" name="user_asset_catalog" time="0.81"/>
+</testsuite>
+</testsuites>

@@ -70,17 +70,29 @@ D:/Godot/Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res:
 D:/Godot/Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res://tools/prepare_building_demo.gd -- --back=E:/assets/tower_back.png
 ```
 
-不提供背面图时只创建无背面示例，不会把正面图伪装成背面。
+工具默认使用工程内配套背图 `meowa_tiles/generated/citywall_1to9_back.png`。该图来自用户确认的 `图片节点 1 (1).png`，与正面同为 1584×2816；背图底座中心初始设为 `(0.575, 0.9)`，底座标定宽度为 1150px。正面图与背面图分别保留自己的锚点配置。
+
+可用 `--back=<路径>` 替换配图；用 `--single` 显式生成无背面示例。工具会保留已存在正面素材的标定参数并更新前背关联，同时在示例快照内保存两张图的描述符。
 
 ## 编辑操作与代码验证
 
-在素材面板将导入类型选为“建筑”，选中建筑素材后在地图上放置。`T` 旋转当前建筑方向；橡皮擦命中占地内任一格会删除整栋建筑。支持撤销、重做、地图保存加载，以及完整选中建筑后的区域复制和移动。命名区域预设暂不包含建筑，保存前会明确提示。
+在【地形】Tab 的【建筑】分组点击“石墙”，进入与预设类似的连续放置模式。编辑器启动时会自动注册工程内的正背图片，已存在的用户标定和名称保留，背面依赖不单独列成建筑。无需手动运行示例工具。
+
+- 移动鼠标：整栋建筑实时预览，绿色占地提示可放置；越界、重叠、压单位或底面不等高时标红并拒绝放置。
+- 单击：放置一栋并保留模式，可继续放下一栋；拖动不刷建筑，再点已放置建筑不会删除。
+- `T`：切换预放置朝向；`Esc` 或再次点击同一建筑按钮：退出并清除预览。切换工具、生成、读取或调整地图尺寸也会退出。
+- 【预设】Tab 的实时预览开关同样控制建筑预览；关闭预览仍可单击放置。
+- 每次成功放置对应一步历史，支持撤销、重做及保存加载；完整选中建筑后可区域复制和移动。
+
+素材面板仍可将导入类型选为“建筑”来增加其他建筑或修改标定。命名区域预设暂不包含建筑，保存前会明确提示。
+
+本次分组入口通过 9 项无截图契约：`builtin_building_assets`、`map_editor_building_palette`、`map_editor_building`、`building_visual`、`user_asset_editor`、`map_editor_region_ops`、`map_editor_ui`、`editor_region_preset_store`、`editor_region_clipboard`。报告位于 `.tmp/building_palette_checks/summary.txt`，无脚本、解析、编译或断言错误；其中 3 项既有契约仍有退出时资源未释放提示。
 
 2026-11-17 已完成 15 项相关契约，结果均为 pass：`building_layout`、`building_visual`、`map_editor_building`、`battle_movement`、`battle_save`、`battlefields`、`editor_region_clipboard`、`editor_selection`、`map_editor`、`map_editor_region_ops`、`map_editor_ui`、`reinforcement`、`user_asset_catalog`、`user_asset_editor`、`user_asset_runtime`。报告位于 `.tmp/building_final/summary.tsv` 与 `junit.xml`。
 
 另外对主场景执行了运行时加载编译检查，并用真实示例校验 B2 建筑视觉注入、地面占用和四象限相机同步。检查采用 headless，不截图。测试日志未发现脚本、解析或编译错误；部分既有测试退出时仍报告资源未释放，尚不能声称整个工程没有资源生命周期问题。
 
-真实塔楼只有正面图；有背面的切换分支使用测试生成的不同图片验证，仍需要真实前／背配图进行人工视觉验收。
+真实石塔前背配图已接入，并通过无窗口检查：正确背图内容哈希、素材库关联、示例快照、前背图显示尺寸一致、B2 四象限实际选择的图片引用均符合预期。未截图，锚点和遮挡表现仍交由人工视觉验收。
 
 ## 人工视觉验收
 

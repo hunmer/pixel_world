@@ -1,0 +1,13 @@
+--- current/scripts/assets/user_asset_visual_adapter.gd
++++ recovered/scripts/assets/user_asset_visual_adapter.gd
+@@ -466,6 +466,10 @@
+ 		if String(key).begins_with("s:" + asset_id + ":"):
+ 			_cache.erase(key)
+ 			_lru.erase(key)
++	for key in _cache.keys():
++		if String(key).begins_with("s:" + asset_id + ":"):
++			_cache.erase(key)
++			_lru.erase(key)
+ 
+ 
+ func _load_blob_image(sha: String) -> Image:

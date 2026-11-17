@@ -672,8 +672,8 @@
 			"kind": "building",
 			"name": "石塔（视觉验收）",
 			"render": {
-				"back_asset_id": "",
-				"back_mode": "single",
+				"back_asset_id": "citywall_1to9_back",
+				"back_mode": "front_back",
 				"crop": null,
 				"footprint": {
 					"h": 2,
@@ -689,6 +689,36 @@
 			},
 			"saved": true,
 			"sha256": "a5dd6cf208854e96b7df3626662a9c135e5cb88cb2550d6350243a93cda6903f",
+			"tags": [
+				"citywall"
+			],
+			"width": 1584
+		},
+		"citywall_1to9_back": {
+			"bytes": 5083798,
+			"height": 2816,
+			"id": "citywall_1to9_back",
+			"image": "citywall_1to9_back.png",
+			"kind": "building",
+			"name": "石塔背面（视觉验收）",
+			"render": {
+				"back_asset_id": "",
+				"back_mode": "single",
+				"crop": null,
+				"footprint": {
+					"h": 2,
+					"w": 2
+				},
+				"ground_width_px": 1150.0,
+				"mode": "full",
+				"pivot": {
+					"x": 0.575,
+					"y": 0.9
+				},
+				"scale": 1.0
+			},
+			"saved": true,
+			"sha256": "79ed6bfc47a40b0cadf542cb24f269fd9c5b5ced1c96c6f06419c0a778cb546c",
 			"tags": [
 				"citywall"
 			],

@@ -1,0 +1,142 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[editor] 生成地形 seed=region_ops size=10x8
+Panku Console Loaded!
+[editor] 区域端点 pos1=(1, 1, 0) pos2=(1, 1, 0)
+[editor] 区域端点 pos1=(1, 1, 0) pos2=(4, 3, 0)
+[editor] 复制区域 4×3 区域 · 单位 1 · 植物 1 · 地块覆盖 1
+[editor] 进入粘贴模式 4×3 区域 · 单位 1 · 植物 1 · 地块覆盖 1
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[editor] 粘贴区域 origin=(6, 1) dropped_units=0 buildings=0/0
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[editor] 移动区域 min=(1, 1) delta=(5, 2) dropped_units=0 buildings=0
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[editor] 区域端点 pos1=(2, 2, 3) pos2=(2, 2, 3)
+[editor] 区域端点 pos1=(2, 2, 0) pos2=(9, 6, 3)
+[editor] 复制区域 8×5 区域 · 单位 0 · 植物 0 · 地块覆盖 1
+[editor] 进入粘贴模式 8×5 区域 · 单位 0 · 植物 0 · 地块覆盖 1
+[editor] 复制区域 8×5 区域 · 单位 0 · 植物 0 · 地块覆盖 1
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[editor] 剪切区域 8×5 区域 · 单位 0 · 植物 0 · 地块覆盖 1
+[battlefield-render] 等距 3D 方块渲染完成: 10x8, 80 柱
+[editor] 进入粘贴模式 8×5 区域 · 单位 0 · 植物 0 · 地块覆盖 1
+[battlefield-render] 等距 3D 方块渲染完成: 6x6, 36 柱
+[editor] 生成地形 seed=region_ops_clear size=6x6
+[editor] 区域端点 pos1=(1, 1, 0) pos2=(1, 1, 0)
+[editor] 区域端点 pos1=(1, 1, 0) pos2=(4, 3, 0)
+[battlefield-render] 等距 3D 方块渲染完成: 6x6, 36 柱
+[editor] 移动区域 min=(1, 1) delta=(1, 1) dropped_units=0 buildings=0
+[battlefield-render] 等距 3D 方块渲染完成: 6x6, 36 柱
+[editor] 区域端点 pos1=(3, 3, 0) pos2=(3, 3, 0)
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 生成地形 seed=region_ops_t5 size=8x8
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 移动区域 min=(1, 1) delta=(1, 1) dropped_units=0 buildings=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 移动区域 min=(2, 2) delta=(1, 1) dropped_units=0 buildings=0
+[editor] 区域端点 pos1=(4, 4, 3) pos2=(4, 4, 3)
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 生成地形 seed=region_ops_k size=8x8
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 移动区域 min=(2, 2) delta=(0, -1) dropped_units=0 buildings=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 移动区域 min=(2, 1) delta=(-1, 0) dropped_units=0 buildings=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 移动区域 min=(1, 1) delta=(0, 1) dropped_units=0 buildings=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 移动区域 min=(1, 2) delta=(1, 0) dropped_units=0 buildings=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 移动区域 min=(2, 2) delta=(0, -1) dropped_units=0 buildings=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 移动区域 min=(2, 1) delta=(0, -1) dropped_units=0 buildings=0
+[editor] 保存预设 id=preset_1 name=契约预设 3×3
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 填入预设 id=preset_1 origin=(1, 1) dropped_units=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 进入放置模式 id=preset_1
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 放置预设 id=preset_1 at=(0, 0) dropped_units=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 放置预设 id=preset_1 at=(4, 4) dropped_units=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[editor] 放置预设 id=preset_1 at=(5, 1) dropped_units=0
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 8x8, 64 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 生成地形 seed=replace_ops size=6x5
+[editor] 替换源 cell=(1, 1) code=asset:old_asset
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 生成地形 seed=pick_ops size=6x5
+[editor] 吸取方块 cell=(2, 2) slot=fg kind=asset id=pick_asset z=3
+[editor] 吸取方块 cell=(3, 2) slot=bg kind=terrain id=water z=1
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 生成地形 seed=ghost_ops size=6x5
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 保存预设 id=preset_1 name=幽灵契约 2×2
+[editor] 进入放置模式 id=preset_1
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 放置预设 id=preset_1 at=(0, 0) dropped_units=1
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 放置预设 id=preset_1 at=(0, 3) dropped_units=1
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 复制区域 2×2 区域 · 单位 2 · 植物 1 · 地块覆盖 1
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 进入粘贴模式 2×2 区域 · 单位 2 · 植物 1 · 地块覆盖 1
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 生成地形 seed=replace_popup size=6x5
+[editor] 替换源 cell=(1, 1) code=asset:old_asset
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 替换全图 source=asset:old_asset dest=terrain:w cells=2
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[editor] 替换区域 source=asset:old_asset dest=terrain:g cells=2
+[battlefield-render] 等距 3D 方块渲染完成: 6x5, 30 柱
+[battlefield-render] 等距 3D 方块渲染完成: 10x4, 40 柱
+[editor] 生成地形 seed=recent_picks size=10x3
+[editor] 吸取方块 cell=(0, 0) slot=fg kind=terrain id=water z=1
+[editor] 吸取方块 cell=(1, 0) slot=bg kind=asset id=recent_asset z=2
+[editor] 吸取方块 cell=(2, 0) slot=fg kind=terrain id=grass z=3
+[editor] 吸取方块 cell=(0, 0) slot=bg kind=terrain id=water z=1
+[editor] 最近吸取取用 index=2 slot=fg kind=asset id=recent_asset z=2
+[editor] 最近吸取取用 index=1 slot=bg kind=terrain id=grass z=3
+[editor] 吸取方块 cell=(0, 1) slot=fg kind=asset id=recent_cap_00 z=0
+[editor] 吸取方块 cell=(1, 1) slot=fg kind=asset id=recent_cap_01 z=1
+[editor] 吸取方块 cell=(2, 1) slot=fg kind=asset id=recent_cap_02 z=2
+[editor] 吸取方块 cell=(3, 1) slot=fg kind=asset id=recent_cap_03 z=3
+[editor] 吸取方块 cell=(4, 1) slot=fg kind=asset id=recent_cap_04 z=4
+[editor] 吸取方块 cell=(5, 1) slot=fg kind=asset id=recent_cap_05 z=5
+[editor] 吸取方块 cell=(6, 1) slot=fg kind=asset id=recent_cap_06 z=6
+[editor] 吸取方块 cell=(7, 1) slot=fg kind=asset id=recent_cap_07 z=7
+[editor] 吸取方块 cell=(8, 1) slot=fg kind=asset id=recent_cap_08 z=8
+[editor] 吸取方块 cell=(9, 1) slot=fg kind=asset id=recent_cap_09 z=9
+[battlefield-render] 等距 3D 方块渲染完成: 6x4, 24 柱
+[editor] 生成地形 seed=alt_pick_thumbnails size=6x4
+MapEditor: Alt 临时吸管 -> 松开恢复工具 0
+[editor] 吸取方块 cell=(0, 0) slot=fg kind=terrain id=water z=1
+[editor] 吸取方块 cell=(1, 0) slot=bg kind=asset id=thumb_asset z=2
+MapEditor: Alt 松开 -> 恢复工具 0
+[editor] 吸取方块 cell=(2, 0) slot=bg kind=terrain id=grass z=3
+MAP_EDITOR_REGION_OPS_CONTRACT_OK
+WARNING: 9 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)

@@ -26,7 +26,7 @@
     "animals": 4,
     "battle-logic": 9,
     "presentation": 7,
-    "battle-3d-editor": 13,
+    "battle-3d-editor": 14,
     "battle-automation": 2,
     "battle-presentation": 5,
     "battle-persistence": 2,
@@ -41,12 +41,32 @@
     "world-3d": 5,
     "fx": 1,
     "ui": 2,
-    "user-assets": 7,
+    "user-assets": 8,
     "world-camera": 1,
     "world-battle-bridge": 1,
     "simulation": 1
   },
   "contracts": [
+    {
+      "name": "builtin_building_assets",
+      "path": "tests/builtin_building_assets_contract.gd",
+      "group": "user-assets",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-17 内置石墙注册：真实正背素材导入、幂等、用户标定保留、旧类型迁移、失败回滚；5段headless全过"
+    },
+    {
+      "name": "map_editor_building_palette",
+      "path": "tests/map_editor_building_palette_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": ["scene", "render"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-17 无截图：地形建筑分组、石墙真实缩略图、背面依赖隐藏、实时预览、单击连续放置、拖动不提交、冲突拒绝、一步历史、T旋转、撤销重做、Esc和工具切换清理"
+    },
     {
       "name": "building_layout",
       "path": "tests/building_layout_contract.gd",

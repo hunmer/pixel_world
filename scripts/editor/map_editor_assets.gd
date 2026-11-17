@@ -13,12 +13,17 @@ const MapEditorOverlaysScript = preload("res://scripts/editor/map_editor_overlay
 const MapEditorCellToolsScript = preload("res://scripts/editor/map_editor_cell_tools.gd")
 const BattlefieldDocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
+const BuildingPaletteScript = preload("res://scripts/editor/map_editor_buildings.gd")
 
 
 ## 素材面板选中变化：写入选中态并同步画布预览格
 ## （建筑素材不进前景槽——画布点击走整栋放置，T 换朝向）
 static func on_asset_selected(ed, descriptor: Dictionary) -> void:
+	if ed._building_place_mode:
+		ed._building_place_mode = false
+		ed._canvas.clear_paste_preview()
 	ed._selected_asset = descriptor
+	BuildingPaletteScript.sync_selection(ed)
 	if String(descriptor.get("kind", "")) == UserAssetCatalogScript.KIND_TERRAIN:
 		ed._set_block_slot("fg", {"kind": "asset", "id": String(descriptor.get("id", "")), "z": int(ed._block_fg.z)})
 	ed._clear_block_asset_selection()  # 与方块页选中互斥
@@ -135,6 +140,7 @@ static func flush_asset_thumbs(ed) -> void:
 	# 0.3s 合批：新下载的素材整体重建网格加入（列表=已下载集，重建即增量；不做逐按钮补丁）
 	ed._pending_asset_thumbs.clear()
 	rebuild_block_asset_grid(ed)
+	BuildingPaletteScript.rebuild(ed)
 
 
 ## 选地形/植物调色板时清空素材选中（两组互斥，避免误放置）。
@@ -143,7 +149,12 @@ static func flush_asset_thumbs(ed) -> void:
 static func clear_asset_selection(ed) -> void:
 	if ed._selected_asset.is_empty():
 		return
+	var was_building_place: bool = ed._building_place_mode
+	ed._building_place_mode = false
 	ed._selected_asset = {}
+	if was_building_place and ed._canvas != null:
+		ed._canvas.clear_paste_preview()
+	BuildingPaletteScript.sync_selection(ed)
 	if String(ed._block_fg.get("kind", "")) == "asset":
 		ed._set_block_slot("fg", {"kind": "terrain", "id": String(ed.current_terrain), "z": int(ed._block_fg.z)})
 	if ed._asset_panel != null:
@@ -155,13 +166,14 @@ static func clear_asset_selection(ed) -> void:
 ## 选中素材已不存在则清空选中；画布烘焙缓存已随库失效，整图刷新
 static func on_asset_library_changed(ed) -> void:
 	rebuild_block_asset_grid(ed)
+	BuildingPaletteScript.rebuild(ed)
 	MapEditorOverlaysScript.replace_populate_options(ed)
 	if ed._selected_asset.is_empty():
 		ed._refresh_canvas()
 		return
 	var aid := String(ed._selected_asset.get("id", ""))
 	if not (ed._asset_service.find_by_id(aid) is Dictionary):
-		ed._selected_asset = {}
+		clear_asset_selection(ed)
 		if ed._asset_panel != null:
 			ed._asset_panel.deselect()
 	update_asset_preview(ed)
@@ -185,3 +197,51 @@ static func update_asset_preview(ed) -> void:
 		return
 	MapEditorCellToolsScript.clear_building_preview(ed)  # 非建筑素材不占建筑预览
 	ed._canvas.asset_preview_visual = ed._asset_adapter.resolve(String(d.get("id", "")))
+
+
+## 地形页建筑分组：选择即进入连续单击放置，与区域预设/粘贴/移动互斥。
+static func on_building_selected(ed, asset_id: String) -> void:
+	if ed._building_place_mode and String(ed._selected_asset.get("id", "")) == asset_id:
+		clear_asset_selection(ed)
+		ed._status("已退出建筑放置")
+		return
+	var descriptor: Variant = ed._asset_service.find_by_id(asset_id)
+	if not descriptor is Dictionary or String(descriptor.get("kind", "")) != "building":
+		return
+	ed._seal_pending()
+	ed._cancel_place_mode()
+	ed._cancel_paste()
+	if ed._move_tool_active:
+		ed._set_move_tool(false)
+	clear_asset_selection(ed)
+	clear_block_asset_selection(ed)
+	ed._selected_asset = descriptor.duplicate(true)
+	ed._building_place_mode = true
+	ed.current_prop = ""
+	if ed._terrain_group != null:
+		for button: BaseButton in ed._terrain_group.get_buttons():
+			button.set_pressed_no_signal(false)
+	BuildingPaletteScript.sync_selection(ed)
+	update_asset_preview(ed)
+	ed._status("建筑放置：移动鼠标实时预览，单击连续放置；T 换朝向，Esc 退出")
+
+
+## 提交前在副本校验，失败不入历史；点击已有建筑不删除，拖动不提交。
+static func commit_building_placement(ed, cell: Vector2i) -> void:
+	var asset_id := String(ed._selected_asset.get("id", ""))
+	if asset_id.is_empty():
+		return
+	var snapshot: Dictionary = preload("res://scripts/editor/map_editor_model_ops.gd").building_assets_snapshot(ed, asset_id)
+	var candidate: Dictionary = ed.model.duplicate(true)
+	var result: Dictionary = BattlefieldDocScript.add_building(candidate, asset_id, cell, int(ed._building_rotation), snapshot)
+	if not bool(result.get("ok", false)):
+		ed._status("放置失败：%s" % String(result.get("error", "建筑位置无效")), true)
+		MapEditorCellToolsScript.update_building_preview(ed, cell)
+		return
+	ed._push_undo("放置建筑")
+	ed.model = candidate
+	ed._refresh_canvas()
+	ed._seal_pending()
+	MapEditorCellToolsScript.update_building_preview(ed, cell)
+	ed._status("已放置建筑 → (%d,%d)，可继续放置；Esc 退出" % [cell.x, cell.y])
+	print("[editor] 建筑连续放置 asset=%s cell=%s" % [asset_id, str(cell)])

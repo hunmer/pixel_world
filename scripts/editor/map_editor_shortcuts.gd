@@ -106,7 +106,7 @@ static func unhandled_input(ed, event: InputEvent) -> void:
 					ed.get_viewport().set_input_as_handled()
 				return
 			# 放置模式激活时：Esc 先退出放置（清预览），不碰菜单也不返回世界
-			if ed._place_mode:
+			if ed._place_mode or ed._building_place_mode:
 				ed._cancel_place_mode()
 				if ed.get_viewport() != null:
 					ed.get_viewport().set_input_as_handled()

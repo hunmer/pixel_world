@@ -1,0 +1,35 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+WARNING: [building_layout] 素材 ghost 不在快照中，占用回退 1x1
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] footprint_size (res://scripts/core/building_layout.gd:56)
+       [1] _test_footprint_and_cells (res://tests/building_layout_contract.gd:108)
+       [2] _run (res://tests/building_layout_contract.gd:31)
+WARNING: [building_layout] 素材 ghost 不在快照中，占用回退 1x1
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] footprint_size (res://scripts/core/building_layout.gd:56)
+       [1] occupied_cells (res://scripts/core/building_layout.gd:69)
+       [2] validate_entries (res://scripts/core/building_layout.gd:138)
+       [3] _test_validate_entries (res://tests/building_layout_contract.gd:189)
+       [4] _run (res://tests/building_layout_contract.gd:32)
+WARNING: [grid] 单位 u_test 试图落位建筑格 (2,2)，已拒绝
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] place_unit (res://scripts/systems/grid_system.gd:91)
+       [1] _test_grid_blocking (res://tests/building_layout_contract.gd:243)
+       [2] _run (res://tests/building_layout_contract.gd:33)
+WARNING: [building_layout] 素材 wall_a 不在快照中，占用回退 1x1
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] footprint_size (res://scripts/core/building_layout.gd:56)
+       [1] occupied_cells (res://scripts/core/building_layout.gd:69)
+       [2] validate_entries (res://scripts/core/building_layout.gd:138)
+       [3] _parse_buildings (res://scripts/core/battlefield_loader.gd:563)
+       [4] _build_chapter (res://scripts/core/battlefield_loader.gd:212)
+       [5] load_battlefield (res://scripts/core/battlefield_loader.gd:142)
+       [6] _test_loader_error_cases (res://tests/building_layout_contract.gd:380)
+       [7] _run (res://tests/building_layout_contract.gd:35)
+BUILDING_LAYOUT_CONTRACT_OK
+Panku Console Loaded!

@@ -1,0 +1,41 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+Panku Console Loaded!
+WARNING: [UserAsset] 图片拉取失败（hang ← http://127.0.0.1:54603/hang.png）: http_result_13_code_0
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] _dispatch_failure (res://scripts/assets/user_asset_service.gd:557)
+       [1] _on_request_completed (res://scripts/assets/user_asset_service.gd:535)
+WARNING: [UserAsset] 源 URL 被配置覆盖: http://127.0.0.1:9/blocks.json
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] _load_source_override (res://scripts/assets/user_asset_service.gd:122)
+       [1] _ready (res://scripts/assets/user_asset_service.gd:74)
+       [2] _run (res://tests/user_asset_runtime_contract.gd:486)
+       [3] _await_sig (res://tests/user_asset_runtime_contract.gd:150)
+WARNING: [UserAsset] 清单拉取失败（源 http://127.0.0.1:9/blocks.json）: http_result_13_code_0 —— 已缓存素材仍可离线使用
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] _dispatch_failure (res://scripts/assets/user_asset_service.gd:550)
+       [1] _on_request_completed (res://scripts/assets/user_asset_service.gd:535)
+WARNING: [UserAsset] 源 URL 被配置覆盖: http://127.0.0.1:9/blocks.json
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] _load_source_override (res://scripts/assets/user_asset_service.gd:122)
+       [1] _ready (res://scripts/assets/user_asset_service.gd:74)
+       [2] _run (res://tests/user_asset_runtime_contract.gd:507)
+       [3] _await_sig (res://tests/user_asset_runtime_contract.gd:150)
+WARNING: [UserAsset] 远程源已被配置禁用（remote_enabled=false），仅本地导入与缓存可用
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] _load_source_override (res://scripts/assets/user_asset_service.gd:124)
+       [1] _ready (res://scripts/assets/user_asset_service.gd:74)
+       [2] _run (res://tests/user_asset_runtime_contract.gd:507)
+       [3] _await_sig (res://tests/user_asset_runtime_contract.gd:150)
+WARNING: [UserAsset] 远程源已禁用，跳过清单拉取: user://user_asset_runtime_tmp/ovr/asset_source.cfg
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] request_manifest (res://scripts/assets/user_asset_service.gd:233)
+       [1] _run (res://tests/user_asset_runtime_contract.gd:508)
+       [2] _await_sig (res://tests/user_asset_runtime_contract.gd:150)
+USER_ASSET_RUNTIME_CONTRACT_OK (90 checks)

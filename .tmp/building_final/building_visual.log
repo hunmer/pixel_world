@@ -1,0 +1,45 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+== building_visual_contract ==
+  ok: 两幅建筑素材可导入独立临时库
+  ok: 建筑详情显示底座宽与前/背图配置
+  ok: 图向含 single/front_back，分类含建筑
+  ok: front_back 模式可选择库内另一建筑背图
+  ok: 面板保存 2x3 占地
+  ok: 面板保存背图引用与底座宽
+  ok: 面板保存建筑底座中心 pivot
+  ok: 建筑按 ground_width_px 等比标定，不限制高度
+  ok: 建筑 pivot 按烘焙后 alpha 内容盒计算
+  ok: ground_width_px=0 自动按内容宽标定
+  ok: visual_for_buildings 输出单实例及依赖背图
+[battlefield-render] 等距 3D 方块渲染完成: 4x4, 16 柱
+  ok: 建筑追加到 origin 列且保留原地形 blocks
+  ok: 相机先于 setup 存在时建筑进入真实 3D 通路
+  ok: 首次 3D setup 不混入 2D 占地中心/TOP_CENTER 偏移
+  ok: rotation=1 交换占地并锚定旋转后包围矩形中心
+  ok: 多格占地不逐格复制建筑
+  ok: 相机象限 0 实际切换正确前/背图 asset_id
+  ok: 相机象限 0 不改变占地锚点
+  ok: 相机象限 1 实际切换正确前/背图 asset_id
+  ok: 相机象限 1 不改变占地锚点
+  ok: 相机象限 2 实际切换正确前/背图 asset_id
+  ok: 相机象限 2 不改变占地锚点
+  ok: 相机象限 3 实际切换正确前/背图 asset_id
+  ok: 相机象限 3 不改变占地锚点
+  ok: single 分类在背面象限仍显示正面
+  ok: 缺前图占位仍保留 front_back 元数据与背图
+  ok: 缺前图时背面象限仍可使用背图
+  ok: 缺背图时背面象限回退前图
+  ok: 四向建筑 pivot 屏幕位移恒等于 render_offset*zoom（含 x≠0）
+  ok: 建筑 camera_right 四向均与相机前向正交，不引入横向深度漂移
+  ok: 旧 flora 未传 camera_right 时固定屏幕轴保持不变
+Panku Console Loaded!
+[battlefield-render] 等距 3D 方块渲染完成: 4x4, 16 柱
+  ok: EditorCanvas 未知职业保留文档数据且只生成一个单位标记
+  ok: EditorCanvas 无立绘旧职业仅在显示层回退 swordsman，避免 portrait Nil
+  ok: EditorCanvas 建筑悬停预览实际写入 3D blocks，无双份 2D 预览
+  ok: EditorCanvas 相机旋转实际刷新悬停预览背图
+  ok: EditorCanvas 清除预览立即移除建筑 block 且保留地形
+[battlefield-render] 等距 3D 方块渲染完成: 4x4, 16 柱
+  ok: EditorCanvas 整图 model 重建后仍按当前悬停重注入预览
+== building_visual_contract: PASS ==

@@ -105,6 +105,8 @@ static func on_place_preset_toggled(ed, on: bool) -> void:
 			if ed._place_preset_btn != null:
 				ed._place_preset_btn.set_pressed_no_signal(false)
 			return
+		if ed._building_place_mode:
+			ed._clear_asset_selection()
 		ed._cancel_paste()  # 与粘贴模式互斥
 		ed._place_mode = true
 		ed._place_preset_id = id
@@ -118,6 +120,9 @@ static func on_place_preset_toggled(ed, on: bool) -> void:
 ## 实时预览总开关：关闭立即清除当前放置预览；不影响粘贴模式或放置提交
 static func on_place_preview_toggled(ed, on: bool) -> void:
 	ed._place_preview_enabled = on
+	if ed._building_place_mode:
+		ed._update_building_preview(ed._canvas.hover_cell)
+		return
 	if ed._canvas == null or not ed._place_mode:
 		return
 	if on:

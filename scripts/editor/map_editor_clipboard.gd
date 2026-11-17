@@ -311,6 +311,8 @@ static func on_move_tool_toggled(ed, pressed: bool) -> void:
 
 ## 同步移动工具状态（含开关无信号回写）；关闭时清待移动/预览
 static func set_move_tool(ed, active: bool) -> void:
+	if active and ed.get("_building_place_mode") == true:
+		ed._cancel_place_mode()
 	ed._move_tool_active = active
 	if ed._move_tool_toggle != null and ed._move_tool_toggle.button_pressed != active:
 		ed._move_tool_toggle.set_pressed_no_signal(active)

@@ -1,0 +1,26 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+ERROR: [breakpoint_runtime] could not listen on 127.0.0.1:9081 (error 22)
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _ready (res://addons/breakpoint_mcp/runtime_bridge.gd:200)
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+Panku Console Loaded!
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[editor] 建筑连续放置 asset=citywall_1to9 cell=(1, 1)
+ERROR: BUILDING_PALETTE_FAIL: T旋转与预览一致
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _expect (res://tests/map_editor_building_palette_contract.gd:17)
+       [1] _run (res://tests/map_editor_building_palette_contract.gd:56)
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[editor] 建筑连续放置 asset=citywall_1to9 cell=(4, 1)
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[editor] 生成地形 seed=building_palette_contract size=12x10
+WARNING: 2 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)

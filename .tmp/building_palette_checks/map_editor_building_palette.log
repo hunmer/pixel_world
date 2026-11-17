@@ -1,0 +1,14 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[battlefield-render] 等距 3D 方块渲染完成: 12x9, 108 柱
+Panku Console Loaded!
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[editor] 建筑连续放置 asset=citywall_1to9 cell=(1, 1)
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[editor] 建筑连续放置 asset=citywall_1to9 cell=(4, 1)
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[battlefield-render] 等距 3D 方块渲染完成: 12x10, 120 柱
+[editor] 生成地形 seed=building_palette_contract size=12x10
+MAP_EDITOR_BUILDING_PALETTE_OK

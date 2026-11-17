@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="pixel_world_contracts" tests="15" failures="0" skipped="0" time="34.1">
+<testsuite name="contract" tests="15" failures="0" skipped="0">
+	<testcase classname="pixel_world.pass" name="building_layout" time="0.81"/>
+	<testcase classname="pixel_world.pass" name="building_visual" time="1.19"/>
+	<testcase classname="pixel_world.pass" name="map_editor_building" time="0.91"/>
+	<testcase classname="pixel_world.pass" name="battle_movement" time="12.81"/>
+	<testcase classname="pixel_world.pass" name="battle_save" time="0.81"/>
+	<testcase classname="pixel_world.pass" name="battlefields" time="0.70"/>
+	<testcase classname="pixel_world.pass" name="editor_region_clipboard" time="0.81"/>
+	<testcase classname="pixel_world.pass" name="editor_selection" time="1.19"/>
+	<testcase classname="pixel_world.pass" name="map_editor" time="0.89"/>
+	<testcase classname="pixel_world.pass" name="map_editor_region_ops" time="3.52"/>
+	<testcase classname="pixel_world.pass" name="map_editor_ui" time="2.67"/>
+	<testcase classname="pixel_world.pass" name="reinforcement" time="0.91"/>
+	<testcase classname="pixel_world.pass" name="user_asset_catalog" time="0.81"/>
+	<testcase classname="pixel_world.pass" name="user_asset_editor" time="2.11"/>
+	<testcase classname="pixel_world.pass" name="user_asset_runtime" time="3.95"/>
+</testsuite>
+</testsuites>

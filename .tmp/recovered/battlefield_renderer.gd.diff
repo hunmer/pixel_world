@@ -1,0 +1,83 @@
+--- current/scripts/iso/battlefield_renderer.gd
++++ recovered/scripts/iso/battlefield_renderer.gd
+@@ -83,6 +83,10 @@
+ ## layer="tile"：整图替换该格地块视觉（隐藏常规柱/装饰，避免与预渲染场景块重复叠画），
+ ##               逻辑地形/高度/拾取不变；layer="prop"：素材植物块替代该格装饰物选取。
+ var _asset_overrides: Dictionary = {}
++## 单实例建筑：每项 {cell,instance_id,asset_id,rotation,visual,back_visual}。
++## 只挂在占地包围矩形 origin 格，grid_anchor 指向整片占地中心，绝不逐格复制。
++var _building_visuals: Array = []
++var _camera_quadrant := 0
+ ## 单实例建筑：每项 {cell,instance_id,asset_id,rotation,visual,back_visual}。
+ ## 只挂在占地包围矩形 origin 格，grid_anchor 指向整片占地中心，绝不逐格复制。
+ var _building_visuals: Array = []
+@@ -695,6 +699,69 @@
+ 	return block
+ 
+ 
++## 建筑只追加在 origin 列，并保留列里已有地形/植物 blocks。
++func _append_building_blocks(cell: Vector2i, blocks: Array[Dictionary]) -> void:
++	for raw in _building_visuals:
++		if not raw is Dictionary:
++			continue
++		var entry: Dictionary = raw
++		if _building_cell(entry) != cell:
++			continue
++		var front: Dictionary = entry.get("visual", {})
++		if front.is_empty():
++			continue
++		var rotation := posmod(int(entry.get("rotation", 0)), 4)
++		var visual := front
++		var mode := String(front.get("back_mode", "single"))
++		var back: Dictionary = entry.get("back_visual", {})
++		var relative := posmod(_camera_quadrant - rotation, 4)
++		if mode == "front_back" and relative >= 2 and not back.is_empty():
++			visual = back
++		var block := _building_block_for(cell, visual, front, entry, rotation)
++		if not block.is_empty():
++			blocks.append(block)
++
++
++func _building_block_for(
++	cell: Vector2i,
++	visual: Dictionary,
++	front: Dictionary,
++	entry: Dictionary,
++	rotation: int
++) -> Dictionary:
++	var tex: Texture2D = visual.get("texture", null)
++	if tex == null:
++		return {}
++	var footprint: Dictionary = front.get("footprint", {"w": 1, "h": 1})
++	var fw := clampi(int(footprint.get("w", 1)), 1, 8)
++	var fh := clampi(int(footprint.get("h", 1)), 1, 8)
++	var rotated_w := fh if rotation % 2 != 0 else fw
++	var rotated_h := fw if rotation % 2 != 0 else fh
++	var anchor := Vector2(
++		cell.x + float(rotated_w - 1) * 0.5,
++		cell.y + float(rotated_h - 1) * 0.5
++	)
++	var offset: Vector2 = visual.get("render_offset", Vector2.ZERO)
++	if _terrain_3d == null:
++		# 2D 柱以 origin 格为基准；补上占地中心位移与顶面中心偏移。
++		offset += IsoCoords.to_screen(anchor.x, anchor.y, 0.0) - IsoCoords.to_screen(cell.x, cell.y, 0.0)
++		offset += ColumnBatchScript.TOP_CENTER_OFFSET
++	var block := _block(tex, visual_top_level(cell.x, cell.y), Color.WHITE, 2, offset)
++	block["occluder_class"] = &"prop"
++	block["asset_id"] = String(visual.get("asset_id", ""))
++	block["building"] = true
++	block["building_instance_id"] = String(entry.get("instance_id", ""))
++	block["building_rotation"] = rotation
++	block["grid_anchor"] = anchor
++	block["back_mode"] = String(front.get("back_mode", "single"))
++	# 3D billboard 的屏幕横轴随目标象限旋转；旧 flora 仍走固定轴，不改变其契约。
++	var base_right := Vector3(IsoProjection.GRID_STEP, 0.0, -IsoProjection.GRID_STEP)
++	block["camera_right"] = Basis(Vector3.UP, float(_camera_quadrant) * PI * 0.5) * base_right
++	if bool(visual.get("missing", false)):
++		block["modulate"] = Color(1.0, 0.55, 0.55, 0.92)
++	return block
++
++
+ func _block(
+ 	tex: Texture2D,
+ 	level: int,

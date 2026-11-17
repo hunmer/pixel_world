@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="pixel_world_contracts" tests="11" failures="1" skipped="0" time="149.4">
+<testsuite name="contract" tests="11" failures="1" skipped="0">
+	<testcase classname="pixel_world.pass" name="battle_movement" time="13.56"/>
+	<testcase classname="pixel_world.pass" name="battle_save" time="1.02"/>
+	<testcase classname="pixel_world.pass" name="battlefields" time="0.92"/>
+	<testcase classname="pixel_world.pass" name="editor_region_clipboard" time="0.91"/>
+	<testcase classname="pixel_world.pass" name="editor_selection" time="1.39"/>
+	<testcase classname="pixel_world.pass" name="map_editor" time="1.09"/>
+	<testcase classname="pixel_world.pass" name="map_editor_region_ops" time="3.98"/>
+	<testcase classname="pixel_world.pass" name="map_editor_ui" time="3.14"/>
+	<testcase classname="pixel_world.pass" name="user_asset_catalog" time="0.94"/>
+	<testcase classname="pixel_world.pass" name="user_asset_editor" time="2.39"/>
+	<testcase classname="pixel_world.timeout" name="user_asset_runtime" time="120.09">
+<failure type="timeout">超过 120.0s 被杀（进程组 SIGKILL，退出码按旧约定记 124）</failure>
+	</testcase>
+</testsuite>
+</testsuites>

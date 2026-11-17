@@ -1,11 +1,12 @@
 ## prepare_building_demo.gd — 用真实塔楼准备建筑视觉验收地图（不启动游戏、不截图）。
 ## 用法：godot --headless --path . --script res://tools/prepare_building_demo.gd
-## 可选：-- --back=<真实背面图片路径>；没有背图时只创建单图建筑。
+## 可选：-- --back=<背面图片路径>；默认使用工程内配套背图，--single 可生成单图示例。
 extends SceneTree
 
 const ServiceScript = preload("res://scripts/assets/user_asset_service.gd")
 const DocScript = preload("res://scripts/editor/battlefield_doc.gd")
 const SOURCE := "res://meowa_tiles/generated/citywall_1to9.png"
+const BACK_SOURCE := "res://meowa_tiles/generated/citywall_1to9_back.png"
 
 func _initialize() -> void:
 	call_deferred("_prepare")
@@ -27,10 +28,12 @@ func _prepare() -> void:
 	front["kind"] = "building"
 	front["render"] = render
 	var snapshots: Dictionary = {asset_id: front}
-	var back_path := ""
+	var back_path := BACK_SOURCE if FileAccess.file_exists(BACK_SOURCE) else ""
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--back="):
 			back_path = argument.trim_prefix("--back=")
+		elif argument == "--single":
+			back_path = ""
 	if not back_path.is_empty():
 		var back_import: Dictionary = service.import_local_file(back_path, "building", [], "石塔背面（视觉验收）")
 		if not _require(bool(back_import.get("ok", false)), "背面导入失败：%s" % back_import):
@@ -40,13 +43,25 @@ func _prepare() -> void:
 			return
 		var back: Dictionary = (service.find_by_id(back_id) as Dictionary).duplicate(true)
 		back["kind"] = "building"
-		back["render"] = render.duplicate(true)
+		var back_render := render.duplicate(true)
+		# 配套背图与正面同为 1584×2816；木棚在左，底座中心在内容包围盒内右移。
+		back_render["pivot"] = {"x": 0.575, "y": 0.9}
+		back["render"] = back_render
 		snapshots[back_id] = back
+		if not bool(back_import.get("deduped", false)):
+			var back_updated: Dictionary = service.update_asset(back_id, {"kind": "building", "render": back_render})
+			if not _require(bool(back_updated.get("ok", false)), "背面配置保存失败：%s" % back_updated):
+				return
 		render["back_mode"] = "front_back"
 		render["back_asset_id"] = back_id
-	# 新导入素材同步标定到素材库；已存在的素材只在本示例快照中覆盖，保留用户设置。
-	if not bool(imported.get("deduped", false)):
-		var updated: Dictionary = service.update_asset(asset_id, {"kind": "building", "render": render})
+	# 新素材同步标定；已存在素材保留标定，但更新前背关联，让新放置的石塔也能切图。
+	if not bool(imported.get("deduped", false)) or not back_path.is_empty():
+		var library_render := render.duplicate(true)
+		if bool(imported.get("deduped", false)):
+			library_render = (service.find_by_id(asset_id) as Dictionary).get("render", {}).duplicate(true)
+			library_render["back_mode"] = render["back_mode"]
+			library_render["back_asset_id"] = render["back_asset_id"]
+		var updated: Dictionary = service.update_asset(asset_id, {"kind": "building", "render": library_render})
 		if not _require(bool(updated.get("ok", false)), "素材配置保存失败：%s" % updated):
 			return
 	var model: Dictionary = DocScript.create_empty(12, 10)

@@ -1,0 +1,13 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[editor] 建筑放置 asset=hut cell=(1, 1) rotation=0
+[editor] 建筑删除 asset=hut cell=(2, 2)
+[editor] 建筑放置 asset=hut cell=(0, 0) rotation=0
+[editor] 单格高度 cell=(8, 0) z=3
+[editor] 复制区域 3×3 区域 · 单位 0 · 植物 0 · 地块覆盖 0 · 建筑 1
+[editor] 粘贴区域 origin=(5, 0) dropped_units=0 buildings=1/1
+[editor] 移动区域 min=(0, 0) delta=(0, 4) dropped_units=0 buildings=1
+[editor] 剪切区域 3×3 区域 · 单位 0 · 植物 0 · 地块覆盖 0 · 建筑 1（跨界的 1 栋保留原地）
+[editor] 建筑放置 asset=hut cell=(1, 1) rotation=0
+MAP_EDITOR_BUILDING_PASS: all 16 sections
+Panku Console Loaded!
