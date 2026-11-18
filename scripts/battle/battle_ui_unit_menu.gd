@@ -48,6 +48,7 @@ func setup(p_ui) -> void:
 
 
 func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> void:
+	_ui.clear_support_range()
 	_ui.on_set_mode.call(MODE_MENU)
 	# 记录可撤销移动：菜单期间按 ESC 取消时，把单位送回 from_pos。
 	# _pending_move_undo 由 battle.gd 在调用本方法前/后维护；这里通过回调让 battle.gd 设置。
@@ -74,8 +75,7 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		b.set("semantic", 0)
 		b.pressed.connect(func():
 			_ui.close_menu()
-			# 确认行动：移动生效，不再可撤销。
-			_ui.on_clear_pending_move_undo.call()
+			# 浏览目标菜单仍保留移动撤销记录，真正执行行动时才提交。
 			_open_attack_target_picker(u, targets)
 		)
 		vbox.add_child(b)
@@ -84,7 +84,6 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		bs.text = "技能（%d 可用）" % usable_skills.size()
 		bs.pressed.connect(func():
 			_ui.close_menu()
-			_ui.on_clear_pending_move_undo.call()
 			_open_skill_picker(u)
 		)
 		vbox.add_child(bs)
@@ -93,7 +92,6 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		bi.text = "背包（%d 可用）" % usable_items.size()
 		bi.pressed.connect(func():
 			_ui.close_menu()
-			_ui.on_clear_pending_move_undo.call()
 			_open_item_picker(u)
 		)
 		vbox.add_child(bi)
@@ -103,7 +101,6 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		bt.tooltip_text = "与相邻友军转移物品（自由动作，不消耗行动）"
 		bt.pressed.connect(func():
 			_ui.close_menu()
-			_ui.on_clear_pending_move_undo.call()
 			_open_trade_picker(u, trade_targets)
 		)
 		vbox.add_child(bt)
@@ -117,6 +114,8 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		_ui.update_unit_sprite(u)
 		_ui.on_clear_selection.call()
 		_ui.on_set_mode.call(MODE_IDLE)
+		if _ui.on_record_action.is_valid():
+			_ui.on_record_action.call("等待 " + String(u.name))
 		_ui.on_check_battle_end.call()
 		if _ui.turn.all_player_acted():
 			await _ui.get_tree().create_timer(0.3).timeout
@@ -127,6 +126,7 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 
 ## 技能选择菜单：列出单位可用技能（含 MP/冷却/描述），选中后按 targetType 分发。
 func _open_skill_picker(u: Dictionary) -> void:
+	_ui.clear_support_range()
 	var usable := SkillData.owned_skills(u)
 	if usable.is_empty():
 		return
@@ -148,6 +148,8 @@ func _open_skill_picker(u: Dictionary) -> void:
 		b.text = info
 		b.disabled = not reason.is_empty()
 		b.tooltip_text = String(sk[&"desc"])
+		b.mouse_entered.connect(func(): _ui.show_support_range(u, sk[&"id"]))
+		b.focus_entered.connect(func(): _ui.show_support_range(u, sk[&"id"]))
 		b.pressed.connect(func():
 			_ui.close_menu()
 			_on_skill_selected(u, sk[&"id"])
@@ -158,9 +160,10 @@ func _open_skill_picker(u: Dictionary) -> void:
 ## 技能选中后：self 类型直接执行；其它类型列目标。
 func _on_skill_selected(u: Dictionary, skill_id: StringName) -> void:
 	var sk := SkillData.get_skill(skill_id)
+	_ui.show_support_range(u, skill_id)
 	if sk[&"targetType"] == &"self":
 		await _ui.on_resolve_skill.call(u, [u], skill_id)
-		_ui.on_finish_player_action.call(u)
+		_ui.on_finish_player_action.call(u, "技能 " + SkillData.skill_name(skill_id))
 		return
 	var targets := SkillSystem.targets_for(u, skill_id, _ui.grid)
 	if targets.is_empty():
@@ -191,13 +194,17 @@ func _open_skill_target_picker(u: Dictionary, targets: Array, skill_id: StringNa
 
 ## 技能预览面板 + 执行。仿 _preview_and_attack。
 func _preview_and_use_skill(caster: Dictionary, targets: Array, skill_id: StringName) -> void:
+	var revision: int = _ui.action_preview_revision
+	_ui.on_set_mode.call(MODE_MENU)
 	# 显示技能预览面板（针对第一个目标）
 	if not targets.is_empty():
 		_ui._show_skill_preview(caster, targets[0], skill_id)
 	await _ui.get_tree().create_timer(1.0).timeout
+	if revision != _ui.action_preview_revision:
+		return
 	_ui.close_preview()
 	await _ui.on_resolve_skill.call(caster, targets, skill_id)
-	_ui.on_finish_player_action.call(caster)
+	_ui.on_finish_player_action.call(caster, "技能 " + SkillData.skill_name(skill_id))
 
 
 ## 物品选择菜单。
@@ -234,7 +241,7 @@ func _on_item_selected(u: Dictionary, item_id: StringName, entry: Dictionary) ->
 	var idef := ItemData.get_item(item_id)
 	if idef[&"target"] == &"self":
 		await _ui.on_resolve_item.call(u, [u], entry)
-		_ui.on_finish_player_action.call(u)
+		_ui.on_finish_player_action.call(u, "物品 " + ItemData.item_name(idef[&"id"]))
 		return
 	var targets := ItemSystem.targets_for(u, item_id, _ui.grid)
 	if targets.is_empty():
@@ -244,7 +251,7 @@ func _on_item_selected(u: Dictionary, item_id: StringName, entry: Dictionary) ->
 		return
 	if targets.size() == 1:
 		await _ui.on_resolve_item.call(u, targets, entry)
-		_ui.on_finish_player_action.call(u)
+		_ui.on_finish_player_action.call(u, "物品 " + ItemData.item_name(idef[&"id"]))
 	else:
 		_open_item_target_picker(u, targets, item_id, entry)
 
@@ -259,7 +266,7 @@ func _open_item_target_picker(u: Dictionary, targets: Array, _item_id: StringNam
 		b.pressed.connect(func():
 			_ui.close_menu()
 			await _ui.on_resolve_item.call(u, [t], entry)
-			_ui.on_finish_player_action.call(u)
+			_ui.on_finish_player_action.call(u, "物品 " + ItemData.item_name(entry.get(&"id", &"")))
 		)
 		vbox.add_child(b)
 
@@ -307,6 +314,10 @@ func _open_trade_item_picker(u: Dictionary, ally: Dictionary) -> void:
 			TradeSystemScript.execute_trade(owner, receiver, entry)
 			_ui.update_unit_sprite(u)
 			_ui.update_unit_sprite(ally)
+			if _ui.on_record_action.is_valid():
+				_ui.on_record_action.call("交换 %s → %s（%s）" % [
+					String(owner.name), String(receiver.name),
+					ItemData.item_name(entry.get(&"id", &""))])
 			_reopen_unit_menu(u)
 		)
 		vbox.add_child(b)
@@ -341,14 +352,20 @@ func _open_attack_target_picker(u: Dictionary, targets: Array) -> void:
 
 
 func _preview_and_attack(attacker: Dictionary, defender: Dictionary) -> void:
+	var revision: int = _ui.action_preview_revision
+	_ui.on_set_mode.call(MODE_MENU)
 	var def_tile = _ui.grid.tile_at(defender.position.x, defender.position.y)
 	var prev := CombatSystem.preview(attacker, defender, def_tile.avoid_bonus, def_tile.def_bonus)
 	_ui._show_preview_panel(attacker, defender, prev)
 	await _ui.get_tree().create_timer(1.2).timeout
+	if revision != _ui.action_preview_revision:
+		return
 	_ui.close_preview()
 	_ui.on_resolve_combat.call(attacker, defender, func():
 		_ui.on_clear_selection.call()
 		_ui.on_set_mode.call(MODE_IDLE)
+		if _ui.on_record_action.is_valid():
+			_ui.on_record_action.call("攻击 " + String(defender.name))
 		_ui.on_check_battle_end.call()
 		if _ui.turn.phase == &"player" and _ui.turn.all_player_acted():
 			await _ui.get_tree().create_timer(0.3).timeout

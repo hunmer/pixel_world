@@ -7,8 +7,9 @@
 ##
 ## 视觉风格：扁平贴地菱形描边（不用 3D 高墙）。
 ##   - 光标框（金色）：上下浮动
-##   - 移动范围（蓝/红）：静态贴地
-##   - 攻击范围（紫）：脉冲透明度（2D 无法绕 Y 旋转，改用 alpha 脉冲代替）
+##   - 移动范围（蓝）、移动范围外武器格（红）、辅助格（绿）
+##   - 敌方危险格（紫色描边），独立于当前选择范围
+##   - 威胁连线：红色普通，黄色高必杀/武器克制
 ##   - 路径箭头：_draw 画三角形
 
 class_name RangeOverlay
@@ -34,9 +35,12 @@ var _range_tweens: Array = []
 var _cursor_cell := Vector2i.ZERO
 
 # ---- 常量（颜色与原版一致）----
-const _RANGE_COLOR_MOVABLE := Color(0.25, 0.55, 1.0, 0.4)
-const _RANGE_COLOR_BLOCKED := Color(1.0, 0.25, 0.25, 0.4)
-const _RANGE_COLOR_ATTACK  := Color(0.75, 0.35, 1.0, 0.4)
+const _RANGE_COLOR_MOVABLE: Color = Color(0.25, 0.55, 1.0, 0.4)
+const _RANGE_COLOR_ATTACK: Color = Color(1.0, 0.25, 0.25, 0.4)
+const _RANGE_COLOR_SUPPORT: Color = Color(0.2, 0.9, 0.4, 0.42)
+const _RANGE_COLOR_DANGER: Color = Color(0.75, 0.35, 1.0, 0.32)
+var _danger_markers: Array[Node2D] = []
+var _support_markers: Array[Node2D] = []
 const _CURSOR_COLOR := Color(1.0, 0.82, 0.2)
 
 # 光标浮动（像素；原版世界单位 0.40，2D 下放大到 4px 让浮动可见）
@@ -48,7 +52,8 @@ const _QUAD_INSET_SCALE := 0.85
 
 ## Camera3D 旋转/缩放只改变屏幕投影；刷新轻量标记，不触碰地形 mesh。
 func _process(_delta: float) -> void:
-	for marker in _range_markers:
+	var projected_markers: Array = _range_markers + _danger_markers + _support_markers
+	for marker: Node2D in projected_markers:
 		if not is_instance_valid(marker) or not marker.has_meta("cell"):
 			continue
 		var cell: Vector2i = marker.get_meta("cell")
@@ -160,54 +165,69 @@ func _make_outline_block(x: int, y: int, color: Color, line_width: float = 2.0) 
 # ============================================================
 # 范围高亮
 # ============================================================
-func highlight_range(move_range: Dictionary, attack_tiles: Dictionary, selected_unit: Dictionary) -> void:
+func highlight_range(move_range: Dictionary, attack_tiles: Dictionary, selected_unit: Dictionary, support_tiles: Dictionary = {}) -> void:
 	_clear_range_markers()
-	var sel_x := -1
-	var sel_y := -1
-	if not selected_unit.is_empty():
-		sel_x = selected_unit.position.x
-		sel_y = selected_unit.position.y
-	var markers: Dictionary = {}
-	# 攻击范围 → 紫
-	for key in attack_tiles.keys():
-		var ap := (key as String).split(",")
-		var ax := ap[0].to_int()
-		var ay := ap[1].to_int()
-		if not _has_visible_cell(ax, ay):
+	var selected_cell: Vector2i = selected_unit.get(&"position", Vector2i(-1, -1))
+	# 移动格始终蓝色；武器红格只画移动范围之外，辅助覆盖独立维护。
+	for raw_key: Variant in attack_tiles:
+		if not move_range.has(raw_key):
+			_add_range_cell(String(raw_key), _RANGE_COLOR_ATTACK, selected_unit, selected_cell)
+	for raw_key: Variant in move_range:
+		_add_range_cell(String(raw_key), _RANGE_COLOR_MOVABLE, selected_unit, selected_cell)
+	show_support_tiles(support_tiles)
+
+
+func _add_range_cell(key: String, color: Color, selected_unit: Dictionary, selected_cell: Vector2i) -> void:
+	var parts: PackedStringArray = key.split(",")
+	var cell: Vector2i = Vector2i(int(parts[0]), int(parts[1]))
+	if cell == selected_cell or not _has_visible_cell(cell.x, cell.y):
+		return
+	var tint: Color = color
+	tint.a *= _range_alpha_for_cell(cell.x, cell.y, selected_unit)
+	var marker: Node2D = _make_color_block(cell.x, cell.y, tint)
+	_attach(marker)
+	_range_markers.append(marker)
+
+
+## 独立辅助层：切换技能时不重建蓝红格；传入实际技能/道具射程生成的格集。
+func show_support_tiles(tiles: Dictionary) -> void:
+	clear_support_tiles()
+	_support_markers = _make_tile_layer(tiles, _RANGE_COLOR_SUPPORT, false)
+
+
+func clear_support_tiles() -> void:
+	_free_tile_layer(_support_markers)
+
+
+## 独立危险层：以紫色描边保证与蓝色移动/绿色辅助叠加后仍可分辨。
+func show_danger_tiles(tiles: Dictionary) -> void:
+	clear_danger_tiles()
+	_danger_markers = _make_tile_layer(tiles, _RANGE_COLOR_DANGER, true)
+
+
+func clear_danger_tiles() -> void:
+	_free_tile_layer(_danger_markers)
+
+
+func _make_tile_layer(tiles: Dictionary, color: Color, outline: bool) -> Array[Node2D]:
+	var markers: Array[Node2D] = []
+	for raw_key: Variant in tiles:
+		var parts: PackedStringArray = String(raw_key).split(",")
+		var cell: Vector2i = Vector2i(int(parts[0]), int(parts[1]))
+		if not _has_visible_cell(cell.x, cell.y):
 			continue
-		if ax == sel_x and ay == sel_y:
-			continue
-		markers[key] = { "color": _RANGE_COLOR_ATTACK, "x": ax, "y": ay, "attack": true }
-	# 移动范围 → 蓝/红
-	for key in move_range.keys():
-		if markers.has(key):
-			continue
-		var mp := (key as String).split(",")
-		var mx := mp[0].to_int()
-		var my := mp[1].to_int()
-		if not _has_visible_cell(mx, my):
-			continue
-		if mx == sel_x and my == sel_y:
-			continue
-		var col: Color = _RANGE_COLOR_MOVABLE if grid.unit_at(mx, my).is_empty() else _RANGE_COLOR_BLOCKED
-		markers[key] = { "color": col, "x": mx, "y": my, "attack": false }
-	# 逐格生成描边
-	for key in markers.keys():
-		var info: Dictionary = markers[key]
-		var x: int = info["x"]
-		var y: int = info["y"]
-		var col: Color = info["color"]
-		col.a *= _range_alpha_for_cell(x, y, selected_unit)
-		var marker := _make_color_block(x, y, col)
+		var marker: Node2D = _make_outline_block(cell.x, cell.y, color, 3.0) if outline else _make_color_block(cell.x, cell.y, color)
 		_attach(marker)
-		_range_markers.append(marker)
-		# 攻击格：alpha 脉冲（2D 替代原版的绕 Y 旋转）
-		if bool(info["attack"]):
-			var tw := create_tween()
-			tw.set_loops(0)
-			tw.tween_property(marker, "modulate:a", 0.45, 0.5)
-			tw.tween_property(marker, "modulate:a", 1.0, 0.5)
-			_range_tweens.append(tw)
+		marker.z_index = 6 if outline else 5
+		markers.append(marker)
+	return markers
+
+
+func _free_tile_layer(markers: Array[Node2D]) -> void:
+	for marker: Node2D in markers:
+		if is_instance_valid(marker):
+			marker.free()
+	markers.clear()
 
 
 func _has_visible_cell(x: int, y: int) -> bool:
@@ -242,8 +262,19 @@ func _higher_neighbor_count(x: int, y: int, level: int) -> int:
 
 func clear_range_highlight() -> void:
 	_clear_range_markers()
+	clear_support_tiles()
 	clear_path()
 	clear_threat_arrows()
+
+
+## marker 挂在外部投影父节点，overlay 退出时须主动回收。
+func _exit_tree() -> void:
+	_clear_range_markers()
+	clear_support_tiles()
+	clear_danger_tiles()
+	for marker: Node2D in [_cursor_marker, _path_marker, _threat_marker]:
+		if is_instance_valid(marker):
+			marker.queue_free()
 
 
 # ============================================================
@@ -303,7 +334,7 @@ func show_path(path: Array, color: Color) -> void:
 		_path_marker.name = "PathMarker"
 		_attach(_path_marker)
 	_path_marker.color = color
-	_path_marker.coord_fn = _coord_fn
+	_path_marker.coord_fn = Callable(self, "_cell_to_screen")
 	# 收集每段的方向，画箭头
 	var segs: Array = []
 	var last_dir := Vector2i(1, 0)
@@ -340,10 +371,16 @@ func show_threat_arrows(sources: Array, target: Vector2i) -> void:
 		_attach(_threat_marker)
 		if is_world_mode():
 			_threat_marker.z_index = 6
-	_threat_marker.coord_fn = _coord_fn
+	_threat_marker.coord_fn = Callable(self, "_cell_to_screen")
 	_threat_marker.arcs = []
-	for source in sources:
-		_threat_marker.arcs.append({ source = source, target = target })
+	for raw_source: Variant in sources:
+		var arc: Dictionary = {target = target, high_risk = false}
+		if raw_source is Dictionary:
+			arc.merge(raw_source, true)
+			arc[&"target"] = target
+		else:
+			arc[&"source"] = raw_source
+		_threat_marker.arcs.append(arc)
 	_threat_marker.queue_redraw()
 
 
@@ -482,7 +519,8 @@ class _PathDrawer:
 ## 火焰纹章风格威胁箭头：每个可攻击落点的敌人各画一条红色二次抛物线。
 class _ThreatDrawer:
 	extends Node2D
-	const _RED := Color(0.95, 0.12, 0.10, 0.96)
+	const _RED: Color = Color(0.95, 0.12, 0.10, 0.96)
+	const _YELLOW: Color = Color(1.0, 0.84, 0.12, 0.98)
 	const _OUTLINE := Color(0.24, 0.015, 0.015, 0.90)
 	var arcs: Array = []             # [{ source: Vector2i, target: Vector2i }, ...]
 	var coord_fn := Callable()       # 与路径/范围层共用真实顶面投影
@@ -493,7 +531,8 @@ class _ThreatDrawer:
 		return IsoCoords.to_screen(cell.x, cell.y)
 
 	func _draw() -> void:
-		for arc in arcs:
+		for arc: Dictionary in arcs:
+			var color: Color = _YELLOW if bool(arc.get(&"high_risk", false)) else _RED
 			var start := _to_screen(arc.source)
 			var end := _to_screen(arc.target)
 			var distance := start.distance_to(end)
@@ -507,11 +546,11 @@ class _ThreatDrawer:
 				points.append((1.0 - t) * (1.0 - t) * start
 					+ 2.0 * (1.0 - t) * t * control + t * t * end)
 			draw_polyline(points, _OUTLINE, 5.0, true)
-			draw_polyline(points, _RED, 2.5, true)
+			draw_polyline(points, color, 2.5, true)
 			var direction := (end - points[points.size() - 2]).normalized()
 			var perpendicular := Vector2(-direction.y, direction.x)
 			var back := end - direction * 12.0
 			var left := back + perpendicular * 6.0
 			var right := back - perpendicular * 6.0
-			draw_colored_polygon(PackedVector2Array([end, left, right]), _RED)
+			draw_colored_polygon(PackedVector2Array([end, left, right]), color)
 			draw_polyline(PackedVector2Array([end, left, right, end]), _OUTLINE, 1.5, true)

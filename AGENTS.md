@@ -21,17 +21,20 @@
 - `dbg_launch` 必传 `scene`，省略只会进默认主场景。CLI 通道（`GODOT_BIN`）未配置，调试全走编辑器桥接（`dbg_*` / `runtime_*`）。
 - `runtime_get_log` **必须带 `levels`**，否则吐整个环形缓冲（实测 130KB+）。
 
-## 验证
+## 调试与验证（代码优先）
 
-- 代码改动要加 L1 日志 / L2 断言 / L3 断点，并用 `runtime_assert_*` 自动验证，不要 `print` 后肉眼判断。
-- 只跑修改过的测试，不盲目跑全量测试
+- **优先级：代码测试（单元 / 契约 / headless / 自动模拟）→ 函数或 API 驱动流程 + 自动断言 → 游戏内模拟点击 / 按键。** 能用代码测试覆盖的问题，不打开游戏做模拟点击验证；能通过函数调用、流程接口或自动化脚本控制的游戏流程，不用模拟点击 / 按键推进。
+- 优先复用现有测试、CLI、模拟器与流程接口；缺少入口时，优先补最小、可复用的测试或函数驱动入口。只有前两层无法覆盖的真实输入交互、焦点、命中区域或视觉表现问题，才打开对应场景做必要的交互 / 画面验证，并说明需要这一层验证的原因。
+- 代码测试以自动断言和退出码验收；确需运行时验证时，先读 `godot-debug`，通过函数 / API 驱动目标流程，用 `runtime_assert_*` 自动验证。按需使用 L1 日志 / L2 断言 / L3 断点定位，不要 `print` 后肉眼判断，也不要为纯逻辑验证强制启动游戏或下断点。
+- headless 契约测试走项目测试命令，不因 MCP 未激活而改成打开游戏；MCP 桥接与场景表适用于确需编辑器 / 游戏运行时的验证。
+- 只跑与改动相关的测试，不盲目跑全量测试。
 
-## 场景（改哪跑哪）
+## 场景（仅在需要运行时验证时使用）
 
 | 改动 | `dbg_launch` 的 `scene` |
 | --- | --- |
 | `main.gd`、世界生态、表现层 | `res://main.tscn` |
-| 战棋（`scripts/scenes/battle.gd`、`scripts/battle/`、`scripts/systems/`、`scripts/core/`、`scripts/iso/`） | 先 `res://main.tscn`，按 P 进 B1；`Battle.tscn` 依赖 `SceneArgs.battle_args`，不能直启 |
+| 战棋（`scripts/scenes/battle.gd`、`scripts/battle/`、`scripts/systems/`、`scripts/core/`、`scripts/iso/`） | 先 `res://main.tscn`，优先通过函数 / 流程接口进入 B1（玩家入口为 P，仅验证该输入时模拟按键）；`Battle.tscn` 依赖 `SceneArgs.battle_args`，不能无参直启 |
 | 技能 / 物品系统 | `res://scenes/SkillTest.tscn` |
 | 地图编辑器 | `res://scenes/MapEditor.tscn` |
 | 标题 / 主菜单 | `res://scenes/Title.tscn` |

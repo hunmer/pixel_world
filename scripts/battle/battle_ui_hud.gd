@@ -55,6 +55,8 @@ var _pending_log_bbcode := ""
 var _log_update_pending := false
 ## PankuModuleNativeLogger 实例（duck-typed；Panku 不在时保持 null）
 var _logger_module = null
+# ---- 【记录】Tab（玩家行动记录与回退；数据由 battle.gd 推送） ----
+var history_list: VBoxContainer = null
 
 # ---- 配色常量（统一取自 ui_theme.gd，与 battle_ui 原侧栏样式一致） ----
 const TEXT_MAIN := UIThemeScript.TEXT_MAIN
@@ -161,7 +163,18 @@ func build(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pref_cb: Cal
 	log_label.custom_minimum_size.y = Tokens.SPACE_LG * 8
 	log_tab.add_child(log_label)
 	_attach_panku_logger()
-	sv.add_child(Widgets.label("Q/Z·E/X 旋转 · R 复位 · 中键平移 · ESC 取消", true, TEXT_DIM))
+
+	var history_tab := _add_tab(tabs, "记录", "arrow_counterclockwise")
+	history_tab.add_child(Widgets.label("本次战斗行动记录", false, ACCENT))
+	history_list = Widgets.Column.new()
+	history_list.name = "ActionHistoryList"
+	history_list.gap = Tokens.SPACE_SM
+	history_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	history_tab.add_child(history_list)
+	history_list.add_child(Widgets.label("暂无已结算行动。", true, TEXT_DIM))
+	sv.add_child(Widgets.label("Q/X 旋转 · R 复位 · 中键平移 · Esc 撤回", true, TEXT_DIM))
+	sv.add_child(Widgets.label("T 固定当前敌人范围 · G 全体危险范围", true, TEXT_DIM))
+	sv.add_child(Widgets.label("蓝 移动 · 红 攻击 · 绿 辅助 · 紫 危险\n连线：红 普通 · 黄 高必杀/克制", true, TEXT_DIM))
 
 
 ## 各页只纵向滚动；短页签避免固定 360px 侧栏被标签撑宽。
@@ -177,6 +190,28 @@ func _add_tab(tabs: TabContainer, title: String, icon_name: String) -> VBoxConta
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(column)
 	return column
+
+
+## 【记录】Tab 重渲染：battle.gd 在行动记录变化时推送 labels。
+## 点第 i 条 → _ui.on_rewind_action.call(i)（battle.gd 恢复到该行动之前）。
+func refresh_action_history(labels: Array) -> void:
+	if history_list == null:
+		return
+	for c in history_list.get_children():
+		# 立即摘除再延迟释放：同帧 get_children 必须只看到新节点（回退后马上数按钮的契约/测试依赖）。
+		history_list.remove_child(c)
+		c.queue_free()
+	if labels.is_empty():
+		history_list.add_child(Widgets.label("暂无已结算行动。", true, TEXT_DIM))
+		return
+	for i in labels.size():
+		var idx := i
+		var row := Widgets.button("↩ %d. %s" % [i + 1, String(labels[i])],
+			func():
+				if _ui.on_rewind_action.is_valid():
+					_ui.on_rewind_action.call(idx))
+		history_list.add_child(row)
+	history_list.add_child(Widgets.label("点击记录回退到该行动之前（本次战斗全程可回退，敌方回合中暂不可用）。", true, TEXT_DIM))
 
 
 ## battle_ui._process 每帧驱动：状态刷新 + 挂起日志落盘（顺序与拆分前一致）。

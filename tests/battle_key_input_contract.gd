@@ -32,6 +32,8 @@ func _run() -> void:
 	var route: Dictionary = battle._key_route()
 	var missing_handler: Callable = route.get(KEY_A, Callable())
 	_expect(not missing_handler.is_valid(), "未绑定键应返回空 Callable")
+	_expect((route.get(KEY_T, Callable()) as Callable).is_valid()
+		and (route.get(KEY_G, Callable()) as Callable).is_valid(), "T/G 应绑定敌人危险范围切换")
 	battle._handle_key_input(event)
 	event.keycode = KEY_A
 	battle._handle_key_input(event)
@@ -40,6 +42,10 @@ func _run() -> void:
 	event.keycode = KEY_Z
 	battle._handle_key_input(event)
 	_expect(routed_count == 1, "已绑定键按下应调用一次处理器")
+	event.echo = true
+	battle._handle_key_input(event)
+	_expect(routed_count == 1, "长按重复事件不应反复切换危险范围")
+	event.echo = false
 	event.pressed = false
 	battle._handle_key_input(event)
 	_expect(routed_count == 1, "松键不应调用处理器")
@@ -49,5 +55,5 @@ func _run() -> void:
 	_expect(routed_count == 1, "路由表已缓存时未绑定键仍应安全忽略")
 	battle.free()
 	if failures.is_empty():
-		print("BATTLE_KEY_INPUT_CONTRACT_OK checks=5")
+		print("BATTLE_KEY_INPUT_CONTRACT_OK checks=7")
 	quit(0 if failures.is_empty() else 1)

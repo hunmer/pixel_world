@@ -113,10 +113,57 @@ func _run_b2() -> void:
 		"B2 点击不同 z 的移动格后单位未到目标（position=%s）" % str(player.position))
 	_expect(battle.mode == battle.Mode.MENU and battle.battle_ui.has_open_menu(),
 		"B2 跨高度移动完成后行动菜单未打开")
-	_expect(battle.range_overlay.threat_arrow_count() == 0,
-		"进入移动后行动菜单时应清除威胁抛物线")
+	_expect(battle.range_overlay.threat_arrow_count() == 2,
+		"进入移动后行动菜单时应继续显示落点威胁")
 	var sprite: UnitSprite3D = battle._unit_sprites[player.id]
 	_expect_unit_facing_matches_last_step(sprite, "B2")
+	# 浏览技能面板不能提交移动；Esc 必须同时恢复占位、立绘和可移动状态。
+	var skill_buttons: Array[Node] = battle.battle_ui.menu_container.find_children("*", "Button", true, false)
+	var opened_skill: bool = false
+	for button: Node in skill_buttons:
+		if String(button.get("text")).begins_with("技能（"):
+			button.emit_signal("pressed")
+			opened_skill = true
+			break
+	_expect(opened_skill and battle.battle_ui.has_open_menu(), "应通过真实技能按钮打开技能面板")
+	battle._show_support_range(player, &"heal")
+	_expect(not battle.range_overlay._support_markers.is_empty(), "选择治疗指令应显示绿色辅助范围")
+	battle._show_support_range(player, &"smite")
+	_expect(battle.range_overlay._support_markers.is_empty(), "切换攻击指令应清除辅助范围")
+	var cancel := InputEventKey.new()
+	cancel.keycode = KEY_ESCAPE
+	cancel.pressed = true
+	battle._input(cancel)
+	_expect(player.position == Vector2i.ZERO and not player.hasMoved, "技能菜单 Esc 未恢复初始位置与移动状态")
+	_expect(battle.grid.unit_at(0, 0).get(&"id", &"") == player.id
+		and battle.grid.unit_at(target.x, target.y).is_empty(), "Esc 后网格占位错误")
+	_expect(sprite.global_position.is_equal_approx(sprite._b2_cell_world(Vector2i.ZERO)), "Esc 后立绘未回原位")
+	_expect(battle.mode == battle.Mode.UNIT_SELECTED and battle._pending_move_undo.is_empty(), "Esc 后应回到选中态")
+	battle._perform_move(player, target)
+	await create_timer(0.5).timeout
+	# 攻击预览已启动的计时器也必须被 Esc 作废。
+	var enemy_hp: int = enemy.hp
+	battle.battle_ui.close_menu()
+	battle.battle_ui._menu._preview_and_attack(player, enemy)
+	battle._input(cancel)
+	await create_timer(1.3).timeout
+	_expect(enemy.hp == enemy_hp and not player.hasActed, "取消预览后旧协程仍执行了攻击")
+	_expect(player.position == Vector2i.ZERO, "预览 Esc 未撤回初始位置")
+	# 悬停 / 固定 / 全体危险层可以与玩家移动范围共存。
+	battle._hovered_enemy = enemy
+	battle._refresh_enemy_danger()
+	_expect(not battle.range_overlay._danger_markers.is_empty(), "悬停敌人未显示危险范围")
+	battle._toggle_enemy_danger()
+	battle._hovered_enemy = {}
+	battle._refresh_enemy_danger()
+	_expect(not battle.range_overlay._danger_markers.is_empty(), "固定敌人范围在离开光标后消失")
+	battle._pinned_enemy_ids.clear()
+	battle._toggle_all_enemy_danger()
+	_expect(not battle.range_overlay._danger_markers.is_empty(), "全体敌人危险范围未显示")
+	battle._toggle_all_enemy_danger()
+	_expect(battle.range_overlay._danger_markers.is_empty(), "关闭全体危险范围后未清理")
+	battle._perform_move(player, target)
+	await create_timer(0.5).timeout
 	player.hasActed = true
 	battle.battle_ui.update_unit_sprite(player)
 	await process_frame

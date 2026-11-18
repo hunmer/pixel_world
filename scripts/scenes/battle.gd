@@ -31,12 +31,14 @@ const BattlePresentationScript = preload("res://scripts/battle/battle_presentati
 const ActionAnimScript = preload("res://scripts/battle/action_anim.gd")
 const ImmersiveCameraScript = preload("res://scripts/battle/immersive_camera.gd")
 const BattleActionResolver = preload("res://scripts/battle/battle_action_resolver.gd")
+const BattleThreatDataScript = preload("res://scripts/battle/battle_threat_data.gd")
 const FacingRules = preload("res://scripts/systems/facing_rules.gd")
 const BattleFxScript = preload("res://scripts/battle/battle_fx.gd")
 const BattleSfxScript = preload("res://scripts/battle/battle_sfx.gd")
 const BattleResultStageScript = preload("res://scripts/battle/battle_result_stage.gd")
 const BattlePrefPanelScript = preload("res://scripts/battle/battle_pref_panel.gd")
 const BattleSaveScript = preload("res://scripts/battle/battle_save.gd")
+const BattleActionHistoryScript = preload("res://scripts/battle/battle_action_history.gd")
 const BattleCameraKickScript = preload("res://scripts/battle/battle_camera_kick.gd")
 const LevelUpPresentationScript = preload("res://scripts/battle/level_up_presentation.gd")
 const CampaignBattleBridgeScript = preload("res://scripts/battle/campaign_battle_bridge.gd")
@@ -49,6 +51,10 @@ var _sfx: BattleSfx = null
 var _result_stage: BattleResultStage = null
 var _pref_panel: BattlePrefPanel = null
 var _save: BattleSave = null
+## 玩家行动记录与回退（回合内撤销；【记录】Tab 数据源）。
+## 不写类型标注：新 class_name 未进 .godot 全局类缓存时会 unknown identifier
+## （同 grid_system.gd 的 preload 惯例）。
+var _action_history = BattleActionHistoryScript.new()
 var _camera_kick: BattleCameraKick = null
 # 契约测试别名（指向模块实例/模块内部字典，勿重赋值）
 var _presentation_audio: AudioStreamPlayer = null
@@ -102,6 +108,11 @@ var cursor_visible := false
 # 可撤销移动：移动完成后弹出菜单期间记录「移动前位置」，按 ESC 取消移动时把单位送回。
 # { unit: Dictionary, from: Vector2i } —— 菜单确认（攻击/等待）后清空。
 var _pending_move_undo: Dictionary = {}
+## 固定范围按单位 ID 保存；签名变化时才重新计算危险格。
+var _pinned_enemy_ids: Dictionary = {}
+var _show_all_enemy_danger: bool = false
+var _danger_signature: String = ""
+var _hovered_enemy: Dictionary = {}
 
 # 托管（autoplay）编排器：敌方回合 + 玩家方托管 + 偏好数据。
 # hosting_active=true 时玩家回合自动跑，手动输入路径被锁。
@@ -206,8 +217,7 @@ func _configure_battle_core() -> void:
 	turn_director.host_difficulty = AIDifficulty.normalize(Settings.host_ai_difficulty)
 	# 1a. 战旗持久化模块（完整行动边界提交；toast 经 battle_ui 回交，调用时才求值）
 	_save = BattleSaveScript.new()
-	_save.setup(
-		_save_identity,
+	_save.setup(		_save_identity,
 		_save_state,
 		turn,
 		turn_director,
@@ -597,10 +607,15 @@ func _inject_battle_ui_callables() -> void:
 	battle_ui.on_clear_selection = _clear_selection
 	battle_ui.on_clear_pending_move_undo = _clear_pending_move_undo
 	battle_ui.on_cancel_move = _cancel_move
+	battle_ui.on_show_support_range = _show_support_range
+	battle_ui.on_clear_support_range = _clear_support_range
 	battle_ui.on_select_unit = _select_unit
 	battle_ui.on_set_mode = _set_mode_from_director
 	battle_ui.on_check_battle_end = _check_battle_end
 	battle_ui.on_should_end_turn_after_action = _should_end_turn_after_action
+	# 行动记录（【记录】Tab）：记一条 / 点条目回退
+	battle_ui.on_record_action = _on_ui_record_action
+	battle_ui.on_rewind_action = _rewind_player_action
 	# host_btn 由 battle_ui.build 内部创建，通过回调交给 turn_director
 	battle_ui.set_host_btn_callback(func(btn: Button): turn_director.set_host_btn(btn))
 	# close_menu 复位 mode（仅当当前是 MENU 态）
@@ -630,6 +645,9 @@ func _on_player_phase(turn_num: int) -> void:
 	mode = Mode.IDLE
 	battle_ui.set_phase_text("第 %d 轮 · 我方行动" % turn_num, Color(0.29, 0.87, 0.50))
 	_refresh_all_units()
+	# 行动记录：首个玩家回合开始记 baseline，整场战斗累积（跨回合可回退）
+	_action_history.ensure_baseline(turn.units, _drop_ctx.get(&"loot", []), chapter.get("reinforcements", []), turn.turn_number)
+	_refresh_action_history_ui()
 	_commit_snapshot()
 	# 托管模式下不需要手动选中（托管自己驱动），跳过 debug_auto_select 避免范围墙未入树报错
 	if SceneArgs.battle_args.get("debug_auto_select_first_player", false) and not turn_director.is_hosting():
@@ -833,6 +851,12 @@ func _input(event: InputEvent) -> void:
 			_skip_action_presentation()
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventKey:
+		var cancel_key: InputEventKey = event as InputEventKey
+		if cancel_key.keycode == KEY_ESCAPE and cancel_key.pressed and not cancel_key.echo:
+			_on_cancel()
+			get_viewport().set_input_as_handled()
+			return
 	if _b1_mode:
 		return  # B1：相机/拾取由 main.gd._handle_battle_input 接管
 	# 按住空格 = 临时平移模式（左键拖地图），松开恢复（与编辑器一致）
@@ -897,7 +921,7 @@ func _handle_input_while_animating(event: InputEvent) -> void:
 
 
 func _handle_key_input(k: InputEventKey) -> void:
-	if not k.pressed:
+	if not k.pressed or k.echo:
 		return
 	var handler: Callable = _key_route().get(k.keycode, Callable())
 	if handler.is_valid():
@@ -914,6 +938,8 @@ func _key_route() -> Dictionary:
 			KEY_Q: Callable(self, "_rotate_camera").bind(-1),
 			KEY_X: Callable(self, "_rotate_camera").bind(1),
 			KEY_R: Callable(self, "_reset_camera_rotation"),
+			KEY_T: Callable(self, "_toggle_enemy_danger"),
+			KEY_G: Callable(self, "_toggle_all_enemy_danger"),
 			KEY_UP: Callable(self, "_move_cursor").bind(0, -1),
 			KEY_DOWN: Callable(self, "_move_cursor").bind(0, 1),
 			KEY_LEFT: Callable(self, "_move_cursor").bind(-1, 0),
@@ -1034,6 +1060,10 @@ func _process(_delta: float) -> void:
 				menu_target = true
 				break
 			control = control.get_parent_control()
+	_hovered_enemy = {}
+	if candidate != null and candidate.unit.faction != &"player":
+		_hovered_enemy = candidate.unit
+	_refresh_enemy_danger()
 	for raw_sprite in _unit_sprites.values():
 		var sprite := raw_sprite as UnitSprite3D
 		if not is_instance_valid(sprite):
@@ -1149,6 +1179,13 @@ func _on_confirm() -> void:
 func _on_cancel() -> void:
 	if turn_director.is_hosting():
 		return
+	if mode in [Mode.ANIMATING, Mode.ENEMY_TURN]:
+		return
+	# 未提交的移动优先撤销，技能/攻击/背包子菜单都保留同一出发点。
+	if not _pending_move_undo.is_empty():
+		battle_ui.close_unit_detail()
+		_cancel_move()
+		return
 	# 详情面板打开时，ESC 优先关闭它
 	if battle_ui.is_unit_detail_open():
 		battle_ui.close_unit_detail()
@@ -1192,10 +1229,22 @@ func _on_tile_click(x: int, y: int) -> void:
 			_select_unit(u)
 	elif mode == Mode.UNIT_SELECTED and not selected_unit.is_empty():
 		var key := "%d,%d" % [x, y]
+		# 原地点击当前角色：不移动，直接弹行动菜单（攻击/技能/物品/等待无需先移动）。
+		if not u.is_empty() and u.id == selected_unit.id:
+			_open_menu_in_place()
+			return
 		if current_move_range.has(key) and u.is_empty():
 			_perform_move(selected_unit, Vector2i(x, y))
 		elif current_attack_tiles.has(key) and not u.is_empty() and u.faction != &"player":
-			_perform_attack_from_current(selected_unit, u)
+			var reach: Array = ProfessionData.unit_attack_range(selected_unit)
+			var distance: int = GridSystem.distance(selected_unit.position, u.position)
+			if distance >= int(reach[0]) and distance <= int(reach[1]):
+				_perform_attack_from_current(selected_unit, u)
+			else:
+				# 红格包含移动后射程，必须先走到合法站位，不能隔空结算。
+				var stand: Vector2i = _find_attack_stand(u.position)
+				if stand.x >= 0:
+					_perform_move(selected_unit, stand)
 		elif not u.is_empty() and u.faction == &"player" and not u.hasActed:
 			_clear_range_highlight()
 			_select_unit(u)
@@ -1209,7 +1258,7 @@ func _on_tile_click(x: int, y: int) -> void:
 func _select_unit(u: Dictionary) -> void:
 	selected_unit = u
 	mode = Mode.UNIT_SELECTED
-	var res := grid.compute_attack_range(u.position.x, u.position.y, u)
+	var res: Dictionary = BattleThreatDataScript.unit_ranges(grid, u)
 	current_move_range = res.moveRange
 	current_attack_tiles = res.attackTiles
 	range_overlay.highlight_range(current_move_range, current_attack_tiles, selected_unit)
@@ -1262,20 +1311,80 @@ func _update_hover_path(hover_cell: Vector2i) -> void:
 	range_overlay.clear_threat_arrows()
 
 
+## —— 敌方危险预览与技能辅助范围（数据源 battle_threat_data.gd；钉住/全局两层） ——
+
+
 ## 候选落点沿用现有攻击距离规则；每个能攻击该格的存活敌人各产生一条箭头。
 func _update_threat_arrows(target: Vector2i) -> void:
-	var sources: Array[Vector2i] = []
-	for unit in grid.units.values():
-		if unit.get(&"isDead", false) or unit.get(&"faction", &"") == &"player":
-			continue
-		var attack_range: Array = ProfessionData.unit_attack_range(unit)
-		var dist := absi(unit.position.x - target.x) + absi(unit.position.y - target.y)
-		if dist >= int(attack_range[0]) and dist <= int(attack_range[1]):
-			sources.append(unit.position)
+	if selected_unit.is_empty():
+		range_overlay.clear_threat_arrows()
+		return
+	var sources: Array = BattleThreatDataScript.threats_to(grid, _living_enemies(), selected_unit, target)
 	range_overlay.show_threat_arrows(sources, target)
 
 
-## 找一个攻击站位：在移动范围内、该格可停、且所选单位从该格能打到 target_cell。
+
+
+func _living_enemies() -> Array:
+	var enemies: Array = []
+	for unit_value: Variant in grid.units.values():
+		var unit: Dictionary = unit_value
+		if not bool(unit.get(&"isDead", false)) and unit.get(&"faction", &"") != &"player":
+			enemies.append(unit)
+	return enemies
+
+
+func _show_support_range(unit: Dictionary, skill_id: StringName) -> void:
+	var skill: Dictionary = SkillData.get_skill(skill_id)
+	if skill.get(&"targetType", &"") not in [&"self", &"ally", &"aoe_ally"]:
+		_clear_support_range()
+		return
+	var support: Dictionary = BattleThreatDataScript.tiles_in_range(grid, unit[&"position"], skill.get(&"range", [0, 0]))
+	if skill.get(&"targetType", &"") == &"self":
+		var pos: Vector2i = unit[&"position"]
+		support = {"%d,%d" % [pos.x, pos.y]: true}
+	range_overlay.show_support_tiles(support)
+
+
+func _clear_support_range() -> void:
+	range_overlay.clear_support_tiles()
+
+
+func _toggle_enemy_danger() -> void:
+	if _hovered_enemy.is_empty():
+		return
+	var id: StringName = _hovered_enemy.get(&"id", &"")
+	if _pinned_enemy_ids.has(id):
+		_pinned_enemy_ids.erase(id)
+	else:
+		_pinned_enemy_ids[id] = true
+	_refresh_enemy_danger()
+
+
+func _toggle_all_enemy_danger() -> void:
+	_show_all_enemy_danger = not _show_all_enemy_danger
+	_refresh_enemy_danger()
+
+
+func _refresh_enemy_danger() -> void:
+	var enemies: Array = _living_enemies()
+	var shown: Array = []
+	var signature_parts: Array[String] = [str(_show_all_enemy_danger), str(mode)]
+	for unit_value: Variant in grid.units.values():
+		var unit: Dictionary = unit_value
+		signature_parts.append(str([unit.get(&"id"), unit.get(&"position"), unit.get(&"isDead"), unit.get(&"stats"), unit.get(&"weapon"), unit.get(&"attackRange")]))
+	for enemy: Dictionary in enemies:
+		var id: StringName = enemy.get(&"id", &"")
+		if _show_all_enemy_danger or _pinned_enemy_ids.has(id) or id == _hovered_enemy.get(&"id", &""):
+			shown.append(enemy)
+			signature_parts.append("显示:" + String(id))
+	var signature: String = "|".join(signature_parts)
+	if signature == _danger_signature:
+		return
+	_danger_signature = signature
+	range_overlay.show_danger_tiles(BattleThreatDataScript.danger_tiles(grid, shown))
+
+
 ## 返回站位 Vector2i；找不到返回 Vector2i(-1,-1)。
 func _find_attack_stand(target_cell: Vector2i) -> Vector2i:
 	var best := Vector2i(-1, -1)
@@ -1301,6 +1410,15 @@ func _find_attack_stand(target_cell: Vector2i) -> Vector2i:
 # ============================================================
 # 移动
 # ============================================================
+## 原地弹出行动菜单：不移动即可攻击/技能/物品/等待。
+## _pending_move_undo 记录 from == 当前位置，ESC 取消时
+## _cancel_move 的无位移分支只关菜单并回到选中态，天然兼容。
+func _open_menu_in_place() -> void:
+	var u: Dictionary = selected_unit
+	_pending_move_undo = { &"unit": u, &"from": u.position, &"facing": FacingRules.get_facing(u) }
+	battle_ui.open_unit_menu(u, u.position, u.position)
+
+
 func _perform_move(u: Dictionary, target: Vector2i) -> void:
 	mode = Mode.ANIMATING
 	_clear_range_highlight()
@@ -1324,13 +1442,15 @@ func _perform_move(u: Dictionary, target: Vector2i) -> void:
 		u.hasMoved = true
 		us.update_state()
 		battle_ui.open_unit_menu(u, target, from_pos)
+		_update_threat_arrows(target)
 	)
 
 
 func _perform_attack_from_current(u: Dictionary, target: Dictionary) -> void:
 	_clear_range_highlight()
-	
+
 	_resolve_combat(u, target, func():
+		_record_player_action("攻击 " + String(target.get(&"name", target.id)))
 		selected_unit = {}
 
 		mode = Mode.IDLE
@@ -1351,6 +1471,8 @@ func _resolve_combat(attacker: Dictionary, defender: Dictionary, on_done: Callab
 ## 唯一普攻结算入口：先落地 CombatSystem，再完整播放事件，最后统一刷新死亡/经验。
 ## TurnDirector 敌方/托管直接 await 本函数；手动路径经上方回调包装保持原状态机。
 func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
+	_clear_pending_move_undo()
+	_clear_range_highlight()
 	mode = Mode.ANIMATING
 	print("[combat] %s → %s atk_hp=%d def_hp=%d" % [
 		attacker.name, defender.name, attacker.hp, defender.hp])
@@ -1405,6 +1527,8 @@ func _on_impact_presented(impact: Dictionary) -> void:
 # ============================================================
 ## 技能先落地 SkillSystem，再播放其 attack_event；返回 true 告知 TurnDirector 已自行 await。
 func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) -> bool:
+	_clear_pending_move_undo()
+	_clear_range_highlight()
 	if targets.is_empty():
 		caster.hasActed = true
 		return true
@@ -1455,6 +1579,8 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 
 ## 物品演出。item_entry 为 {id, uses}。内部调 ItemSystem.execute。
 func _resolve_item(user: Dictionary, targets: Array, item_entry: Dictionary) -> bool:
+	_clear_pending_move_undo()
+	_clear_range_highlight()
 	if targets.is_empty() or item_entry.is_empty():
 		user.hasActed = true
 		return true
@@ -1549,7 +1675,11 @@ func _present_level_up(u: Dictionary, exp_info: Dictionary) -> void:
 # 玩家行动收尾（菜单UI在 battle_ui；这里只保留状态机收尾）
 # ============================================================
 ## 玩家手动行动（攻击/技能/物品）结束后的统一收尾。
-func _finish_player_action(_u: Dictionary) -> void:
+## label：行动记录文案（battle_ui 传入；空则记「行动 · 单位名」）。
+func _finish_player_action(u: Dictionary, label: String = "") -> void:
+	if label.is_empty():
+		label = "行动 · " + String(u.get(&"name", u.id))
+	_record_player_action(label)
 	selected_unit = {}
 	mode = Mode.IDLE
 	_commit_snapshot()
@@ -1559,10 +1689,130 @@ func _finish_player_action(_u: Dictionary) -> void:
 		turn.end_turn()
 
 
+# ============================================================
+# 玩家行动记录与回退（battle_action_history.gd + 【记录】Tab）
+# ============================================================
+## battle_ui 注入回调：菜单侧收尾（等待/交换/菜单攻击）记一条已结算行动。
+func _on_ui_record_action(label: String) -> void:
+	_record_player_action(label)
+
+
+func _record_player_action(label: String) -> void:
+	if _action_history == null:
+		return
+	_action_history.record(label, turn.units, _drop_ctx.get(&"loot", []), chapter.get("reinforcements", []), turn.turn_number)
+	_refresh_action_history_ui()
+
+
+## 刷新【记录】Tab（headless 契约测试无 battle_ui 时跳过）。
+func _refresh_action_history_ui() -> void:
+	if _action_history == null or battle_ui == null:
+		return
+	battle_ui.refresh_action_history(_action_history.labels())
+
+
+## 点【记录】Tab 第 index 条（0-based）→ 恢复到该行动开始之前。
+## 仅玩家回合、非托管、非演出中可回退；第 1 条回退到战斗开始（baseline）。
+## 支持跨回合回退（整场战斗累积历史）。
+func _rewind_player_action(index: int) -> void:
+	if _battle_ended or turn.phase != &"player":
+		return
+	if mode == Mode.ENEMY_TURN or mode == Mode.ANIMATING:
+		return
+	if turn_director != null and turn_director.is_hosting():
+		return
+	if _action_history == null:
+		return
+	var snap: Dictionary = _action_history.rewind_target(index)
+	if snap.is_empty():
+		return
+	var labels: Array = _action_history.labels()
+	print("[history] 回退玩家行动 #%d（%s）→ 回到 T%d" % [index + 1, labels[index] if index < labels.size() else "?", int(snap.get(&"turn", 1))])
+	_apply_history_snapshot(snap)
+	_action_history.truncate_after_rewind(index)
+	_refresh_action_history_ui()
+	_commit_snapshot()
+
+
+## 就地回写快照：单位 Dictionary 被 grid/turn/sprite 共享引用，clear+merge
+## 后所有持有者自动一致；再重建 grid 占位、回写掉落、恢复 sprite 表现层。
+## 跨回合回退时一并恢复回合数、增援波次，并移除快照之后刷入的增援单位。
+func _apply_history_snapshot(snap: Dictionary) -> void:
+	var snap_units: Dictionary = snap.get(&"units", {})
+	# 0) 恢复回合数（restore_state 只赋 phase/turn_number，不动单位数据）
+	var snap_turn := int(snap.get(&"turn", turn.turn_number))
+	if snap_turn != turn.turn_number:
+		turn.restore_state(&"player", snap_turn)
+		if battle_ui != null:
+			battle_ui.set_phase_text("第 %d 轮 · 我方行动" % snap_turn, Color(0.29, 0.87, 0.50))
+	# 0.1) 移除快照之后刷入的增援单位（id 不在快照里 = 快照后 spawn_due 追加的）：
+	#      从 turn.units / chapter 两阵营数组 erase；sprite 释放；
+	#      grid 占位随后全清重建，无需单独 remove_unit。
+	var removal: Array = []
+	for u in turn.units:
+		if not snap_units.has(u[&"id"]):
+			removal.append(u)
+	for u in removal:
+		(turn.units as Array).erase(u)
+		(chapter.get("playerUnits", []) as Array).erase(u)
+		(chapter.get("enemyUnits", []) as Array).erase(u)
+		var us: UnitSprite3D = _unit_sprites.get(u[&"id"])
+		if us != null:
+			us.queue_free()
+			_unit_sprites.erase(u[&"id"])
+	# 0.2) 恢复未刷的增援波次（spawn_due 整组替换消费，无共享引用，可整组回写）
+	chapter["reinforcements"] = (snap.get(&"reinforcements", []) as Array).duplicate(true)
+	# 1) 单位数据就地回写（duplicate(true) 防 baseline 快照被后续修改污染）
+	for u in turn.units:
+		var s: Dictionary = snap_units.get(u[&"id"], {}) as Dictionary
+		if s.is_empty():
+			continue
+		u.clear()
+		u.merge(s.duplicate(true))
+	# 2) 重建 grid 占位（place_unit 原地重放 delta 为零，不动已恢复的朝向）
+	grid.units.clear()
+	for y in range(grid.height):
+		for x in range(grid.width):
+			grid.cell_to_unit[y][x] = null
+	for u in turn.units:
+		if bool(u.get(&"isDead", false)):
+			continue
+		var pos: Vector2i = u[&"position"]
+		grid.place_unit(u, pos.x, pos.y)
+	# 3) 掉落列表就地回写（_drop_ctx.loot 与 chapter.pending_loot 同引用）
+	var loot_arr: Array = _drop_ctx.get(&"loot", []) as Array
+	loot_arr.clear()
+	loot_arr.append_array((snap.get(&"loot", []) as Array).duplicate(true))
+	# 4) 表现层：位置同步 / 死亡复活（杀死亡 tween+还原淡出）/ 朝向 / 血条
+	for u in turn.units:
+		var us: UnitSprite3D = _unit_sprites.get(u[&"id"])
+		if us == null:
+			continue
+		if not bool(u.get(&"isDead", false)):
+			var raw_tw = _result_stage.tweens.get(u[&"id"])
+			if raw_tw != null and (raw_tw as Tween).is_valid():
+				(raw_tw as Tween).kill()
+			_result_stage.tweens.erase(u[&"id"])
+			us.visible = true
+			us.fade_alpha(1.0)
+			us.scale = Vector3.ONE
+		var pos: Vector2i = u[&"position"]
+		us.global_position = us._world_cell_world(pos) if us.is_world_mode() else us._b2_cell_world(pos)
+		_sync_sprite_facing(u)
+		us.update_state()
+	# 5) 状态机复位：回退后回到空闲态，玩家重新选择
+	selected_unit = {}
+	_pending_move_undo.clear()
+	_clear_range_highlight()
+	mode = Mode.IDLE
+	_refresh_all_units()
+
+
 ## 取消移动（移动完成后弹出菜单、按 ESC 时调用）：
 ## 关菜单 → 单位送回出发点 → 复位 hasMoved → 重新进入 UNIT_SELECTED 并重算移动/攻击范围。
 ## 对「没真正移动」（from == 当前位置）的情况只关菜单、回到选中态即可。
 func _cancel_move() -> void:
+	battle_ui.cancel_action_preview()
 	battle_ui.close_menu()
 	if _pending_move_undo.is_empty():
 		return
@@ -1581,7 +1831,13 @@ func _cancel_move() -> void:
 		_sync_sprite_facing(u)
 		u.hasMoved = false
 		if _unit_sprites.has(u.id):
-			(_unit_sprites[u.id] as UnitSprite3D).update_state()
+			var sprite: UnitSprite3D = _unit_sprites[u.id]
+			sprite.global_position = sprite._world_cell_world(from) if sprite.is_world_mode() else sprite._b2_cell_world(from)
+			sprite.update_state()
+	assert(grid.unit_at(from.x, from.y).get(&"id", &"") == u.id, "撤销后网格占位必须回到出发点")
+	print("[battle-move] 撤销 %s → %s" % [String(u.id), str(from)])
+	cursor_pos = from
+	cursor_visible = true
 	# 重新选中：重算移动/攻击范围、高亮、光标归位。
 	_select_unit(u)
 

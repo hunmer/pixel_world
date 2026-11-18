@@ -101,6 +101,14 @@ var on_select_unit: Callable
 var on_set_mode: Callable
 var on_check_battle_end: Callable
 var on_should_end_turn_after_action: Callable
+var on_show_support_range: Callable
+var on_clear_support_range: Callable
+## 每次取消预览递增，阻止已经取消的协程落地行动。
+var action_preview_revision: int = 0
+## 行动记录（battle.gd 注入）：on_record_action(label) 记一条已结算行动；
+## on_rewind_action(index) 点击记录条目回退（0-based，恢复到该行动之前）。
+var on_record_action: Callable
+var on_rewind_action: Callable
 
 # ---- 子模块（build 时创建并注入宿主） ----
 var _hud: BattleUiHudScript = null
@@ -194,6 +202,12 @@ func refresh_turn_status() -> void:
 		_hud.refresh_turn_status()
 
 
+## 【记录】Tab 重渲染 —— 薄委托到 hud 模块；labels 由 battle.gd 推送。
+func refresh_action_history(labels: Array) -> void:
+	if _hud != null:
+		_hud.refresh_action_history(labels)
+
+
 ## battle.gd 注入：把 host_btn 交给 turn_director（battle.gd 持有 director 引用）。
 var _on_set_host_btn: Callable
 func set_host_btn_callback(cb: Callable) -> void:
@@ -271,6 +285,22 @@ func _hit_ui(node: Node, screen_pos: Vector2) -> bool:
 		if _hit_ui(child, screen_pos):
 			return true
 	return false
+
+
+func show_support_range(unit: Dictionary, skill_id: StringName) -> void:
+	if on_show_support_range.is_valid():
+		on_show_support_range.call(unit, skill_id)
+
+
+func clear_support_range() -> void:
+	if on_clear_support_range.is_valid():
+		on_clear_support_range.call()
+
+
+func cancel_action_preview() -> void:
+	action_preview_revision += 1
+	close_preview()
+	clear_support_range()
 
 
 func has_open_menu() -> bool:
