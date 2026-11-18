@@ -1,7 +1,8 @@
 ## tests/equipment_contract.gd — 装备目录/四槽装卸/统一实际武器读取 契约
 ##
 ## 覆盖：data/equipment.json 严格装载（v1/11 件/四槽 weapon+shield+staff+relic）、
-## 查询与授权、事务性 equip/unequip（装上不补满、卸下超容才钳）、equipment 键可选、
+## 查询与授权、事务性 equip/unequip（装上不补满、同槽替换降容即钳与卸下超容才钳
+## 共用钳制、同装幂等不动 HP/MP）、equipment 键可选、
 ## WeaponData.unit_weapon 装备优先空装回退（weapon/staff 两武器槽）、
 ## BuffSystem=base+装备+buff 而容量=base+装备、normalize_unit_equipment 存档归一、
 ## 坏档整体拒绝。坏档注入：user://equipment_contract_tmp/ + force_reload()。
@@ -196,22 +197,40 @@ func _test_equip_unequip() -> void:
 	_expect(bool(r7.ok) and not bool(r7.changed), "重复卸应幂等")
 	var r8: Dictionary = EquipmentData.unequip(u, &"helm")
 	_expect(not bool(r8.ok), "未知槽位应拒绝")
-	# 卸下超容才钳：披风（relic）hp+1
+	# 同槽替换降容即钳 + 卸下超容才钳：披风（relic）hp+1 ↔ 坠饰
 	var v := _mk_unit("eq_clamp", &"priest")
 	var base_hp := int(v[&"stats"][&"hp"])
 	var rc: Dictionary = EquipmentData.equip(v, &"campaignCloak")
 	_expect(bool(rc.ok) and StringName(rc.slot) == &"relic", "priest 应能装远征披风（relic）：%s" % String(rc.reason))
 	_expect(EquipmentData.capacity_hp(v) == base_hp + 1, "披风 HP 容量应 +1")
 	v[&"hp"] = base_hp + 1
-	# relic 同槽替换：披风 → 幸运坠饰
+	# relic 同槽替换到更低容量：HP 应立即钳到新容量（不等到卸下）
 	var rr: Dictionary = EquipmentData.equip(v, &"luckyPendant")
 	_expect(bool(rr.ok) and bool(rr.changed) and StringName(rr.prev) == &"campaignCloak", "relic 同槽替换应成功并返回 prev")
+	_expect(bool(rr.hp_clamped), "同槽替换到低容量装备应触发 HP 钳制")
+	_expect(int(v[&"hp"]) == base_hp, "替换降容后 HP 应立即钳回 base")
 	_expect(EquipmentData.equipment_of(v) == {&"relic": &"luckyPendant"}, "替换后 relic 槽应为 luckyPendant")
+	# 换回高容量装备：不补满、不钳
 	rr = EquipmentData.equip(v, &"campaignCloak")
 	_expect(bool(rr.ok) and StringName(rr.prev) == &"luckyPendant", "relic 槽换回披风")
+	_expect(not bool(rr.hp_clamped), "换回高容量不应触发钳制")
+	_expect(int(v[&"hp"]) == base_hp, "换回高容量不得补满 HP")
 	var ru: Dictionary = EquipmentData.unequip(v, &"relic")
-	_expect(bool(ru.ok) and bool(ru.hp_clamped), "卸披风应触发 HP 钳制")
-	_expect(int(v[&"hp"]) == base_hp, "HP 应钳回 base")
+	_expect(bool(ru.ok) and not bool(ru.hp_clamped), "已在新容量的 HP 卸披风不应重复钳")
+	_expect(int(v[&"hp"]) == base_hp, "卸披风后 HP 保持 base")
+	# 卸下超容才钳（独立路径：装满到容量再直接卸）
+	var vb := _mk_unit("eq_clamp_b", &"priest")
+	EquipmentData.equip(vb, &"campaignCloak")
+	vb[&"hp"] = base_hp + 1
+	var rub: Dictionary = EquipmentData.unequip(vb, &"relic")
+	_expect(bool(rub.ok) and bool(rub.hp_clamped) and int(vb[&"hp"]) == base_hp, "卸披风应触发 HP 钳制并钳回 base")
+	# 同槽同装幂等：changed=false 且 HP 不动（即使人为超容也不动——同装不变）
+	var vc := _mk_unit("eq_clamp_c", &"priest")
+	EquipmentData.equip(vc, &"campaignCloak")
+	vc[&"hp"] = base_hp + 5
+	var ridem: Dictionary = EquipmentData.equip(vc, &"campaignCloak")
+	_expect(bool(ridem.ok) and not bool(ridem.changed) and not bool(ridem.hp_clamped), "同槽同装应幂等且不触发钳制")
+	_expect(int(vc[&"hp"]) == base_hp + 5, "同槽同装 HP 不得变动")
 	# 装上高于容量不钳（装上不补满也不削）
 	var v2 := _mk_unit("eq_clamp2", &"priest")
 	v2[&"hp"] = int(v2[&"stats"][&"hp"]) - 2
@@ -369,15 +388,24 @@ func _test_bad_files() -> void:
 # ============================================================
 
 func _test_injected_good_file() -> void:
-	_inject('{"version":1,"equipment":[{"id":"blueRobe","name":"蓝袍","slot":"relic","stats":{"mp":2,"res":1},"allowed_professions":[],"iconId":"01","acquisition":"test"}]}', "good_mp.json")
+	_inject('{"version":1,"equipment":[{"id":"blueRobe","name":"蓝袍","slot":"relic","stats":{"mp":2,"res":1},"allowed_professions":[],"iconId":"01","acquisition":"test"},{"id":"luckyCharm","name":"幸运符","slot":"relic","stats":{"luk":1},"allowed_professions":[],"iconId":"02","acquisition":"test"}]}', "good_mp.json")
 	var st: Dictionary = EquipmentData.load_status()
-	_expect(bool(st.ok) and int(st.count) == 1, "注入蓝袍应装载 1 件：%s" % String(st.error))
+	_expect(bool(st.ok) and int(st.count) == 2, "注入蓝袍+幸运符应装载 2 件：%s" % String(st.error))
 	var u := _mk_unit("eq_mp", &"mage")
 	var mp_base := int(u[&"stats"][&"mp"])
 	var r: Dictionary = EquipmentData.equip(u, &"blueRobe")
 	_expect(bool(r.ok), "蓝袍应可装：%s" % String(r.reason))
 	_expect(EquipmentData.capacity_mp(u) == mp_base + 2, "MP 容量应 +2")
 	_expect(BuffSystem.effective_stat(u, &"res") == int(u[&"stats"][&"res"]) + 1, "res 有效值含装备")
+	u[&"mp"] = mp_base + 2
+	# 同槽替换到无 mp 加成装备：MP 立即钳制（与 HP 同语义）
+	var rswap: Dictionary = EquipmentData.equip(u, &"luckyCharm")
+	_expect(bool(rswap.ok) and bool(rswap.changed) and bool(rswap.mp_clamped), "替换到低 MP 容量应触发钳制")
+	_expect(int(u[&"mp"]) == mp_base, "替换降容后 MP 应钳回 base")
+	# 换回高容量：不补满、不钳
+	var rback: Dictionary = EquipmentData.equip(u, &"blueRobe")
+	_expect(bool(rback.ok) and not bool(rback.mp_clamped) and int(u[&"mp"]) == mp_base, "换回高 MP 容量不补满不钳")
+	# 卸下超容才钳（独立路径保留）
 	u[&"mp"] = mp_base + 2
 	var ru: Dictionary = EquipmentData.unequip(u, &"relic")
 	_expect(bool(ru.mp_clamped) and int(u[&"mp"]) == mp_base, "卸蓝袍应触发 MP 钳制")

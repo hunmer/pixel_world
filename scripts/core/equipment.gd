@@ -15,7 +15,8 @@
 ##
 ## 单位侧约定：unit.equipment 为「可选」槽位->装备 ID 字典（空装单位没有该键，
 ## UnitFactory 原始签名不动）；装卸事务性 = 先校验后单点写入；装上不补满 HP/MP，
-## 卸下只在超出新容量时钳制。既有 items.json equip 环（unit.equipped 戒指）与本系统
+## 但同槽替换到更低容量装备时与卸下共用钳制（仅超容才钳，不补满不抬升）。
+## 既有 items.json equip 环（unit.equipped 戒指）与本系统
 ## 互不接触：那是 ItemSystem 的永久 stats 改写路径，这里是槽位字典。
 ##
 ## 循环依赖：与 WeaponData / ProfessionData 一样以 class_name 静态体互引
@@ -362,20 +363,22 @@ static func equipped_weapon_id(unit: Dictionary) -> StringName:
 # ============================================================
 
 ## 装上：校验通过后单点写入 unit.equipment[slot]（替换旧装备，返回 prev）。
-## 不改 HP/MP（装上不补满）；同槽同装幂等（changed=false）。
-## 返回 { ok, reason, changed, prev:StringName, slot:StringName }。
+## 装上不补满；但同槽替换到更低容量装备时与卸下共用钳制（仅超容才钳）。
+## 同槽同装幂等（changed=false，HP/MP 不动）。
+## 返回 { ok, reason, changed, prev:StringName, slot:StringName, hp_clamped, mp_clamped }。
 static func equip(unit: Dictionary, entry_id: StringName) -> Dictionary:
 	var check := can_equip(unit, entry_id)
 	if not bool(check.ok):
-		return { ok = false, reason = String(check.reason), changed = false, prev = &"", slot = check.slot }
+		return { ok = false, reason = String(check.reason), changed = false, prev = &"", slot = check.slot, hp_clamped = false, mp_clamped = false }
 	var slot: StringName = check.slot
 	var eq := equipment_of(unit)
 	var prev := _slot_load(eq, slot)
 	if prev == entry_id:
-		return { ok = true, reason = "", changed = false, prev = prev, slot = slot }
+		return { ok = true, reason = "", changed = false, prev = prev, slot = slot, hp_clamped = false, mp_clamped = false }
 	eq[slot] = entry_id
 	unit[&"equipment"] = eq   # 单点写入：要么整体生效，要么不动
-	return { ok = true, reason = "", changed = true, prev = prev, slot = slot }
+	var clamps := _clamp_vitals(unit)
+	return { ok = true, reason = "", changed = true, prev = prev, slot = slot, hp_clamped = clamps.hp, mp_clamped = clamps.mp }
 
 
 ## 卸下：移除槽位条目；只在 HP/MP 超出新容量时钳制（卸下才钳，装上不补满）。
@@ -394,6 +397,13 @@ static func unequip(unit: Dictionary, slot: StringName) -> Dictionary:
 		unit.erase(&"equipment")
 	else:
 		unit[&"equipment"] = eq_new
+	var clamps := _clamp_vitals(unit)
+	return { ok = true, reason = "", changed = true, prev = prev, slot = slot, hp_clamped = clamps.hp, mp_clamped = clamps.mp }
+
+
+## 仅在 HP/MP 超出当前容量（base+装备）时钳到容量；不补满、不抬升。
+## 装上替换与卸下共用，保证任何降低容量的路径都不遗留超容值。
+static func _clamp_vitals(unit: Dictionary) -> Dictionary:
 	var hp_c := false
 	var mp_c := false
 	if unit.has(&"hp"):
@@ -406,7 +416,7 @@ static func unequip(unit: Dictionary, slot: StringName) -> Dictionary:
 		if int(unit[&"mp"]) > cap_m:
 			unit[&"mp"] = cap_m
 			mp_c = true
-	return { ok = true, reason = "", changed = true, prev = prev, slot = slot, hp_clamped = hp_c, mp_clamped = mp_c }
+	return { hp = hp_c, mp = mp_c }
 
 
 # ============================================================
