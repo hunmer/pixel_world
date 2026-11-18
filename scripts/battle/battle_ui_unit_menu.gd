@@ -231,6 +231,10 @@ func _open_item_picker(u: Dictionary) -> void:
 		elif idef[&"target"] != &"self" and ItemSystem.targets_for(u, idef[&"id"], _ui.grid).is_empty():
 			reason = "无合法目标"
 		b.text = "%s ×%d\n%s" % [String(idef[&"name"]), int(entry.get(&"uses", 0)), String(idef[&"desc"]) if reason.is_empty() else reason]
+		b.icon = ItemData.item_icon(idef[&"id"])
+		b.expand_icon = true
+		b.set("icon_size", ComponentThemeScript.SPACE_LG + ComponentThemeScript.SPACE_SM)
+		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		b.disabled = not reason.is_empty()
 		b.tooltip_text = String(idef[&"desc"])
 		b.pressed.connect(func():
