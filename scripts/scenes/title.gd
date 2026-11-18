@@ -32,6 +32,13 @@ func _ready() -> void:
 	start_btn.custom_minimum_size = Vector2(260, 60)
 	start_btn.add_theme_font_size_override("font_size", 24)
 	vbox.add_child(start_btn)
+	var skills_btn := preload("res://ui/components/pixel_button.gd").new()
+	skills_btn.name = "SkillListButton"
+	skills_btn.text = "技能图鉴"
+	skills_btn.semantic = 1
+	skills_btn.pressed.connect(_on_skills)
+	vbox.add_child(skills_btn)
+	start_btn.grab_focus()
 	# 底部版权
 	var foot := UIFactoryScript.label(
 		"pixel_world × 战旗融合 · Godot 4.7", 11, Color(0.8, 0.83, 0.88))
@@ -39,6 +46,10 @@ func _ready() -> void:
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	foot.position.y = -28
 	add_child(foot)
+
+
+func _on_skills() -> void:
+	get_tree().change_scene_to_file("res://scenes/SkillList.tscn")
 
 
 func _on_start() -> void:

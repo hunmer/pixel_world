@@ -1178,6 +1178,16 @@
       "evidence": "tests/world_map_overlay_contract.gd L116 tscn; L26 frame; L122 timing｜--script headless 模式不加载 autoload，依赖 Sfx 编译失败挂起（基线超时清单）｜加速不安全（初始保守，待 A/B）：计时 L122"
     },
     {
+      "name": "skill_list",
+      "path": "tests/skill_list_contract.gd",
+      "group": "ui",
+      "tags": ["scene"],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "技能图鉴真实场景：8 技能选择、图标与字段同步、键盘焦点、未知技能拒绝、三档视口布局及标题入口接线。"
+    },
+    {
       "name": "world_terrain_mapping",
       "path": "tests/world_terrain_mapping_contract.gd",
       "group": "world-battle-bridge",

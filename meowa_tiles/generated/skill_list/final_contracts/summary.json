@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "godot": "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+    "jobs": 1,
+    "timeout": 120.0,
+    "backend": "native",
+    "gdtest": null,
+    "fast_fps": null,
+    "disable_render_loop": false,
+    "run_env_skip": false,
+    "selected": 1,
+    "out_dir": "E:\\pixel_world\\meowa_tiles\\generated\\skill_list\\final_contracts",
+    "total_seconds": 9.6,
+    "runner": "tools/run_contracts.py"
+  },
+  "results": [
+    {
+      "name": "skill_list",
+      "path": "res://tests/skill_list_contract.gd",
+      "group": "ui",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 2.78,
+      "log": "E:\\pixel_world\\meowa_tiles\\generated\\skill_list\\final_contracts\\skill_list.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/skill_list_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "pass": 1,
+    "fail": 0,
+    "timeout": 0,
+    "environment-skip": 0,
+    "executor-error": 0
+  }
+}
