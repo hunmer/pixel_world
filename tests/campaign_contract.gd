@@ -68,6 +68,7 @@ func _run() -> void:
 	_test_victory_loot()
 	_test_victory_loot_pending()
 	_test_victory_loot_persist_retry()
+	_test_last_opened_level()
 	_cleanup_root()
 	for raw_session in _sessions:
 		var node := raw_session as Node
@@ -1347,6 +1348,55 @@ func _test_victory_loot_persist_retry() -> void:
 	var fresh := _mk_session()
 	fresh.load_profile(str(session.get_profile().id))
 	_expect(_count_items(fresh.get_profile().inventory, "bomb") == 9, "loot_retry: 磁盘应持久 9×bomb")
+
+
+# ============================================================
+# 上次打开的关卡（基地「继续上次战斗」）
+# ============================================================
+
+func _test_last_opened_level() -> void:
+	var session := _begin("last_opened")
+	var created: Dictionary = session.create_profile("续战队")
+	var pid := str(created.profile_id)
+	_expect(session.get_last_opened_level().is_empty(), "last: 新档没有上次关卡")
+	var locked: Dictionary = session.prepare_battle(L1)
+	_expect(not locked.ok, "last: 未解锁关卡不应出征")
+	_expect(session.get_last_opened_level().is_empty(), "last: 失败出征不应记下关卡")
+	var faulty := FaultyStore.new()
+	faulty.base_dir = session.base_dir
+	session._store = faulty
+	var blocked: Dictionary = session.prepare_battle(L0)
+	_expect(not blocked.ok, "last: 落盘失败应取消出征")
+	_expect(str(session.get_profile().get("last_opened_level", "x")) == "",
+		"last: 落盘失败应回滚上次关卡")
+	faulty.fail_saves = false
+	var prepared: Dictionary = session.prepare_battle(L0)
+	_expect(prepared.ok, "last: 出征应成功")
+	var opened: Dictionary = session.get_last_opened_level()
+	_expect(str(opened.get("id", "")) == L0 and bool(opened.get("unlocked", false)),
+		"last: 成功出征应记下 %s，实际 %s" % [L0, str(opened)])
+	var token := str(prepared.token)
+	var chapter: Dictionary = prepared.chapter
+	var abandoned: Dictionary = session.settle_battle(token, &"abandon", chapter)
+	_expect(abandoned.ok, "last: 撤退应成功")
+	_expect(str(session.get_last_opened_level().get("id", "")) == L0, "last: 撤退后仍应是上次关卡")
+	var fresh := _mk_session()
+	var loaded: Dictionary = fresh.load_profile(pid)
+	_expect(loaded.ok, "last: 重载应成功")
+	_expect(str(fresh.get_last_opened_level().get("id", "")) == L0, "last: 重载后仍应是上次关卡")
+	var again: Dictionary = fresh.prepare_battle(L0)
+	_expect(again.ok, "last: 应可再次出征上次关卡")
+	var units: Array = again.chapter.playerUnits
+	units[0]["exp"] = int(units[0].exp) + 10
+	var won: Dictionary = fresh.settle_battle(str(again.token), &"win", again.chapter)
+	_expect(won.ok, "last: 胜利应成功，实际 %s" % str(won.get("error", "")))
+	_expect(str(fresh.get_last_opened_level().get("id", "")) == L0 and bool(fresh.get_last_opened_level().get("completed", false)),
+		"last: 胜利后上次关卡应仍可继续且标记已通关")
+	var bought: Dictionary = fresh.buy_item("hpPotion", 1)
+	_expect(bought.ok, "last: 购买应成功")
+	var after_shop := _mk_session()
+	after_shop.load_profile(pid)
+	_expect(str(after_shop.get_last_opened_level().get("id", "")) == L0, "last: 购买落盘后上次关卡不应丢失")
 
 
 # ============================================================

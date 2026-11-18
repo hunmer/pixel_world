@@ -193,7 +193,7 @@ func _run() -> void:
 			"PixelCheckButtonScript.new()"],
 		["Button.new(", "CheckButton.new(", "OptionButton.new("])
 	_check_source("res://scripts/battle/battle_ui.gd",
-		["UIFactoryScript.button(", "UIThemeScript.menu_panel_style("],
+		["UIFactoryScript.button(", "BattleUiPreviewScript.new()"],
 		["func _btn_styles(", "func _make_panel_style(", "func _sidebar_panel_style(",
 			"func _detail_label(", "func _tab_styles("])
 	_check_source("res://scripts/game_hud.gd",

@@ -25,6 +25,13 @@ extends RefCounted
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
+const PixelPanelScene = preload("res://ui/components/pixel_panel.tscn")
+const PixelButtonScript = preload("res://ui/components/pixel_button.gd")
+const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
+const PixelMarginScript = preload("res://ui/components/pixel_margin.gd")
+const PixelCenterScript = preload("res://ui/components/pixel_center.gd")
+const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
 # 用预加载脚本作类型，避免干净 headless 尚未生成 global class cache 时无法解析。
 const TradeSystemScript = preload("res://scripts/systems/trade_system.gd")
 
@@ -59,37 +66,12 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 	var usable_items := ItemData.usable_items(u)
 	# 相邻 1 格带物品友军（C1 交换；自由动作）
 	var trade_targets: Array = TradeSystemScript.adjacent_trade_targets(u, _ui.grid)
-	# 面板高度按按钮数动态算
-	var btn_count := 1   # 等待
+	var vbox := _menu_list("行动菜单 · " + String(u.name),
+		"HP %d/%d · MP %d/%d · Esc 撤销 / 关闭" % [int(u.hp), int(u.stats.hp), int(u.get(&"mp", 0)), int(u.stats.get(&"mp", 0))], 5)
 	if not targets.is_empty():
-		btn_count += 1
-	if not usable_skills.is_empty():
-		btn_count += 1
-	if not usable_items.is_empty():
-		btn_count += 1
-	if not trade_targets.is_empty():
-		btn_count += 1
-	var panel := Panel.new()
-	panel.size = Vector2(120, 40 + btn_count * 28)
-	# Camera3D 直接给出 viewport 屏幕坐标；菜单位于 CanvasLayer。
-	var menu_level := 0
-	if _ui.level_fn.is_valid():
-		menu_level = int(_ui.level_fn.call(at_pos.x, at_pos.y))
-	var screen := Vector2.ZERO
-	if _ui.cell_screen_fn.is_valid():
-		screen = _ui.cell_screen_fn.call(at_pos.x, at_pos.y, float(menu_level))
-	elif _ui.board != null:
-		screen = _ui.board.cell_to_screen(at_pos.x, at_pos.y, float(menu_level))
-	panel.position = screen - panel.size / 2.0 + Vector2(40, -40)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	_ui.menu_container.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
-	panel.add_child(vbox)
-	if not targets.is_empty():
-		var b := UIFactoryScript.button()
-		b.text = "攻击"
+		var b := _button()
+		b.text = "★ 攻击（%d 目标）" % targets.size()
+		b.set("semantic", 0)
 		b.pressed.connect(func():
 			_ui.close_menu()
 			# 确认行动：移动生效，不再可撤销。
@@ -97,18 +79,18 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 			_open_attack_target_picker(u, targets)
 		)
 		vbox.add_child(b)
-	if not usable_skills.is_empty():
-		var bs := UIFactoryScript.button()
-		bs.text = "技能"
+	if not SkillData.owned_skills(u).is_empty():
+		var bs := _button()
+		bs.text = "技能（%d 可用）" % usable_skills.size()
 		bs.pressed.connect(func():
 			_ui.close_menu()
 			_ui.on_clear_pending_move_undo.call()
 			_open_skill_picker(u)
 		)
 		vbox.add_child(bs)
-	if not usable_items.is_empty():
-		var bi := UIFactoryScript.button()
-		bi.text = "物品"
+	if not (u.get(&"items", []) as Array).is_empty():
+		var bi := _button()
+		bi.text = "背包（%d 可用）" % usable_items.size()
 		bi.pressed.connect(func():
 			_ui.close_menu()
 			_ui.on_clear_pending_move_undo.call()
@@ -116,8 +98,8 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 		)
 		vbox.add_child(bi)
 	if not trade_targets.is_empty():
-		var bt := UIFactoryScript.button()
-		bt.text = "交换"
+		var bt := _button()
+		bt.text = "交换（%d 友军）" % trade_targets.size()
 		bt.tooltip_text = "与相邻友军转移物品（自由动作，不消耗行动）"
 		bt.pressed.connect(func():
 			_ui.close_menu()
@@ -125,7 +107,7 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 			_open_trade_picker(u, trade_targets)
 		)
 		vbox.add_child(bt)
-	var bwait := UIFactoryScript.button()
+	var bwait := _button()
 	bwait.text = "等待"
 	bwait.pressed.connect(func():
 		_ui.close_menu()
@@ -145,27 +127,26 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 
 ## 技能选择菜单：列出单位可用技能（含 MP/冷却/描述），选中后按 targetType 分发。
 func _open_skill_picker(u: Dictionary) -> void:
-	var usable := SkillData.usable_skills(u)
+	var usable := SkillData.owned_skills(u)
 	if usable.is_empty():
 		return
-	var panel := Panel.new()
-	panel.size = Vector2(280, 40 + usable.size() * 44)
-	var vp = _ui.get_viewport().get_visible_rect().size
-	panel.position = Vector2(vp.x / 2 - 140, vp.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	_ui.menu_container.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
-	panel.add_child(vbox)
+	var vbox := _menu_list("技能 · " + String(u.name),
+		"MP %d/%d · %d 项可用 / %d 项已学" % [int(u.get(&"mp", 0)), int(u.stats.get(&"mp", 0)), SkillData.usable_skills(u).size(), usable.size()], usable.size())
 	for sk in usable:
-		var info := "%s (MP%d" % [String(sk[&"name"]), int(sk[&"mpCost"])]
-		if int(sk[&"cooldown"]) > 0:
-			info += " 冷却%d" % int(sk[&"cooldown"])
-		info += ")"
-		var b := UIFactoryScript.button()
+		var targets := SkillSystem.targets_for(u, sk[&"id"], _ui.grid)
+		var cooldown := int((u.get(&"skillCooldowns", {}) as Dictionary).get(sk[&"id"], 0))
+		var reason := ""
+		if cooldown > 0:
+			reason = "冷却 %d 回合" % cooldown
+		elif int(sk[&"mpCost"]) > int(u.get(&"mp", 0)):
+			reason = "MP 不足"
+		elif sk[&"targetType"] != &"self" and targets.is_empty():
+			reason = "无合法目标"
+		var info := "%s · MP %d · 射程 %d–%d" % [String(sk[&"name"]), int(sk[&"mpCost"]), sk[&"range"][0], sk[&"range"][1]]
+		info += "\n" + (reason if not reason.is_empty() else ("自身" if sk[&"targetType"] == &"self" else "%d 个目标" % targets.size()))
+		var b := _button()
 		b.text = info
-		b.custom_minimum_size = Vector2(0, 40)
+		b.disabled = not reason.is_empty()
 		b.tooltip_text = String(sk[&"desc"])
 		b.pressed.connect(func():
 			_ui.close_menu()
@@ -196,18 +177,11 @@ func _on_skill_selected(u: Dictionary, skill_id: StringName) -> void:
 
 ## 技能目标选择菜单（多目标时）。仿 _open_attack_target_picker。
 func _open_skill_target_picker(u: Dictionary, targets: Array, skill_id: StringName) -> void:
-	var panel := Panel.new()
-	panel.size = Vector2(150, 30 + targets.size() * 28)
-	panel.position = Vector2(_ui.get_viewport().get_visible_rect().size.x / 2 - 75, _ui.get_viewport().get_visible_rect().size.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	_ui.menu_container.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
-	panel.add_child(vbox)
+	var vbox := _menu_list("技能目标 · " + SkillData.skill_name(skill_id), "%d 个合法目标" % targets.size(), targets.size())
 	for t in targets:
-		var b := UIFactoryScript.button()
-		b.text = "▸ " + String(t.name)
+		var b := _button()
+		b.text = _target_text(t)
+		b.set_meta("hover_target_id", t.id)
 		b.pressed.connect(func():
 			_ui.close_menu()
 			_preview_and_use_skill(u, [t], skill_id)
@@ -228,25 +202,25 @@ func _preview_and_use_skill(caster: Dictionary, targets: Array, skill_id: String
 
 ## 物品选择菜单。
 func _open_item_picker(u: Dictionary) -> void:
-	var usable := ItemData.usable_items(u)
+	var usable: Array = []
+	for entry in u.get(&"items", []):
+		usable.append({&"entry": entry, &"def": ItemData.get_item(entry.get(&"id", &""))})
 	if usable.is_empty():
 		return
-	var panel := Panel.new()
-	panel.size = Vector2(280, 40 + usable.size() * 40)
-	var vp = _ui.get_viewport().get_visible_rect().size
-	panel.position = Vector2(vp.x / 2 - 140, vp.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	_ui.menu_container.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
-	panel.add_child(vbox)
+	var vbox := _menu_list("背包 · " + String(u.name), "%d 件物品 · %d 项可使用" % [usable.size(), ItemData.usable_items(u).size()], usable.size())
 	for ie in usable:
 		var entry: Dictionary = ie[&"entry"]
 		var idef: Dictionary = ie[&"def"]
-		var b := UIFactoryScript.button()
-		b.text = "%s ×%d" % [String(idef[&"name"]), int(entry.get(&"uses", 0))]
-		b.custom_minimum_size = Vector2(0, 36)
+		var b := _button()
+		var reason := ""
+		if int(entry.get(&"uses", 0)) <= 0:
+			reason = "已耗尽"
+		elif idef[&"type"] == &"equip":
+			reason = "装备 · 不可在战斗中使用"
+		elif idef[&"target"] != &"self" and ItemSystem.targets_for(u, idef[&"id"], _ui.grid).is_empty():
+			reason = "无合法目标"
+		b.text = "%s ×%d\n%s" % [String(idef[&"name"]), int(entry.get(&"uses", 0)), String(idef[&"desc"]) if reason.is_empty() else reason]
+		b.disabled = not reason.is_empty()
 		b.tooltip_text = String(idef[&"desc"])
 		b.pressed.connect(func():
 			_ui.close_menu()
@@ -277,18 +251,11 @@ func _on_item_selected(u: Dictionary, item_id: StringName, entry: Dictionary) ->
 
 ## 物品多目标选择。
 func _open_item_target_picker(u: Dictionary, targets: Array, _item_id: StringName, entry: Dictionary) -> void:
-	var panel := Panel.new()
-	panel.size = Vector2(150, 30 + targets.size() * 28)
-	panel.position = Vector2(_ui.get_viewport().get_visible_rect().size.x / 2 - 75, _ui.get_viewport().get_visible_rect().size.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	_ui.menu_container.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
-	panel.add_child(vbox)
+	var vbox := _menu_list("物品目标 · " + ItemData.item_name(_item_id), "%d 个合法目标" % targets.size(), targets.size())
 	for t in targets:
-		var b := UIFactoryScript.button()
-		b.text = "▸ " + String(t.name)
+		var b := _button()
+		b.text = _target_text(t)
+		b.set_meta("hover_target_id", t.id)
 		b.pressed.connect(func():
 			_ui.close_menu()
 			await _ui.on_resolve_item.call(u, [t], entry)
@@ -304,18 +271,11 @@ func _open_trade_picker(u: Dictionary, targets: Array) -> void:
 	if targets.size() == 1:
 		_open_trade_item_picker(u, targets[0])
 		return
-	var panel := Panel.new()
-	panel.size = Vector2(170, 30 + targets.size() * 28)
-	panel.position = Vector2(_ui.get_viewport().get_visible_rect().size.x / 2 - 85, _ui.get_viewport().get_visible_rect().size.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	_ui.menu_container.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
-	panel.add_child(vbox)
+	var vbox := _menu_list("交换对象", "%d 位相邻友军 · 自由动作" % targets.size(), targets.size())
 	for t in targets:
-		var b := UIFactoryScript.button()
-		b.text = "⇄ " + String(t.name)
+		var b := _button()
+		b.text = "⇄ " + _target_text(t)
+		b.set_meta("hover_target_id", t.id)
 		b.pressed.connect(func():
 			_ui.close_menu()
 			_open_trade_item_picker(u, t)
@@ -335,28 +295,13 @@ func _open_trade_item_picker(u: Dictionary, ally: Dictionary) -> void:
 	if entries.is_empty():
 		_reopen_unit_menu(u)
 		return
-	var panel := Panel.new()
-	panel.size = Vector2(280, 70 + entries.size() * 36)
-	var vp = _ui.get_viewport().get_visible_rect().size
-	panel.position = Vector2(vp.x / 2 - 140, vp.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	_ui.menu_container.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
-	panel.add_child(vbox)
-	var title := Label.new()
-	title.text = "转移给对方（%s ⇄ %s）" % [String(u.name), String(ally.name)]
-	title.add_theme_font_size_override("font_size", 12)
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(title)
+	var vbox := _menu_list("物品交换", "%s ⇄ %s · 选择物品转移给对方" % [String(u.name), String(ally.name)], entries.size() + 1)
 	for rec in entries:
 		var entry: Dictionary = rec[&"entry"]
 		var owner: Dictionary = rec[&"owner"]
 		var receiver: Dictionary = ally if owner == u else u
-		var b := UIFactoryScript.button()
-		b.text = "%s：%s ×%d" % [String(owner.name), ItemData.item_name(entry.get(&"id", &"")), int(entry.get(&"uses", 0))]
-		b.custom_minimum_size = Vector2(0, 32)
+		var b := _button()
+		b.text = "%s → %s\n%s ×%d" % [String(owner.name), String(receiver.name), ItemData.item_name(entry.get(&"id", &"")), int(entry.get(&"uses", 0))]
 		b.pressed.connect(func():
 			_ui.close_menu()
 			TradeSystemScript.execute_trade(owner, receiver, entry)
@@ -365,7 +310,7 @@ func _open_trade_item_picker(u: Dictionary, ally: Dictionary) -> void:
 			_reopen_unit_menu(u)
 		)
 		vbox.add_child(b)
-	var bclose := UIFactoryScript.button()
+	var bclose := _button()
 	bclose.text = "返回"
 	bclose.pressed.connect(func():
 		_ui.close_menu()
@@ -383,19 +328,10 @@ func _open_attack_target_picker(u: Dictionary, targets: Array) -> void:
 	if targets.size() == 1:
 		_preview_and_attack(u, targets[0])
 		return
-	var panel := Panel.new()
-	panel.size = Vector2(150, 30 + targets.size() * 28)
-	panel.position = Vector2(_ui.get_viewport().get_visible_rect().size.x / 2 - 75, _ui.get_viewport().get_visible_rect().size.y / 2 - panel.size.y / 2)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	_ui.menu_container.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.offset_left = 6; vbox.offset_top = 6; vbox.offset_right = -6; vbox.offset_bottom = -6
-	panel.add_child(vbox)
+	var vbox := _menu_list("攻击目标", "%d 个目标 · 悬浮查看对应角色" % targets.size(), targets.size())
 	for t in targets:
-		var b := UIFactoryScript.button()
-		b.text = "▸ " + String(t.name)
-		# 战场从悬浮控件读取目标 id，同步显示该角色的头顶指针。
+		var b := _button()
+		b.text = _target_text(t)
 		b.set_meta("hover_target_id", t.id)
 		b.pressed.connect(func():
 			_ui.close_menu()
@@ -418,3 +354,60 @@ func _preview_and_attack(attacker: Dictionary, defender: Dictionary) -> void:
 			await _ui.get_tree().create_timer(0.3).timeout
 			_ui.turn.end_turn()
 	)
+
+
+## 自适应菜单：卡片内容由容器排布，长列表只纵向滚动，不按条目数撑出屏幕。
+func _menu_list(title: String, description: String, item_count: int) -> VBoxContainer:
+	_ui.on_set_mode.call(MODE_MENU)
+	var margin := PixelMarginScript.new()
+	margin.name = "BattleMenuShell"
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui.menu_container.add_child(margin)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var center := PixelCenterScript.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(center)
+	var card = PixelPanelScene.instantiate()
+	card.name = "BattleMenuCard"
+	card.title = title
+	card.description = description
+	center.add_child(card)
+	var scroll := PixelScrollScript.new()
+	scroll.name = "BattleMenuScroll"
+	card.get_content_slot().add_child(scroll)
+	var list := PixelVBoxScript.new()
+	list.name = "BattleMenuList"
+	list.gap = ComponentThemeScript.SPACE_SM
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	# viewport 改变时重算可用空间，尺寸只决定滚动窗口，条目最小高度交给主题。
+	var fit := func():
+		var viewport: Vector2 = _ui.get_viewport().get_visible_rect().size
+		var width := minf(ComponentThemeScript.SPACE_LG * 18.0, viewport.x - ComponentThemeScript.SPACE_LG * 4.0)
+		var row_height := ComponentThemeScript.FONT_BODY * 2.0 + ComponentThemeScript.BUTTON_MARGIN_Y * 2.0 + ComponentThemeScript.SPACE_SM
+		var max_height := maxf(row_height, viewport.y - ComponentThemeScript.SPACE_LG * 10.0)
+		scroll.custom_minimum_size = Vector2(maxf(width, 0.0), minf(row_height * maxi(item_count, 1), max_height))
+	fit.call()
+	# 绑定节点方法，菜单释放后自动解除视口信号，避免回调触碰已释放控件。
+	var resize_callback := fit.bind()
+	_ui.get_viewport().size_changed.connect(resize_callback)
+	margin.tree_exiting.connect(func():
+		if _ui.get_viewport().size_changed.is_connected(resize_callback):
+			_ui.get_viewport().size_changed.disconnect(resize_callback)
+	)
+	return list
+
+
+func _button() -> Button:
+	var button := PixelButtonScript.new()
+	button.semantic = ComponentThemeScript.ButtonSemantic.SECONDARY
+	button.hover_sfx_enabled = false
+	button.click_sfx_enabled = false
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	return button
+
+
+func _target_text(target: Dictionary) -> String:
+	return "%s · HP %d/%d" % [String(target.name), int(target.hp), int(target.stats.hp)]

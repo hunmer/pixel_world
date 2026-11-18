@@ -249,7 +249,7 @@ func set_hovered(value: bool, attack_target := false) -> void:
 		add_child(_hover_marker)
 		var arrow := MeshInstance3D.new()
 		arrow.mesh = preload("res://assets/markers/path_marker.obj")
-		arrow.rotation.x = PI * 0.5
+		arrow.rotation.x = -PI * 0.5
 		arrow.scale = Vector3.ONE * 0.16
 		arrow.position = -(arrow.transform.basis * arrow.mesh.get_aabb().get_center())
 		_hover_material = StandardMaterial3D.new()

@@ -34,8 +34,8 @@ var _range_tweens: Array = []
 var _cursor_cell := Vector2i.ZERO
 
 # ---- 常量（颜色与原版一致）----
-const _RANGE_COLOR_MOVABLE := Color(0.25, 0.55, 1.0)
-const _RANGE_COLOR_BLOCKED := Color(1.0, 0.25, 0.25)
+const _RANGE_COLOR_MOVABLE := Color(0.25, 0.55, 1.0, 0.4)
+const _RANGE_COLOR_BLOCKED := Color(1.0, 0.25, 0.25, 0.4)
 const _RANGE_COLOR_ATTACK  := Color(0.75, 0.35, 1.0, 0.4)
 const _CURSOR_COLOR := Color(1.0, 0.82, 0.2)
 

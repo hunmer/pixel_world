@@ -61,6 +61,29 @@ func get_profile() -> Dictionary:
 		"inventory": _state.inventory.duplicate(true),
 		"completed_levels": _state.completed_levels.duplicate(true),
 		"saved_at": float(_state.saved_at),
+		"last_opened_level": str(_state.get("last_opened_level", "")),
+	}
+
+
+## 上次成功出征的关卡。未出征、关卡已不存在或当前未解锁时返回 {}。
+## 否则返回 {id, name, unlocked, completed}，供基地「继续上次战斗」直接开战。
+func get_last_opened_level() -> Dictionary:
+	if _state.is_empty():
+		return {}
+	var level_id := str(_state.get("last_opened_level", "")).strip_edges()
+	if level_id == "":
+		return {}
+	var level: Dictionary = CampaignConfigScript.get_level(level_id)
+	if level.is_empty():
+		return {}
+	var completed: Array = _state.completed_levels if _state.completed_levels is Array else []
+	if not _level_unlocked(int(level.index), completed):
+		return {}
+	return {
+		"id": str(level.id),
+		"name": str(level.get("name", level_id)),
+		"unlocked": true,
+		"completed": completed.has(str(level.id)),
 	}
 
 
@@ -239,6 +262,7 @@ func create_profile(profile_name: String) -> Dictionary:
 		"shop_purchases": {"clear_index": 0, "counts": {}},
 		"created_at": now,
 		"saved_at": now,
+		"last_opened_level": "",
 	}
 	var persisted := _persist(state)
 	if not persisted.get("ok", false):
@@ -276,6 +300,9 @@ func load_profile(profile_id: String) -> Dictionary:
 	if state.get("attempt", null) != null:
 		interrupted_level = str(state.attempt.get("level_id", ""))
 		notice = (notice + "；" if notice != "" else "") + "上次战斗中断，已恢复到出征前状态"
+	# 旧档没有 last_opened_level：中断关卡就是上次打开的关卡。
+	if str(state.get("last_opened_level", "")).strip_edges() == "" and interrupted_level != "":
+		state["last_opened_level"] = interrupted_level
 	state.erase("attempt")
 	_state = state
 	_attempt = {}
@@ -449,6 +476,7 @@ func buy_item(item_id: String, count: Variant = 1) -> Dictionary:
 		"shop_purchases": {"clear_index": clear_index, "counts": counts_new},
 		"created_at": _state.created_at,
 		"saved_at": Time.get_unix_time_from_system(),
+		"last_opened_level": str(_state.get("last_opened_level", "")),
 	}
 	var persisted := _persist(staged)
 	if not persisted.get("ok", false):
@@ -534,6 +562,8 @@ func prepare_battle(level_id: String) -> Dictionary:
 		_state["inventory"] = snapshot.inventory
 		return {"ok": false, "error": "队伍部署失败：%s" % str(deployment.error)}
 	var token := _gen_token()
+	var previous_opened := str(_state.get("last_opened_level", ""))
+	_state["last_opened_level"] = str(level.id)
 	_attempt = {
 		"token": token,
 		"level_id": str(level.id),
@@ -546,6 +576,7 @@ func prepare_battle(level_id: String) -> Dictionary:
 	var persisted := _persist_safe()
 	if not persisted.get("ok", false):
 		_state["inventory"] = snapshot.inventory
+		_state["last_opened_level"] = previous_opened
 		_attempt = {}
 		return {"ok": false, "error": "出征前存档写入失败，已取消出征（可重试）：%s" % str(persisted.error)}
 	var out := {
@@ -649,6 +680,7 @@ func _settle_win(token: String, level_id: String, level_name: String, chapter: D
 		"shop_purchases": _state.shop_purchases,
 		"created_at": _state.created_at,
 		"saved_at": Time.get_unix_time_from_system(),
+		"last_opened_level": str(_state.get("last_opened_level", "")),
 	}
 	var persisted := _persist(staged)
 	if not persisted.get("ok", false):
@@ -851,6 +883,7 @@ func _persist_safe(override_name := "") -> Dictionary:
 			"shop_purchases": _state.shop_purchases,
 			"created_at": _state.created_at,
 			"saved_at": now,
+			"last_opened_level": str(_state.get("last_opened_level", "")),
 			"attempt": {
 				"level_id": str(_attempt.level_id),
 				"prepared_at": float(_attempt.prepared_at),

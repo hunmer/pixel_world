@@ -27,7 +27,13 @@ extends RefCounted
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
-const BattleSettingsTabScript = preload("res://scripts/battle/battle_settings_tab.gd")
+const Widgets = preload("res://scripts/battle/battle_ui_status_widgets.gd")
+const Tokens = preload("res://ui/theme/component_theme.gd")
+const PixelTabsScript = preload("res://ui/components/pixel_tabs.gd")
+const PixelCheckButtonScript = preload("res://ui/components/pixel_check_button.gd")
+var _force_bars: Dictionary = {}
+var _force_counters: Dictionary = {}
+var _objective_label: Label
 
 ## 宿主 BattleUI（CanvasLayer；duck-typed 动态访问 add_child/get_node_or_null/grid/turn）
 var _ui = null
@@ -80,108 +86,97 @@ func build(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pref_cb: Cal
 		host_btn_cb: Callable, immersive_toggled_cb: Callable) -> void:
 	sidebar = PanelContainer.new()
 	sidebar.name = "BattleSidePanel"
+	sidebar.theme = Tokens.create()
+	sidebar.theme_type_variation = Tokens.PANEL_VARIATION
 	sidebar.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
 	sidebar.offset_left = -_ui.SIDEBAR_WIDTH
 	sidebar.mouse_filter = Control.MOUSE_FILTER_STOP
-	sidebar.add_theme_stylebox_override("panel", UIThemeScript.dock_panel_style())
 	_ui.add_child(sidebar)
-
-	var sv := VBoxContainer.new()
+	var sv := Widgets.Column.new()
 	sv.name = "SideVBox"
+	sv.gap = Tokens.SPACE_SM
 	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sv.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sv.add_theme_constant_override("separation", 6)
 	sidebar.add_child(sv)
-
-	# 标题行：双剑图标 + 文字（图标缺失只显示文字）
-	var title_row := HBoxContainer.new()
-	title_row.add_theme_constant_override("separation", 6)
-	var swords: Texture2D = UIThemeScript.icon("swords")
-	if swords != null:
-		var icon_rect := TextureRect.new()
-		icon_rect.texture = swords
-		icon_rect.custom_minimum_size = Vector2(18, 18)
-		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon_rect.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title_row.add_child(icon_rect)
-	title_row.add_child(UIFactoryScript.label("战场情报", 16, ACCENT))
-	sv.add_child(title_row)
-
-	# Tab 样式统一走 ui_factory.tab_container（含页签三态与面板底）
-	var tabs := UIFactoryScript.tab_container("InfoTabs")
+	sv.add_child(Widgets.label("战场情报", false, ACCENT))
+	var tabs: TabContainer = PixelTabsScript.new()
+	tabs.name = "InfoTabs"
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tabs.use_hidden_tabs_for_min_size = false
 	sv.add_child(tabs)
 
-	# ---- Tab【回合】：阶段 / 阵营状态 / 结束回合 ----
-	var turn_tab := UIFactoryScript.add_tab(tabs, "回合", "swords")
-	phase_label = UIFactoryScript.label("第 1 轮 · 我方行动", 18, TEXT_MAIN)
-	turn_tab.add_child(phase_label)
-	_add_turn_status_rows(turn_tab)
-	end_turn_btn = UIFactoryScript.button()
-	end_turn_btn.text = "结束回合 (E)"
-	end_turn_btn.pressed.connect(end_turn_cb)
+	var turn_tab := _add_tab(tabs, "回合", "swords")
+	var hud := Widgets.card(turn_tab, "战场态势", "BattleHudCard")
+	phase_label = Widgets.label("第 1 轮 · 我方行动")
+	phase_label.name = "BattleHudPhase"
+	hud.add_child(phase_label)
+	_objective_label = Widgets.label("", false, ACCENT)
+	_objective_label.name = "BattleHudObjective"
+	hud.add_child(_objective_label)
+	_add_turn_status_rows(hud)
+	end_turn_btn = Widgets.button("结束回合 (E)", end_turn_cb, true)
 	turn_tab.add_child(end_turn_btn)
-	turn_tab.add_child(UIFactoryScript.label("存活单位实时 HP 与行动状态；全部行动后自动结束回合。", 10, TEXT_DIM))
+	turn_tab.add_child(Widgets.label("全部行动后自动结束回合。", true, TEXT_DIM))
 
-	# ---- Tab【情报】：悬停单位 / 地形详情（show_info_at 更新） ----
-	var info_tab := UIFactoryScript.add_tab(tabs, "情报", "info")
-	info_label = UIFactoryScript.label("（鼠标悬停单位或地形查看详情）", 13, TEXT_DIM)
-	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info_tab.add_child(info_label)
-	info_tab.add_child(UIFactoryScript.label("右键单位打开完整详情；方向键移动光标同样刷新。", 10, TEXT_DIM))
+	var info_tab := _add_tab(tabs, "情报", "info")
+	var info := Widgets.card(info_tab, "单位与地形", "BattleInfoCard")
+	info_label = Widgets.label("鼠标悬停单位或地形查看详情。", false, TEXT_DIM)
+	info.add_child(info_label)
+	info_tab.add_child(Widgets.label("右键单位打开完整详情；方向键移动光标同样刷新。", true, TEXT_DIM))
 
-	# ---- Tab【托管】：托管 / 偏好 /（按需）退出战斗 ----
-	host_tab = UIFactoryScript.add_tab(tabs, "托管", "gears")
-	var host_btn := UIFactoryScript.button()
-	host_btn.pressed.connect(toggle_hosting_cb)
+	host_tab = _add_tab(tabs, "托管", "gears")
+	var host_btn := Widgets.button("", toggle_hosting_cb)
 	host_tab.add_child(host_btn)
-	# 把 host_btn 引用交给 turn_director（它负责更新按钮文字）—— 通过注入回调
 	if host_btn_cb.is_valid():
 		host_btn_cb.call(host_btn)
-	var pref_btn := UIFactoryScript.button()
-	pref_btn.text = "托管偏好"
-	pref_btn.pressed.connect(open_pref_cb)
-	host_tab.add_child(pref_btn)
-	host_tab.add_child(UIFactoryScript.label("托管 = 本场战斗自动代打（敌方回合本就自动）；偏好按单位配置目标与策略。", 10, TEXT_DIM))
+	host_tab.add_child(Widgets.button("托管偏好", open_pref_cb))
+	host_tab.add_child(Widgets.label("托管自动代打本场战斗；偏好按单位配置目标与策略。", true, TEXT_DIM))
 
-	# ---- Tab【战场设置】：真实交战镜头偏好；切换立即作用于当前/下一次演出 ----
-	var settings_tab := UIFactoryScript.add_tab(tabs, "战场设置", "settings")
-	immersive_toggle = BattleSettingsTabScript.populate(
-		settings_tab,
-		Settings.battle_immersive_presentation,
-		immersive_toggled_cb
-	)
+	var settings_tab := _add_tab(tabs, "设置", "settings")
+	var settings := Widgets.card(settings_tab, "交战镜头", "BattleSettingsCard")
+	immersive_toggle = PixelCheckButtonScript.new()
+	immersive_toggle.name = "ImmersivePresentationToggle"
+	immersive_toggle.text = "沉浸式演出"
+	immersive_toggle.button_pressed = Settings.battle_immersive_presentation
+	immersive_toggle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	immersive_toggle.tooltip_text = "关闭会在当前完整动作结束后恢复战术镜头。"
+	settings.add_child(immersive_toggle)
+	if immersive_toggled_cb.is_valid():
+		immersive_toggle.toggled.connect(immersive_toggled_cb)
+	settings.add_child(Widgets.label("开启后，攻击与技能使用近平视交战镜头；反击、多段与范围目标完整演出后恢复原视角。", true, TEXT_DIM))
 
-	# ---- Tab【日志】：引擎/战斗日志（接管 Panku native_logger，浮层不再挂左侧） ----
-	var log_tab := UIFactoryScript.add_tab(tabs, "日志", "file_terminal")
-	var log_toolbar := HBoxContainer.new()
-	log_toolbar.add_theme_constant_override("separation", 8)
-	log_tab.add_child(log_toolbar)
-	var clear_btn := UIFactoryScript.button()
-	clear_btn.text = "清空"
-	clear_btn.tooltip_text = "清空日志（同步清空 Panku native_logger 缓冲）"
-	clear_btn.pressed.connect(_clear_log)
-	log_toolbar.add_child(clear_btn)
-	var log_source := UIFactoryScript.label("引擎日志 · info/warning/error", 10, TEXT_DIM)
-	log_source.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	log_source.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	log_toolbar.add_child(log_source)
+	var log_tab := _add_tab(tabs, "日志", "file_terminal")
+	var toolbar := Widgets.Row.new()
+	toolbar.gap = Tokens.SPACE_SM
+	log_tab.add_child(toolbar)
+	toolbar.add_child(Widgets.button("清空", _clear_log))
+	toolbar.add_child(Widgets.label("引擎日志", true, TEXT_DIM))
 	log_label = UIFactoryScript.log_label()
+	log_label.add_theme_font_size_override("normal_font_size", Tokens.FONT_CAPTION)
 	log_label.scroll_active = true
 	log_label.context_menu_enabled = true
 	log_label.shortcut_keys_enabled = true
 	log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	log_label.custom_minimum_size.y = Tokens.SPACE_LG * 8
 	log_tab.add_child(log_label)
 	_attach_panku_logger()
+	sv.add_child(Widgets.label("Q/Z·E/X 旋转 · R 复位 · 中键平移 · ESC 取消", true, TEXT_DIM))
 
-	# 底部提示行（贴面板底部，自动换行）
-	var hint := UIFactoryScript.label("Q/Z·E/X 旋转视角 · R 复位 · 中键拖拽平移 · ESC 取消", 10, TEXT_DIM)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sv.add_child(hint)
+
+## 各页只纵向滚动；短页签避免固定 360px 侧栏被标签撑宽。
+func _add_tab(tabs: TabContainer, title: String, icon_name: String) -> VBoxContainer:
+	var scroll := Widgets.Scroll.new()
+	scroll.name = title + "Scroll"
+	tabs.add_child(scroll)
+	tabs.set_tab_title(tabs.get_tab_count() - 1, title)
+	tabs.set_tab_icon(tabs.get_tab_count() - 1, UIThemeScript.icon(icon_name))
+	var column := Widgets.Column.new()
+	column.name = title + "Tab"
+	column.gap = Tokens.SPACE_SM
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(column)
+	return column
 
 
 ## battle_ui._process 每帧驱动：状态刷新 + 挂起日志落盘（顺序与拆分前一致）。
@@ -200,21 +195,16 @@ func process_tick() -> void:
 func _add_turn_status_rows(parent: VBoxContainer) -> void:
 	if _ui.turn == null:
 		return
-	for faction: StringName in [&"player", &"enemy"]:
-		var has_faction := false
-		for u: Dictionary in _ui.turn.units:
-			if StringName(u.get(&"faction", &"")) == faction:
-				has_faction = true
-				break
-		if not has_faction:
-			continue
-		var label := Label.new()
-		label.name = "PlayerStatus" if faction == &"player" else "EnemyStatus"
-		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		label.add_theme_font_size_override("font_size", 13)
-		label.add_theme_color_override("font_color", FACTION_COLOR[faction])
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		parent.add_child(label)
+	for faction: StringName in [&"player", &"enemy", &"ally", &"other"]:
+		var slot := Widgets.card(parent, String(FACTION_NAME[faction]), "Force_" + String(faction))
+		var counter := Widgets.label("", true, TEXT_DIM)
+		slot.add_child(counter)
+		_force_counters[faction] = counter
+		var bar := Widgets.bar(slot, "ForceHp_" + String(faction), "HP", 0, 0)
+		_force_bars[faction] = bar
+		var label := Widgets.label("", true)
+		label.name = "PlayerStatus" if faction == &"player" else "EnemyStatus" if faction == &"enemy" else String(faction) + "Status"
+		slot.add_child(label)
 		turn_status_labels[faction] = label
 	refresh_turn_status()
 
@@ -223,6 +213,7 @@ func _add_turn_status_rows(parent: VBoxContainer) -> void:
 func refresh_turn_status() -> void:
 	if _ui.turn == null or turn_status_labels.is_empty():
 		return
+	_refresh_objective()
 	var signature := "%d:%s" % [_ui.turn.turn_number, String(_ui.turn.phase)]
 	for u: Dictionary in _ui.turn.units:
 		signature += "|%s:%s:%s:%d:%d:%s:%s" % [
@@ -236,10 +227,20 @@ func refresh_turn_status() -> void:
 	_turn_status_signature = signature
 	for faction: StringName in turn_status_labels:
 		var parts := PackedStringArray()
+		var total := 0
+		var alive := 0
+		var hp := 0
+		var max_hp := 0
 		for u: Dictionary in _ui.turn.units:
-			if StringName(u.get(&"faction", &"")) != faction or bool(u.get(&"isDead", false)):
+			if StringName(u.get(&"faction", &"")) != faction:
 				continue
+			total += 1
+			if bool(u.get(&"isDead", false)):
+				continue
+			alive += 1
 			var stats: Dictionary = u.get(&"stats", {})
+			hp += int(u.get(&"hp", 0))
+			max_hp += int(stats.get(&"hp", 0))
 			parts.append("%s %s HP%d/%d" % [
 				String(u.get(&"name", "")), "已行动" if bool(u.get(&"hasActed", false)) else "未行动",
 				int(u.get(&"hp", 0)), int(stats.get(&"hp", 0))
@@ -247,6 +248,29 @@ func refresh_turn_status() -> void:
 		var label: Label = turn_status_labels[faction]
 		label.text = "%s｜%s" % [FACTION_NAME[faction], "；".join(parts)]
 		label.visible = not parts.is_empty()
+		var counter: Label = _force_counters[faction]
+		counter.text = "存活 %d/%d · HP %d/%d" % [alive, total, hp, max_hp]
+		var bar: ProgressBar = _force_bars[faction]
+		bar.max_value = maxi(max_hp, 1)
+		bar.value = hp
+		bar.get_parent().get_child(0).text = "阵营生命"
+		# 保留阵营全灭后的计数；未出现的阵营不占侧栏。
+		counter.get_parent().get_parent().get_parent().visible = total > 0
+
+
+## 目标只取真实 chapter 胜利条件；不引入画廊中的解救任务等占位机制。
+func _refresh_objective() -> void:
+	if _objective_label == null:
+		return
+	var victory: Dictionary = _ui.chapter.get("victory", {"type": "rout"})
+	match String(victory.get("type", "rout")):
+		"defend_turns":
+			_objective_label.text = "目标 · 坚守 %d 回合（当前第 %d 轮）" % [int(victory.get("turns", 1)), int(_ui.turn.turn_number)]
+		"seize":
+			var cell: Vector2i = victory.get("cell", Vector2i.ZERO)
+			_objective_label.text = "目标 · 占领 (%d, %d)" % [cell.x, cell.y]
+		_:
+			_objective_label.text = "目标 · 歼灭全部敌军"
 
 
 ## 悬停单位/地形情报文本（写入【情报】Tab 的 info_label）。

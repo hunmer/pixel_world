@@ -26,6 +26,7 @@ var _progress_fill: Range
 var _roster_list: VBoxContainer
 var _inventory_list: VBoxContainer
 var _save_btn: Button
+var _continue_btn: Button
 var _map_btn: Button
 var _shop_btn: Button
 var _switch_btn: Button
@@ -163,6 +164,11 @@ func _build() -> void:
 	_save_btn.name = "SaveNowBtn"
 	footer.add_child(_save_btn)
 
+	_continue_btn = _make_action_button("继续上次战斗", 0, _on_continue_last)
+	_continue_btn.name = "ContinueLastBtn"
+	_continue_btn.disabled = true
+	footer.add_child(_continue_btn)
+
 	_map_btn = _make_action_button("世界地图", 0, _on_open_map)
 	_map_btn.name = "MapBtn"
 	footer.add_child(_map_btn)
@@ -226,6 +232,7 @@ func refresh() -> void:
 	_fill_inventory(profile.get("inventory", []))
 	_fill_progress(profile, levels)
 	_update_gold_caption(levels)
+	_refresh_continue(session)
 
 
 func _fill_roster(roster: Variant) -> void:
@@ -337,6 +344,31 @@ func _present_last_result() -> void:
 
 func _on_result_closed(_action_id: String) -> void:
 	refresh()
+
+
+## 有可继续关卡时显示关卡名并启用；否则禁用，避免点进未知关。
+func _refresh_continue(session: Node) -> void:
+	var last: Dictionary = CampaignFormatScript.call_raw_dict(session, "get_last_opened_level")
+	var level_id := CampaignFormatScript.as_text(last.get("id", ""), "")
+	var level_name := CampaignFormatScript.as_text(last.get("name", ""), "")
+	if level_id == "" or level_name == "" or not bool(last.get("unlocked", false)):
+		_continue_btn.text = "继续上次战斗"
+		_continue_btn.disabled = true
+		_continue_btn.tooltip_text = "还没有可继续的关卡"
+		return
+	_continue_btn.text = "继续：%s" % level_name
+	_continue_btn.disabled = false
+	_continue_btn.tooltip_text = "直接进入上次打开的关卡，不再确认"
+
+
+func _on_continue_last() -> void:
+	var session: Node = _main.call("session")
+	var last: Dictionary = CampaignFormatScript.call_raw_dict(session, "get_last_opened_level")
+	var level_id := CampaignFormatScript.as_text(last.get("id", ""), "")
+	if level_id == "" or not bool(last.get("unlocked", false)):
+		_continue_btn.disabled = true
+		return
+	_main.call("request_battle", level_id)
 
 
 func _on_save_now() -> void:

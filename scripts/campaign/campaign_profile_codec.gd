@@ -78,6 +78,7 @@ static func capture(state: Dictionary) -> Dictionary:
 		"created_at": float(state.get("created_at", 0.0)),
 		"saved_at": float(state.get("saved_at", 0.0)),
 		"attempt": attempt,
+		"last_opened_level": str(state.get("last_opened_level", "")).strip_edges(),
 	}
 	return {"ok": true, "record": BattleSaveCodecScript.encode(record)}
 
@@ -149,6 +150,7 @@ static func restore(record: Variant) -> Dictionary:
 			"created_at": float(data.get("created_at", 0.0)),
 			"saved_at": float(data.get("saved_at", 0.0)),
 			"attempt": attempt,
+			"last_opened_level": str(data.get("last_opened_level", "")).strip_edges(),
 		},
 	}
 

@@ -28,6 +28,13 @@ const RESULT_LOSE := &"lose"
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
+const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
+const PixelPanelScene = preload("res://ui/components/pixel_panel.tscn")
+const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
+const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
+const PixelMarginScript = preload("res://ui/components/pixel_margin.gd")
+const PixelCenterScript = preload("res://ui/components/pixel_center.gd")
+const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
 const CampaignFormatScript = preload("res://scripts/scenes/campaign_format.gd")
 
 const _DEFEAT_SHADER_CODE := """
@@ -396,64 +403,99 @@ func _build_result(kind: StringName) -> void:
 		_fade_material.set_shader_parameter("fade_amount", 0.0)
 		fade.material = _fade_material
 	else:
-		fade.color = Color(0.015, 0.02, 0.035, 0.64)
+		fade.color = Color(UIThemeScript.BG, 0.64)
 
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var margin := PixelMarginScript.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_result_root.add_child(margin)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var center := PixelCenterScript.new()
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_result_root.add_child(center)
-	var panel := PanelContainer.new()
+	margin.add_child(center)
+	var panel = PixelPanelScene.instantiate()
 	panel.name = "ResultPanel"
-	panel.custom_minimum_size = Vector2(470, 0)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.025, 0.03, 0.05, 0.95), Color(0.82, 0.70, 0.40), 20))
 	center.add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
-	panel.add_child(box)
+	var box := PixelVBoxScript.new()
+	box.gap = ComponentThemeScript.SPACE_SM
+	panel.get_content_slot().add_child(box)
 
 	var title := UIFactoryScript.label(
-		String(_result_data.get(&"title", "胜利！" if kind == RESULT_WIN else "败北…")), 42,
-		Color(0.55, 0.95, 0.66) if kind == RESULT_WIN else Color(0.95, 0.48, 0.48))
+		String(_result_data.get(&"title", "胜利！" if kind == RESULT_WIN else "败北…")), ComponentThemeScript.FONT_DISPLAY,
+		UIThemeScript.TOAST_COLOR if kind == RESULT_WIN else UIThemeScript.ERROR)
 	title.name = "ResultTitle"
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
 	if kind == RESULT_WIN:
-		_build_victory_widgets(box)
+		var scroll := PixelScrollScript.new()
+		scroll.name = "ResultScroll"
+		box.add_child(scroll)
+		var rewards := PixelVBoxScript.new()
+		rewards.name = "ResultRewards"
+		rewards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rewards.gap = ComponentThemeScript.SPACE_SM
+		scroll.add_child(rewards)
+		_build_victory_widgets(rewards)
+		_fit_result_layout(panel, scroll, rewards)
 	else:
 		var hint := UIFactoryScript.label(
-			String(_result_data.get(&"return_hint", "战斗结束 · 返回战场…")), 18, Color.WHITE)
+			String(_result_data.get(&"return_hint", "战斗结束 · 返回战场…")), ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
 		hint.name = "ReturnHint"
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(hint)
+		_fit_result_layout(panel)
+
+
+## 结果卡宽度随视口变化；奖励列表按内容取高，并将上限限制在视口内。
+func _fit_result_layout(panel: Control, scroll: ScrollContainer = null, rewards: Control = null) -> void:
+	var fit := func():
+		if not is_instance_valid(panel) or not panel.is_inside_tree():
+			return
+		var viewport := get_viewport().get_visible_rect().size
+		var width := minf(ComponentThemeScript.SPACE_LG * 22.0, viewport.x - ComponentThemeScript.SPACE_LG * 4.0)
+		panel.custom_minimum_size.x = maxf(width, 0.0)
+		if scroll != null:
+			var available := maxf(ComponentThemeScript.SPACE_LG * 3.0, viewport.y - ComponentThemeScript.SPACE_LG * 10.0)
+			scroll.custom_minimum_size = Vector2(maxf(width - ComponentThemeScript.CARD_MARGIN * 4.0, 0.0), minf(maxf(rewards.get_combined_minimum_size().y, ComponentThemeScript.SPACE_LG * 3.0), available))
+	fit.call_deferred()
+	get_viewport().size_changed.connect(fit)
+	if rewards != null:
+		rewards.minimum_size_changed.connect(fit)
+	panel.tree_exiting.connect(func():
+		if get_viewport().size_changed.is_connected(fit):
+			get_viewport().size_changed.disconnect(fit)
+	)
 
 
 func _build_victory_widgets(box: VBoxContainer) -> void:
 	# 掉落空则整节省略（标题+列表都不渲染，不显示「（无）」占位）。
 	_loot_entries = _normalized_loot()
 	if not _loot_entries.is_empty():
-		var loot_title := UIFactoryScript.label("战利品", 17, Color(0.95, 0.80, 0.43))
+		var loot_title := UIFactoryScript.label("战利品", ComponentThemeScript.FONT_BODY, UIThemeScript.ACCENT)
 		box.add_child(loot_title)
-		var loot_list := VBoxContainer.new()
+		var loot_list := PixelVBoxScript.new()
+		loot_list.gap = ComponentThemeScript.SPACE_XS
 		loot_list.name = "LootList"
 		box.add_child(loot_list)
 		for index in range(_loot_entries.size()):
-			var row := PanelContainer.new()
+			var row = PixelPanelScene.instantiate()
 			row.name = "Loot%d" % index
 			row.visible = false
 			row.modulate.a = 0.0
 			row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			row.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.09, 0.12, 0.96), Color(0.35, 0.40, 0.50), 7))
 			loot_list.add_child(row)
-			var label := UIFactoryScript.label(_loot_text(_loot_entries[index]), 18, UIThemeScript.TEXT_MAIN)
-			row.add_child(label)
+			var label := UIFactoryScript.label(_loot_text(_loot_entries[index]), ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			row.get_content_slot().add_child(label)
 			_loot_rows.append(row)
 			_loot_sent.append(false)
 
-	var stats := HBoxContainer.new()
+	var stats := PixelHBoxScript.new()
 	stats.alignment = BoxContainer.ALIGNMENT_CENTER
-	stats.add_theme_constant_override("separation", 24)
+	stats.gap = ComponentThemeScript.SPACE_LG
 	box.add_child(stats)
 	_exp_value = _add_reward_counter(stats, "EXP", "ExpValue")
 	_gold_value = _add_reward_counter(stats, "金币", "GoldValue")
@@ -465,47 +507,50 @@ func _build_victory_widgets(box: VBoxContainer) -> void:
 	# CampaignFormat.level_up_lines 与 Hub 收据一致。
 	var growth_lines := CampaignFormatScript.level_up_lines(_result_data.get(&"level_ups", []))
 	if not growth_lines.is_empty():
-		var growth_title := UIFactoryScript.label("成长", 17, Color(0.55, 0.95, 0.66))
+		var growth_title := UIFactoryScript.label("成长", ComponentThemeScript.FONT_BODY, UIThemeScript.ACCENT)
 		growth_title.name = "GrowthTitle"
 		box.add_child(growth_title)
-		var growth_list := VBoxContainer.new()
+		var growth_list := PixelVBoxScript.new()
+		growth_list.gap = ComponentThemeScript.SPACE_XS
 		growth_list.name = "GrowthList"
 		box.add_child(growth_list)
 		for index in range(growth_lines.size()):
-			var grow_row := PanelContainer.new()
+			var grow_row = PixelPanelScene.instantiate()
 			grow_row.name = "LevelUp_%d" % index
 			grow_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			grow_row.add_theme_stylebox_override("panel", _panel_style(Color(0.06, 0.10, 0.07, 0.96), Color(0.35, 0.50, 0.40), 7))
 			growth_list.add_child(grow_row)
-			var grow_label := UIFactoryScript.label(String(growth_lines[index]), 18, UIThemeScript.TEXT_MAIN)
-			grow_row.add_child(grow_label)
+			var grow_label := UIFactoryScript.label(String(growth_lines[index]), ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
+			grow_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			grow_row.get_content_slot().add_child(grow_label)
 
-	_chapter_card = PanelContainer.new()
+	_chapter_card = PixelPanelScene.instantiate()
 	_chapter_card.name = "ChapterCard"
 	_chapter_card.visible = false
-	_chapter_card.add_theme_stylebox_override("panel", _panel_style(Color(0.10, 0.075, 0.025, 0.96), Color(0.95, 0.75, 0.25), 12))
 	box.add_child(_chapter_card)
-	var chapter_box := VBoxContainer.new()
-	_chapter_card.add_child(chapter_box)
-	var chapter_title := UIFactoryScript.label("章节完成", 24, Color(1.0, 0.86, 0.48))
+	var chapter_box := PixelVBoxScript.new()
+	chapter_box.gap = ComponentThemeScript.SPACE_XS
+	(_chapter_card.call("get_content_slot") as Container).add_child(chapter_box)
+	var chapter_title := UIFactoryScript.label("章节完成", ComponentThemeScript.FONT_TITLE, UIThemeScript.TOAST_COLOR)
 	chapter_title.name = "ChapterTitle"
 	chapter_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	chapter_box.add_child(chapter_title)
 	var chapter_name := UIFactoryScript.label(
-		String(_result_data.get(&"chapter_title", "")), 16, Color.WHITE)
+		String(_result_data.get(&"chapter_title", "")), ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
 	chapter_name.name = "ChapterName"
+	chapter_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	chapter_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	chapter_box.add_child(chapter_name)
 
 
 func _add_reward_counter(parent: HBoxContainer, caption: String, value_name: String) -> Label:
-	var pair := HBoxContainer.new()
+	var pair := PixelHBoxScript.new()
+	pair.gap = ComponentThemeScript.SPACE_SM
 	parent.add_child(pair)
-	var caption_label := UIFactoryScript.label(caption, 18, UIThemeScript.TEXT_MAIN)
+	var caption_label := UIFactoryScript.label(caption, ComponentThemeScript.FONT_BODY, UIThemeScript.TEXT_MAIN)
 	pair.add_child(caption_label)
-	var value := UIFactoryScript.label("", 24, Color(1.0, 0.90, 0.55))
+	var value := UIFactoryScript.label("", ComponentThemeScript.FONT_TITLE, UIThemeScript.TOAST_COLOR)
 	value.name = value_name
-	value.custom_minimum_size = Vector2(76, 0)
+	value.custom_minimum_size = Vector2(ComponentThemeScript.SPACE_LG * 3.0, 0)
 	pair.add_child(value)
 	return value
 

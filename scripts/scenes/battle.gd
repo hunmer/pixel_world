@@ -536,6 +536,7 @@ func _on_viewport_resized() -> void:
 func _build_ui() -> void:
 	battle_ui = BattleUI.new()
 	battle_ui.setup(board, grid, _unit_sprites, turn)
+	battle_ui.chapter = chapter
 	# B1 没有 IsoBoard；菜单定位与范围层共用同一套真实顶面投影。
 	battle_ui.cell_screen_fn = Callable(self, "_b1_cell_to_screen" if _b1_mode else "_b2_cell_to_screen")
 	battle_ui.level_fn = Callable(self, "_b1_cell_level") if _b1_mode else Callable(renderer, "visual_top_level")

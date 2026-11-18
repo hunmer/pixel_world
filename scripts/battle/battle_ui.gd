@@ -61,6 +61,7 @@ const BattleUiHudScript = preload("res://scripts/battle/battle_ui_hud.gd")
 const BattleUiUnitMenuScript = preload("res://scripts/battle/battle_ui_unit_menu.gd")
 const BattleUiUnitDetailScript = preload("res://scripts/battle/battle_ui_unit_detail.gd")
 const BattleUiBannerScript = preload("res://scripts/battle/battle_ui_banner.gd")
+const BattleUiPreviewScript = preload("res://scripts/battle/battle_ui_preview.gd")
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 
@@ -85,6 +86,8 @@ var cell_screen_fn: Callable = Callable()
 var grid: GridSystem
 var unit_sprites: Dictionary
 var turn: TurnManager
+## 真实战场目标，由场景装配时注入；不从画廊复制示例目标。
+var chapter: Dictionary = {}
 
 # ---- Callable 注入面 ----
 var on_resolve_combat: Callable
@@ -104,6 +107,7 @@ var _hud: BattleUiHudScript = null
 var _menu: BattleUiUnitMenuScript = null
 var _detail: BattleUiUnitDetailScript = null
 var _banner: BattleUiBannerScript = null
+var _preview: BattleUiPreviewScript = null
 
 # ---- 控件（HUD 别名：build 后指向 hud 模块持有的同一实例；契约测试直戳） ----
 var phase_label: Label
@@ -179,6 +183,8 @@ func build(end_turn_cb: Callable, toggle_hosting_cb: Callable, open_pref_cb: Cal
 	_detail.setup(self)
 	_banner = BattleUiBannerScript.new()
 	_banner.setup(self)
+	_preview = BattleUiPreviewScript.new()
+	_preview.setup(self)
 	_ensure_result_presentation()
 
 
@@ -325,28 +331,7 @@ func update_unit_sprite(u: Dictionary) -> void:
 
 ## 技能效果预览面板。仿 _show_preview_panel（贴侧栏左侧，避开右侧 360 宽侧栏）。
 func _show_skill_preview(caster: Dictionary, target: Dictionary, skill_id: StringName) -> void:
-	close_preview()
-	var sk := SkillData.get_skill(skill_id)
-	var prev := SkillSystem.preview(caster, target, skill_id)
-	var panel := Panel.new()
-	panel.size = Vector2(230, 110)
-	# 贴侧栏左侧（避开右侧 360 宽侧栏）
-	panel.position = Vector2(get_viewport().get_visible_rect().size.x - 250.0 - SIDEBAR_WIDTH, 60)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	preview_container.add_child(panel)
-	var lines: Array = [
-		"%s · %s" % [String(sk[&"name"]), String(sk[&"type"])],
-		"→ %s" % String(target.name),
-	]
-	if prev.has(&"desc"):
-		lines.append(String(prev[&"desc"]))
-	if prev.has(&"hit"):
-		lines.append("命中 %d%%" % int(prev[&"hit"]))
-	var lbl := Label.new()
-	lbl.text = "\n".join(lines)
-	lbl.add_theme_font_size_override("font_size", 12)
-	lbl.position = Vector2(10, 10)
-	panel.add_child(lbl)
+	_preview.show_skill(caster, target, skill_id)
 
 
 # ============================================================
@@ -354,12 +339,14 @@ func _show_skill_preview(caster: Dictionary, target: Dictionary, skill_id: Strin
 # ============================================================
 func close_preview() -> void:
 	for c in preview_container.get_children():
+		preview_container.remove_child(c)
 		c.queue_free()
 
 
 ## 关菜单：free 掉控件 + 若当前是 MENU 态则回到 IDLE（mode 由 battle.gd 改）。
 func close_menu() -> void:
 	for c in menu_container.get_children():
+		menu_container.remove_child(c)
 		c.queue_free()
 	# mode 复位交给 battle.gd：通过 on_menu_closed 回调。
 	# 但原代码只在 mode==MENU 时复位；这里统一通知 battle.gd。
@@ -373,26 +360,7 @@ func set_menu_closed_callback(cb: Callable) -> void:
 
 
 func _show_preview_panel(attacker: Dictionary, defender: Dictionary, prev: Dictionary) -> void:
-	close_preview()
-	var panel := Panel.new()
-	panel.size = Vector2(210, 150)
-	# 贴侧栏左侧（避开右侧 360 宽侧栏）
-	panel.position = Vector2(get_viewport().get_visible_rect().size.x - 230.0 - SIDEBAR_WIDTH, 60)
-	panel.add_theme_stylebox_override("panel", UIThemeScript.menu_panel_style())
-	preview_container.add_child(panel)
-	var lines := [
-		"%s → %s" % [String(attacker.name), String(defender.name)],
-		"命中 %d%%  必杀 %d%%" % [prev.atkHit, prev.atkCrit],
-		"伤害 %d%s" % [prev.atkDmg, " ×2" if prev.doubleAttack else ""],
-		"%s 反击" % String(defender.name),
-		"命中 %d%%" % prev.defHit,
-		"伤害 %d%s" % [prev.defDmg, " ×2" if prev.defenderDouble else ""],
-	]
-	var lbl := Label.new()
-	lbl.text = "\n".join(lines)
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.position = Vector2(10, 10)
-	panel.add_child(lbl)
+	_preview.show_combat(attacker, defender, prev)
 
 
 # ============================================================

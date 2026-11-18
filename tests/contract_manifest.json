@@ -437,6 +437,16 @@
       "evidence": "tests/battle_turn_visibility_contract.gd L62 tscn; L66 frame｜加速不安全（初始保守，待 A/B）：场景帧 L66"
     },
     {
+      "name": "battle_ui_components",
+      "path": "tests/battle_ui_components_contract.gd",
+      "group": "battle-presentation",
+      "tags": ["scene", "ui"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-18 headless BATTLE_UI_COMPONENTS_CONTRACT_OK；覆盖真实目标/阵营HP刷新/行动回调/技能与物品禁用/预测数据只读/同帧替换/详情与30条奖励列表；960×540、1280×720、1640×800布局通过，须正常process_frame"
+    },
+    {
       "name": "battlefield_render",
       "path": "tests/battlefield_render_contract.gd",
       "group": "battle-3d-editor",
