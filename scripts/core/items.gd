@@ -5,7 +5,9 @@
 ##   id, name, desc, type(consumable/throwable/equip/buff),
 ##   target(self/ally/enemy/aoe_enemy), effect(heal_hp/heal_mp/damage/buff/cleanse/equip),
 ##   power, range:[min,max], uses, stat, buffValue, buffTurns, equipStat, equipValue,
-##   iconId（可选）：物品图标稳定 ID（数字字符串 "01".."08"，见 core/item_icons.gd）
+##   iconId（可选）：物品图标稳定 ID（数字字符串 "01".."08"，见 core/item_icons.gd）；
+##   缺/空/null 归一为 ItemIcons.DEFAULT_ICON_ID（物品菜单兜底默认图），
+##   未知非空 ID 原样保留，由 ItemIcons.get_texture 告警回退（可判「声明了但不在目录」）
 
 class_name ItemData
 extends RefCounted
@@ -63,9 +65,20 @@ static func _normalize(s: Dictionary) -> Dictionary:
 		buffTurns = int(g.call("buffTurns")) if g.call("buffTurns") != null else 0,
 		equipStat = StringName(g.call("equipStat")) if g.call("equipStat") != null else &"",
 		equipValue = int(g.call("equipValue")) if g.call("equipValue") != null else 0,
-		iconId = StringName(g.call("iconId")) if g.call("iconId") != null else &"",
+		iconId = _normalize_icon_id(g.call("iconId")),
 	}
 	return d
+
+
+## iconId 归一：缺/空/null → DEFAULT_ICON_ID（物品菜单兜底默认图）；
+## 未知非空 ID 原样保留，由 ItemIcons.get_texture 告警回退（契约可判「声明了但不在目录」）。
+static func _normalize_icon_id(value) -> StringName:
+	if value == null:
+		return ItemIcons.DEFAULT_ICON_ID
+	var s := String(value)
+	if s.is_empty():
+		return ItemIcons.DEFAULT_ICON_ID
+	return StringName(s)
 
 
 static func get_item(item_id: StringName) -> Dictionary:

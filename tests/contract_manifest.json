@@ -192,7 +192,7 @@
       "known_status": "pass",
       "parallel_safe": false,
       "fast_flag_safe": false,
-      "evidence": "2026-11-19 物品图标契约：\"01\"..\"08\" 稳定 ID 显式目录、8 物品 iconId 绑定表锁定互异（hpPotion=01…mightPotion=08）、8 文件全存在且加载本 ID 真实路径 64x64 纹理（禁兜底通过）、get_texture 缓存同实例/未知 ID 回退默认、_load_hook 隔离缝验证默认图也坏时非 null 应急纹理（同实例）且 item_icon 链路仍非 null（与技能 null 语义相反）、未知物品回退默认物品图标、旧定义缺 iconId normalize 为 &\"\"、旧 {id,uses} 背包条目 usable/equipable 可解析、8 物品战斗数值基线锁定、真实 _open_item_picker 菜单接线（全 8 物品+耗尽+装备禁用原因+未知条目默认图、NEAREST、token 图标尺寸、打开前后战斗状态与背包零变化）；复用 battle_ui_components setup+settle 模式，须正常 process_frame"
+      "evidence": "2026-11-19 物品图标契约：\"01\"..\"08\" 稳定 ID 显式目录、8 物品 iconId 绑定表锁定互异（hpPotion=01…mightPotion=08）、原始 items.json 字段直检（每项必显式声明非空 iconId 且与绑定表一致，不以归一化值作缺失检测依据）、8 文件全存在且加载本 ID 真实路径 64x64 纹理（禁兜底通过）、get_texture 缓存同实例/未知 ID 回退默认、_load_hook 隔离缝验证默认图也坏时非 null 应急纹理（同实例）且 item_icon 链路仍非 null（与技能 null 语义相反）、未知物品回退默认物品图标、旧定义缺/空/null iconId 归一 DEFAULT_ICON_ID 且经注入 item_icon 链路取默认图、未知非空 iconId 原样保留交 get_texture 告警回退、旧 {id,uses} 背包条目 usable/equipable 可解析、8 物品战斗数值基线锁定、真实 _open_item_picker 菜单接线（全 8 物品+耗尽+装备禁用原因+未知条目默认图、NEAREST、token 图标尺寸、打开前后战斗状态与背包零变化）；复用 battle_ui_components setup+settle 模式，须正常 process_frame"
     },
     {
       "name": "campaign_ui",

@@ -95,7 +95,8 @@ func _run_catalog_shape() -> void:
 	_expect(ItemIcons.has_icon(ItemIcons.DEFAULT_ICON_ID), "默认兜底图标必须在目录内")
 
 
-## ②绑定完整性：8 物品 iconId 与约定表逐项一致且互异；旧定义缺 iconId 容忍。
+## ②绑定完整性：8 物品 iconId 与约定表逐项一致且互异（原始 JSON 字段直检 + 归一化视图）；
+##   旧定义缺/空/null iconId 归一 DEFAULT_ICON_ID；未知非空 ID 原样保留交 get_texture 回退。
 func _run_binding_integrity() -> void:
 	var seen: Dictionary = {}
 	var items: Array = ItemData.ITEM_LIST
@@ -113,16 +114,64 @@ func _run_binding_integrity() -> void:
 		_expect(not seen.has(icon_id), "iconId %s 被 %s 与 %s 重复绑定" % [
 			String(icon_id), String(seen.get(icon_id, &"")), String(iid)])
 		seen[icon_id] = iid
-	# 旧定义缺 iconId：normalize 容忍且落 &""（不回填默认，保契约可判 JSON 绑定缺失）
-	var legacy: Dictionary = ItemData._normalize({
-		id = &"legacyItem", name = "旧物品", desc = "无图标字段", type = &"consumable",
+	# JSON 完整性：直接检查原始 JSON 字段（不经归一化视图，空归一值不作缺失检测依据）
+	var json_path := "res://data/items.json"
+	_expect(FileAccess.file_exists(json_path), "items.json 缺失: %s" % json_path)
+	var raw_items: Array = []
+	if FileAccess.file_exists(json_path):
+		var json := JSON.new()
+		var err := json.parse(FileAccess.open(json_path, FileAccess.READ).get_as_text())
+		_expect(err == OK, "items.json 解析失败: %s" % json.get_error_message())
+		if err == OK:
+			raw_items = json.data.get("items", [])
+	_expect(raw_items.size() == EXPECTED_BINDINGS.size(),
+		"原始 JSON 物品数应为 %d，实际 %d" % [EXPECTED_BINDINGS.size(), raw_items.size()])
+	for raw in raw_items:
+		var it: Dictionary = raw
+		var iid := StringName(it.get("id", ""))
+		_expect(it.has("iconId"), "原始 JSON：%s 缺 iconId 字段（绑定必须显式声明）" % String(iid))
+		if it.has("iconId"):
+			_expect(it["iconId"] != null and String(it["iconId"]) != "",
+				"原始 JSON：%s 的 iconId 不得为 null/空串" % String(iid))
+			_expect(String(it["iconId"]) == String(EXPECTED_BINDINGS.get(iid, &"")),
+				"原始 JSON：%s iconId 应为 %s，实际 %s" % [String(iid), String(EXPECTED_BINDINGS.get(iid, &"")), str(it["iconId"])])
+	# 旧定义三例：缺字段 / 空串 / null → 归一 DEFAULT_ICON_ID（不落空值）
+	# 注：定义需带全量常规字段，_normalize 对 name/desc 等做 String() 强转，缺字段会中断调用
+	var legacy_missing: Dictionary = ItemData._normalize({
+		id = &"legacyMissing", name = "旧物品", desc = "缺图标字段", type = &"consumable",
 		target = &"self", effect = &"heal_hp", power = 5, range = [0, 0], uses = 1,
 	})
-	_expect(String(legacy.get(&"iconId", &"<missing>")) == "",
-		"旧定义缺 iconId 应 normalize 为空 StringName，实际 %s" % String(legacy.get(&"iconId", &"<missing>")))
-	# 有 iconId 时透传为 StringName
-	var with_icon: Dictionary = ItemData._normalize({id = &"x1", iconId = "07"})
-	_expect(with_icon[&"iconId"] == &"07", "iconId 应透传为 StringName 07，实际 %s" % String(with_icon[&"iconId"]))
+	var legacy_empty: Dictionary = ItemData._normalize({
+		id = &"legacyEmpty", name = "旧物品", desc = "空图标字段", type = &"consumable",
+		target = &"self", effect = &"heal_hp", power = 5, range = [0, 0], uses = 1,
+		iconId = "",
+	})
+	var legacy_null: Dictionary = ItemData._normalize({
+		id = &"legacyNull", name = "旧物品", desc = "null 图标字段", type = &"consumable",
+		target = &"self", effect = &"heal_hp", power = 5, range = [0, 0], uses = 1,
+		iconId = null,
+	})
+	for pair in [[&"缺字段", legacy_missing], [&"空串", legacy_empty], [&"null", legacy_null]]:
+		var got: StringName = pair[1].get(&"iconId", &"<missing>")
+		_expect(got == ItemIcons.DEFAULT_ICON_ID,
+			"旧定义 iconId %s 应归一为 DEFAULT_ICON_ID(%s)，实际 %s" % [String(pair[0]), String(ItemIcons.DEFAULT_ICON_ID), String(got)])
+	# 未知非空 ID：原样保留，交 get_texture 告警回退（不在此归一吞掉）
+	var legacy_unknown: Dictionary = ItemData._normalize({
+		id = &"legacyUnknown", name = "旧物品", desc = "未知图标 ID", type = &"consumable",
+		target = &"self", effect = &"heal_hp", power = 5, range = [0, 0], uses = 1,
+		iconId = "99",
+	})
+	_expect(legacy_unknown[&"iconId"] == &"99",
+		"未知非空 iconId 应原样保留（99），实际 %s" % String(legacy_unknown[&"iconId"]))
+	# item_icon 链路注入验证：归一 DEFAULT 的定义取默认图标；未知 ID 定义经 get_texture 回退默认
+	var saved_items: Dictionary = ItemData._items.duplicate()
+	ItemData._items[legacy_missing[&"id"]] = legacy_missing
+	ItemData._items[legacy_unknown[&"id"]] = legacy_unknown
+	_expect(ItemData.item_icon(legacy_missing[&"id"]) == ItemIcons.get_texture(ItemIcons.DEFAULT_ICON_ID),
+		"iconId 归一 DEFAULT 的定义经 item_icon 应取默认物品图标")
+	_expect(ItemData.item_icon(legacy_unknown[&"id"]) == ItemIcons.get_texture(ItemIcons.DEFAULT_ICON_ID),
+		"未知非空 iconId 定义经 item_icon 应由 get_texture 告警回退默认图标")
+	ItemData._items = saved_items
 
 
 ## ③纹理性：8 个文件全部存在；每个 ID 取到本 ID 真实路径的 64x64 纹理（不得以兜底通过）。
