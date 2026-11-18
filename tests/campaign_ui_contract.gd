@@ -5,7 +5,7 @@
 ## ①源码静态规范（UIFactory 按钮 / 无直建控件 / 无绝对定位 / tscn 绑脚本）
 ## ②存档列表（排序/最近标记/不可加载警告/默认焦点）③模态焦点陷阱与还原
 ## ④重命名 ⑤新建→自动进基地 ⑥基地四数据+进度条 ⑦手动保存 ⑧胜利结算弹窗
-## ⑨单位/物品详情 ⑩关卡列表/出征确认/battle_requested+桥接缺失兜底
+## ⑨单位装备弹层（四槽装卸/拒绝明示/焦点还原）+物品详情 ⑩关卡列表/出征确认/battle_requested+桥接缺失兜底
 ## ⑪ESC 屏级返回 ⑫删除存档 ⑬切换存档 ⑭三档分辨率布局 ⑮无会话降级
 ## ⑳营地商店（入口/列表/限购/余额禁用/确认防重/changed 刷新/售罄/失败明示/
 ## ESC 返回/焦点还原）。ESC 用直接调 _unhandled_input(构造 InputEventAction)
@@ -20,6 +20,7 @@ const UI_FILES: Array[String] = [
 	"res://scripts/scenes/campaign_levels.gd",
 	"res://scripts/scenes/campaign_shop.gd",
 	"res://scripts/scenes/campaign_modal.gd",
+	"res://scripts/scenes/campaign_equipment.gd",
 	"res://scripts/scenes/campaign_save_select.gd",
 ]
 ## 这些文件必须含 UIFactory 按钮调用（main 只装配无按钮）。
@@ -28,6 +29,7 @@ const BUTTON_FILES: Array[String] = [
 	"res://scripts/scenes/campaign_levels.gd",
 	"res://scripts/scenes/campaign_shop.gd",
 	"res://scripts/scenes/campaign_modal.gd",
+	"res://scripts/scenes/campaign_equipment.gd",
 	"res://scripts/scenes/campaign_save_select.gd",
 ]
 const FORBIDDEN_PATTERNS: Array[String] = [
@@ -283,14 +285,66 @@ func _run() -> void:
 	gold_value = campaign.find_child("GoldValue", true, false) as Label
 	check(gold_value.text == "270", "08 金币入账 220+50")
 
-	# ⑨ 单位/物品详情弹层。
+	# ⑨ 单位装备弹层（四槽装卸/拒绝明示/焦点还原）+ 物品详情弹窗。
 	(campaign.find_child("UnitRow_0", true, false) as Button).pressed.emit()
 	await process_frame
-	modal = campaign.find_child("CampaignModal", true, false)
-	message = modal.find_child("ModalMessage", true, false) as Label
-	check(message.text.find("剑士队长") >= 0, "09 单位详情含名称")
-	(modal.find_child("Action_close", true, false) as Button).pressed.emit()
+	var equip_panel: Control = campaign.find_child("CampaignEquipment", true, false)
+	check(equip_panel != null, "09 角色行打开装备弹层")
+	check(
+		String(equip_panel.find_child("EquipPanel", true, false).get("title")).find("剑士队长") >= 0,
+		"09 弹层标题含单位名"
+	)
+	check(
+		(equip_panel.find_child("EquipSummary", true, false) as Label).text.find("剑士") >= 0,
+		"09 概要行含职业名（swordsman→剑士）"
+	)
+	for slot_label: String in ["武器", "盾牌", "法杖", "秘宝"]:
+		check(_panel_has_text(equip_panel, slot_label), "09 四槽标签含 %s" % slot_label)
+	var shield_row: Label = equip_panel.find_child("SlotTitle_shield", true, false) as Label
+	check(shield_row.text.find("（空）") >= 0, "09 初始盾槽为空")
+	# 装上皮盾（通用盾）：changed 驱动重建 → 槽行/加成/条目状态全量更新。
+	(equip_panel.find_child("Equip_leatherShield", true, false) as Button).pressed.emit()
 	await process_frame
+	shield_row = equip_panel.find_child("SlotTitle_shield", true, false) as Label
+	check(shield_row.text.find("皮盾") >= 0 and shield_row.text.find("防+1") >= 0, "09 装备后槽行显示皮盾（防+1）")
+	check(_panel_has_text(equip_panel, "装备加成："), "09 加成行存在")
+	var equipped_btn: Button = equip_panel.find_child("Equip_leatherShield", true, false) as Button
+	check(equipped_btn.disabled and equipped_btn.text == "已装备", "09 已装备条目置灰「已装备」")
+	check((equip_panel.find_child("EquipError", true, false) as Label).visible == false, "09 成功后无错误")
+	# 卸下：槽行回空、加成清零，焦点按约定回到该件的「装备」键。
+	(equip_panel.find_child("Unequip_shield", true, false) as Button).pressed.emit()
+	await process_frame
+	shield_row = equip_panel.find_child("SlotTitle_shield", true, false) as Label
+	check(shield_row.text.find("（空）") >= 0, "09 卸下后槽行回空")
+	check(_panel_has_text(equip_panel, "装备加成：无"), "09 卸下后加成为无")
+	check(
+		root.gui_get_focus_owner() != null
+			and root.gui_get_focus_owner().name == "Equip_leatherShield",
+		"09 卸下后焦点回该件装备键"
+	)
+	# 拒绝路径（会话级）：出征挂起时 session 拒绝装卸 → 内联错误、数据不变。
+	# （职业不符条目不进 catalog_for 清单——可装性过滤在 UI 列表层已生效，
+	# 见 equipment_integration_contract 的核心判定断言。）
+	stub.attempt = "battle_1"
+	(equip_panel.find_child("Equip_leatherShield", true, false) as Button).pressed.emit()
+	await process_frame
+	var equip_error: Label = equip_panel.find_child("EquipError", true, false) as Label
+	check(equip_error.visible, "09 拒绝时错误行可见")
+	check(equip_error.text.find("战斗进行中") >= 0, "09 拒绝信息透传会话原文")
+	check(
+		(equip_panel.find_child("SlotTitle_shield", true, false) as Label).text.find("（空）") >= 0,
+		"09 拒绝后槽位不变"
+	)
+	stub.attempt = ""
+	# 焦点陷阱：焦点只能落在弹层内部控件。
+	var trapped: Control = root.gui_get_focus_owner()
+	check(trapped != null and equip_panel.is_ancestor_of(trapped), "09 焦点被困弹层内")
+	# 关闭（点关闭键）：弹层移除、焦点还原 Hub 保存按钮。
+	(equip_panel.find_child("EquipCloseBtn", true, false) as Button).pressed.emit()
+	await process_frame
+	check(campaign.find_child("CampaignEquipment", true, false) == null, "09 关闭后弹层移除")
+	var equip_restored: Control = root.gui_get_focus_owner()
+	check(equip_restored != null and equip_restored.name == "SaveNowBtn", "09 关闭后焦点还原 Hub")
 	(campaign.find_child("ItemRow_0", true, false) as Button).pressed.emit()
 	await process_frame
 	modal = campaign.find_child("CampaignModal", true, false)
@@ -702,6 +756,14 @@ func _v_overlaps(control: Control, viewport: Control) -> bool:
 	return a.position.y < b.end.y - 1.0 and a.end.y > b.position.y + 1.0
 
 
+## 弹层内任意 Label 是否含指定文案（槽行/加成行等多标签聚合断言用）。
+func _panel_has_text(panel: Control, needle: String) -> bool:
+	for node: Variant in panel.find_children("*", "Label", true, false):
+		if (node as Label).text.find(needle) >= 0:
+			return true
+	return false
+
+
 func _static_source_checks() -> void:
 	for path: String in UI_FILES:
 		var text := FileAccess.get_file_as_string(path)
@@ -725,6 +787,9 @@ func _static_source_checks() -> void:
 class StubSession extends Node:
 	signal changed(reason: String)
 
+	## 装备装卸直用真实 EquipmentData 核心（拒绝/幂等/prev 形状与正式会话一致）。
+	const EquipmentDataScript = preload("res://scripts/core/equipment.gd")
+
 	const LEVEL_IDS: Array[String] = [
 		"plains_skirmish", "river_crossing", "ambush_reinforce",
 		"mountain_pass", "last_stand", "arena_1v1",
@@ -743,6 +808,8 @@ class StubSession extends Node:
 	## 最近一次 create_profile 收到的难度参（供新建弹层传值断言）。
 	var last_created_difficulty := ""
 	var settled_tokens := {}
+	## 非空模拟出征挂起：装卸一律拒绝「战斗进行中，不能更换装备」。
+	var attempt := ""
 	## 购买调用流水（无论成败都记录）——供防重/失败路径断言。
 	var buy_calls: Array = []
 	## 商店货架（实例字段而非 const：remaining 随购买递减需可变）。
@@ -760,7 +827,7 @@ class StubSession extends Node:
 		profiles["b"] = _make_profile(
 			"b", "最近的档", 220, ["plains_skirmish", "river_crossing"], 900,
 			[
-				{"id": "hero", "name": "剑士队长", "level": 3, "exp": 40, "hp": 30, "max_hp": 30, "mp": 10, "max_mp": 10},
+				{"id": "hero", "name": "剑士队长", "level": 3, "exp": 40, "hp": 30, "max_hp": 30, "mp": 10, "max_mp": 10, "classId": "swordsman"},
 				{"id": "mage", "name": "见习法师", "level": 2, "hp": 18, "max_hp": 20, "mp": 14, "max_mp": 16},
 			],
 			[
@@ -931,6 +998,39 @@ class StubSession extends Node:
 			_emit()
 			return {"ok": true}
 		return {"ok": false, "error": "未知商品：%s" % id}
+
+	## 装备装卸（契约 scripts/campaign/campaign_session.gd equip_item/unequip_item）：
+	## 核心判定走真实 EquipmentData（职业授权/同槽替换/幂等/prev 形状与正式
+	## 会话一致），桩只负责 roster 定位、原地修改与 changed 通知。
+	func equip_item(roster_id: String, entry_id: String) -> Dictionary:
+		if attempt != "":
+			return {"ok": false, "error": "战斗进行中，不能更换装备"}
+		var unit := _find_roster_unit(roster_id)
+		if unit.is_empty():
+			return {"ok": false, "error": "队伍中找不到该单位"}
+		var result: Dictionary = EquipmentDataScript.equip(unit, StringName(entry_id))
+		if bool(result.get("ok", false)) and bool(result.get("changed", false)):
+			_emit("equipped")
+		return result
+
+	func unequip_item(roster_id: String, slot: String) -> Dictionary:
+		if attempt != "":
+			return {"ok": false, "error": "战斗进行中，不能更换装备"}
+		var unit := _find_roster_unit(roster_id)
+		if unit.is_empty():
+			return {"ok": false, "error": "队伍中找不到该单位"}
+		var result: Dictionary = EquipmentDataScript.unequip(unit, StringName(slot))
+		if bool(result.get("ok", false)) and bool(result.get("changed", false)):
+			_emit("unequipped")
+		return result
+
+	func _find_roster_unit(roster_id: String) -> Dictionary:
+		if current == "" or not profiles.has(current):
+			return {}
+		for entry: Variant in profiles[current].get("roster", []):
+			if entry is Dictionary and String((entry as Dictionary).get("id", "")) == roster_id:
+				return entry
+		return {}
 
 	func settle_battle(token: String, result: StringName, chapter: Variant) -> Dictionary:
 		if settled_tokens.has(token):

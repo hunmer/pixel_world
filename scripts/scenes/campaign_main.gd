@@ -133,6 +133,12 @@ func open_modal(
 	return modal
 
 
+## 全屏覆盖层挂载点（装备弹层等交互面板）：与文本弹窗共用 _modal_layer，
+## 使 modal_open() 互斥语义、ESC 屏级守卫与「关闭后焦点还原」对覆盖层一致生效。
+func mount_overlay(control: Control) -> void:
+	_modal_layer.add_child(control)
+
+
 func open_error(title: String, message: String) -> Control:
 	return open_modal(
 		title,

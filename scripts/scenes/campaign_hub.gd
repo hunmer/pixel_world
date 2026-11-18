@@ -16,6 +16,7 @@ const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
 const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
 const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
 const CampaignFormatScript = preload("res://scripts/scenes/campaign_format.gd")
+const EquipmentPanelScript = preload("res://scripts/scenes/campaign_equipment.gd")
 
 var _main: Control
 var _profile_title: Label
@@ -242,7 +243,7 @@ func _fill_roster(roster: Variant) -> void:
 	var index := 0
 	for entry: Variant in units:
 		var unit: Dictionary = entry if entry is Dictionary else {}
-		var row := _make_detail_button(CampaignFormatScript.unit_label(unit), unit)
+		var row := _make_detail_button(CampaignFormatScript.unit_label(unit), unit, true)
 		row.name = "UnitRow_%d" % index
 		_roster_list.add_child(row)
 		index += 1
@@ -273,11 +274,15 @@ func _make_empty_label(text: String, node_name: String) -> Label:
 	return label
 
 
-func _make_detail_button(text: String, data: Dictionary) -> Button:
+func _make_detail_button(text: String, data: Dictionary, is_unit := false) -> Button:
 	var button: Button = UIFactoryScript.button(text, Callable(), "", false)
 	button.set("semantic", 1)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.pressed.connect(_on_show_detail.bind(text, data))
+	# 角色行与物品行数据都带 id 键，不能按 id 判路由；入口在按钮绑定处分流。
+	if is_unit:
+		button.pressed.connect(_on_show_unit_detail.bind(data))
+	else:
+		button.pressed.connect(_on_show_detail.bind(text, data))
 	return button
 
 
@@ -404,6 +409,18 @@ func _on_switch_profile() -> void:
 	_main.call("go_save_select")
 
 
+func _on_show_unit_detail(data: Dictionary) -> void:
+	# 角色行入口：打开装备弹层（四槽查看/装卸）。与弹窗共用 _modal_layer，
+	# 获得 modal_open() 互斥与 ESC 屏级守卫；已有弹层时忽略本次点击。
+	if bool(_main.call("modal_open")):
+		return
+	var equipment: Control = EquipmentPanelScript.new()
+	equipment.build(String(data.get("id", "")), _main, self)
+	_main.call("mount_overlay", equipment)
+	equipment.open()
+	equipment.connect("closed", Callable(self, "_on_equipment_closed"))
+
+
 func _on_show_detail(title: String, data: Dictionary) -> void:
 	var body: String = CampaignFormatScript.detail_lines(data)
 	if body == "":
@@ -414,3 +431,10 @@ func _on_show_detail(title: String, data: Dictionary) -> void:
 		body,
 		[{"text": "关闭", "semantic": 0, "id": "close", "focus": true}]
 	)
+
+
+func _on_equipment_closed() -> void:
+	# 装卸成功已由 changed 事件驱动 refresh()；这里只确认焦点回到本屏按钮
+	# （弹层 close() 已还原打开前焦点，正常情况下此处是幂等兜底）。
+	if CampaignFormatScript.can_grab_focus(_save_btn):
+		_save_btn.grab_focus()
