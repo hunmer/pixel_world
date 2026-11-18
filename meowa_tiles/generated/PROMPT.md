@@ -177,7 +177,7 @@ libtv node --x 4000 --y 200 create "item_icons_3x4_v2" -t image \
   --prompt "<提示词模板，要点见下>" --run
 ```
 
-提示词要点（完整 prompt 存画布节点 `item_icons_3x4_v2`，i-2TN5EzwOxg；v1 节点 `item_icons_3x4_v1`，i-ShPLqXiyuc）：
+提示词要点（完整 prompt 与参数快照已只读取回存本地 `item_icons/_v2_prompt.txt`，实际布局 **3 列 × 4 行**；画布节点 `item_icons_3x4_v2`，i-2TN5EzwOxg，读回命令 `~/.libtv/libtv node i-2TN5EzwOxg`；v1 节点 `item_icons_3x4_v1`，i-ShPLqXiyuc）：
 
 - 布局与内容：「3 列 × 4 行共 12 格……每行恰好 3 个」+ 逐行清单（8 个游戏物品 + 4 张卷轴储备，卷轴不入游戏数据）。
 - **关键约束（v1 教训）**：v1 只写「图标之间留出明显均匀的透明间隔」，模型在行 1–3 图标底下画了一整块不透明背板（全表连通成一片，无法切片）。v2 写明：「12 个圆角方形底框彼此完全独立，底框轮廓之外必须 100% 全透明，底框之间绝对不要任何背板、底板、桌面、木板、纸张、板条或任何相连的背景物——绝对不要把图标放在一块板子上」，实测 39.9% 全透明像素、连通域恰好 12 个。
