@@ -1,0 +1,133 @@
+[
+ {
+  "id": "01",
+  "src": "sliced_v1/equip_icons_3x4_v1_r2c1.png",
+  "bbox": [
+   4,
+   4,
+   453,
+   466
+  ],
+  "scale_nn": 0.1385
+ },
+ {
+  "id": "02",
+  "src": "sliced_v1/equip_icons_3x4_v1_r2c2.png",
+  "bbox": [
+   4,
+   4,
+   477,
+   498
+  ],
+  "scale_nn": 0.1296
+ },
+ {
+  "id": "03",
+  "src": "sliced_v1/equip_icons_3x4_v1_r2c3.png",
+  "bbox": [
+   4,
+   4,
+   464,
+   483
+  ],
+  "scale_nn": 0.1336
+ },
+ {
+  "id": "04",
+  "src": "sliced_v1/equip_icons_3x4_v1_r3c1.png",
+  "bbox": [
+   3,
+   4,
+   464,
+   440
+  ],
+  "scale_nn": 0.1388
+ },
+ {
+  "id": "05",
+  "src": "sliced_v1/equip_icons_3x4_v1_r3c2.png",
+  "bbox": [
+   4,
+   4,
+   446,
+   493
+  ],
+  "scale_nn": 0.1309
+ },
+ {
+  "id": "06",
+  "src": "sliced_v1/equip_icons_3x4_v1_r3c3.png",
+  "bbox": [
+   4,
+   4,
+   442,
+   476
+  ],
+  "scale_nn": 0.1356
+ },
+ {
+  "id": "07",
+  "src": "sliced_v1/equip_icons_3x4_v1_r4c1.png",
+  "bbox": [
+   4,
+   3,
+   451,
+   493
+  ],
+  "scale_nn": 0.1306
+ },
+ {
+  "id": "08",
+  "src": "sliced_v1/equip_icons_3x4_v1_r4c2.png",
+  "bbox": [
+   4,
+   4,
+   458,
+   451
+  ],
+  "scale_nn": 0.141
+ },
+ {
+  "id": "09",
+  "src": "sliced_v1/equip_icons_3x4_v1_r4c3.png",
+  "bbox": [
+   2,
+   4,
+   470,
+   530
+  ],
+  "scale_nn": 0.1217
+ },
+ {
+  "id": "10",
+  "src": "sliced_v1/equip_icons_3x4_v1_r5c1.png",
+  "bbox": [
+   4,
+   4,
+   510,
+   545
+  ],
+  "scale_nn": 0.1183
+ },
+ {
+  "id": "11",
+  "src": "sliced_v1/equip_icons_3x4_v1_r5c2.png",
+  "bbox": [
+   4,
+   2,
+   440,
+   499
+  ],
+  "scale_nn": 0.1288
+ },
+ {
+  "id": "reserve_whetstone",
+  "src": "sliced_v1/equip_icons_3x4_v1_r5c3.png",
+  "note": "储备不入游戏数据"
+ },
+ {
+  "id": "discarded",
+  "src": "sliced_v1/equip_icons_3x4_v1_r1c1.png",
+  "note": "27x27 噪点碎片弃用"
+ }
+]

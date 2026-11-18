@@ -203,6 +203,44 @@ libtv node --x 4000 --y 200 create "item_icons_3x4_v2" -t image \
 
 QA：`asset_report.py --expect-size 64x64 --require-alpha` exit 0（8/8 RGBA、alpha 0–255、圆角透明 125–197px、无 problems；留档 `_qa_asset_report.json`）；`_qa_compare.png` 与 `assets/ui/skills/01..08.png` 的 4x 放大 + 原尺寸并排对照，深底泛光风格一致、原尺寸可读；原始图 URL 留档 `_v1_url.txt` / `_v2_url.txt`。
 
+## 装备图标素材表（equipment_icons，2026-11-19 实测通过）
+
+游戏装备 64x64 图标（入场目录 `assets/ui/equipment/`，装备 ID 与 iconId 映射见 `data/equipment.json`，01–11 永不重排；UI 经 `scripts/core/equipment_icons.gd` 稳定 ID 目录取图）。风格目标：与 `assets/ui/skills/` 同族（物件+深蓝黑光晕+粗像素）但**光晕之外真透明、无方形卡框**（skills 原件实为 0% 透明烘焙底，勿照抄其 alpha 形态）。
+
+直接参考节点（复用 item_icons 轮上传的 skills 实际 PNG，仅作风格参考）：`item_ref_blue_01`（i-AKbjQuvPNQ，01.png）、`item_ref_green_09`（i-Wpv7IElvVU，09.png）、`item_ref_red_21`（i-ulnBon7t9N，21.png）、`item_ref_orange_25`（i-6UOeLXCJA7，25.png）。
+
+Seedream 5.5 / image2image（4 参考入边）/ ratio=3:4 / quality=2K / background=transparent → 1776x2368 原生真透明 RGBA，**一次通过**（task 20261119060503960122737；画布节点 `equip_icons_3x4_v1`，i-tMnfiWNTXd；完整 prompt 快照 `_v1_prompt.txt`，URL 留档 `_v1_url.txt`）。
+
+提示词要点（完整原文见 `_v1_prompt.txt`）：
+
+- 布局与内容：「3 列 × 4 行共 12 格……每行恰好 3 个」+ 逐行清单（11 件装备 + 1 张磨刀石储备，储备不入游戏数据）。
+- 独立性约束沿用 item_icons v2 教训：**「图标及其光晕轮廓之外必须 100% 全透明，绝对不要任何背板/底板/桌面/板条/方形底框」**——本轮无背板粘连（52.7% 全透明，连通域 12+1 碎片）。
+- 风格锚：「单个物件居中 + 物件周围一圈柔和深色光晕（与参考图标完全一致的深蓝黑泛光）+ 大颗粒像素点阵 + 清晰深色描边，绝不能平滑矢量或高清插画」。
+- 易混装备写明区分点：铁剑=简朴宽刃棕柄 vs 钢剑=细长蓝光华丽护手；皮木圆盾=皮革蒙皮木框铆钉 vs 鸢形金属大盾=银铁框蓝色纹章漆面。
+- 四槽语义：07 治愈法杖=staff、10 远征披风/11 幸运坠饰=relic（v2 四槽口径，图标只按 iconId 对号）。
+
+切片与归一（入 64x64）：
+
+1. `python3 tools/slice_ui_sheet.py meowa_tiles/generated/equipment_icons/equip_icons_3x4_v1.png -o meowa_tiles/generated/equipment_icons/sliced_v1`（连通域自动模式；实测报「5 行 13 张」——**行聚类与真实网格无关，别信行名**：1 张 27x27 噪点碎片（弃）+ 12 个图标按 prompt 行序完整对应，逐格看图确认后再映射 ID）。
+2. 每张紧裁 alpha bbox → 最长边等比缩放到 64（NEAREST）→ 居中贴入 64x64 透明画布 → `assets/ui/equipment/01..11.png`；磨刀石储备切至 `equipment_icons/reserves/whetstone.png`；溯源清单 `_slice_manifest.json`（bbox/scale）。
+
+| 文件 | 装备 ID / 名称（data/equipment.json） |
+| --- | --- |
+| assets/ui/equipment/01.png | ironSword 铁剑（简朴宽刃棕柄） |
+| assets/ui/equipment/02.png | steelSword 钢剑（细长蓝光华丽护手） |
+| assets/ui/equipment/03.png | ironLance 铁枪（长柄银头骑枪） |
+| assets/ui/equipment/04.png | ironAxe 铁斧（短柄宽刃战斧） |
+| assets/ui/equipment/05.png | ironBow 铁弓（木质弯弓绷弦） |
+| assets/ui/equipment/06.png | fire 火焰（橙红火焰亮黄内芯） |
+| assets/ui/equipment/07.png | heal 治疗杖（木杖绿光宝珠，staff） |
+| assets/ui/equipment/08.png | leatherShield 皮盾（圆盾皮革铆钉） |
+| assets/ui/equipment/09.png | kiteShield 鸢盾（鸢形银框蓝漆） |
+| assets/ui/equipment/10.png | campaignCloak 远征披风（深蓝紫连帽金扣，relic） |
+| assets/ui/equipment/11.png | luckyPendant 幸运坠饰（金链绿四叶草，relic） |
+| equipment_icons/reserves/whetstone.png | 磨刀石储备（不入 data/equipment.json） |
+
+QA：`asset_report.py --expect-size 64x64 --require-alpha` exit 0（11/11 RGBA、alpha 0–255、单图透明像素 1k+、problems 空；留档 `_qa_asset_report.json`）；`_qa_compare.png` 11 列 equipment vs skills 4x 对照（同族深底泛光、四类 weapon×6/staff×1/shield×2/relic×2 视觉对齐）；`_qa_contact_v1_indexed.png` 切片编号对照；`tests/equipment_icons_contract.gd` 资产就绪分支全过（11 路径禁兜底加载、campaign_ui 216 项 ALL PASS）。
+
 ## 实测产物
 
 | 文件 | 说明 |
@@ -227,5 +265,6 @@ QA：`asset_report.py --expect-size 64x64 --require-alpha` exit 0（8/8 RGBA、a
 | valley_birdview.png | ✅ 山谷地形鸟瞰布局图（双山脊+河流+草甸），3136x1344，真透明 |
 | item_icons/item_icons_3x4_v1.png | ❌ 行 1–3 底部连成不透明背板，无法切片（迭代淘汰） |
 | item_icons/item_icons_3x4_v2.png | ✅ 12 格物品图标表（8 物品+4 卷轴），1776x2368，真透明，已切片入库 assets/ui/items/01..08.png |
+| equipment_icons/equip_icons_3x4_v1.png | ✅ 12 格装备图标表（11 装备+1 储备），1776x2368，真透明，一次通过，已切片入库 assets/ui/equipment/01..11.png |
 | professions_8grid_v1.png | ✅ 八职业人形 2x4 概念网格，2816x1584，真透明，粗像素（含三骑乘） |
 | meowa_tiles/heroes/{swordmaster,soldier,sniper,sage,bishop}/static.png | ✅ 五个非骑乘身份锚，128x128，底部中心，NN 统一缩放 k=0.1899 |

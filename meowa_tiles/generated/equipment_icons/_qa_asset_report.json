@@ -1,0 +1,225 @@
+{
+  "ok": true,
+  "assets": [
+    {
+      "path": "assets/ui/equipment/01.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8601,
+      "color_count": 2463,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1037,
+      "content_bounds": [
+        1,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/02.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8444,
+      "color_count": 2409,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1321,
+      "content_bounds": [
+        1,
+        0,
+        62,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/03.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8101,
+      "color_count": 2212,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1160,
+      "content_bounds": [
+        1,
+        0,
+        62,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/04.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8370,
+      "color_count": 2416,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1202,
+      "content_bounds": [
+        0,
+        1,
+        64,
+        62
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/05.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 7415,
+      "color_count": 2147,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1494,
+      "content_bounds": [
+        3,
+        0,
+        61,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/06.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8683,
+      "color_count": 2825,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1244,
+      "content_bounds": [
+        2,
+        0,
+        61,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/07.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8456,
+      "color_count": 2634,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1366,
+      "content_bounds": [
+        3,
+        0,
+        61,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/08.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 9494,
+      "color_count": 2792,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 993,
+      "content_bounds": [
+        0,
+        0,
+        64,
+        63
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/09.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8473,
+      "color_count": 2464,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1342,
+      "content_bounds": [
+        3,
+        0,
+        60,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/10.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 7953,
+      "color_count": 2321,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1236,
+      "content_bounds": [
+        2,
+        0,
+        62,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/equipment/11.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8311,
+      "color_count": 2525,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 1406,
+      "content_bounds": [
+        4,
+        0,
+        60,
+        64
+      ],
+      "problems": []
+    }
+  ]
+}
