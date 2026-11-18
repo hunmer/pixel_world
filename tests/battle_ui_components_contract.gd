@@ -87,6 +87,9 @@ func _run() -> void:
 	_expect(item_buttons.size() == 2, "背包保留可用和耗尽物品")
 	if item_buttons.size() == 2:
 		_expect(not item_buttons[0].disabled and item_buttons[1].disabled, "背包根据实际剩余次数禁用")
+		for button in item_buttons:
+			_expect(button.icon != null and button.icon == ItemData.item_icon(&"hpPotion"), "物品按钮必须显示对应物品图标")
+			_expect(button.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST, "物品图标保持最近邻采样")
 	ui.close_menu()
 	var before := [player.hp, enemy.hp, player.mp]
 	var prediction := CombatSystem.preview(player, enemy, 0, 0)
