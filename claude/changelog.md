@@ -4,6 +4,9 @@
 
 ## 2026-11-18（第四轮增量：冒险模式 + 建筑子系统入册，103 契约基线）
 
+- **触发**：自上轮（11-17）起 36+ commits / 302 文件变更，最大两项=冒险模式子系统落地（主入口改 `Campaign.tscn`、autoload 8→9）与建筑/室内子系统。
+- **后续补记（11-19）**：`docs/roadmap.md` 按本轮事实清理——P0-1/P0-3、P1-3（收口 103 项 pass 98/fail 0/env-skip 5）、P1-4 前半（3→7）、P1-6 大半、P2-10 战役结构、P3-13 第一波拆分**归档**；P2-10 改写为"战役扩容 6→15 章"、P3-13 改写为"装配层持续治理（battle.gd 2186 / campaign_session 973）"、P3-15 收敛为剩余 battle_ui/HUD 迁移面；新增暂不立项项（campaign 是否加 B1 变体）。
+
 - **触发**：`/init-project` 增量扫描。自 2026-11-17 起 36+ commits（302 文件变更）：冒险模式（campaign 六件 + 七屏 + bridge + data）、建筑/室内子系统、背击/夹击规则、行动历史【记录】Tab、升级演出、九键成长、技能/状态图标、图鉴 SkillList、UI 组件 22→27、ui_gallery 六模块拆分、编辑器建筑摆放/角色编辑。
 - **主入口变更**：`project.godot` main_scene → `res://scenes/Campaign.tscn`；autoload 8→9（第 3 位 CampaignSession）。全部文档口径同步（Game.tscn 降为开发入口）。
 - **feature_map**：新增顶级类 campaign 🏕️（4 子节点）+ buildings 🏰（4 子节点）+ battle.icons + editor.units + ui.components +5 + ui.gallery +6 + assets.tooling +4；**收录 421/421 = 100%**（unmapped 18 条 = .tmp/ 等；`feature_map.py all` build/render/check 全过，HTML 578166 字节）。
