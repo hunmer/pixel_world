@@ -1,0 +1,218 @@
+{
+  "sheets": {
+    "meowa_tiles/generated/professions_8grid_v1.png": {
+      "sha256": "1c7d3d463442b5a97b80e2144e1334c817cdba86f2df81fddd8f3e26bdd87ba0",
+      "size": [
+        2816,
+        1584
+      ],
+      "grid": "2x4",
+      "ids_row_major": [
+        "swordmaster",
+        "soldier",
+        "recruit_knight",
+        "paladin",
+        "pegasus_knight",
+        "sniper",
+        "sage",
+        "bishop"
+      ],
+      "only": [
+        "swordmaster",
+        "soldier",
+        "sniper",
+        "sage",
+        "bishop"
+      ],
+      "cell_size": [
+        704.0,
+        792.0
+      ],
+      "scale": 0.189873,
+      "anchor": "bottom-center",
+      "pad": 4
+    }
+  },
+  "files": [
+    {
+      "id": "swordmaster",
+      "source": "meowa_tiles/generated/professions_8grid_v1.png",
+      "source_sha256": "1c7d3d463442b5a97b80e2144e1334c817cdba86f2df81fddd8f3e26bdd87ba0",
+      "source_cell": {
+        "row": 0,
+        "col": 0
+      },
+      "source_bbox": [
+        68,
+        135,
+        663,
+        712
+      ],
+      "content_size_source": [
+        596,
+        578
+      ],
+      "scale": 0.189873,
+      "size": [
+        128,
+        128
+      ],
+      "content_size": [
+        113,
+        110
+      ],
+      "anchor": "bottom-center",
+      "pad": 4,
+      "paste_xy": [
+        8,
+        14
+      ],
+      "alpha_min": 0,
+      "out": "meowa_tiles/heroes/swordmaster/static.png"
+    },
+    {
+      "id": "soldier",
+      "source": "meowa_tiles/generated/professions_8grid_v1.png",
+      "source_sha256": "1c7d3d463442b5a97b80e2144e1334c817cdba86f2df81fddd8f3e26bdd87ba0",
+      "source_cell": {
+        "row": 0,
+        "col": 1
+      },
+      "source_bbox": [
+        788,
+        127,
+        1311,
+        712
+      ],
+      "content_size_source": [
+        524,
+        586
+      ],
+      "scale": 0.189873,
+      "size": [
+        128,
+        128
+      ],
+      "content_size": [
+        99,
+        111
+      ],
+      "anchor": "bottom-center",
+      "pad": 4,
+      "paste_xy": [
+        15,
+        13
+      ],
+      "alpha_min": 0,
+      "out": "meowa_tiles/heroes/soldier/static.png"
+    },
+    {
+      "id": "sniper",
+      "source": "meowa_tiles/generated/professions_8grid_v1.png",
+      "source_sha256": "1c7d3d463442b5a97b80e2144e1334c817cdba86f2df81fddd8f3e26bdd87ba0",
+      "source_cell": {
+        "row": 1,
+        "col": 1
+      },
+      "source_bbox": [
+        766,
+        977,
+        1306,
+        1528
+      ],
+      "content_size_source": [
+        541,
+        552
+      ],
+      "scale": 0.189873,
+      "size": [
+        128,
+        128
+      ],
+      "content_size": [
+        103,
+        105
+      ],
+      "anchor": "bottom-center",
+      "pad": 4,
+      "paste_xy": [
+        13,
+        19
+      ],
+      "alpha_min": 0,
+      "out": "meowa_tiles/heroes/sniper/static.png"
+    },
+    {
+      "id": "sage",
+      "source": "meowa_tiles/generated/professions_8grid_v1.png",
+      "source_sha256": "1c7d3d463442b5a97b80e2144e1334c817cdba86f2df81fddd8f3e26bdd87ba0",
+      "source_cell": {
+        "row": 1,
+        "col": 2
+      },
+      "source_bbox": [
+        1546,
+        926,
+        1968,
+        1529
+      ],
+      "content_size_source": [
+        423,
+        604
+      ],
+      "scale": 0.189873,
+      "size": [
+        128,
+        128
+      ],
+      "content_size": [
+        80,
+        115
+      ],
+      "anchor": "bottom-center",
+      "pad": 4,
+      "paste_xy": [
+        24,
+        9
+      ],
+      "alpha_min": 0,
+      "out": "meowa_tiles/heroes/sage/static.png"
+    },
+    {
+      "id": "bishop",
+      "source": "meowa_tiles/generated/professions_8grid_v1.png",
+      "source_sha256": "1c7d3d463442b5a97b80e2144e1334c817cdba86f2df81fddd8f3e26bdd87ba0",
+      "source_cell": {
+        "row": 1,
+        "col": 3
+      },
+      "source_bbox": [
+        2246,
+        899,
+        2689,
+        1530
+      ],
+      "content_size_source": [
+        444,
+        632
+      ],
+      "scale": 0.189873,
+      "size": [
+        128,
+        128
+      ],
+      "content_size": [
+        84,
+        120
+      ],
+      "anchor": "bottom-center",
+      "pad": 4,
+      "paste_xy": [
+        22,
+        4
+      ],
+      "alpha_min": 0,
+      "out": "meowa_tiles/heroes/bishop/static.png"
+    }
+  ]
+}

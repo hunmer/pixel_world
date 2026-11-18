@@ -147,6 +147,17 @@ Seedream 5.5 / image2image（参考 meowa_grass_tile + meowa_snow_tile）/ 1:1 /
 
 Seedream 2K 21:9、transparent、terrain 双参考。场景模板：**上下两列天然雪峰山脊夹中央谷地 + 大块平整绿色草甸（供摆放建筑）+ 蜿蜒河流对角穿谷（两岸沙滩浅滩）+ 成片松林/阔叶林/灌木/岩石 + 土路沿河蜿蜒**。实测 3136x1344，约 33% 透明（山体轮廓外），谷底完整。与 castle_birdview 同属「鸟瞰布局图」配方家族，只换场景模板。
 
+## 八职业人形概念网格 + 身份锚（professions_8grid，2026-11-19 实测通过）
+
+- Seedream 5.5 `image2image` 双参考：人形剪影参考 `assets/units/class-knight-idle.png`（384x48 战棋 sprite，锁人形站姿剪影）+ 风格参考 `meowa_tiles/heroes/fox/idle.png`（129x129，只借粗像素战棋风格，不借动物解剖）。
+- 请求 `ratio=1:1` 实际输出 2816x1584（模型不保证 1:1；2816/4=704、1584/2=792 恰好整除 4x2 网格，cell 704x792 可整格切）。transparent、count=1、quality=2K。
+- prompt 关键结构：2 行 4 列 8 职业严格顺序（行1 swordmaster/soldier/recruit_knight/paladin，行2 pegasus_knight/sniper/sage/bishop）+ 每角色独占一格互不重叠 + 骑士类含坐骑（马）、天马骑士含翼 + 低分辨率复古像素大颗粒深色描边 + 纯透明背景、无底座/网格线/文字。
+- 画布节点：prof8_ref_knight=i-RRsxNBrq3k、prof8_ref_style=i-rv9TEWgin0、prof8_grid_v1=i-Af9ZRlTNil（libtv task 20261119035103397072737，一次通过未用修复额度）。
+- 切片：`python3 tools/slice_profession_sheets.py --sheet meowa_tiles/generated/professions_8grid_v1.png --grid 2x4 --ids <行优先8名> --only <5非骑乘> --canvas 128 --pad 4 --out-dir meowa_tiles/heroes --manifest meowa_tiles/heroes/professions_static_manifest.json`。连通域质心归格 + 每格并集 bbox + 全局统一最近邻缩放（k=0.1899，五锚共用保相对体型）+ 底部中心锚定 + 4px 留白；manifest 记录 sha256/cell/bbox/scale/paste_xy 溯源。
+- 身份映射：recruitKnight→recruit_knight、pegasusKnight→pegasus_knight 仅素材目录名，不改 story 侧 ID；骑乘三格（recruit_knight/paladin/pegasus_knight）只存在于网格，不切片派生。
+- .import 注意：`meowa_tiles/generated/` 有 `.gdignore`，网格原稿不生成 `.png.import`（运行时不加载概念稿，属预期）；`meowa_tiles/heroes/` 下运行时锚点正常生成 `static.png.import` 且项目默认 `mipmaps/generate=false`。
+- 教训：① 请求 1:1 不保证输出 1:1，切片前先验实际尺寸能否被行列整除；② 2K 输出边缘有抗锯齿碎屑噪点连通域，切片器 MIN_COMPONENT 阈值自动丢弃即可。
+
 ## 实测产物
 
 | 文件 | 说明 |
@@ -169,3 +180,5 @@ Seedream 2K 21:9、transparent、terrain 双参考。场景模板：**上下两�
 | castle_lobby_4k.png | ✅ 中世纪城堡王座大厅 lobby 图，3808x1632，全场景不透明 |
 | castle_birdview.png | ✅ 城堡全城鸟瞰布局图（城墙+街道+空地），2048²，可作房屋摆放底图 |
 | valley_birdview.png | ✅ 山谷地形鸟瞰布局图（双山脊+河流+草甸），3136x1344，真透明 |
+| professions_8grid_v1.png | ✅ 八职业人形 2x4 概念网格，2816x1584，真透明，粗像素（含三骑乘） |
+| meowa_tiles/heroes/{swordmaster,soldier,sniper,sage,bishop}/static.png | ✅ 五个非骑乘身份锚，128x128，底部中心，NN 统一缩放 k=0.1899 |
