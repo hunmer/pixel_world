@@ -42,6 +42,8 @@ var _pose: StringName = CharacterSheet.POSE_IDLE
 # 世界空间朝向（水平）。idle 按相机投影解析 front/back/side；姿态帧按屏幕水平位移镜像。
 var _facing_world := Vector3(0.0, 0.0, 1.0)
 var _last_camera_yaw := 1.0e20
+# 头顶状态图标行（buff/debuff → StatusIcons 图标 + 剩余回合数字）。
+var _status_badges: UnitStatusBadges = null
 
 const FACTION_COLOR := {
 	player = Color(0.376, 0.647, 0.980),
@@ -182,6 +184,10 @@ func _build_visual() -> void:
 	# 任务要求隐藏头顶名称标签：节点保留（update_state 仍写文本以兼容外部调用），仅不渲染。
 	_name_label.visible = false
 	add_child(_name_label)
+	_status_badges = UnitStatusBadges.new()
+	_status_badges.name = "StatusBadges"
+	add_child(_status_badges)
+	_sync_status_badges_anchor()
 	update_state()
 
 ## 立绘"可见头顶"的世界高度：从贴图顶部向下找第一行有效 alpha，
@@ -237,7 +243,8 @@ func _process(delta: float) -> void:
 		portrait.modulate = Color(base, base, base, 1.0)
 	if _hover_marker != null and _hover_marker.visible:
 		_hover_phase += delta * TAU
-		_hover_marker.position.y = _head_y + 0.32 + sin(_hover_phase) * 0.06
+		# 指针跳动基准锚在有状态图标时抬到状态行上方，指针不遮挡图标/数字。
+		_hover_marker.position.y = _hover_anchor_y() + 0.32 + sin(_hover_phase) * 0.06
 		var camera := _active_camera()
 		if camera != null:
 			_hover_marker.rotation.y = camera.global_rotation.y
@@ -288,7 +295,7 @@ func set_hovered(value: bool, attack_target := false) -> void:
 		_hover_marker.add_child(arrow)
 	if not _hover_marker.visible:
 		_hover_phase = 0.0
-		_hover_marker.position.y = _head_y + 0.32
+		_hover_marker.position.y = _hover_anchor_y() + 0.32
 	_hover_material.albedo_color = FACTION_COLOR[&"enemy"] if attack_target else Color(1.0, 0.82, 0.2)
 	_hover_marker.visible = true
 
@@ -353,6 +360,20 @@ func _refresh_hp_bar_y() -> void:
 		return
 	_hp_bar_y_key = key
 	_head_y = _visible_top_world() + _HP_BAR_GAP_PX / 32.0
+	_sync_status_badges_anchor()
+
+
+## 头顶姿态变化（换帧/换立绘）重算 _head_y 后，状态行锚点跟随头顶。
+func _sync_status_badges_anchor() -> void:
+	if _status_badges != null:
+		_status_badges.position.y = _status_badges.anchor_y(_head_y)
+
+
+## hover 指针参考高度：有状态图标时抬到状态行上方，避免遮挡；无状态保持原锚点。
+func _hover_anchor_y() -> float:
+	if _status_badges != null and _status_badges.slot_count() > 0:
+		return _status_badges.top_world_y(_head_y)
+	return _head_y
 
 ## 常驻血条显隐开关。恢复时按当前 hp 重新推导填充条可见性（满血隐藏填充条）。
 func set_persistent_bar_visible(visible_: bool) -> void:
@@ -400,13 +421,24 @@ func update_state() -> void:
 	_name_label.text = _build_name_label(unit)
 	# ALPHA_CUT_DISCARD 会裁掉半透明像素；存活单位始终不透明，仅用RGB区分已行动。
 	_set_children_alpha(1.0)
-	portrait.modulate = Color(0.58, 0.58, 0.58, 1.0) if bool(unit[&"hasActed"]) else Color.WHITE
+	# 无立绘单位（classId 无素材的 fallback 路径）没有可灰度对象，跳过而非崩溃。
+	if portrait != null:
+		portrait.modulate = Color(0.58, 0.58, 0.58, 1.0) if bool(unit[&"hasActed"]) else Color.WHITE
 	visible = not bool(unit[&"isDead"])
+	# 头顶状态行：死亡清理不残留；存活按 buffs 顺序刷新（签名未变不重建节点）。
+	if _status_badges != null:
+		if bool(unit.get(&"isDead", false)):
+			_status_badges.clear()
+		else:
+			_status_badges.refresh(unit.get(&"buffs", []))
 
 func _set_children_alpha(a: float) -> void:
 	for c in get_children():
 		if c is Sprite3D or c is Label3D:
 			c.modulate.a = a
+	# 状态行是 Node3D 容器，单独联动图标、文字及描边的淡出。
+	if _status_badges != null:
+		_status_badges.set_alpha(a)
 
 func fade_alpha(a: float) -> void:
 	_set_children_alpha(a)

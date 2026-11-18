@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "godot": "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+    "jobs": 1,
+    "timeout": 120.0,
+    "backend": "native",
+    "gdtest": null,
+    "fast_fps": null,
+    "disable_render_loop": false,
+    "run_env_skip": false,
+    "selected": 3,
+    "out_dir": "E:\\pixel_world\\meowa_tiles\\generated\\status_icons\\final_contracts",
+    "total_seconds": 14.8,
+    "runner": "tools/run_contracts.py"
+  },
+  "results": [
+    {
+      "name": "status_icons",
+      "path": "res://tests/status_icons_contract.gd",
+      "group": "battle-3d-editor",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 0.91,
+      "log": "E:\\pixel_world\\meowa_tiles\\generated\\status_icons\\final_contracts\\status_icons.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/status_icons_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "battle_result_presentation",
+      "path": "res://tests/battle_result_presentation_contract.gd",
+      "group": "battle-presentation",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 5.99,
+      "log": "E:\\pixel_world\\meowa_tiles\\generated\\status_icons\\final_contracts\\battle_result_presentation.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/battle_result_presentation_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "isometric_3d",
+      "path": "res://tests/isometric_3d_contract.gd",
+      "group": "world-3d",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 0.91,
+      "log": "E:\\pixel_world\\meowa_tiles\\generated\\status_icons\\final_contracts\\isometric_3d.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/isometric_3d_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "pass": 3,
+    "fail": 0,
+    "timeout": 0,
+    "environment-skip": 0,
+    "executor-error": 0
+  }
+}

@@ -48,6 +48,16 @@
   },
   "contracts": [
     {
+      "name": "status_icons",
+      "path": "tests/status_icons_contract.gd",
+      "group": "battle-3d-editor",
+      "tags": ["scene", "render"],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": false,
+      "evidence": "技能状态图标目录、头顶图标与回合计数、状态刷新/叠加/净化/到期与淡出契约"
+    },
+    {
       "name": "builtin_building_assets",
       "path": "tests/builtin_building_assets_contract.gd",
       "group": "user-assets",

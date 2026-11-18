@@ -1,0 +1,16 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+Panku Console Loaded!
+[result_presentation] opening units=2 boss=熔核君王
+[result_presentation] finished kind=opening skipped=false
+[result_presentation] opening units=3 boss=Boss
+[result_presentation] finished kind=opening skipped=true
+[result_presentation] result=win exp=90 gold=30 chapter=false
+[result_presentation] finished kind=win skipped=false
+[result_presentation] result=win exp=120 gold=45 chapter=true
+[result_presentation] finished kind=win skipped=true
+[result_presentation] result=lose exp=0 gold=0 chapter=false
+[result_presentation] finished kind=lose skipped=true
+[result_presentation] result=win exp=7 gold=3 chapter=true
+[result_presentation] finished kind=win skipped=true
+BATTLE_RESULT_PRESENTATION_CONTRACT_OK

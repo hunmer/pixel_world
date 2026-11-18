@@ -1,0 +1,184 @@
+{
+ "src": "meowa_tiles/generated/status_icons/status_icons_2x3_raw.png",
+ "src_size": [
+  2496,
+  1664
+ ],
+ "grid": "2x3",
+ "slices": {
+  "power_up": {
+   "cell": [
+    0,
+    0,
+    832,
+    832
+   ],
+   "bbox_in_src": [
+    175,
+    181,
+    743,
+    735
+   ],
+   "region_in_src": [
+    163,
+    169,
+    755,
+    747
+   ],
+   "region_size": [
+    592,
+    578
+   ],
+   "canvas_side": 592,
+   "alpha_threshold": 8,
+   "bbox_threshold": 32,
+   "pad": 12,
+   "output": "assets/ui/status/power_up.png"
+  },
+  "defense_up": {
+   "cell": [
+    832,
+    0,
+    1664,
+    832
+   ],
+   "bbox_in_src": [
+    965,
+    182,
+    1532,
+    734
+   ],
+   "region_in_src": [
+    953,
+    170,
+    1544,
+    746
+   ],
+   "region_size": [
+    591,
+    576
+   ],
+   "canvas_side": 591,
+   "alpha_threshold": 8,
+   "bbox_threshold": 32,
+   "pad": 12,
+   "output": "assets/ui/status/defense_up.png"
+  },
+  "speed_up": {
+   "cell": [
+    1664,
+    0,
+    2496,
+    832
+   ],
+   "bbox_in_src": [
+    1747,
+    181,
+    2316,
+    734
+   ],
+   "region_in_src": [
+    1735,
+    169,
+    2328,
+    746
+   ],
+   "region_size": [
+    593,
+    577
+   ],
+   "canvas_side": 593,
+   "alpha_threshold": 8,
+   "bbox_threshold": 32,
+   "pad": 12,
+   "output": "assets/ui/status/speed_up.png"
+  },
+  "defense_down": {
+   "cell": [
+    0,
+    832,
+    832,
+    1664
+   ],
+   "bbox_in_src": [
+    177,
+    925,
+    740,
+    1472
+   ],
+   "region_in_src": [
+    165,
+    913,
+    752,
+    1484
+   ],
+   "region_size": [
+    587,
+    571
+   ],
+   "canvas_side": 587,
+   "alpha_threshold": 8,
+   "bbox_threshold": 32,
+   "pad": 12,
+   "output": "assets/ui/status/defense_down.png"
+  },
+  "buff": {
+   "cell": [
+    832,
+    832,
+    1664,
+    1664
+   ],
+   "bbox_in_src": [
+    968,
+    925,
+    1527,
+    1472
+   ],
+   "region_in_src": [
+    956,
+    913,
+    1539,
+    1484
+   ],
+   "region_size": [
+    583,
+    571
+   ],
+   "canvas_side": 583,
+   "alpha_threshold": 8,
+   "bbox_threshold": 32,
+   "pad": 12,
+   "output": "assets/ui/status/buff.png"
+  },
+  "debuff": {
+   "cell": [
+    1664,
+    832,
+    2496,
+    1664
+   ],
+   "bbox_in_src": [
+    1750,
+    924,
+    2312,
+    1472
+   ],
+   "region_in_src": [
+    1738,
+    912,
+    2324,
+    1484
+   ],
+   "region_size": [
+    586,
+    572
+   ],
+   "canvas_side": 586,
+   "alpha_threshold": 8,
+   "bbox_threshold": 32,
+   "pad": 12,
+   "output": "assets/ui/status/debuff.png"
+  }
+ }
+}

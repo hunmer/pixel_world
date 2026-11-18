@@ -38,7 +38,8 @@ func _capture_visual(sprite: UnitSprite3D) -> void:
 		return
 	var visual: Node3D = sprite.portrait if sprite.portrait != null else sprite
 	var children: Array[Dictionary] = []
-	for child in sprite.get_children():
+	# 状态图标与回合数字位于独立子模块内，递归捕获以便跳过/重演恢复透明度。
+	for child in sprite.find_children("*", "", true, false):
 		if child is Sprite3D or child is Label3D:
 			children.append({"node": child, "modulate": child.modulate})
 	var state := {
@@ -49,6 +50,7 @@ func _capture_visual(sprite: UnitSprite3D) -> void:
 		"visual": visual,
 		"visual_rotation": visual.rotation,
 		"children": children,
+		"status_alpha": sprite._status_badges._alpha if sprite._status_badges != null else 1.0,
 	}
 	if visual is Sprite3D:
 		state["visual_modulate"] = (visual as Sprite3D).modulate
@@ -103,7 +105,7 @@ func collapse(unit: Dictionary) -> void:
 func play_death_fade(unit_id: StringName, us: UnitSprite3D) -> void:
 	var tw := create_tween()
 	_track_tween(unit_id, tw)
-	# UnitSprite3D 是 Node2D（2D 版），用 fade_alpha 驱动子 CanvasItem alpha 淡出
+	# 通过 UnitSprite3D.fade_alpha 统一淡出立绘与头顶状态图标、回合数字。
 	tw.tween_method(us.fade_alpha, 1.0, 0.0, 0.4)
 	tw.parallel().tween_property(us, "scale", us.scale * 1.5, 0.4)
 	tw.tween_callback(func(): us.visible = false)
@@ -129,6 +131,8 @@ func restore() -> void:
 			visual.rotation = state["visual_rotation"]
 			if visual is Sprite3D and state.has("visual_modulate"):
 				(visual as Sprite3D).modulate = state["visual_modulate"]
+		if sprite._status_badges != null:
+			sprite._status_badges.set_alpha(float(state.get("status_alpha", 1.0)))
 		for entry_value in state["children"]:
 			var entry := entry_value as Dictionary
 			var child := entry.get("node") as Node
