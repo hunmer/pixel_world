@@ -344,6 +344,8 @@ func _open_attack_target_picker(u: Dictionary, targets: Array) -> void:
 		var b := _button()
 		b.text = _target_text(t)
 		b.set_meta("hover_target_id", t.id)
+		# 攻击目标专属：battle.gd 据此在 picker hover 时显示背击/追击战场标记。
+		b.set_meta("hover_attack_target", true)
 		b.pressed.connect(func():
 			_ui.close_menu()
 			_preview_and_attack(u, t)
@@ -355,7 +357,10 @@ func _preview_and_attack(attacker: Dictionary, defender: Dictionary) -> void:
 	var revision: int = _ui.action_preview_revision
 	_ui.on_set_mode.call(MODE_MENU)
 	var def_tile = _ui.grid.tile_at(defender.position.x, defender.position.y)
-	var prev := CombatSystem.preview(attacker, defender, def_tile.avoid_bonus, def_tile.def_bonus)
+	# 尾参 allies 与 resolver.resolve_attack 同口径（grid.units.values()）：
+	# 预览的 pincer 摘要与真实结算同判定同公式。
+	var allies: Array = _ui.grid.units.values()
+	var prev := CombatSystem.preview(attacker, defender, def_tile.avoid_bonus, def_tile.def_bonus, allies)
 	_ui._show_preview_panel(attacker, defender, prev)
 	await _ui.get_tree().create_timer(1.2).timeout
 	if revision != _ui.action_preview_revision:

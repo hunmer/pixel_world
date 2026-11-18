@@ -33,6 +33,7 @@ const ImmersiveCameraScript = preload("res://scripts/battle/immersive_camera.gd"
 const BattleActionResolver = preload("res://scripts/battle/battle_action_resolver.gd")
 const BattleThreatDataScript = preload("res://scripts/battle/battle_threat_data.gd")
 const FacingRules = preload("res://scripts/systems/facing_rules.gd")
+const PincerRules = preload("res://scripts/systems/pincer_rules.gd")
 const BattleFxScript = preload("res://scripts/battle/battle_fx.gd")
 const BattleSfxScript = preload("res://scripts/battle/battle_sfx.gd")
 const BattleResultStageScript = preload("res://scripts/battle/battle_result_stage.gd")
@@ -1052,18 +1053,27 @@ func _process(_delta: float) -> void:
 				closest = distance
 				candidate = sprite
 	var menu_target := false
+	var menu_attack_pick := false
 	if mode == Mode.MENU and not turn_director.is_hosting():
 		var control := get_viewport().gui_get_hovered_control()
 		while control != null:
 			if control.has_meta("hover_target_id"):
 				candidate = _unit_sprites.get(control.get_meta("hover_target_id")) as UnitSprite3D
 				menu_target = true
+				# 攻击目标 picker 按钮带 hover_attack_target 标记；
+				# 技能/物品 picker 的目标按钮不触发背击/追击战场标记。
+				menu_attack_pick = control.has_meta("hover_attack_target")
 				break
 			control = control.get_parent_control()
 	_hovered_enemy = {}
 	if candidate != null and candidate.unit.faction != &"player":
 		_hovered_enemy = candidate.unit
 	_refresh_enemy_danger()
+	# 选择物理攻击目标时自动出现背击/追击标记：菜单攻击 picker hover、
+	# UNIT_SELECTED 悬停攻击格内敌人、攻击预览面板确认期（pair 由 battle_ui 记录）。
+	# hover 离开 / 取消（close_preview 清 pair）/ 技能切换 / 模式变化在此统一兜底清理。
+	var engage_defender: Dictionary = {}
+	var preview_pair: Dictionary = battle_ui.preview_engagement_pair()
 	for raw_sprite in _unit_sprites.values():
 		var sprite := raw_sprite as UnitSprite3D
 		if not is_instance_valid(sprite):
@@ -1071,9 +1081,79 @@ func _process(_delta: float) -> void:
 		var attack_target := menu_target and sprite == candidate
 		if sprite == candidate and not selected_unit.is_empty():
 			var pos: Vector2i = sprite.unit.position
+			var in_tiles: bool = current_attack_tiles.has("%d,%d" % [pos.x, pos.y])
 			attack_target = attack_target or (sprite.unit.faction != selected_unit.faction \
-				and current_attack_tiles.has("%d,%d" % [pos.x, pos.y]))
+				and in_tiles)
+			var can_engage: bool = (menu_attack_pick or mode == Mode.UNIT_SELECTED) \
+				and sprite.unit.faction != selected_unit.faction \
+				and (in_tiles or menu_attack_pick)
+			if can_engage:
+				engage_defender = sprite.unit
 		sprite.set_hovered(sprite == candidate, attack_target)
+	if engage_defender.is_empty() and not preview_pair.is_empty():
+		engage_defender = preview_pair.get(&"defender", {})
+	_update_engagement_marks(engage_defender)
+
+
+# ============================================================
+# 夹击/背击目标标记（选择攻击目标时自动出现）
+# ============================================================
+## engage 标记缓存 key：hover/目标变化时才重查（_process 每帧调用，避免重复判定）。
+var _engage_marks_key := ""
+
+
+## 统一更新入口（_process 每帧调）：defender 为空或场景不符时清理。
+## 判定复用共享权威逻辑（PincerRules/FacingRules，与 CombatSystem.preview 同源），
+## 表现层不复写结算口径。
+func _update_engagement_marks(defender: Dictionary) -> void:
+	if range_overlay == null:
+		return
+	if defender.is_empty() or selected_unit.is_empty() \
+			or mode not in [Mode.UNIT_SELECTED, Mode.MENU]:
+		if not _engage_marks_key.is_empty():
+			_engage_marks_key = ""
+			range_overlay.clear_engagement_marks()
+		return
+	var key := "%s>%s|%d" % [String(selected_unit.get(&"id", &"")),
+		String(defender.get(&"id", &"")), current_attack_tiles.size()]
+	if key == _engage_marks_key:
+		return
+	_engage_marks_key = key
+	range_overlay.show_engagement_marks(_build_engagement_marks(selected_unit, defender, turn.units))
+
+
+## 组装背击/追击标记数据：背击=目标格（FacingRules.is_backstab，与预览面板
+## atkBackstab 同式，不分武器类型）；追击=对侧友军格（物理武器才提示——
+## PincerRules.pincer_partner + is_physical_weapon，与 preview/结算同口径）。
+## allies 池由调用方传全量单位（turn.units / grid.units.values()），
+## PincerRules 内部按阵营/存活/位置过滤。静态纯函数：契约测试直调。
+static func _build_engagement_marks(attacker: Dictionary, defender: Dictionary, allies: Array) -> Array:
+	var marks: Array = []
+	if FacingRules.is_backstab(attacker.position, defender):
+		marks.append({
+			cell = defender.position,
+			kind = &"backstab",
+			aim = _attack_line_dir(attacker.position, defender.position),
+		})
+	if PincerRules.is_physical_weapon(attacker):
+		var partner: Dictionary = PincerRules.pincer_partner(attacker, defender, allies)
+		if not partner.is_empty():
+			marks.append({
+				cell = partner.position,
+				kind = &"pincer",
+				aim = _attack_line_dir(partner.position, defender.position),
+			})
+	return marks
+
+
+## 正交攻击线方向（斜向或同格返回 ZERO → 无向标记）。
+static func _attack_line_dir(from: Vector2i, to: Vector2i) -> Vector2i:
+	var dir := to - from
+	if (dir.x != 0 and dir.y != 0) or dir == Vector2i.ZERO:
+		return Vector2i.ZERO
+	if dir.x != 0:
+		return Vector2i(signi(dir.x), 0)
+	return Vector2i(0, signi(dir.y))
 
 
 func _handle_mouse_motion_input(mm: InputEventMouseMotion) -> void:
@@ -1467,6 +1547,21 @@ func _perform_attack_from_current(u: Dictionary, target: Dictionary) -> void:
 # ============================================================
 # 战斗演出
 # ============================================================
+## 夹击追击结果日志（读 resolver result.pincer，纯表现：结算/死亡已由 resolver
+## 落地，这里只补一条引擎日志，玩家在【日志】Tab 可见追击攻击者与伤害）。
+func _log_pincer_result(tag: String, result: Dictionary) -> void:
+	var pincer: Dictionary = result.get(&"pincer", {})
+	if not bool(pincer.get(&"active", false)):
+		return
+	var partner_id := StringName(pincer.get(&"partner_id", &""))
+	var partner_name := String(partner_id)
+	if grid != null and grid.units.has(partner_id):
+		partner_name = String((grid.units[partner_id] as Dictionary).get(&"name", partner_name))
+	print("[%s-pincer] %s 追击 +%d%s" % [
+		tag, partner_name, int(pincer.get(&"damage", 0)),
+		" 击倒" if bool(pincer.get(&"died", false)) else ""])
+
+
 func _resolve_combat(attacker: Dictionary, defender: Dictionary, on_done: Callable) -> void:
 	await _resolve_combat_async(attacker, defender)
 	if is_inside_tree() and on_done.is_valid():
@@ -1493,6 +1588,7 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 		float(options.get(&"anim_speed", 1.0)),
 		str(options.get(&"skip", false)),
 	])
+	_log_pincer_result("combat", result)
 	if action_anim != null and not event.is_empty():
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
@@ -1540,7 +1636,8 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 	mode = Mode.ANIMATING
 	var atk_us: UnitSprite3D = _unit_sprites.get(caster.id)
 	# 结算（execute+死亡标志+hasActed+经验）走共享 resolver；演出在结算后播放。
-	var outcome := BattleActionResolver.resolve_skill(caster, targets, skill_id, _drop_ctx)
+	# grid 实参启用物理伤害技能的夹击追击（与普攻同规则，见 resolver 文件头）。
+	var outcome := BattleActionResolver.resolve_skill(caster, targets, skill_id, _drop_ctx, grid)
 	var result: Dictionary = outcome[&"skill"]
 	var event: Dictionary = result.get(&"attack_event", {})
 	var options := turn_director.get_action_anim_options(caster.id)
@@ -1549,6 +1646,7 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 		(event.get(&"impacts", []) as Array).size(),
 		str(options.get(&"skip", false)),
 	])
+	_log_pincer_result("skill", result)
 	if action_anim != null and not event.is_empty():
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))

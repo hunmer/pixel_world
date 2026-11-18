@@ -28,6 +28,14 @@ func show_combat(attacker: Dictionary, defender: Dictionary, prev: Dictionary) -
 	if bool(prev.get(&"atkBackstab", false)):
 		_line(attack_column, "背击 · 伤害 ×%s" % String.num(FacingRules.BACKSTAB_DAMAGE_MULTIPLIER, 2), Palette.ACCENT)
 	_line(attack_column, "必杀 %d%%" % int(prev.atkCrit))
+	# 夹击追击（CombatSystem.preview 尾参 allies 时的权威预览结果）：
+	# 物理攻击 + 对侧有同阵营存活友军才激活；伤害与结算同公式（pincer_damage）。
+	var pincer_info: Dictionary = prev.get(&"pincer", {})
+	var pincer_active := bool(pincer_info.get(&"active", false))
+	var pincer_damage := int(pincer_info.get(&"damage", 0))
+	if pincer_active:
+		_line(attack_column, "追击 · %s" % [_partner_display_name(pincer_info)], Palette.ACCENT)
+		_line(attack_column, "追击伤害 %d" % pincer_damage, Palette.ACCENT)
 	var defend_column: VBoxContainer = _combatant(defender, "守方", "BattlePreviewDefender")
 	row.add_child(defend_column)
 	# 使用结算内核同一射程判定；法杖不造成反击伤害。
@@ -44,6 +52,10 @@ func show_combat(attacker: Dictionary, defender: Dictionary, prev: Dictionary) -
 		_line(slot, "命中可击倒目标", Palette.ACCENT)
 	elif bool(prev.doubleAttack) and int(prev.atkDmg) * 2 >= int(defender.hp):
 		_line(slot, "两次命中可击倒目标", Palette.ACCENT)
+	elif pincer_active:
+		var swings: int = 2 if bool(prev.doubleAttack) else 1
+		if int(prev.atkDmg) * swings + pincer_damage >= int(defender.hp):
+			_line(slot, "含追击可击倒目标", Palette.ACCENT)
 	if can_counter and int(prev.defDmg) >= int(attacker.hp):
 		_line(slot, "⚠ 反击命中可能使攻方倒下", Palette.ERROR)
 
@@ -107,3 +119,12 @@ func _line(parent: Node, text: String, color: Color = Palette.TEXT_MAIN) -> Labe
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(label)
 	return label
+
+
+## 追击友军显示名：预览结果只带 partner_id，这里从战场单位池取显示名
+##（纯表现 enrich，不参与判定/结算）；查无此单位时退化为「友军」。
+func _partner_display_name(pincer_info: Dictionary) -> String:
+	var uid := StringName(pincer_info.get(&"partner_id", &""))
+	if uid != &"" and _ui.grid != null and _ui.grid.units.has(uid):
+		return String((_ui.grid.units[uid] as Dictionary).get(&"name", "友军"))
+	return "友军"

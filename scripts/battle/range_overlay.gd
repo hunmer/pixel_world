@@ -41,6 +41,11 @@ const _RANGE_COLOR_SUPPORT: Color = Color(0.2, 0.9, 0.4, 0.42)
 const _RANGE_COLOR_DANGER: Color = Color(0.75, 0.35, 1.0, 0.32)
 var _danger_markers: Array[Node2D] = []
 var _support_markers: Array[Node2D] = []
+# 夹击/背击提示标记：选择攻击目标时自动出现（背击=目标格橙金、追击=对侧友军格青色）。
+const _ENGAGE_COLOR_BACKSTAB: Color = Color(1.0, 0.60, 0.12, 0.95)
+const _ENGAGE_COLOR_PINCER: Color = Color(0.30, 0.92, 1.0, 0.95)
+const _ENGAGE_OUTLINE: Color = Color(0.08, 0.04, 0.02, 0.92)
+var _engage_markers: Array[Node2D] = []
 const _CURSOR_COLOR := Color(1.0, 0.82, 0.2)
 
 # 光标浮动（像素；原版世界单位 0.40，2D 下放大到 4px 让浮动可见）
@@ -58,6 +63,13 @@ func _process(_delta: float) -> void:
 			continue
 		var cell: Vector2i = marker.get_meta("cell")
 		marker.set("corners", _cell_corners(cell.x, cell.y, float(marker.get_meta("corner_scale", 1.0))))
+		marker.queue_redraw()
+	for marker: Node2D in _engage_markers:
+		if not is_instance_valid(marker) or not marker.has_meta("cell"):
+			continue
+		var engage_cell: Vector2i = marker.get_meta("cell")
+		marker.set("corners", _cell_corners(engage_cell.x, engage_cell.y, float(marker.get_meta("corner_scale", 1.0))))
+		marker.set("aim_screen", _aim_screen_dir(marker.get("aim")))
 		marker.queue_redraw()
 	if _cursor_marker != null and is_instance_valid(_cursor_marker) and _cursor_marker.visible:
 		update_cursor_particles(_cursor_cell.x, _cursor_cell.y, true)
@@ -209,6 +221,58 @@ func clear_danger_tiles() -> void:
 	_free_tile_layer(_danger_markers)
 
 
+# ============================================================
+# 夹击/背击自动提示标记（选择攻击目标时出现）
+# ============================================================
+## marks 每项：{ cell: Vector2i, kind: &"backstab" | &"pincer", aim: Vector2i }。
+## backstab=目标格（本次攻击可背击，橙金）；pincer=对侧友军格（将追加追击，青色）。
+## aim 为攻击来向的格方向（如 (1, 0)），驱动贴地箭头；Vector2i.ZERO 表示无向标记。
+func show_engagement_marks(marks: Array) -> void:
+	clear_engagement_marks()
+	for raw_mark: Variant in marks:
+		var mark: Dictionary = raw_mark
+		var cell: Vector2i = mark.get(&"cell", Vector2i.ZERO)
+		if not mark.has(&"cell") or not _has_visible_cell(cell.x, cell.y):
+			continue
+		var node := _EngageMark.new()
+		node.kind = StringName(mark.get(&"kind", &""))
+		node.color = _ENGAGE_COLOR_BACKSTAB if node.kind == &"backstab" else _ENGAGE_COLOR_PINCER
+		node.aim = mark.get(&"aim", Vector2i.ZERO)
+		node.set_meta("cell", cell)
+		node.set_meta("corner_scale", _QUAD_INSET_SCALE)
+		node.set_meta("kind", node.kind)
+		node.corners = _cell_corners(cell.x, cell.y, _QUAD_INSET_SCALE)
+		node.aim_screen = _aim_screen_dir(node.aim)
+		_attach(node)
+		node.z_index = 6
+		_engage_markers.append(node)
+
+
+func clear_engagement_marks() -> void:
+	_free_tile_layer(_engage_markers)
+
+
+## 契约钩子：当前 engage 标记数；kind 为空时返回全部。
+func engagement_mark_count(kind: StringName = &"") -> int:
+	if kind == &"":
+		return _engage_markers.size()
+	var count := 0
+	for marker: Node2D in _engage_markers:
+		if is_instance_valid(marker) and StringName(marker.get_meta("kind", &"")) == kind:
+			count += 1
+	return count
+
+
+## aim 格方向 → 屏幕单位向量（与 _PathDrawer._draw_arrow 同投影口径）。
+func _aim_screen_dir(aim: Vector2i) -> Vector2:
+	if aim == Vector2i.ZERO:
+		return Vector2.ZERO
+	var delta := _cell_to_screen(aim.x, aim.y) - _cell_to_screen(0, 0)
+	if delta.length() < 0.001:
+		return Vector2.ZERO
+	return delta.normalized()
+
+
 func _make_tile_layer(tiles: Dictionary, color: Color, outline: bool) -> Array[Node2D]:
 	var markers: Array[Node2D] = []
 	for raw_key: Variant in tiles:
@@ -272,6 +336,7 @@ func _exit_tree() -> void:
 	_clear_range_markers()
 	clear_support_tiles()
 	clear_danger_tiles()
+	clear_engagement_marks()
 	for marker: Node2D in [_cursor_marker, _path_marker, _threat_marker]:
 		if is_instance_valid(marker):
 			marker.queue_free()
@@ -477,6 +542,50 @@ class _OutlineDraw:
 			var a: Vector2 = corners[i]
 			var b: Vector2 = corners[(i + 1) % corners.size()]
 			draw_line(a, b, color, width)
+
+
+## 夹击/背击自动提示标记：双层菱形描边 + 攻击方向箭头（贴地，随投影每帧刷新）。
+## kind 语义由外部组装（backstab=橙金/pincer=青色），本类只负责绘制。
+class _EngageMark:
+	extends Node2D
+	const OUTLINE := Color(0.08, 0.04, 0.02, 0.92)
+	var color: Color = Color.WHITE
+	var kind: StringName = &""
+	var corners: Array = []
+	var aim: Vector2i = Vector2i.ZERO
+	var aim_screen: Vector2 = Vector2.ZERO
+
+	func _draw() -> void:
+		if corners.size() < 3:
+			return
+		var pts := PackedVector2Array(corners)
+		pts.append(pts[0])
+		draw_polyline(pts, OUTLINE, 5.0, true)
+		draw_polyline(pts, color, 2.5, true)
+		var center := Vector2.ZERO
+		for corner in corners:
+			center += corner
+		center /= float(corners.size())
+		if aim_screen.length() < 0.001:
+			# 无方向标记：格中心画小菱形点。
+			draw_colored_polygon(_small_diamond(center, 5.0), color)
+			return
+		# 攻击方向箭头：格中心沿来向偏移的实心三角 + 尾线（刺入/冲向目标）。
+		var anchor := center + aim_screen * 10.0
+		var tip := anchor + aim_screen * 7.0
+		var perp := Vector2(-aim_screen.y, aim_screen.x)
+		var left := anchor + perp * 5.0
+		var right := anchor - perp * 5.0
+		draw_colored_polygon(PackedVector2Array([tip, left, right]), color)
+		draw_line(anchor - aim_screen * 8.0, anchor, color, 2.0)
+
+	func _small_diamond(center: Vector2, radius: float) -> PackedVector2Array:
+		return PackedVector2Array([
+			center + Vector2(0, -radius),
+			center + Vector2(radius, 0),
+			center + Vector2(0, radius),
+			center + Vector2(-radius, 0),
+		])
 
 
 ## 路径箭头容器（_draw 按每段方向画三角形）。

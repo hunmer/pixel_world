@@ -432,6 +432,10 @@ func _spawn_highlight(unit_id: StringName, seconds: float) -> void:
 func _present_impacts(event: Dictionary) -> void:
 	for raw_impact in event.get(&"impacts", []):
 		var impact: Dictionary = raw_impact
+		if bool(impact.get(&"pincer", false)):
+			# 夹击追击出手：给追击友军一次金色菱形高亮，指明追加攻击者。
+			# （skipped/关闭演出路径不进本函数，天然无表现。）
+			_spawn_highlight(StringName(impact.get(&"source_id", &"")), 0.35)
 		_present_float_text(impact)
 		_react_to_impact(impact)
 		impact_presented.emit(impact)
@@ -455,6 +459,11 @@ func _present_float_text(impact: Dictionary) -> void:
 		if not label.is_empty():
 			text += " " + label
 		color = ELEMENT_COLORS.get(element, Color.WHITE)
+		if bool(impact.get(&"pincer", false)):
+			# 夹击追击伤害：青色（与战场追击标记同色系）+「追击」前缀；
+			# 追击友军自身背击时仍会叠「背击」尾标。
+			color = Color(0.30, 0.92, 1.0)
+			text = "追击 " + text
 		if bool(impact.get(&"critical", false)):
 			font_size = CRIT_FONT_SIZE
 			text = "暴击 " + text

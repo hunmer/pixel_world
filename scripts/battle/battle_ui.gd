@@ -297,6 +297,10 @@ func clear_support_range() -> void:
 		on_clear_support_range.call()
 
 
+## 预览确认期的攻击配对（battle.gd _process 据此维持背击/追击战场标记）。
+var _preview_engagement_pair: Dictionary = {}
+
+
 func cancel_action_preview() -> void:
 	action_preview_revision += 1
 	close_preview()
@@ -368,6 +372,8 @@ func _show_skill_preview(caster: Dictionary, target: Dictionary, skill_id: Strin
 # 通用：关闭菜单 / 关闭预览 / 预览面板
 # ============================================================
 func close_preview() -> void:
+	# 关闭预览即解除战场标记兜底数据源（取消/技能切换/结算前都会走到这里）。
+	_preview_engagement_pair = {}
 	for c in preview_container.get_children():
 		preview_container.remove_child(c)
 		c.queue_free()
@@ -391,6 +397,14 @@ func set_menu_closed_callback(cb: Callable) -> void:
 
 func _show_preview_panel(attacker: Dictionary, defender: Dictionary, prev: Dictionary) -> void:
 	_preview.show_combat(attacker, defender, prev)
+	# 记录配对供战场标记在预览确认期（1.2s）维持显示；close_preview 清空。
+	# 注意 show_combat 内部 _shell 会先 close_preview（清旧面板），故在此之后记录。
+	_preview_engagement_pair = { &"attacker": attacker, &"defender": defender }
+
+
+## 预览确认期只读取（attack picker 确认窗口内战场标记的兜底数据源）。
+func preview_engagement_pair() -> Dictionary:
+	return _preview_engagement_pair
 
 
 # ============================================================

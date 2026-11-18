@@ -312,7 +312,7 @@ func _exec_skill(caster: Dictionary, payload: Dictionary, source: StringName) ->
 				_steps + 1, String(tid), String(skill_id)]
 			return
 		targets.append(t)
-	var outcome := Resolver.resolve_skill(caster, targets, skill_id, _drop_ctx)
+	var outcome := Resolver.resolve_skill(caster, targets, skill_id, _drop_ctx, _grid)
 	_emit_skill_event(caster, skill_id, outcome, source)
 
 
@@ -377,7 +377,7 @@ func _exec_ai_decision(faction: StringName, u: Dictionary, decision: Dictionary)
 	var action: Dictionary = decision.get("action", {})
 	var atype: StringName = action.get("type", &"normal")
 	if atype == &"skill" and action.has(&"skillId"):
-		var outcome := Resolver.resolve_skill(u, action.get(&"targets", []), action[&"skillId"], _drop_ctx)
+		var outcome := Resolver.resolve_skill(u, action.get(&"targets", []), action[&"skillId"], _drop_ctx, _grid)
 		_emit_skill_event(u, action[&"skillId"], outcome, source)
 	elif atype == &"item" and action.has(&"itemId"):
 		var entry: Dictionary = action.get(&"entry", {})
@@ -397,6 +397,7 @@ func _exec_ai_decision(faction: StringName, u: Dictionary, decision: Dictionary)
 func _resolve_and_emit_attack(attacker: Dictionary, defender: Dictionary, source: StringName) -> void:
 	var outcome := Resolver.resolve_attack(attacker, defender, _grid, _drop_ctx)
 	var combat: Dictionary = outcome[&"combat"]
+	var pincer: Dictionary = combat.get(&"pincer", {})
 	_emit({
 		"type": &"attack",
 		"actor": attacker[&"id"],
@@ -410,6 +411,12 @@ func _resolve_and_emit_attack(attacker: Dictionary, defender: Dictionary, source
 		"counter_damage": int(combat[&"defenderDamage"]),
 		"attacker_hp_after": int(attacker[&"hp"]),
 		"defender_hp_after": int(defender[&"hp"]),
+		"pincer": {
+			"active": bool(pincer.get(&"active", false)),
+			"partner": String(pincer.get(&"partner_id", &"")),
+			"damage": int(pincer.get(&"damage", 0)),
+			"died": bool(pincer.get(&"died", false)),
+		},
 	})
 	_emit_deaths_and_exp(attacker, outcome)
 
@@ -430,6 +437,7 @@ func _emit_skill_event(caster: Dictionary, skill_id: StringName, outcome: Dictio
 	for m in (skill_res.get(&"missed", []) as Array):
 		var t2: Dictionary = m[&"unit"] if (m is Dictionary and m.has(&"unit")) else m
 		hits.append({"unit": t2.get(&"id", &""), "hit": false})
+	var pincer: Dictionary = skill_res.get(&"pincer", {})
 	_emit({
 		"type": &"skill",
 		"actor": caster[&"id"],
@@ -441,6 +449,12 @@ func _emit_skill_event(caster: Dictionary, skill_id: StringName, outcome: Dictio
 		"hits": hits,
 		"healed": int((skill_res.get(&"healed", []) as Array).size()),
 		"buffed": int((skill_res.get(&"buffed", []) as Array).size()),
+		"pincer": {
+			"active": bool(pincer.get(&"active", false)),
+			"partner": String(pincer.get(&"partner_id", &"")),
+			"damage": int(pincer.get(&"damage", 0)),
+			"died": bool(pincer.get(&"died", false)),
+		},
 	})
 	_emit_deaths_and_exp(caster, outcome)
 

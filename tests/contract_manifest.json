@@ -24,11 +24,11 @@
     "battle-anim": 1,
     "ambient": 2,
     "animals": 4,
-    "battle-logic": 11,
+    "battle-logic": 12,
     "presentation": 7,
     "battle-3d-editor": 17,
     "battle-automation": 2,
-    "battle-presentation": 7,
+    "battle-presentation": 8,
     "battle-persistence": 2,
     "campaign": 2,
     "biome": 2,
@@ -153,6 +153,16 @@
       "parallel_safe": false,
       "fast_flag_safe": true,
       "evidence": "背击定向契约：世界朝向、正背侧判定、伤害增幅、普攻技能物品一致性、移动与存档恢复"
+    },
+    {
+      "name": "pincer",
+      "path": "tests/pincer_contract.gd",
+      "group": "battle-logic",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-18 追击规则：对侧友军半伤、预览/结算一致、命中/击杀/双击/反杀/技能/掉落边界"
     },
     {
       "name": "campaign_ui",
@@ -387,6 +397,16 @@
       "parallel_safe": true,
       "fast_flag_safe": false,
       "evidence": "tests/battle_presentation_hooks_contract.gd L229 tscn; L194 frame｜2026-11-17 修复转 pass：①音效断言对齐 battle_sfx 真实素材优先设计（nameplate→ui_select/victory 有素材走 Sfx，未映射 cue 回退程序化波形+缓存，两侧均断言）；②密闭性修复——契约固定关闭 immersive_presentation（本地 user://settings.cfg 开关不再泄入），相机 kick 断言只对传统取景链成立；③附带修 game_sfx.play 未命中 cue 的 Nil→Array 类型化赋值报错｜加速不安全（初始保守，待 A/B）：演出 hook 帧序列 L194"
+    },
+    {
+      "name": "pincer_marks",
+      "path": "tests/pincer_marks_contract.gd",
+      "group": "battle-presentation",
+      "tags": ["scene", "render"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-18 追击/背击标记层、自动显示清理、预览配对与追击演出接线"
     },
     {
       "name": "battle_result_presentation",

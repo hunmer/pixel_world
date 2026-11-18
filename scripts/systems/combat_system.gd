@@ -5,6 +5,9 @@
 ##   双击   = 攻击速度差 ≥ 4（重量补正后）
 ##   必杀   = (技/2 + 武器必杀 - 对方运/2)%
 ##   背击   = 攻击来自受击者身后（FacingRules）时本次伤害 ×1.25（preview/execute 共用）
+##   夹击追击 = 物理普攻命中且目标未死后，对侧相邻格的同阵营友军自动追加一次
+##            半强度攻击（判定 PincerRules.pincer_partner；伤害 pincer_damage；
+##            结算由 BattleActionResolver 落地，本类只供预览与公式）
 ## 纯静态函数；UnitData 用 Dictionary。
 
 class_name CombatSystem
@@ -12,11 +15,16 @@ extends RefCounted
 
 const AttackEventBuilder = preload("res://scripts/systems/attack_event.gd")
 const FacingRules = preload("res://scripts/systems/facing_rules.gd")
+const PincerRules = preload("res://scripts/systems/pincer_rules.gd")
 
-## 预览：不造成伤害，返回 { atkHit,defHit,atkDmg,defDmg,doubleAttack,defenderDouble,atkCrit,atkBackstab }
+## 预览：不造成伤害，返回 { atkHit,defHit,atkDmg,defDmg,doubleAttack,defenderDouble,atkCrit,atkBackstab,pincer }
+## allies（可选）= 攻击方阵营候选单位池（grid.units.values()）时，pincer 字段给出
+## 夹击追击预览 {active,partner_id,damage}（判定 PincerRules.pincer_partner、
+## 伤害 pincer_damage，与 resolver 真实结算同公式）；缺省恒 inactive，旧调用零影响。
 static func preview(
 	attacker: Dictionary, defender: Dictionary,
-	defender_tile_avoid: int, defender_tile_def: int
+	defender_tile_avoid: int, defender_tile_def: int,
+	allies: Array = []
 ) -> Dictionary:
 	var tri := _triangle_modifier(attacker, defender)
 	var tri_hit: int = tri[&"hit"]
@@ -52,6 +60,37 @@ static func preview(
 		&"defenderDouble": defender_double,
 		&"atkCrit": _crit_chance(attacker, defender),
 		&"atkBackstab": atk_backstab,
+		&"pincer": _pincer_preview_info(attacker, defender, defender_tile_def, allies),
+	}
+
+
+## 夹击追击伤害唯一公式（预览/结算/无头 runner 共用）：
+## 追击友军普攻口径（_damage + 三角修正钳 0 → 背击增幅，与 preview.atkDmg 同式）
+## × PincerRules.DAMAGE_RATIO，roundi 四舍五入后 maxi(0, ·)。
+## 追击自身无命中/必杀掷（必中无暴击），随机流零消耗。
+static func pincer_damage(
+	partner: Dictionary, defender: Dictionary, defender_tile_def: int
+) -> int:
+	var tri := _triangle_modifier(partner, defender)
+	var base := maxi(0, _damage(partner, defender, defender_tile_def) + int(tri[&"damage"]))
+	var full := FacingRules.apply_backstab(partner[&"position"], defender, base)
+	return maxi(0, roundi(full * PincerRules.DAMAGE_RATIO))
+
+
+## 预览用夹击摘要：非物理武器 / 无 allies / 无对侧友军 → 恒 {active=false}。
+static func _pincer_preview_info(
+	attacker: Dictionary, defender: Dictionary,
+	defender_tile_def: int, allies: Array
+) -> Dictionary:
+	if not PincerRules.is_physical_weapon(attacker) or allies.is_empty():
+		return { &"active": false, &"partner_id": &"", &"damage": 0 }
+	var partner := PincerRules.pincer_partner(attacker, defender, allies)
+	if partner.is_empty():
+		return { &"active": false, &"partner_id": &"", &"damage": 0 }
+	return {
+		&"active": true,
+		&"partner_id": StringName(partner.get(&"id", &"")),
+		&"damage": pincer_damage(partner, defender, defender_tile_def),
 	}
 
 
