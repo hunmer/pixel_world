@@ -10,11 +10,15 @@
 ##   aoe     — 范围伤害（对范围内所有合法目标各结算一次）
 ##   buff    — 增益（自身/友方，挂正面 buff）
 ##   debuff  — 减益（敌方，挂负面 buff，value 为负）
+##
+## 背击：伤害类技能（damage/aoe）与普攻同样经 FacingRules.apply_backstab 增幅；
+## heal/buff/debuff 不走伤害公式，天然不受背击影响。
 
 class_name SkillSystem
 extends RefCounted
 
 const AttackEventBuilder = preload("res://scripts/systems/attack_event.gd")
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
 
 
 # ============================================================
@@ -186,7 +190,9 @@ static func _skill_damage(caster: Dictionary, target: Dictionary, sk: Dictionary
 	var is_magic: bool = _is_magic_element(sk[&"element"])
 	var atk: int = _skill_atk(caster, sk)
 	var def: int = effective_stat(target, &"res") if is_magic else effective_stat(target, &"def")
-	return maxi(0, atk + int(sk[&"power"]) - def)
+	var base := maxi(0, atk + int(sk[&"power"]) - def)
+	# 背击增幅在公式内部统一施加：preview/execute/AI/无头 runner 自动共用。
+	return FacingRules.apply_backstab(caster[&"position"], target, base)
 
 
 static func _skill_hit(caster: Dictionary, target: Dictionary, sk: Dictionary) -> int:

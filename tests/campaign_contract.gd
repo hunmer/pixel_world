@@ -69,6 +69,7 @@ func _run() -> void:
 	_test_victory_loot_pending()
 	_test_victory_loot_persist_retry()
 	_test_last_opened_level()
+	_test_difficulty_chain()
 	_cleanup_root()
 	for raw_session in _sessions:
 		var node := raw_session as Node
@@ -1397,6 +1398,102 @@ func _test_last_opened_level() -> void:
 	var after_shop := _mk_session()
 	after_shop.load_profile(pid)
 	_expect(str(after_shop.get_last_opened_level().get("id", "")) == L0, "last: 购买落盘后上次关卡不应丢失")
+
+
+# ============================================================
+# 难度链路
+# ============================================================
+
+## 创建 → 存档 → 恢复 → 出征的难度贯通：create_profile 缺省 normal / 指定档
+## 回读、非法档拒绝、往返保持、prepare_battle 携带、列表摘要、codec 直测
+## （capture 严格拒绝非法、restore 旧档缺失与档内非法值归一 DEFAULT）。
+func _test_difficulty_chain() -> void:
+	var session := _begin("difficulty")
+	var created_default: Dictionary = session.create_profile("默认难度队")
+	_expect(created_default.ok, "diff: 无难度参创建应成功，实际 %s" % str(created_default.get("error", "")))
+	_expect(String(session.get_profile().difficulty) == "normal",
+		"diff: 缺省难度应为 normal，实际 %s" % String(session.get_profile().difficulty))
+	session.leave_profile()
+	var created_hard: Dictionary = session.create_profile("困难队", &"hard")
+	_expect(created_hard.ok, "diff: hard 创建应成功，实际 %s" % str(created_hard.get("error", "")))
+	_expect(String(session.get_profile().difficulty) == "hard",
+		"diff: 档案难度应回读 hard，实际 %s" % String(session.get_profile().difficulty))
+	var bad: Dictionary = session.create_profile("非法队", "impossible")
+	_expect(not bad.ok and str(bad.get("error", "")).contains("难度"),
+		"diff: 非法难度应被拒绝并提示难度，实际 %s" % str(bad.get("error", "")))
+	# 存/退/载 往返保持
+	var pid := str(created_hard.profile_id)
+	var saved: Dictionary = session.save_current()
+	_expect(saved.ok, "diff: 手动保存应成功")
+	session.leave_profile()
+	var reloaded: Dictionary = session.load_profile(pid)
+	_expect(reloaded.ok, "diff: 重载应成功，实际 %s" % str(reloaded.get("error", "")))
+	_expect(String(session.get_profile().difficulty) == "hard",
+		"diff: 往返后难度应保持 hard，实际 %s" % String(session.get_profile().difficulty))
+	# 出征携带存档难度
+	var prepared: Dictionary = session.prepare_battle(L0)
+	_expect(prepared.ok, "diff: 出征应成功，实际 %s" % str(prepared.get("error", "")))
+	_expect(String(prepared.difficulty) == "hard",
+		"diff: 出征应携带存档难度 hard，实际 %s" % str(prepared.difficulty))
+	session.settle_battle(str(prepared.token), &"abandon", prepared.chapter)
+	# 列表摘要带难度
+	var sum_hard := ""
+	var sum_default := ""
+	for s in session.list_profiles():
+		if str(s.name) == "困难队":
+			sum_hard = String(s.get("difficulty", "<无>"))
+		elif str(s.name) == "默认难度队":
+			sum_default = String(s.get("difficulty", "<无>"))
+	_expect(sum_hard == "hard", "diff: 列表摘要应带 hard，实际 %s" % sum_hard)
+	_expect(sum_default == "normal", "diff: 列表摘要应带 normal，实际 %s" % sum_default)
+	# codec 直测：磁盘 record ↔ state
+	var store := StoreScript.new()
+	store.base_dir = session.base_dir
+	var raw: Dictionary = store.load_profile_record(pid)
+	_expect(raw.ok, "diff: 磁盘档案应可读")
+	if not raw.ok:
+		return
+	var record: Dictionary = raw.record
+	var restored: Dictionary = CodecScript.restore(record)
+	_expect(restored.ok and String(restored.state.difficulty) == "hard",
+		"diff: restore 应回读 hard，实际 %s" % str(restored.get("error", restored.get("state", {}).get("difficulty", "?"))))
+	var recaptured: Dictionary = CodecScript.capture(restored.state)
+	_expect(recaptured.ok, "diff: capture(restore(state)) 应成功，实际 %s" % str(recaptured.get("error", "")))
+	if recaptured.ok:
+		var roundtrip: Dictionary = CodecScript.restore(recaptured.record)
+		_expect(roundtrip.ok and String(roundtrip.state.difficulty) == "hard", "diff: capture→restore 难度应保持 hard")
+	var hostile: Dictionary = restored.state.duplicate(true)
+	hostile["difficulty"] = "hell"
+	var refused: Dictionary = CodecScript.capture(hostile)
+	_expect(not refused.ok and str(refused.get("error", "")).contains("难度"),
+		"diff: capture 应拒绝非法难度，实际 %s" % str(refused.get("error", "")))
+	# 旧档（v1 无 difficulty 键）→ DEFAULT；档内非法值 → normalize 归一
+	var legacy: Dictionary = record.duplicate(true)
+	legacy.erase("difficulty")
+	var legacy_res: Dictionary = CodecScript.restore(legacy)
+	_expect(legacy_res.ok and String(legacy_res.state.difficulty) == "normal",
+		"diff: 旧档无难度键应回 normal，实际 %s" % str(legacy_res.get("error", legacy_res.get("state", {}).get("difficulty", "?"))))
+	var corrupt: Dictionary = record.duplicate(true)
+	corrupt["difficulty"] = "hell"
+	var corrupt_res: Dictionary = CodecScript.restore(corrupt)
+	_expect(corrupt_res.ok and String(corrupt_res.state.difficulty) == "normal",
+		"diff: 档内非法难度应归一 normal，实际 %s" % str(corrupt_res.get("error", corrupt_res.get("state", {}).get("difficulty", "?"))))
+	# 非字符串坏值（数字/布尔/null/数组/字典）不得触发原生错误：
+	# create 拒绝、capture 拒绝、restore 宽容归一 normal。
+	for bad_value in [123, 1.5, true, null, [1, 2], {"id": "hard"}]:
+		var refused_create: Dictionary = session.create_profile("坏值队", bad_value)
+		_expect(not refused_create.ok and str(refused_create.get("error", "")).contains("难度"),
+			"diff: create 非字符串坏值 %s 应拒绝" % str(typeof(bad_value)))
+		var hostile_state: Dictionary = restored.state.duplicate(true)
+		hostile_state["difficulty"] = bad_value
+		var refused_capture: Dictionary = CodecScript.capture(hostile_state)
+		_expect(not refused_capture.ok and str(refused_capture.get("error", "")).contains("难度"),
+			"diff: capture 非字符串坏值 %s 应拒绝" % str(typeof(bad_value)))
+		var bad_record: Dictionary = record.duplicate(true)
+		bad_record["difficulty"] = bad_value
+		var healed: Dictionary = CodecScript.restore(bad_record)
+		_expect(healed.ok and String(healed.state.difficulty) == "normal",
+			"diff: restore 档内坏值 %s 应归一 normal" % str(typeof(bad_value)))
 
 
 # ============================================================

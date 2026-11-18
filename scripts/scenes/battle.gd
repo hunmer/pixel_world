@@ -31,6 +31,7 @@ const BattlePresentationScript = preload("res://scripts/battle/battle_presentati
 const ActionAnimScript = preload("res://scripts/battle/action_anim.gd")
 const ImmersiveCameraScript = preload("res://scripts/battle/immersive_camera.gd")
 const BattleActionResolver = preload("res://scripts/battle/battle_action_resolver.gd")
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
 const BattleFxScript = preload("res://scripts/battle/battle_fx.gd")
 const BattleSfxScript = preload("res://scripts/battle/battle_sfx.gd")
 const BattleResultStageScript = preload("res://scripts/battle/battle_result_stage.gd")
@@ -114,6 +115,7 @@ var _save_identity := ""
 var _save_state: Dictionary = {}
 var _save_notice := ""
 var _campaign_token := ""
+var _args_difficulty: StringName = &""
 var _campaign_result: StringName = &""
 var _campaign_receipt: Dictionary = {}
 # 击杀掉落（W4）：独立 RNG + pending 数组（挂 chapter.pending_loot，胜利结算随收据入账；
@@ -164,6 +166,9 @@ func _configure_scene_args() -> void:
 	_save_state = SceneArgs.battle_args.get("save_state", {})
 	_save_notice = String(SceneArgs.battle_args.get("save_notice", ""))
 	_campaign_token = String(SceneArgs.battle_args.get("campaign_token", ""))
+	# 冒险出征注入的档案难度档（campaign_battle_bridge）；空 = 非冒险局，
+	# 敌方 AI 难度回退全局 Settings（_configure_battle_core 消费）。
+	_args_difficulty = StringName(String(SceneArgs.battle_args.get("difficulty", "")))
 	if not _campaign_token.is_empty():
 		_save_identity = ""
 		_save_state = {}
@@ -192,8 +197,12 @@ func _configure_battle_core() -> void:
 	# 1b. 回合编排器（敌方 AI + 玩家方托管）
 	turn_director = TurnDirector.new()
 	turn_director.setup(grid, turn, chapter, _unit_sprites)
-	# AI 难度档从全局设置注入（非法/缺失由 normalize 回 normal）
-	turn_director.enemy_difficulty = AIDifficulty.normalize(Settings.enemy_ai_difficulty)
+	# AI 难度档：冒险出征注入的档案难度优先（非法/缺失由 validate 拦下）；
+	# 非冒险局或未注入时回全局设置（非法/缺失由 normalize 回 normal）。
+	if AIDifficulty.validate(_args_difficulty):
+		turn_director.enemy_difficulty = _args_difficulty
+	else:
+		turn_director.enemy_difficulty = AIDifficulty.normalize(Settings.enemy_ai_difficulty)
 	turn_director.host_difficulty = AIDifficulty.normalize(Settings.host_ai_difficulty)
 	# 1a. 战旗持久化模块（完整行动边界提交；toast 经 battle_ui 回交，调用时才求值）
 	_save = BattleSaveScript.new()
@@ -253,13 +262,20 @@ func _configure_ui_layer() -> void:
 
 
 ## 开场时让每个单位面向最近的敌对单位；单位移动后仍由 UnitSprite3D.face_movement() 接管朝向。
+## 第一行同步初始化「逻辑朝向」（unit.facing，网格空间）：背击规则的判定依据，
+## 与下方表现层 sprite 朝向同语义（最近敌）；移动后的逻辑朝向由 GridSystem.place_unit 统一维护。
+## 已有逻辑朝向的单位（读档恢复）优先按逻辑朝向同步 sprite，不再按最近敌重转 —— 视觉与判定一致。
 func _orient_units_toward_opponents() -> void:
+	FacingRules.initialize_facings(grid.units.values())
 	for raw_unit in grid.units.values():
 		var unit: Dictionary = raw_unit
 		if bool(unit.get(&"isDead", false)):
 			continue
 		var sprite: UnitSprite3D = _unit_sprites.get(unit.get(&"id", &""))
 		if sprite == null or not is_instance_valid(sprite):
+			continue
+		if FacingRules.get_facing(unit) != FacingRules.NO_FACING:
+			_sync_sprite_facing(unit)
 			continue
 		var nearest_sprite: UnitSprite3D = null
 		var nearest_distance := INF
@@ -279,6 +295,23 @@ func _orient_units_toward_opponents() -> void:
 			facing.y = 0.0
 			if facing.length_squared() > 0.0:
 				sprite.set_pose(CharacterSheet.POSE_IDLE, facing.normalized())
+
+
+## 把逻辑朝向 unit.facing（网格空间）同步到 sprite 世界朝向。
+## 换算用 IsoProjection.grid_to_world 的纯水平差（B1/B2 通用，不依赖地形高度）。
+## 读档重入开场链路与取消移动恢复视觉时复用；facing 为 NO_FACING（旧档）时不动 sprite。
+func _sync_sprite_facing(unit: Dictionary) -> void:
+	var sprite: UnitSprite3D = _unit_sprites.get(unit.get(&"id", &""))
+	if sprite == null or not is_instance_valid(sprite):
+		return
+	var facing := FacingRules.get_facing(unit)
+	if facing == FacingRules.NO_FACING:
+		return
+	var pos: Vector2i = unit.get(&"position", Vector2i.ZERO)
+	var world_delta := IsoProjection.grid_to_world(pos + facing, 0.0) - IsoProjection.grid_to_world(pos, 0.0)
+	world_delta.y = 0.0
+	if world_delta.length_squared() > 0.0:
+		sprite.set_pose(CharacterSheet.POSE_IDLE, world_delta.normalized())
 
 
 ## _ready 拆分件⑤：沉浸相机 + 演出特效/镜头踢击/行动演出模块。
@@ -1274,7 +1307,8 @@ func _perform_move(u: Dictionary, target: Vector2i) -> void:
 	# 记录出发点：菜单期间按 ESC 取消移动时把单位送回这里。
 	var from_pos: Vector2i = u.position
 	# _pending_move_undo 由 battle.gd 维护（菜单确认/取消时读它），弹出菜单前先设置。
-	_pending_move_undo = { &"unit": u, &"from": from_pos }
+	# 同时记录出发朝向：取消移动时一并恢复（place_unit 会把朝向转成移动方向）。
+	_pending_move_undo = { &"unit": u, &"from": from_pos, &"facing": FacingRules.get_facing(u) }
 	var path := grid.find_path(u.position, target, u.moveType, u.stats.mov)
 	if path.is_empty() or path.size() <= 1:
 		battle_ui.open_unit_menu(u, target, from_pos)
@@ -1283,6 +1317,10 @@ func _perform_move(u: Dictionary, target: Vector2i) -> void:
 	Sfx.play_step(StringName(grid.tile_at(target.x, target.y).get(&"type", &"plain")))
 	us.move_along_path(path.slice(1), func():
 		grid.place_unit(u, target.x, target.y)
+		# 逻辑朝向取移动末段方向（与 sprite 逐段动画的最终朝向一致）；
+		# place_unit 的净位移朝向仅在无完整路径时作为兜底。
+		if path.size() >= 2:
+			FacingRules.face_move(u, path[path.size() - 2], path[path.size() - 1])
 		u.hasMoved = true
 		us.update_state()
 		battle_ui.open_unit_menu(u, target, from_pos)
@@ -1530,12 +1568,17 @@ func _cancel_move() -> void:
 		return
 	var u: Dictionary = _pending_move_undo[&"unit"]
 	var from: Vector2i = _pending_move_undo[&"from"]
+	var undo_facing: Vector2i = _pending_move_undo.get(&"facing", FacingRules.NO_FACING)
 	_pending_move_undo.clear()
 	if u.is_empty():
 		return
 	# 仅当确实发生了位移时才回送；原地（path 为空）直接回到选中态。
 	if u.position != from:
 		grid.place_unit(u, from.x, from.y)
+		# 恢复移动前朝向（place_unit 已把朝向转成移动方向；undo_facing 为旧存档兼容缺省）。
+		u[&"facing"] = undo_facing
+		# 视觉朝向一并恢复（update_state 不处理朝向，sprite 仍停在移动末段朝向）。
+		_sync_sprite_facing(u)
 		u.hasMoved = false
 		if _unit_sprites.has(u.id):
 			(_unit_sprites[u.id] as UnitSprite3D).update_state()

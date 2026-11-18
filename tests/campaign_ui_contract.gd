@@ -159,7 +159,8 @@ func _run() -> void:
 		victim != null and victim.focus_mode == Control.FOCUS_NONE,
 		"03 弹层存活期背景控件处于陷阱中"
 	)
-	root.remove_child(victim)
+	# free() 自动从父节点摘除；不再先 root.remove_child（victim 的父是
+	# SaveCard_1 而非 root，父不匹配会打引擎 ERROR remove_child 断言）。
 	victim.free()
 	(modal.find_child("Action_cancel", true, false) as Button).pressed.emit()
 	await process_frame
@@ -185,13 +186,28 @@ func _run() -> void:
 	(campaign.find_child("NewBtn", true, false) as Button).pressed.emit()
 	await process_frame
 	modal = campaign.find_child("CampaignModal", true, false)
+	# ⑤a 新建弹层难度组：四档齐全、默认 normal 选中、ButtonGroup 互斥切换。
+	var diff_ids := ["novice", "normal", "hard", "nightmare"]
+	for did in diff_ids:
+		check(
+			modal.find_child("Difficulty_%s" % did, true, false) != null,
+			"05 新建弹层含难度档按钮 %s" % did
+		)
+	var diff_normal: Button = modal.find_child("Difficulty_normal", true, false) as Button
+	check(diff_normal.button_pressed, "05 难度默认选中 normal")
+	var diff_hard: Button = modal.find_child("Difficulty_hard", true, false) as Button
+	diff_hard.button_pressed = true
+	check(diff_hard.button_pressed and not diff_normal.button_pressed, "05 难度组互斥切换到 hard")
 	input = modal.find_child("ModalInput", true, false) as LineEdit
 	input.text = "测试新档"
 	(modal.find_child("Action_confirm", true, false) as Button).pressed.emit()
 	await process_frame
 	check(stub.current.length() > 0, "05 新档已加载为当前档")
+	check(stub.last_created_difficulty == "hard", "05 新建传值 difficulty=hard")
 	var hub: Control = campaign.find_child("Hub", true, false)
 	check(hub.visible, "05 新建后进入基地")
+	var gold_label: Label = campaign.find_child("GoldLabel", true, false) as Label
+	check(gold_label.text.contains("困难"), "05 基地头部显示所选难度（困难）")
 	var profile_title: Label = campaign.find_child("ProfileTitle", true, false) as Label
 	check(profile_title.text == "测试新档", "05 基地标题=新档名")
 	check(campaign.find_child("RosterEmpty", true, false) != null, "05 空队伍有占位提示")
@@ -208,6 +224,9 @@ func _run() -> void:
 	check(hub.visible, "06 加载 B 进入基地")
 	var gold_value: Label = campaign.find_child("GoldValue", true, false) as Label
 	check(gold_value.text == "220", "06 金币=220")
+	# B 为手造旧档（无 difficulty 键）→ 头部回退显示默认普通。
+	gold_label = campaign.find_child("GoldLabel", true, false) as Label
+	check(gold_label.text.contains("普通"), "06 旧档无难度键回退普通")
 	var progress_label: Label = campaign.find_child("ProgressLabel", true, false) as Label
 	check(progress_label.text == "已通关 2 / 6", "06 进度文本 2 / 6")
 	var progress_fill: Range = campaign.find_child("ProgressFill", true, false) as Range
@@ -721,6 +740,8 @@ class StubSession extends Node:
 	var prepare_calls: Array = []
 	var saved_count := 0
 	var next_id := 0
+	## 最近一次 create_profile 收到的难度参（供新建弹层传值断言）。
+	var last_created_difficulty := ""
 	var settled_tokens := {}
 	## 购买调用流水（无论成败都记录）——供防重/失败路径断言。
 	var buy_calls: Array = []
@@ -792,10 +813,12 @@ class StubSession extends Node:
 			})
 		return result
 
-	func create_profile(profile_name: String) -> Dictionary:
+	func create_profile(profile_name: String, difficulty: Variant = &"normal") -> Dictionary:
 		var id := "p%d" % next_id
 		next_id += 1
 		profiles[id] = _make_profile(id, profile_name, 0, [], 990 + next_id, [], [])
+		(profiles[id] as Dictionary)["difficulty"] = String(difficulty)
+		last_created_difficulty = String(difficulty)
 		_emit()
 		return {"ok": true, "id": id}
 

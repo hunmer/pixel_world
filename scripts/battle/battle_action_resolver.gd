@@ -33,6 +33,8 @@
 class_name BattleActionResolver
 extends RefCounted
 
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
+
 
 ## 普攻结算。attacker/defender 为 UnitData；grid 用于取防守方地形加成。
 ## 与 battle.gd._resolve_combat_async 的结算部分逐行等价：
@@ -42,6 +44,10 @@ static func resolve_attack(
 		attacker: Dictionary, defender: Dictionary, grid: GridSystem,
 		drop_ctx: Dictionary = {}
 ) -> Dictionary:
+	# 出手转身：攻击者面向目标（与演出层 sprite 转身一致）。只转攻击者、不动
+	# 受击者 —— 背击判定只看防守方朝向，本次背击不被消除；转身后防守方反击
+	# 恒打攻击者正面（dot>0），视觉与结算一致。
+	FacingRules.face_toward(attacker, defender.position)
 	var def_tile: Dictionary = grid.tile_at(defender.position.x, defender.position.y)
 	var result: Dictionary = CombatSystem.execute(
 		attacker, defender, int(def_tile.avoid_bonus), int(def_tile.def_bonus)
@@ -76,6 +82,8 @@ static func resolve_skill(
 	if targets.is_empty():
 		caster[&"hasActed"] = true
 		return { skill = {}, deaths = [], exp = { amount = 0, gained = false, levels = [] } }
+	# 出手转身（同 resolve_attack：面向首个目标，只转施放者）。
+	FacingRules.face_toward(caster, targets[0][&"position"])
 	var result: Dictionary = SkillSystem.execute(caster, targets, skill_id)
 	var deaths: Array = []
 	for h in result[&"hits"]:
@@ -106,6 +114,8 @@ static func resolve_item(
 	if targets.is_empty() or item_entry.is_empty():
 		user[&"hasActed"] = true
 		return { item = {}, deaths = [] }
+	# 出手转身（同 resolve_attack：面向首个目标，只转使用者）。
+	FacingRules.face_toward(user, targets[0][&"position"])
 	var result: Dictionary = ItemSystem.execute(user, targets, item_entry)
 	var deaths: Array = []
 	for h in result.get(&"hp_deltas", []):

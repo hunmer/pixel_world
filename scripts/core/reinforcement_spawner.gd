@@ -15,6 +15,8 @@
 class_name ReinforcementSpawner
 extends RefCounted
 
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
+
 ## 落点被占时的邻近搜索半径（曼哈顿环）
 const SEARCH_RADIUS := 3
 
@@ -44,6 +46,8 @@ static func spawn_due(chapter: Dictionary, grid: GridSystem, turn: TurnManager, 
 			if spot != pos:
 				unit[&"position"] = spot
 			grid.place_unit(unit, spot.x, spot.y)
+			# 入场朝向：面向最近敌方（place_unit 的 face_move 对「出生即落位」零位移不设朝向）。
+			FacingRules.orient_toward_nearest_enemy(unit, grid.units.values())
 			(chapter["enemyUnits"] as Array).append(unit)
 			(turn.units as Array).append(unit)
 			spawned.append(unit)

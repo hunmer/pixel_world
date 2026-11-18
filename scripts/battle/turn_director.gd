@@ -36,6 +36,9 @@
 class_name TurnDirector
 extends Node
 
+# 显式 preload（class_name 全局注册在编辑器缓存未刷新时可能 unknown identifier）。
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
+
 # ---- 注入的只读引用（setup 时由 battle.gd 设置）----
 var grid: GridSystem
 var turn: TurnManager
@@ -239,6 +242,10 @@ func _player_auto_act(u: Dictionary) -> void:
 		if not path.is_empty():
 			await _tween_move(us, path.slice(1))
 			grid.place_unit(u, (move_target as Vector2i).x, (move_target as Vector2i).y)
+			# 逻辑朝向与 tween 视觉（_tween_move 逐格 face_movement）对齐：取路径末段方向，
+			# 而非 place_unit 的净位移兜底（L 形路径两者不同）。
+			if path.size() >= 2:
+				FacingRules.face_move(u, path[path.size() - 2], path[path.size() - 1])
 			u.hasMoved = true
 			us.update_state()
 			await get_tree().create_timer(0.2).timeout
@@ -314,6 +321,9 @@ func _enemy_act(enemy: Dictionary) -> void:
 		if not path.is_empty():
 			await _tween_move(us, path.slice(1))
 			grid.place_unit(enemy, (move_target as Vector2i).x, (move_target as Vector2i).y)
+			# 同 _player_auto_act：末段路径朝向（与 tween 视觉一致），覆盖净位移兜底。
+			if path.size() >= 2:
+				FacingRules.face_move(enemy, path[path.size() - 2], path[path.size() - 1])
 			us.update_state()
 			await get_tree().create_timer(0.2).timeout
 	# 按 action.type 分发：普攻 / 技能 / 物品

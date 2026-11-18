@@ -12,6 +12,7 @@ extends RefCounted
 
 # 显式 preload（class_name 全局注册在编辑器缓存未刷新时可能 unknown identifier）
 const BuildingLayoutScript = preload("res://scripts/core/building_layout.gd")
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
 
 var width: int
 var height: int
@@ -85,6 +86,8 @@ func unit_at(x: int, y: int) -> Dictionary:
 ## 注册/移动单位到指定位置
 ## 目标格被建筑占用时拒绝落子（防御：正常链路已被 loader 校验与移动阻挡拦截；
 ## 传送/推退等直接调用方若违规，单位留在原地并告警）
+## 移动落位时同步维护逻辑朝向：单位面向移动方向（FacingRules.face_move，
+## from=旧 position → to=新格；原地重放 delta 为零不动朝向）。
 func place_unit(unit: Dictionary, x: int, y: int) -> void:
 	var pos: Vector2i = unit[&"position"]
 	if is_building_cell(x, y):
@@ -92,6 +95,7 @@ func place_unit(unit: Dictionary, x: int, y: int) -> void:
 		return
 	if in_bounds(pos.x, pos.y):
 		cell_to_unit[pos.y][pos.x] = null
+	FacingRules.face_move(unit, pos, Vector2i(x, y))
 	unit[&"position"] = Vector2i(x, y)
 	units[unit[&"id"]] = unit
 	cell_to_unit[y][x] = unit[&"id"]

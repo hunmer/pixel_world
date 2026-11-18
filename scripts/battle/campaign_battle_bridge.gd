@@ -19,6 +19,8 @@ static func enter_battle(tree: SceneTree, level_id: String) -> Dictionary:
 		"campaign_token": String(prepared["token"]),
 		"campaign_level_id": level_id,
 		"save_identity": "",
+		# 档案难度档：battle 侧优先于全局设置注入敌方 AI
+		"difficulty": String(prepared.get("difficulty", "normal")),
 	}
 	var err: Error = tree.change_scene_to_file(BATTLE_SCENE)
 	if err != OK:

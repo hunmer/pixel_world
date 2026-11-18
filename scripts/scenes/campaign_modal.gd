@@ -18,6 +18,8 @@ const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
 const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
 
 var _input_edit: LineEdit
+var _difficulty_group: ButtonGroup
+var _difficulty_buttons: Array[Button] = []
 var _scope: Control
 var _cancelable := true
 var _default_focus: Control
@@ -30,6 +32,8 @@ var _closing := false
 ## 构建弹层视觉树（加入场景树前调用）。
 ## actions: [{text:String, semantic:int(0/1/2), id:String, focus:bool}]；
 ## want_input 时提供输入框并默认聚焦输入框；scope_focus 为要屏蔽焦点的背景层。
+## difficulty_options（可选）：[{id, label}] 选项组，非空时渲染互斥 toggle 按钮
+## （PixelButton 语义变体 + ButtonGroup），difficulty_default 为默认选中 id。
 func build(
 	title: String,
 	message: String,
@@ -38,7 +42,9 @@ func build(
 	want_input: bool = false,
 	input_placeholder: String = "",
 	input_default: String = "",
-	cancelable: bool = true
+	cancelable: bool = true,
+	difficulty_options: Array = [],
+	difficulty_default: String = ""
 ) -> void:
 	_scope = scope_focus
 	_cancelable = cancelable
@@ -84,6 +90,32 @@ func build(
 		_input_edit.name = "ModalInput"
 		_input_edit.text = input_default
 		body.add_child(_input_edit)
+
+	# 难度选择组（可选）：UIFactory.button(styled=false) 走 PixelButton 组件
+	# 语义变体；toggle_mode + ButtonGroup 互斥，选中 id 挂按钮 meta。
+	if not difficulty_options.is_empty():
+		var difficulty_caption: Label = UIFactoryScript.label(
+			"难度", ComponentThemeScript.FONT_CAPTION, UIThemeScript.TEXT_DIM
+		)
+		difficulty_caption.name = "DifficultyCaption"
+		body.add_child(difficulty_caption)
+		var difficulty_row := PixelHBoxScript.new()
+		difficulty_row.name = "DifficultyRow"
+		body.add_child(difficulty_row)
+		_difficulty_group = ButtonGroup.new()
+		for opt: Variant in difficulty_options:
+			var spec: Dictionary = opt
+			var option_id := String(spec.get("id", ""))
+			var toggle: Button = UIFactoryScript.button(
+				String(spec.get("label", option_id)), Callable(), "", false
+			)
+			toggle.name = "Difficulty_%s" % option_id
+			toggle.set_meta("difficulty_id", option_id)
+			toggle.toggle_mode = true
+			toggle.button_group = _difficulty_group
+			toggle.button_pressed = option_id == difficulty_default
+			difficulty_row.add_child(toggle)
+			_difficulty_buttons.append(toggle)
 
 	var row := PixelHBoxScript.new()
 	row.name = "ModalActions"
@@ -133,6 +165,16 @@ func get_input_text() -> String:
 	if _input_edit == null:
 		return ""
 	return _input_edit.text.strip_edges()
+
+
+## 当前选中的难度档 id（来自选项组按钮 meta）；无选项组或未选中返回 ""。
+func get_selected_difficulty() -> String:
+	if _difficulty_group == null:
+		return ""
+	var pressed_button: Button = _difficulty_group.get_pressed_button()
+	if pressed_button == null:
+		return ""
+	return str(pressed_button.get_meta("difficulty_id", ""))
 
 
 func close(action_id: String) -> void:

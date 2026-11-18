@@ -8,11 +8,16 @@
 ##   cleanse  — 清除减益（解毒）
 ##   equip    — 永久改 stats（装备类，不消耗 uses，单独走 equip 流程）
 ##
+## 背击：投掷物 damage 效果与普攻同样经 FacingRules.apply_backstab 增幅（有 user→target
+## 方向的指向性道具）；heal/buff/cleanse 不走伤害公式，天然不受背击影响。
+##
 ## 消耗品/投掷物/buff 道具：使用后 uses-=1，归零从背包移除。
 ## 装备类：走 equip()，永久改 stats 并标记已装备（uses 保持，不入消耗）。
 
 class_name ItemSystem
 extends RefCounted
+
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
 
 
 ## 背包条目是否可用（uses>0 且非装备）。
@@ -62,7 +67,7 @@ static func targets_for(user: Dictionary, item_id: StringName, grid: GridSystem)
 # ============================================================
 # 预览
 # ============================================================
-static func preview(_user: Dictionary, target: Dictionary, item_id: StringName) -> Dictionary:
+static func preview(user: Dictionary, target: Dictionary, item_id: StringName) -> Dictionary:
 	var idef: Dictionary = ItemData.get_item(item_id)
 	if idef.is_empty():
 		return {}
@@ -77,8 +82,10 @@ static func preview(_user: Dictionary, target: Dictionary, item_id: StringName) 
 			res[&"mp_delta"] = mini(int(idef[&"power"]), max_mp - int(target.get(&"mp", 0)))
 			res[&"desc"] = "回 MP ~%d" % int(idef[&"power"])
 		&"damage":
-			res[&"hp_delta"] = -int(idef[&"power"])
-			res[&"desc"] = "伤害 %d" % int(idef[&"power"])
+			# 投掷物固定伤害，背击经 FacingRules 增幅（与 execute 同公式）。
+			var dmg: int = FacingRules.apply_backstab(user[&"position"], target, int(idef[&"power"]))
+			res[&"hp_delta"] = -dmg
+			res[&"desc"] = "伤害 %d" % dmg
 		&"buff":
 			res[&"buff_desc"] = "%s%+d (%d回合)" % [String(idef[&"stat"]), int(idef[&"buffValue"]), int(idef[&"buffTurns"])]
 			res[&"desc"] = res[&"buff_desc"]
@@ -118,8 +125,8 @@ static func execute(user: Dictionary, targets: Array, item_entry: Dictionary) ->
 				t[&"mp"] = mini(max_mp, before_m + int(idef[&"power"]))
 				result[&"mp_deltas"].append({ unit = t, delta = int(t[&"mp"]) - before_m })
 			&"damage":
-				# 投掷物固定伤害，通常必中（不做命中判定）
-				var dmg: int = int(idef[&"power"])
+				# 投掷物固定伤害，通常必中（不做命中判定）；背击经 FacingRules 增幅（与 preview 同公式）。
+				var dmg: int = FacingRules.apply_backstab(user[&"position"], t, int(idef[&"power"]))
 				var before_d: int = int(t[&"hp"])
 				t[&"hp"] = maxi(0, before_d - dmg)
 				result[&"hp_deltas"].append({ unit = t, delta = int(t[&"hp"]) - before_d, died = int(t[&"hp"]) <= 0 })

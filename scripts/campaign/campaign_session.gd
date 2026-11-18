@@ -26,6 +26,7 @@ const StoreScript := preload("res://scripts/campaign/campaign_profile_store.gd")
 const BattlefieldLoaderScript := preload("res://scripts/core/battlefield_loader.gd")
 const ItemDataScript := preload("res://scripts/core/items.gd")
 const ShopCatalogScript := preload("res://scripts/campaign/shop_catalog.gd")
+const AIDifficultyScript := preload("res://scripts/systems/ai_difficulty.gd")
 
 ## 存档根目录（测试可改；改动在下次访问 store 时生效）。
 var base_dir: String = DEFAULT_STORE_DIR
@@ -62,6 +63,7 @@ func get_profile() -> Dictionary:
 		"completed_levels": _state.completed_levels.duplicate(true),
 		"saved_at": float(_state.saved_at),
 		"last_opened_level": str(_state.get("last_opened_level", "")),
+		"difficulty": StringName(str(_state.get("difficulty", AIDifficultyScript.DEFAULT))),
 	}
 
 
@@ -139,6 +141,7 @@ func _summarize_entry(entry: Dictionary) -> Dictionary:
 			"gold": int(state.gold),
 			"completed_count": int(state.completed_levels.size()),
 			"saved_at": float(state.saved_at),
+			"difficulty": str(state.get("difficulty", AIDifficultyScript.DEFAULT)),
 			"loadable": true,
 			"notice": "；".join(hints),
 		}
@@ -240,10 +243,14 @@ func clear_last_result() -> void:
 # 档案管理
 # ============================================================
 
-func create_profile(profile_name: String) -> Dictionary:
+## 创建新档案。difficulty 为 AI 难度档名（AIDifficulty 四档之一，缺省 normal），
+## 随档持久化并在出征时注入战斗；创建后即成为当前档案。
+func create_profile(profile_name: String, difficulty: Variant = AIDifficultyScript.DEFAULT) -> Dictionary:
 	var name_check := _validate_name(profile_name)
 	if not name_check.get("ok", false):
 		return {"ok": false, "error": str(name_check.error)}
+	if not AIDifficultyScript.validate(difficulty):
+		return {"ok": false, "error": "未知难度档：%s" % str(difficulty)}
 	var first_level := CampaignConfigScript.first_level_id()
 	if first_level == "":
 		return {"ok": false, "error": "冒险配置无效，无法创建档案"}
@@ -263,6 +270,7 @@ func create_profile(profile_name: String) -> Dictionary:
 		"created_at": now,
 		"saved_at": now,
 		"last_opened_level": "",
+		"difficulty": str(difficulty),
 	}
 	var persisted := _persist(state)
 	if not persisted.get("ok", false):
@@ -536,8 +544,8 @@ func _templates_cover(templates: Array, item_id: StringName) -> bool:
 
 ## 出征：校验解锁与无挂起战斗 -> 部署档内队伍到战场（全员出征，自动补给）->
 ## 落盘出征前快照 + attempt 标记（失败则回滚并取消出征）。返回 {ok, chapter,
-## token, level_id, deployed_count, extra_ids, sit_out_ids(恒空)}。chapter 为深拷贝，
-## 可直传战斗。
+## token, level_id, deployed_count, extra_ids, sit_out_ids(恒空), difficulty
+## (档案难度档，出征注入战斗)}。chapter 为深拷贝，可直传战斗。
 func prepare_battle(level_id: String) -> Dictionary:
 	if _state.is_empty():
 		return {"ok": false, "error": "尚未加载冒险档案"}
@@ -588,6 +596,7 @@ func prepare_battle(level_id: String) -> Dictionary:
 		"deployed_count": int(deployment.deployed_count),
 		"extra_ids": deployment.extra_ids,
 		"sit_out_ids": deployment.sit_out_ids,
+		"difficulty": str(_state.get("difficulty", AIDifficultyScript.DEFAULT)),
 	}
 	_emit_changed("prepared")
 	return out

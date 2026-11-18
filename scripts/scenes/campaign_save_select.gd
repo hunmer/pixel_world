@@ -16,6 +16,7 @@ const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
 const PixelHBoxScript = preload("res://ui/components/pixel_h_box.gd")
 const PixelScrollScript = preload("res://ui/components/pixel_scroll.gd")
 const CampaignFormatScript = preload("res://scripts/scenes/campaign_format.gd")
+const AIDifficultyScript = preload("res://scripts/systems/ai_difficulty.gd")
 
 const DEV_ENTRY_SCENE := "res://scenes/Game.tscn"
 
@@ -185,8 +186,11 @@ func _make_save_card(profile: Dictionary, index: int) -> PanelContainer:
 	card.set("title", CampaignFormatScript.profile_name(profile))
 	card.set(
 		"description",
-		"金币 %d · 已通关 %d 关 · %s"
+		"难度 %s · 金币 %d · 已通关 %d 关 · %s"
 		% [
+			CampaignFormatScript.difficulty_label(
+				String(profile.get("difficulty", String(AIDifficultyScript.DEFAULT)))
+			),
 			CampaignFormatScript.as_int(profile.get("gold", 0), 0),
 			CampaignFormatScript.as_int(profile.get("completed_count", 0), 0),
 			CampaignFormatScript.format_saved_at(profile.get("saved_at", null)),
@@ -247,14 +251,17 @@ func _on_new() -> void:
 	var modal: Control = _main.call(
 		"open_modal",
 		"新建冒险",
-		"为新存档起一个名字：",
+		"为新存档起一个名字，并选择冒险难度：",
 		[
 			{"text": "创建", "semantic": 0, "id": "confirm", "focus": true},
 			{"text": "取消", "semantic": 1, "id": "cancel"},
 		],
 		true,
 		"冒险名称",
-		""
+		"",
+		true,
+		AIDifficultyScript.OPTIONS.duplicate(),
+		String(AIDifficultyScript.DEFAULT)
 	)
 	modal.connect("chosen", Callable(self, "_on_new_chosen").bind(modal))
 
@@ -267,7 +274,13 @@ func _on_new_chosen(action_id: String, modal: Control) -> void:
 	if profile_name == "":
 		_main.call("open_error", "名字不能为空", "请输入至少一个字符的冒险名称。")
 		return
-	var created: Dictionary = CampaignFormatScript.call_dict(session, "create_profile", [profile_name])
+	# 难度来自弹层互斥选择组；未选中（异常）回 normal 缺省。
+	var difficulty := String(modal.call("get_selected_difficulty"))
+	if difficulty == "":
+		difficulty = String(AIDifficultyScript.DEFAULT)
+	var created: Dictionary = CampaignFormatScript.call_dict(
+		session, "create_profile", [profile_name, difficulty]
+	)
 	if not bool(created.get("ok", false)):
 		_main.call(
 			"open_error",

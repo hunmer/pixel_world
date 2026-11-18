@@ -460,6 +460,8 @@ func _present_float_text(impact: Dictionary) -> void:
 			text = "暴击 " + text
 		if bool(impact.get(&"effective", false)):
 			text += " 克制"
+		if bool(impact.get(&"backstab", false)):
+			text += " 背击"
 	elif not (impact.get(&"statuses", []) as Array).is_empty():
 		var status: Dictionary = (impact[&"statuses"] as Array)[0]
 		text = "%s%+d" % [String(status.get(&"stat", &"")), int(status.get(&"value", 0))]

@@ -28,7 +28,11 @@ const VALID: Array = [NOVICE, NORMAL, HARD, NIGHTMARE]
 
 
 ## 校验难度名是否合法（String/StringName 均可）。
+## 非字符串坏值（数字/布尔/null/数组/字典，如旧档 JSON 坏键）一律 false，
+## 不触发 StringName 构造的原生错误。
 static func validate(name) -> bool:
+	if not (name is String or name is StringName):
+		return false
 	return VALID.has(StringName(name))
 
 

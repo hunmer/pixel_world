@@ -5,6 +5,8 @@
 class_name AttackEvent
 extends RefCounted
 
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
+
 const SCHEMA_VERSION := 1
 const NORMAL_BUDGET_SECONDS := 1.2
 const SKILL_BUDGET_SECONDS := 2.0
@@ -28,6 +30,7 @@ static func make_impact(
 	var target_cell: Vector2i = target.get(&"position", Vector2i.ZERO)
 	var delta := target_cell - source_cell
 	var weakness := effective or _has_element_weakness(target, element)
+	var backstab := hit and damage > 0 and FacingRules.is_backstab(source_cell, target)
 	var knockback := Vector2i.ZERO
 	if hit and damage > 0:
 		knockback = Vector2i(signi(delta.x), signi(delta.y))
@@ -46,6 +49,7 @@ static func make_impact(
 		&"critical": critical,
 		&"effective": effective,
 		&"weakness": weakness,
+		&"backstab": backstab,
 		&"knockback": knockback,
 		&"element": element,
 		&"statuses": statuses.duplicate(true),
@@ -170,11 +174,13 @@ static func _base_event(
 ) -> Dictionary:
 	var effective := false
 	var weakness := false
+	var backstab := false
 	var statuses: Array = []
 	for raw_impact in impacts:
 		var impact: Dictionary = raw_impact
 		effective = effective or bool(impact.get(&"effective", false))
 		weakness = weakness or bool(impact.get(&"weakness", false))
+		backstab = backstab or bool(impact.get(&"backstab", false))
 		statuses.append_array(impact.get(&"statuses", []))
 	return {
 		&"version": SCHEMA_VERSION,
@@ -188,6 +194,7 @@ static func _base_event(
 		&"impacts": impacts.duplicate(true),
 		&"effective": effective,
 		&"weakness": weakness,
+		&"backstab": backstab,
 		&"hitstop": WEAKNESS_HITSTOP_SECONDS if weakness else 0.0,
 		&"statuses": statuses,
 	}

@@ -225,7 +225,8 @@ func refresh() -> void:
 		return
 	_profile_title.text = CampaignFormatScript.profile_name(profile)
 	var gold := CampaignFormatScript.as_int(profile.get("gold", 0), 0)
-	_gold_label.text = "金币 %d" % gold
+	var difficulty := CampaignFormatScript.difficulty_label(profile.get("difficulty", "normal"))
+	_gold_label.text = "难度 %s · 金币 %d" % [difficulty, gold]
 	_gold_value.text = "%d" % gold
 	var levels: Array = CampaignFormatScript.call_array(session, "list_levels")
 	_fill_roster(profile.get("roster", []))

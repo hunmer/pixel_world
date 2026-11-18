@@ -4,14 +4,16 @@
 ##   伤害   = 力/魔 + 武器威力 - 对方 防/魔防 - 地形防御 + 三角
 ##   双击   = 攻击速度差 ≥ 4（重量补正后）
 ##   必杀   = (技/2 + 武器必杀 - 对方运/2)%
+##   背击   = 攻击来自受击者身后（FacingRules）时本次伤害 ×1.25（preview/execute 共用）
 ## 纯静态函数；UnitData 用 Dictionary。
 
 class_name CombatSystem
 extends RefCounted
 
 const AttackEventBuilder = preload("res://scripts/systems/attack_event.gd")
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
 
-## 预览：不造成伤害，返回 { atkHit,defHit,atkDmg,defDmg,doubleAttack,defenderDouble,atkCrit }
+## 预览：不造成伤害，返回 { atkHit,defHit,atkDmg,defDmg,doubleAttack,defenderDouble,atkCrit,atkBackstab }
 static func preview(
 	attacker: Dictionary, defender: Dictionary,
 	defender_tile_avoid: int, defender_tile_def: int
@@ -23,20 +25,33 @@ static func preview(
 	var def_hit := 0
 	if defender[&"weapon"][&"type"] != &"staff":
 		def_hit = _hit_chance(defender, attacker, 0) - tri_hit
-	var atk_dmg: int = _damage(attacker, defender, defender_tile_def) + tri_dmg
+	# 背击增幅在三角修正合并并钳制后统一施加于「本次总伤害」：
+	# (base + tri) × 1.25，攻击与反击同口径；execute 直接消费本结果，天然一致。
+	var atk_dmg: int = FacingRules.apply_backstab(
+		attacker[&"position"], defender,
+		maxi(0, _damage(attacker, defender, defender_tile_def) + tri_dmg))
 	var def_dmg := 0
 	if defender[&"weapon"][&"type"] != &"staff":
-		def_dmg = _damage(defender, attacker, 0) - tri_dmg
+		# 反击背击口径与 resolver 出手转身一致：攻击者出手时已面向防守方，防守方反击
+		# 恒打攻击者正面。这里用临时朝向快照（duplicate，不 mutate 原字典）复现该口径，
+		# 保证预览（UI/AI）与真实结算同数值 —— 反击永不触发背击增幅。
+		var attacker_turned: Dictionary = attacker.duplicate()
+		FacingRules.face_toward(attacker_turned, defender[&"position"])
+		def_dmg = FacingRules.apply_backstab(
+			defender[&"position"], attacker_turned,
+			maxi(0, _damage(defender, attacker, 0) - tri_dmg))
 	var double_attack := _attack_speed(attacker) - _attack_speed(defender) >= 4
 	var defender_double := _attack_speed(defender) - _attack_speed(attacker) >= 4
+	var atk_backstab := FacingRules.is_backstab(attacker[&"position"], defender)
 	return {
 		&"atkHit": clampi(atk_hit, 0, 100),
 		&"defHit": clampi(def_hit, 0, 100),
-		&"atkDmg": maxi(atk_dmg, 0),
-		&"defDmg": maxi(def_dmg, 0),
+		&"atkDmg": atk_dmg,
+		&"defDmg": def_dmg,
 		&"doubleAttack": double_attack,
 		&"defenderDouble": defender_double,
 		&"atkCrit": _crit_chance(attacker, defender),
+		&"atkBackstab": atk_backstab,
 	}
 
 
@@ -159,6 +174,7 @@ static func _damage(attacker: Dictionary, defender: Dictionary, defender_tile_de
 	var is_magic := ([&"anima", &"dark", &"staff"] as Array).has(attacker[&"weapon"][&"type"])
 	var atk: int = BuffSystem.effective_stat(attacker, &"mag") if is_magic else BuffSystem.effective_stat(attacker, &"str")
 	var def: int = BuffSystem.effective_stat(defender, &"res") if is_magic else BuffSystem.effective_stat(defender, &"def")
+	# 纯基础伤害（不含三角修正与背击增幅）：三角与背击在 preview 合并后统一施加。
 	return maxi(0, atk + attacker[&"weapon"][&"might"] - def - defender_tile_def)
 
 

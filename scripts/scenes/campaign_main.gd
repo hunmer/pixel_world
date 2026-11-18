@@ -111,6 +111,7 @@ func _on_session_changed(_reason: String = "") -> void:
 
 ## 通用模态入口；返回弹层控件（可继续 connect("chosen")）。scope 为 Screens，
 ## 打开期间背景层焦点全部禁用（焦点陷阱），关闭自动恢复。
+## difficulty_options 非空时弹层附带互斥难度选择组（默认选中 difficulty_default）。
 func open_modal(
 	title: String,
 	message: String,
@@ -118,11 +119,14 @@ func open_modal(
 	want_input: bool = false,
 	input_placeholder: String = "",
 	input_default: String = "",
-	cancelable: bool = true
+	cancelable: bool = true,
+	difficulty_options: Array = [],
+	difficulty_default: String = ""
 ) -> Control:
 	var modal: Control = ModalScript.new()
 	modal.call(
-		"build", title, message, actions, _screens, want_input, input_placeholder, input_default, cancelable
+		"build", title, message, actions, _screens, want_input, input_placeholder,
+		input_default, cancelable, difficulty_options, difficulty_default
 	)
 	_modal_layer.add_child(modal)
 	modal.call("open")

@@ -2,6 +2,7 @@
 .godot/
 /android/
 /builds/
+/build/
 /exports/
 
 # Local editor settings

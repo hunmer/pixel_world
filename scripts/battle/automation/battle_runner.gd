@@ -14,6 +14,7 @@ extends RefCounted
 
 const Resolver = preload("res://scripts/battle/battle_action_resolver.gd")
 const AIDifficulty = preload("res://scripts/systems/ai_difficulty.gd")
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
 
 # 运行态（单次 run 内有效）
 var _grid: GridSystem = null
@@ -67,6 +68,9 @@ func _run(scenario: Dictionary) -> Dictionary:
 		_grid.place_unit(u, (u[&"position"] as Vector2i).x, (u[&"position"] as Vector2i).y)
 	for u in (_chapter["enemyUnits"] as Array):
 		_grid.place_unit(u, (u[&"position"] as Vector2i).x, (u[&"position"] as Vector2i).y)
+	# 2a) 逻辑朝向初始化（与 battle.gd _orient_units_toward_opponents 同规则：
+	#     面向最近敌）；此后移动由 place_unit 内 face_move 维护，背击规则与演出链路一致。
+	FacingRules.initialize_facings(_grid.units.values())
 	# 3) 初始化覆盖（loader 已校验单位存在与字段白名单）
 	for uid in (scenario["overrides"] as Dictionary):
 		var u: Dictionary = _grid.units[uid]
@@ -244,6 +248,9 @@ func _exec_script_entry(faction: StringName, entry: Dictionary) -> void:
 					_steps + 1, String(uid), str(u[&"position"]), to.x, to.y, int(u[&"stats"][&"mov"])]
 				return
 			_grid.place_unit(u, to.x, to.y)
+			# 逻辑朝向取移动末段方向（与演出链路 battle.gd._perform_move 一致）。
+			if path.size() >= 2:
+				FacingRules.face_move(u, path[path.size() - 2], path[path.size() - 1])
 			u[&"hasMoved"] = true
 		_emit({
 			"type": &"move",
@@ -354,6 +361,9 @@ func _exec_ai_decision(faction: StringName, u: Dictionary, decision: Dictionary)
 			var path: Array = _grid.find_path(u[&"position"], to, u[&"moveType"], u[&"stats"][&"mov"])
 			if not path.is_empty():
 				_grid.place_unit(u, to.x, to.y)
+				# 逻辑朝向取移动末段方向（与演出链路 battle.gd._perform_move 一致）。
+				if path.size() >= 2:
+					FacingRules.face_move(u, path[path.size() - 2], path[path.size() - 1])
 				u[&"hasMoved"] = true
 				_emit({
 					"type": &"move",

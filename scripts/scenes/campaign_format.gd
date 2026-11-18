@@ -10,6 +10,7 @@ extends RefCounted
 
 const UIThemeScript = preload("res://scripts/ui/ui_theme.gd")
 const WeaponDataScript = preload("res://scripts/core/weapons.gd")
+const AIDifficultyScript = preload("res://scripts/systems/ai_difficulty.gd")
 
 ## 详情弹窗里跳过的内部键（只读查看其余全部键）。
 const DETAIL_SKIP_KEYS: Array[String] = ["token"]
@@ -122,6 +123,16 @@ static func as_text(value: Variant, fallback: String = "—") -> String:
 
 static func profile_name(profile: Dictionary) -> String:
 	return as_text(profile.get("name", profile.get("id", null)), "未命名存档")
+
+
+## 难度档 id → 中文标签（novice→新手 等）；未知/缺失 id 原样回显，
+## 供存档列表卡片与 hub 头部共用同一展示口径。
+static func difficulty_label(difficulty_id: Variant) -> String:
+	var as_id := str(difficulty_id)
+	for option: Dictionary in AIDifficultyScript.OPTIONS:
+		if str(option.get("id", "")) == as_id:
+			return str(option.get("label", as_id))
+	return as_id
 
 
 ## 排序比较：saved_at 新→旧；数字比数值，其余比字符串（ISO 串字典序即时间序）。

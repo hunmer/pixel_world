@@ -20,6 +20,7 @@ const ProfessionDataScript := preload("res://scripts/core/professions.gd")
 const SkillDataScript := preload("res://scripts/core/skills.gd")
 const EnumsScript := preload("res://scripts/core/enums.gd")
 const UnitFactoryScript := preload("res://scripts/core/unit.gd")
+const AIDifficultyScript := preload("res://scripts/systems/ai_difficulty.gd")
 
 const UNIT_INT_FIELDS: Array[String] = ["level", "exp", "hp", "mp"]
 const UNIT_BOOL_FIELDS: Array[String] = ["hasMoved", "hasActed", "isDead"]
@@ -56,6 +57,10 @@ static func capture(state: Dictionary) -> Dictionary:
 	var purchases: Dictionary = _normalize_purchases(state.get("shop_purchases", null))
 	if not purchases.get("ok", false):
 		return {"ok": false, "error": "限购记录校验失败：%s" % str(purchases.error)}
+	# 难度档（v1 存量档无此字段 → DEFAULT；capture 严格校验，防坏值落盘）
+	var difficulty_raw: Variant = state.get("difficulty", AIDifficultyScript.DEFAULT)
+	if not AIDifficultyScript.validate(difficulty_raw):
+		return {"ok": false, "error": "难度档非法：%s" % str(difficulty_raw)}
 	var attempt: Variant = null
 	if state.get("attempt", null) != null:
 		var marker: Dictionary = state.attempt
@@ -79,6 +84,7 @@ static func capture(state: Dictionary) -> Dictionary:
 		"saved_at": float(state.get("saved_at", 0.0)),
 		"attempt": attempt,
 		"last_opened_level": str(state.get("last_opened_level", "")).strip_edges(),
+		"difficulty": str(difficulty_raw),
 	}
 	return {"ok": true, "record": BattleSaveCodecScript.encode(record)}
 
@@ -151,6 +157,8 @@ static func restore(record: Variant) -> Dictionary:
 			"saved_at": float(data.get("saved_at", 0.0)),
 			"attempt": attempt,
 			"last_opened_level": str(data.get("last_opened_level", "")).strip_edges(),
+			# 旧档无 difficulty → DEFAULT；档内非法值按运行时宽容口径归一（normalize）
+			"difficulty": str(AIDifficultyScript.normalize(data.get("difficulty", AIDifficultyScript.DEFAULT))),
 		},
 	}
 
@@ -184,6 +192,7 @@ static func summarize(record: Variant) -> Dictionary:
 			"gold": int(state.gold),
 			"completed_count": state.completed_levels.size(),
 			"saved_at": float(state.saved_at),
+			"difficulty": str(state.get("difficulty", AIDifficultyScript.DEFAULT)),
 			"loadable": true,
 			"notice": "",
 		},

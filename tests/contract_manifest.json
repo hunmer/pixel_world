@@ -24,7 +24,7 @@
     "battle-anim": 1,
     "ambient": 2,
     "animals": 4,
-    "battle-logic": 10,
+    "battle-logic": 11,
     "presentation": 7,
     "battle-3d-editor": 17,
     "battle-automation": 2,
@@ -143,6 +143,16 @@
       "parallel_safe": false,
       "fast_flag_safe": false,
       "evidence": "2026-11-17 建筑编辑契约：多格放置与旋转、等高和冲突拒绝、整体删除、撤销重做、区域复制移动、缩图及保存加载"
+    },
+    {
+      "name": "backstab",
+      "path": "tests/backstab_contract.gd",
+      "group": "battle-logic",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": true,
+      "evidence": "背击定向契约：世界朝向、正背侧判定、伤害增幅、普攻技能物品一致性、移动与存档恢复"
     },
     {
       "name": "campaign_ui",

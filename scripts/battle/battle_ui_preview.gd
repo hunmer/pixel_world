@@ -4,6 +4,7 @@ extends RefCounted
 const Tokens = preload("res://ui/theme/component_theme.gd")
 const Palette = preload("res://scripts/ui/ui_theme.gd")
 const Factory = preload("res://scripts/ui/ui_factory.gd")
+const FacingRules = preload("res://scripts/systems/facing_rules.gd")
 const Card = preload("res://ui/components/pixel_panel.tscn")
 const VBox = preload("res://ui/components/pixel_v_box.gd")
 const HBox = preload("res://ui/components/pixel_h_box.gd")
@@ -24,6 +25,8 @@ func show_combat(attacker: Dictionary, defender: Dictionary, prev: Dictionary) -
 	row.add_child(attack_column)
 	_line(attack_column, "命中 %d%%" % int(prev.atkHit))
 	_line(attack_column, "伤害 %d%s" % [int(prev.atkDmg), " ×2" if prev.doubleAttack else ""])
+	if bool(prev.get(&"atkBackstab", false)):
+		_line(attack_column, "背击 · 伤害 ×%s" % String.num(FacingRules.BACKSTAB_DAMAGE_MULTIPLIER, 2), Palette.ACCENT)
 	_line(attack_column, "必杀 %d%%" % int(prev.atkCrit))
 	var defend_column: VBoxContainer = _combatant(defender, "守方", "BattlePreviewDefender")
 	row.add_child(defend_column)
