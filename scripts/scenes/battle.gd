@@ -249,6 +249,36 @@ func _configure_ui_layer() -> void:
 	# 4. 单位
 	for u in grid.units.values():
 		_spawn_unit_sprite(u)
+	_orient_units_toward_opponents()
+
+
+## 开场时让每个单位面向最近的敌对单位；单位移动后仍由 UnitSprite3D.face_movement() 接管朝向。
+func _orient_units_toward_opponents() -> void:
+	for raw_unit in grid.units.values():
+		var unit: Dictionary = raw_unit
+		if bool(unit.get(&"isDead", false)):
+			continue
+		var sprite: UnitSprite3D = _unit_sprites.get(unit.get(&"id", &""))
+		if sprite == null or not is_instance_valid(sprite):
+			continue
+		var nearest_sprite: UnitSprite3D = null
+		var nearest_distance := INF
+		for raw_opponent in grid.units.values():
+			var opponent: Dictionary = raw_opponent
+			if bool(opponent.get(&"isDead", false)) or opponent.get(&"faction", &"") == unit.get(&"faction", &""):
+				continue
+			var opponent_sprite: UnitSprite3D = _unit_sprites.get(opponent.get(&"id", &""))
+			if opponent_sprite == null or not is_instance_valid(opponent_sprite):
+				continue
+			var distance := sprite.global_position.distance_squared_to(opponent_sprite.global_position)
+			if distance < nearest_distance:
+				nearest_distance = distance
+				nearest_sprite = opponent_sprite
+		if nearest_sprite != null:
+			var facing := nearest_sprite.global_position - sprite.global_position
+			facing.y = 0.0
+			if facing.length_squared() > 0.0:
+				sprite.set_pose(CharacterSheet.POSE_IDLE, facing.normalized())
 
 
 ## _ready 拆分件⑤：沉浸相机 + 演出特效/镜头踢击/行动演出模块。
@@ -607,6 +637,7 @@ func _spawn_due_reinforcements(turn_num: int) -> void:
 		_spawn_unit_sprite(u)
 		var us: UnitSprite3D = _unit_sprites[u.id]
 		us.update_state()
+	_orient_units_toward_opponents()
 	print("[reinforcement] 第 %d 轮敌方回合刷入 %d 个增援" % [turn_num, spawned.size()])
 	_commit_snapshot()
 
@@ -834,7 +865,7 @@ func _handle_input_while_animating(event: InputEvent) -> void:
 func _handle_key_input(k: InputEventKey) -> void:
 	if not k.pressed:
 		return
-	var handler: Callable = _key_route().get(k.keycode)
+	var handler: Callable = _key_route().get(k.keycode, Callable())
 	if handler.is_valid():
 		handler.call()
 
