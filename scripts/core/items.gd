@@ -4,7 +4,8 @@
 ## 物品字段：
 ##   id, name, desc, type(consumable/throwable/equip/buff),
 ##   target(self/ally/enemy/aoe_enemy), effect(heal_hp/heal_mp/damage/buff/cleanse/equip),
-##   power, range:[min,max], uses, stat, buffValue, buffTurns, equipStat, equipValue
+##   power, range:[min,max], uses, stat, buffValue, buffTurns, equipStat, equipValue,
+##   iconId（可选）：物品图标稳定 ID（数字字符串 "01".."08"，见 core/item_icons.gd）
 
 class_name ItemData
 extends RefCounted
@@ -62,6 +63,7 @@ static func _normalize(s: Dictionary) -> Dictionary:
 		buffTurns = int(g.call("buffTurns")) if g.call("buffTurns") != null else 0,
 		equipStat = StringName(g.call("equipStat")) if g.call("equipStat") != null else &"",
 		equipValue = int(g.call("equipValue")) if g.call("equipValue") != null else 0,
+		iconId = StringName(g.call("iconId")) if g.call("iconId") != null else &"",
 	}
 	return d
 
@@ -84,6 +86,19 @@ static func item_name(item_id: StringName) -> String:
 	if _items.has(item_id):
 		return _items[item_id][&"name"]
 	return String(item_id)
+
+
+## 物品 → 图标纹理（iconId 绑定见 items.json；纹理解析/缓存/兜底见 core/item_icons.gd）。
+## 未知物品 / 未配置 iconId 返回默认物品图标（与技能不同：物品菜单兜底不返回
+## null；ItemIcons 默认图加载失败时仍给非 null 应急纹理）。
+static func item_icon(item_id: StringName) -> Texture2D:
+	_ensure_loaded()
+	if not _items.has(item_id):
+		return ItemIcons.get_texture(ItemIcons.DEFAULT_ICON_ID)
+	var icon_id: StringName = _items[item_id].get(&"iconId", &"")
+	if icon_id == &"":
+		return ItemIcons.get_texture(ItemIcons.DEFAULT_ICON_ID)
+	return ItemIcons.get_texture(icon_id)
 
 
 ## 背包里「当前可用」的物品条目（uses > 0，且非装备类）。

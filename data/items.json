@@ -8,6 +8,7 @@
       "type": "consumable",
       "target": "ally",
       "effect": "heal_hp",
+      "iconId": "01",
       "power": 20,
       "range": [0, 1],
       "uses": 3
@@ -19,6 +20,7 @@
       "type": "consumable",
       "target": "ally",
       "effect": "heal_mp",
+      "iconId": "02",
       "power": 10,
       "range": [0, 1],
       "uses": 2
@@ -30,6 +32,7 @@
       "type": "consumable",
       "target": "self",
       "effect": "cleanse",
+      "iconId": "03",
       "power": 0,
       "range": [0, 0],
       "uses": 2
@@ -41,6 +44,7 @@
       "type": "throwable",
       "target": "enemy",
       "effect": "damage",
+      "iconId": "04",
       "power": 8,
       "range": [1, 3],
       "uses": 4
@@ -52,6 +56,7 @@
       "type": "throwable",
       "target": "aoe_enemy",
       "effect": "damage",
+      "iconId": "05",
       "power": 10,
       "range": [1, 2],
       "uses": 2
@@ -63,6 +68,7 @@
       "type": "equip",
       "target": "self",
       "effect": "equip",
+      "iconId": "06",
       "equipStat": "def",
       "equipValue": 4,
       "uses": 1
@@ -74,6 +80,7 @@
       "type": "equip",
       "target": "self",
       "effect": "equip",
+      "iconId": "07",
       "equipStat": "str",
       "equipValue": 3,
       "uses": 1
@@ -85,6 +92,7 @@
       "type": "buff",
       "target": "self",
       "effect": "buff",
+      "iconId": "08",
       "power": 0,
       "stat": "str",
       "buffValue": 5,
