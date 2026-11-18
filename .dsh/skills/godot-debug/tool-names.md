@@ -10,6 +10,8 @@
 
 ## 意图 → 工具（先查这张表，别搜）
 
+先选择代码测试；仅其无法覆盖的运行态目标才使用下表。流程推进优先 `runtime_call_method`，模拟输入只验证输入链路。激活授权与截图条件以 `SKILL.md` 为准。
+
 | 我想… | 用 | 关键参数 |
 | --- | --- | --- |
 | 自检：项目索引通不通 | `find_symbol` | `{"name":"_battle_active","max_results":1}` |
@@ -24,14 +26,14 @@
 | 调某个方法 | `runtime_call_method` | `{path,method,args,confirm:true}` |
 | **表达式求值（GDScript）** | `dbg_evaluate` | `{expression,confirm:true}`；**必须先停在断点上**，否则 `not_stopped` |
 | 推进帧 / 改时间流速 | `runtime_step_frames`、`runtime_time_scale` | 两者都要 `confirm:true` |
-| 模拟按键 | `runtime_inject_input` | `{event:{kind:"key",keycode,physical_keycode,pressed},confirm:true}` |
-| 模拟鼠标 / 指针 | `runtime_inject_input` | `event.kind` = `mouse_motion` / `mouse_button` / `pointer` |
+| 模拟按键（仅验证输入链路） | `runtime_inject_input` | `{event:{kind:"key",keycode,physical_keycode,pressed},confirm:true}` |
+| 模拟鼠标 / 指针（仅验证输入链路） | `runtime_inject_input` | `event.kind` = `mouse_motion` / `mouse_button` / `pointer` |
 | 断言属性值 | `runtime_assert_node_state` | `{path,expect,tolerance}` |
 | 断言节点存在 / 类型 / 已消失 | `runtime_assert_scene_structure` | `{expect:[{path,type?,absent?}]}` |
 | 断言屏幕文字 | `runtime_assert_screen_text` | `{text,present,regex,min_count}` |
 | 等异步状态到位 | `runtime_await_condition` | `{path,property,value,op,timeout_ms}` |
 | 性能 / 帧率 | `runtime_get_monitors`、`runtime_assert_perf` | — |
-| 截图（需用户同意） | `runtime_screenshot`、`runtime_screenshot_diff`、`runtime_screenshot_save` | `diff` 带参考图 + tolerance |
+| 截图（仅视觉需要，沿用任务已有明确授权） | `runtime_screenshot`、`runtime_screenshot_diff`、`runtime_screenshot_save` | `diff` 带参考图 + tolerance |
 | 设断点 | `dbg_set_breakpoints` | `{path,lines}` |
 | 停下后看栈 / 变量 / 单步 | `dbg_stack_trace`、`dbg_scopes`、`dbg_variables`、`dbg_step`、`dbg_continue` | — |
 | 找符号 / 定义 / 引用（比 grep 准） | `find_symbol`、`find_usages`、`project_search` | 全项目索引，不需要编辑器/LSP |

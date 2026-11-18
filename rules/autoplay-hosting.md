@@ -1,6 +1,6 @@
 # Rule: 托管（Autoplay）自动调试
 
-> 本规则是 `AGENTS.md`「验证」的展开。MCP 按会话激活、scene 必传等硬约束见 AGENTS.md；本文讲**托管怎么开、怎么验**。
+> 本规则是 `AGENTS.md`「调试与验证（代码优先）」的展开。MCP 按会话激活、scene 必传等硬约束见 AGENTS.md；本文讲**托管怎么开、怎么验**。
 
 托管（autoplay）让**玩家方**单位由 `PlayerAI` 自动行动（移动 + 攻击 + 技能/物品），用于无人值守跑完整场战斗，验证战斗、AI、回合、经验、胜负判定。敌方回合仍走原有敌方 AI，托管不改变任何规则或确定性契约。
 
@@ -45,7 +45,7 @@ SceneArgs.battle_args = {
 | **B1 就地**（默认，`Settings.battle_inline_mode=true`） | `main.gd` 实例化 `BattleSystem`，`SceneArgs.battle_args = {chapter, world, hosting}` | 3 秒后 `battle_finished` 信号 → `main.gd` `_exit_battle()`，不切场景 |
 | **B2 切场景** | `change_scene_to_file("res://scenes/Battle.tscn")` | 3 秒后 `change_scene_to_file(return_to_scene)` |
 
-**`scenes/Battle.tscn` 不能单独 `dbg_launch`**：它依赖 `SceneArgs.battle_args["chapter"]`，直接启动 chapter 为空会报错。调战斗一律先启动 `res://main.tscn`，再注入 `P` 键进战斗。
+**`scenes/Battle.tscn` 不能无参直启**：它依赖 `SceneArgs.battle_args["chapter"]`。优先 headless 夹具准备完整参数后实例化；需要 B1 集成时再启动 `res://main.tscn`，通过当前战斗入口函数进入，不注入 P 推进流程。
 
 ## 托管偏好（每单位，仅本场有效）
 
@@ -68,45 +68,30 @@ SceneArgs.battle_args = {
 
 未配置的单位退化为 `PlayerAI.default_pref()`（`{priorityTargetId:"", strategy:auto}`）。偏好**只存内存**，战斗结束即丢，不写存档。
 
-## 用 MCP 验证托管
+## 验证托管（先代码，后运行态）
 
-`dbg_launch` 不支持 CLI 参数，`main.gd` 入口又硬编码 `hosting:false`，所以 MCP 下要托管，按可操作性排序：
+1. 优先相关契约、`tools/battle_cli.gd` 或 `tools/run_simulations.gd` 验证规则、AI、回合和确定性；只有托管循环本身的问题才补对应场景夹具，不能用模拟器通过代替场景集成通过。
+2. 场景测试先准备完整 `SceneArgs.battle_args`，设置 `hosting:true` 后实例化战斗；测试配置与正常游戏设置隔离，不修改正常默认值。
+3. 确需 MCP 集成验证时，读取当前入口与节点路径，使用 `runtime_call_method` 调用战斗入口和托管流程方法（如 `set_hosting(active)`，并按实际状态触发自动阶段）；方法签名、前置条件以当前源码为准。函数可驱动就不点击托管按钮。
+4. 仅验证托管按钮点击 / P 输入处理本身时才模拟该输入。
 
-1. **战场 JSON 法**：准备一个 `"hosting": true` 的战场，从世界/地图编辑器进入 → 战斗一开就自动跑。
-2. **注入点击**：启动 `main.tscn` → 注入 `P` 进战斗 → `runtime_inject_input` 点击「开启托管」按钮（坐标易碎，仅临时用）。
-3. **临时测试脚本**：写一个 headless/临时场景，设好 `SceneArgs.battle_args` 后 instantiate `Battle.tscn`，用 `godot --headless --path . --script res://tests/...` 跑（见 `AGENTS.md` 的契约测试）。
-
-跑起来后验证：
-
-```text
-# 等 10–30 秒（托管逐单位 await 移动/攻击动画）
-mcp__godot__runtime_get_log({ "levels": ["error", "warning"] })   # 应为空
-mcp__godot__runtime_get_log()                                     # 找结束埋点
-```
-
-判定成功的日志（`battle.gd:_check_battle_end`，L1116）：
+用有超时的状态等待观察回合推进和结束，再断言胜负、回合、存活数或目标不变量；不要固定等 10–30 秒后查结束日志。`runtime_assert_screen_text` 可补验横幅，但不能替代战斗结果断言。
 
 ```text
-[battle] 胜利！回合数=N 存活玩家=M
-# 或
-[battle] 败北 回合数=N 存活敌方=M
+mcp__godot__runtime_get_log({"levels":["error","warning"],"since_seq":<本次基线 latest_seq>})
 ```
 
-同时屏幕 banner 为「胜利！」/「败北...」，可断言：
-
-```text
-mcp__godot__runtime_assert_screen_text({ "text": "胜利！" })
-```
+日志用于定位，始终带 `levels` 并按序号增量读取。
 
 **卡住不动的排查顺序**：
 
 1. `turn_director.hosting_active` 是否为 true（`dbg_scopes` 不可用时看按钮文案是否已变「关闭托管」）。
 2. 是否卡在 `_player_auto_act` 的 `await _tween_move`（动画/格子异常）。
-3. `PlayerAI.decide` 是否返回空决策（无路径/无目标）——看 `player_ai.gd` 的 L1 埋点或加临时 print。
+3. `PlayerAI.decide` 是否返回空决策（无路径/无目标）——通过代码断言 / 状态读取或必要的断点定位，日志仅辅助。
 4. 胜负是否已判定但 `_battle_ended` 已置位、循环提前退出。
 
 ## 约束
 
 - 托管只接管玩家方；不要在托管期间同时注入手动移动/攻击输入。
-- 托管不改规则、不改随机种子、不写存档，跑完可安全重开。
-- 验证优先日志 + `runtime_assert_*`；截图需先征得用户同意（见 @rules/mcp-debugging.md）。
+- 托管沿用原有规则与随机契约；测试使用隔离夹具 / 存档环境，不假定正常战斗会话不会自动保存。
+- 验证顺序与根 AGENTS.md 一致；截图只用于断言不足的视觉问题，沿用本任务已有明确授权（见 @rules/mcp-debugging.md）。

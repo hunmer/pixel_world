@@ -1,151 +1,113 @@
 ---
 name: godot-debug
-description: "pixel_world（Godot 4.7 / 2D）里凡是「把游戏跑起来看」「查报错/黑屏/没反应」「验证改完对不对」「看画面/像素」「进战斗 / 技能测试」「下断点」「截图」的任务，一律先读本 skill，走 godot MCP 桥接（dbg_launch → runtime_assert_*）。注意 `mcp__godot__*` 是**按会话启用**、默认不在工具表里，先按 §1 用 `mcp_connector_session_tools` 激活；`tool not found` ≠ 没装 godot MCP，不要改用 bash 跑 godot，也不要 print 后肉眼判断。"
+description: "pixel_world 的调试与验证流程：优先代码测试（契约/headless/CLI/自动模拟），其次函数或 API 驱动流程并自动断言；仅真实输入或视觉问题需要游戏交互。需要运行态、画面或断点时先读本 skill，再按权限激活 Godot MCP；纯逻辑测试无需 MCP。"
 ---
 
 # Godot 调试说明（pixel_world）
 
-> 目标：让"验证"变成一次可复现的 MCP 调用，而不是 `print` + 人眼。默认路径只有一条，照抄即可。
+> 以根 `AGENTS.md`「调试与验证（代码优先）」为准。目标是可复现的自动验收；日志用于定位，不能代替断言。
 
-## 0. 先判断：这个任务要不要把游戏跑起来？
+## 0. 先选验证层级
 
-| 任务形态 | 走哪里 |
+| 任务形态 | 首选方式 |
 | --- | --- |
-| 改 GDScript / 场景 / shader / 资源后要"看效果" | **本 skill**（MCP 桥接） |
-| 报错、崩溃、黑屏、点了没反应、卡住 | **本 skill**（`runtime_get_log` 最快） |
-| 问"现在游戏里是什么状态 / 某节点某属性是多少" | **本 skill**（`runtime_get_property` / 断言） |
-| 纯逻辑、确定性、JSON 契约（不需要画面） | 命令行 `godot --headless --path . --script res://tests/<name>_contract.gd` |
-| 只改文档 / 只读代码做解释 | 都不用跑 |
+| 纯逻辑、确定性、JSON、战斗规则、AI、回合流程 | 相关契约 / headless / CLI / 自动模拟 |
+| 场景、节点、异步流程可以由测试实例化并驱动 | 测试脚本调用函数并断言，不要求打开游戏 |
+| 测试无法覆盖的实际运行态、渲染、性能或场景集成问题 | MCP 启动目标场景，通过函数 / API 驱动并自动断言 |
+| 真实按键、鼠标命中、焦点、输入路由问题 | 只对目标输入链路使用模拟按键 / 点击，其余准备步骤仍用函数驱动 |
+| 纯视觉问题，状态断言不足以判定 | 必要的画面验证；截图要求见 §4 |
+| 仅文档或静态解释 | 不跑游戏 |
 
-判断标准：**要看运行态就走 MCP；只看静态数据就走 headless。** 两者都不要"print 后肉眼确认"。
+**代码测试 → 函数 / API 驱动 + 自动断言 → 必要的模拟输入。** 能由前一层覆盖，就不升级到后一层；缺入口时优先补最小可复用的测试或流程接口。
 
-## 1. 工具不在工具表里：先按会话激活
+默认测试入口：`python3 tools/run_contracts.py --test <name>`；单契约可用 `godot --headless --path . --script res://tests/<name>_contract.gd`。战斗复现可用 `tools/battle_cli.gd`，批量模拟用 `tools/run_simulations.gd`，参数见 `docs/test_automation.md` 与 `docs/battle_automation.md`。只选改动相关测试；`--changed` 先 `--dry-run`，若回退到全选则检查原因并缩小范围。环境不可执行不代表测试通过，应记录具体阻碍。
 
-连接 `json-godot` **已配置且已连接**（stdio/npx，scope=project `pixel_world`），但注入模式是 **「按会话启用」**：工具**默认不在工具表里**。2026-11-14 实测 `mcp_connector_session_tools({action:"status"})` = 已激活 **0** / 会话层隐藏 **285**。**`mcp__godot__*` 看不见 ≠ 没装 godot MCP**（也不代表连接坏了）——先激活再下结论。
+## 1. 仅需要 MCP 时按会话激活
 
-激活配方（`connectionKey` 固定 `json-godot`）：
+连接 key 为 `json-godot`，工具前缀为 `mcp__godot__`（双下划线）。工具默认按会话隐藏；`tool not found` 不等于未安装。
 
-```text
-mcp_connector_session_tools({action:"preview-activate", connectionKey:"json-godot", publicNames:["mcp__godot__dbg_launch", "mcp__godot__runtime_get_log", ...]})
-# ↑ 返回精确清单 + revision
-mcp_connector_session_tools({action:"activate", connectionKey:"json-godot", publicNames:[...], expectedRevision:<preview 返回>, ttlMinutes:30, confirmed:true})
-```
-
-`confirmed:true` 由激活方自行设置：**agent / team member / subagent 按任务需要自主激活，无需向 lead 申请或等用户点名**。激活在**下一次推理边界**生效，ttl 1–30 分钟，**不跨会话继承**：新会话、team 成员、subagent 都要在各自会话里重新激活一次。
-
-### 激活也只覆盖这三组
-
-`BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 决定哪 49 个能被激活：
-
-| 组 | 个数 | 干什么 |
-| --- | --- | --- |
-| `runtime_*` | 30 | 读活体状态、断言、注入输入、截图、多 peer 对拍 |
-| `dbg_*` | 15 | 启动 / 重启 / 断点 / 单步 / 栈 / 变量（DAP） |
-| `find_symbol` / `find_usages` / `project_search` / `example_snippet` | 4 | 项目索引与代码检索（不需要编辑器也不需要游戏） |
-
-**不在这三组里的（激活也拿不到，别试名字）**：`editor_*` 149 个（含 `editor_ping`、`editor_get_state`、`scene_*`、`node_*`、`resource_*`、`ui_*`、`project_*`、`inputmap_*`、`theme_*`、`tileset_*` 等）、`lsp`/`cslsp`、`cli`、`tabletop`、`csdap`、`vcs`、`assetgen`、`netcode`、`backend`、`processes`、`hearing`。这是刻意的取舍：把 149 个 `editor_*` 塞进 `BREAKPOINT_TOOLSETS` 会让 schema 体积翻三倍，且调试不需要它们。
-
-卡住的两种情况：
-
-- **`session_tools status` 显示激活 0 个** → 这是**默认态**，按上面配方激活；不要据此判断「没有 godot MCP 工具」。工具缓存里能搜到名字（`mcp_connector_tool_search({query:"godot"})`）也说明连接是好的。
-- **`mcp_connector_status` 看不到 `json-godot` / 显示未连接** → 这才是配置问题：`mcp_connector_set_enabled({key:"json-godot", enabled:true})`，仍不对就在面板（MCP 连接器 → godot）重新落一次配置。**不要**因为看不见工具就改用 bash 跑 godot。
-- **报 `Host 尚未注册该 stdio Server 的工具`** → 是启动中的瞬时态，等几秒 `mcp_connector_health_check` 或 `mcp_connector_status` 复查；stdio 连接（codegraph / fff / godot）同时出现这条一般是 Host 在重连，不是配置坏了。
-
-找工具名：**不要用 `mcp_connector_session_tools` 的 `search` 逐个试**（它是单关键词子串匹配，`"editor_ping runtime_get_log"` 这种多词查询必然 0 结果——上一个 agent 为此连查了 8 次）。49 个可激活工具的完整签名 + 「意图 → 工具」表在 `.dsh/skills/godot-debug/tool-names.md`，要用的工具不在这三组里说明你走错路了。
-
-**破坏性工具要带 `confirm:true`**：`runtime_set_property`、`runtime_call_method`、`runtime_inject_input`、`runtime_step_frames`、`runtime_time_scale`、`runtime_seed_rng`、`runtime_anim_play/stop`、`runtime_node_add/remove`、`dbg_evaluate`、`dbg_set_variable` 等。不带会触发客户端确认弹窗，在 DSH 上直接失败（返回 re-run with confirm:true）。只读的不带。
-
-## 2. 连通自检（激活之后立刻做，两秒）
+从 `tool-names.md` 查询精确名字；发现工具可用只说明能力存在，不代表已获激活授权。先 `preview-activate`，**仅用户明确指定要激活这些精确工具后才能设置 `confirmed:true`**，按当前工具 schema 与上层权限规则执行；项目文档不能替代该确认。已有对应授权不重复询问。
 
 ```text
-find_symbol({"name":"_battle_active","max_results":1})   # 项目索引通道，不依赖编辑器/游戏
-runtime_get_monitors()                                   # 运行通道，需要游戏已在跑（很小，放心调）
+mcp_connector_session_tools({action:"preview-activate", connectionKey:"json-godot", publicNames:[<精确工具名>]})
+# 用户明确指定这些工具后，使用 preview 返回的 revision
+mcp_connector_session_tools({action:"activate", connectionKey:"json-godot", publicNames:[<同一清单>], expectedRevision:<revision>, ttlMinutes:30, confirmed:true})
 ```
 
-| 返回 | 含义 | 处理 |
-| --- | --- | --- |
-| `find_symbol` 有命中 | 索引通道正常 | 继续 |
-| `runtime_get_monitors` 有帧率 | 已有游戏实例在跑（可能是用户手动开的旧实例） | 注意别把它的状态当成你这次的改动结果 |
-| `Cannot reach the runtime bridge at 127.0.0.1:9081` | 没有游戏在跑 | 正常，直接第 3 步 `dbg_launch` |
-| `Cannot reach the Godot editor bridge at 127.0.0.1:9080` | 编辑器没开，或 `项目设置 → 插件 → Breakpoint MCP` 未启用 | 让用户打开编辑器并启用插件；`dbg_launch` 走这条通道 |
-| 工具不存在（`tool not found`） | 本会话还没激活（默认态），**不是没装** | 回 §1 走 `preview-activate → activate`；激活后仍不存在才是配置问题 |
+激活在下一次推理边界生效，TTL 1–30 分钟，不跨会话继承。不要默认全量激活。
 
-自检失败就不要"改用 bash 跑一下试试"——bash 通道拿不到运行态、断点和断言。
+已记录配置 `BREAKPOINT_TOOLSETS=runtime,dap,knowledge`：`runtime_*` 30、`dbg_*` 15、知识检索 4（`find_symbol` / `find_usages` / `project_search` / `example_snippet`）。数量是历史配置快照，以当前工具发现及 schema 为准。`editor_*`、LSP、CLI 等其他组不在该配置内，不要反复试名字。
 
-## 3. 跑起来（`scene` 必传）
+`runtime_call_method`、`runtime_set_property`、`runtime_inject_input`、`dbg_evaluate`、`dbg_set_variable` 等修改状态的工具按 schema 传 `confirm:true`；该参数与连接器的 `confirmed:true` 不同。只对已授权的调试实验使用，避免覆盖真实存档、持久设置或用户正在玩的实例。
+
+## 2. 按需检查连通
+
+- 仅代码测试或静态检索不要求游戏在跑，不调用运行时探针。
+- 使用索引时可用 `find_symbol({name:"_battle_active",max_results:1})`；命中仅证明索引可用。
+- 需要运行态时用 `runtime_get_monitors` / `runtime_get_tree` 确认实例与场景，不能把旧实例当本次结果。
+- `Cannot reach the runtime bridge at 127.0.0.1:9081`：没有运行时实例；只有确需运行态时才进入 §3。
+- `Cannot reach the Godot editor bridge at 127.0.0.1:9080`：编辑器未开或插件未启用；检查连接状态，再请用户打开编辑器 / 启用插件。`editor_ping` 不在可激活组。
+- 工具缺失时检查会话可见性、连接状态和实际 schema，不以 shell 启动图形游戏绕过桥接。**本地 headless 测试是独立的正常测试入口，不受 MCP CLI 通道是否配置影响。**
+
+## 3. 必要时启动并通过函数推进
+
+`dbg_launch` 必传 `scene`，按实际目标选择，避免依赖默认主场景或启动配置。
+
+| 验证目标 | 场景 |
+| --- | --- |
+| 游戏会话 / 启动路由 | `res://scenes/Game.tscn` |
+| 世界生态、表现、B1 集成 | `res://main.tscn` |
+| 技能 / 物品场景自测 | `res://scenes/SkillTest.tscn` |
+| 地图编辑器 | `res://scenes/MapEditor.tscn` |
+| 标题 / 主菜单 | `res://scenes/Title.tscn` |
+| 契约测试 | 不用 `dbg_launch`，走 headless |
 
 ```text
 dbg_launch({"scene":"res://main.tscn","stop_on_entry":false})
 ```
 
-| 改动 | `scene` |
-| --- | --- |
-| `main.gd`、世界生态、表现层（天气/昼夜/光照/音效） | `res://main.tscn` |
-| 战棋：`scripts/scenes/battle.gd`、`scripts/battle/`、`scripts/systems/`、`scripts/core/`、`scripts/iso/` | `res://main.tscn` 然后注入 P 进 B1 |
-| 技能 / 物品 | `res://scenes/SkillTest.tscn` |
-| 地图编辑器 | `res://scenes/MapEditor.tscn` |
-| 标题 / 主菜单 | `res://scenes/Title.tscn` |
-| 契约测试 | 不启场景，走 headless |
-| 拿不准 | `res://main.tscn` |
+战斗先确认世界就绪、真实节点路径与入口签名，再通过 `runtime_call_method({path,method,args,confirm:true})` 调用入口（如 `_enter_battle()`）。预制战场使用对应流程接口并传完整参数；不要为推进流程注入 P 或点击托管按钮。
 
-进战斗（P 是 `main.gd` 里的裸键处理，`KEY_P = 80`，不在 InputMap）：
+`res://scenes/Battle.tscn` 依赖 `SceneArgs.battle_args["chapter"]`，不能无参直启；测试夹具可在实例化前准备完整 `SceneArgs`，无需绕世界输入。入口和状态字段以当前代码为准。
+
+仅验证 P 输入处理时才使用下面事件（历史实现 `KEY_P=80`，调用前确认当前输入代码）：
 
 ```text
 runtime_inject_input({"confirm":true,"event":{"kind":"key","keycode":80,"physical_keycode":80,"pressed":true}})
 runtime_inject_input({"confirm":true,"event":{"kind":"key","keycode":80,"physical_keycode":80,"pressed":false}})
 ```
 
-两个易错点：
+不要重复启动多个实例。`dbg_restart` 是重启，不是停止；结束时关闭本次测试实例，保留用户原有实例。脚本更新后先确认实例加载了新代码；若复现编辑器旧脚本缓存问题，再清理项目 `.godot/editor` 并重启编辑器，纯 headless / 文档改动不要求该操作。
 
-- **`res://scenes/Battle.tscn` 不能直启**：它读 `SceneArgs.battle_args["chapter"]`，只有 `main.gd` 的 `_enter_battle()` / `_enter_battlefield()` 会注入；直接 launch 拿到空 chapter 报错。
-- `dbg_launch` 不传 `scene` 只会进 `project.godot` 的默认主场景，等于在赌。
+## 4. 按验证层级验收
 
-## 4. 验收：断言优先，print 不算验证
+- 代码测试：相关断言通过、退出码成功，跳过 / 超时 / 执行失败不能算通过。
+- 运行态：断言覆盖目标行为及关键状态转换，并检查本次运行新增 error；既有错误要单列证据，不能直接忽略或归因于本次改动。
+- 日志与 L1 日志 / L2 断言 / L3 断点按定位需要选择，不要求每次全部使用。
 
-改完的"完成"定义 = **一条通过的断言 + `error` 日志为空**。
-
-| 想确认 | 工具 |
+| 目的 | 工具 |
 | --- | --- |
-| 某节点某属性 == 期望 | `runtime_assert_node_state({path, expect:{hp:0}, tolerance:0.01})` |
-| 节点存在 / 类型对 / 已消失 | `runtime_assert_scene_structure({expect:[{path:"...",type:"Sprite2D"},{path:"...",absent:true}]})` |
-| 屏幕上出现/消失某段文字 | `runtime_assert_screen_text({text:"...", present:true, regex:false})` |
-| 等异步状态到位 | `runtime_await_condition({path,property,value,op:"eq",timeout_ms:5000})` |
-| 运行日志（先看这个） | `runtime_get_log({"levels":["error","warning"]})` |
-| 增量日志 | `runtime_get_log({"since_seq":<上次 latest_seq>,"levels":["error"]})` |
-| 性能没退化 | `runtime_get_monitors()` → `runtime_assert_perf({baseline, tolerance})` |
+| 属性与节点状态 | `runtime_assert_node_state` |
+| 节点存在、类型、消失 | `runtime_assert_scene_structure` |
+| 屏幕文字 | `runtime_assert_screen_text` |
+| 异步状态到位 | `runtime_await_condition`（设超时，之后断言最终结果） |
+| 新增报错 | `runtime_get_log({levels:["error","warning"],since_seq:<本次基线>})` |
+| 性能 | `runtime_get_monitors` + `runtime_assert_perf`（相同条件基线） |
 
-- **`runtime_get_log` 不带 `levels` 会吐整个环形缓冲**（实测一次 130KB+，把上下文冲掉）。**永远**带 `levels`，并带上一次的 `latest_seq` 做增量。
-- **要算表达式 / 看私有字段：没有 `runtime_evaluate`**（运行时侧只有 `runtime_get_property` / `runtime_read_state` / `runtime_call_method`）。非求值不可时，`dbg_set_breakpoints` + `dbg_launch` 停住后 `dbg_evaluate({expression:"...","confirm":true})`——必须先 `stopped`，否则报 `not_stopped`。
-- **截图（`runtime_screenshot` / `runtime_screenshot_diff`）属侵入性手段**：先在代码里问一遍"断言判不了吗"，仍判不了再**征得用户同意**；同意后用 `runtime_screenshot_diff`（带参考图 + tolerance）而不是靠人眼比对。像素级回归才值得截图。
-- 截图/断言都基于**当前运行实例**；换了场景或重启过，要重新断言，不要复用旧的判断。
+`runtime_get_log` 永远带 `levels`，有 `latest_seq` 后增量读取，避免整环缓冲洪水。日志为空并不能证明功能正确。
 
-## 5. 断点（只在断言判不了时）
+截图仅在代码 / 状态断言不足以判定视觉问题时使用，沿用用户对当前任务已明确给予的截图授权，不逐验证点重复确认；缺少该授权时先说明必要性并取得同意。有参考图时用 `runtime_screenshot_diff` 与明确阈值；无参考图的视觉检查说明观察范围和局限，不伪称自动回归通过。截图不要求模拟点击，目标画面仍优先函数驱动。
 
-```text
-dbg_set_breakpoints({"path":"res://scripts/scenes/battle.gd","lines":[672]})   # 缓冲，等 launch 应用
-dbg_launch({"scene":"res://main.tscn"})                                      # + 注入 P
-dbg_stack_trace()                                                            # 命中后 state=stopped
-dbg_continue()                                                               # 放行
-```
+## 5. 断点仅用于进一步定位
 
-看变量：`dbg_scopes({"frame_id":0})` → `dbg_variables({"variables_ref":N})`。单步 `dbg_step({"kind":"over"})`。改活值 `dbg_set_variable` 是破坏性的，先问用户。
+先确认当前函数和行号，再设置 `dbg_set_breakpoints` 并通过函数驱动复现。命中 `state=stopped` 后依次 `dbg_stack_trace` → `dbg_scopes` → `dbg_variables`，按需 `dbg_step` / `dbg_continue`。
 
-行号会随重构漂移：设断点前用 `find_symbol` / `find_usages` / `project_search` 确认目标函数当前行号（这三个不需要编辑器，很快）。
+运行时没有 `runtime_evaluate`；优先 `runtime_get_property` / `runtime_read_state` / `runtime_call_method`。确需表达式求值时，暂停后使用 `dbg_evaluate({expression,confirm:true})`；未暂停会报 `not_stopped`。在已授权且可恢复的测试实例里改临时变量不重复请求许可；涉及真实存档、持久设置或超出授权范围的改动另行确认。
 
-## 6. 已知坑（按踩到频率）
+## 6. 已知坑与索引
 
-1. 工具名是 `mcp__godot__*`（**双下划线**）；写成点号 = tool not found。**先看本会话有没有激活**（`mcp_connector_session_tools({action:"status"})`）——激活 0 个是默认态，别当成「没有 godot MCP 工具」。
-2. 改了脚本但行为没变：删 `.godot/editor` 再重启编辑器；`dbg_restart` **不会**重新编译脚本。
-3. `GODOT_BIN` 的 CLI 通道不可用（`godot_run_project` / `godot_version` 不在 `BREAKPOINT_TOOLSETS` 三组内，激活也拿不到），调试一律走 `dbg_launch` + `runtime_*`。
-4. 多次 `dbg_launch` 会留下多个 `pixel_world` 窗口；截图/断言前先 `runtime_get_tree` 认准实例。
-5. 日志洪水：`!std::isfinite(p_size.x)`（`scene/gui/control.cpp:1527`）是项目里的 Control 尺寸 NaN 问题，会刷满 ring buffer；看日志先按 `levels:["error"]` + `since_seq` 过滤，别把它当成你刚改出来的。
-6. `game_hud_contract.gd` 在 HEAD 上本来就坏，别把它当回归。
-7. `editor_*`（含 `editor_ping`、`editor_screenshot`）没被注入；需要编辑器侧操作时让用户动手，不要反复试工具名。
-
-## 7. 深入索引（本文件不展开 49 个可激活工具，全在 tool-names.md）
-
-- `.dsh/skills/godot-debug/tool-names.md` — 可激活工具签名 + 「意图 → 工具」表 + 295 个全量名字（标注了哪些不在 `BREAKPOINT_TOOLSETS` 内）+ 不存在的名字清单
-- `rules/godot-tools-map.md` — 295 工具的分类地图（旧口径 298）+ 按会话激活配方；其中 editor/lsp 部分属于不在 `BREAKPOINT_TOOLSETS` 内、激活也拿不到的组
-- `rules/mcp-debugging.md` 完整调试流程、断点位置表、截图方案对比
-- `AGENTS.md`「场景（改哪跑哪）」与「验证」硬约束
-- `addons/breakpoint_mcp/CLAUDE.md` 桥接插件本身（端口 / 版本 / 配置 / `BREAKPOINT_TOOLSETS`）
+- `GODOT_BIN` 未配置指 MCP 的 CLI 组，不代表本机没有 Godot；本地测试可通过 runner `--godot <路径>` 指定可执行文件。
+- `!std::isfinite(p_size.x)`（`scene/gui/control.cpp:1527`）曾造成日志洪水；带 `levels` / `since_seq`，确认当前复现来源，不预设它与本次无关。
+- `game_hud_contract.gd` 已有修复记录，不再默认标为已知失败；以当前 manifest evidence 与本次结果为准。
+- `tool-names.md`：工具索引；`rules/godot-tools-map.md`：分类地图；`rules/mcp-debugging.md`：操作流程；`rules/autoplay-hosting.md`：托管验证。
+- 根 `AGENTS.md`「调试与验证（代码优先）」与「场景（仅在需要运行时验证时使用）」为共同策略来源；桥接实现见 `addons/breakpoint_mcp/CLAUDE.md`。

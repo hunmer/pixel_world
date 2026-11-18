@@ -106,7 +106,7 @@ cell_state / ecology_resolver / animal_behavior_registry 原生契约，经
 
 - **无独立 lint/格式化工具配置**（仓库无 `.gdformat`、`gdlint` 配置，无 CI 文件）。
 - GDScript 静态类型：脚本普遍使用类型标注（`-> void`、`: int`），strict 模式下新代码必须完整标注。
-- 质量主要靠：① 启动期 `_validate_ecosystem_config()`（配置校验，失败 abort），② 契约测试的 SHA-256 快照，③ MCP 调试桥的 `runtime_assert_*` 自动断言（AGENTS.md 要求：改代码后加 L1 日志 / L2 断言 / L3 断点验证，不要 `print` 后肉眼判断）。
+- 质量主要靠：① 启动期 `_validate_ecosystem_config()`（配置校验，失败 abort），② 契约测试的 SHA-256 快照，③ 与改动匹配的自动化测试；仅需运行态验证时再用 MCP `runtime_assert_*`，不要以 `print` 后肉眼判断代替验收。
 
 ## 质量风险（本次扫描 + handoff 待办）
 

@@ -101,9 +101,23 @@ func _run_b2() -> void:
 	battle._last_path_update_msec = -100
 	battle._update_hover_path(target)
 	battle._last_path_update_msec = -100
+	battle._update_hover_path(Vector2i(0, 1))
+	_expect(battle.range_overlay.threat_arrow_count() == 2,
+		"非当前站位的边缘格超出敌人原位射程，但移动后可攻击时必须显示连线")
+	battle._last_path_update_msec = -100
+	battle._update_hover_path(Vector2i.ZERO)
+	_expect(battle.range_overlay.threat_arrow_count() == 2,
+		"敌人原位射程外、但下回合移动后可攻击的边缘落点也必须显示连线")
+	var first_mov: int = enemy.stats.mov
+	var second_mov: int = second_enemy.stats.mov
+	enemy.stats.mov = 0
+	second_enemy.stats.mov = 0
+	battle._last_path_update_msec = -100
 	battle._update_hover_path(Vector2i.ZERO)
 	_expect(battle.range_overlay.threat_arrow_count() == 0,
-		"悬停不在任何敌方攻击范围内的可达格时不应显示威胁抛物线")
+		"敌人无法移动且原位打不到落点时应清除连线")
+	enemy.stats.mov = first_mov
+	second_enemy.stats.mov = second_mov
 	battle._last_path_update_msec = -100
 	battle._update_hover_path(target)
 	var target_screen: Vector2 = battle._b2_cell_to_screen(target.x, target.y)

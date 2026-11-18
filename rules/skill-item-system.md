@@ -70,16 +70,13 @@ unit[&"items"].append({ id = &"potion", uses = 3 })
 
 ## 自动化测试
 
-**纯逻辑自测**：`scenes/SkillTest.tscn` → `scripts/tests/test_skills.gd`（38 条 `_ok` 断言），覆盖数据加载、技能伤害/治疗/AOE、冷却递减、MP 扣减、buff 生效与到期、物品消耗/装备/buff 药水、AI 决策含技能/物品。
+优先执行相关契约 / headless 夹具，直接调用技能、物品、冷却与 AI 接口并断言结果；战斗流程复现优先 CLI / 自动模拟。测试入口见 `docs/test_automation.md`。
 
-```text
-mcp__godot__dbg_launch({ "scene": "res://scenes/SkillTest.tscn" })
-mcp__godot__runtime_get_log()
-```
+**历史场景自测**：`scenes/SkillTest.tscn` → `scripts/tests/test_skills.gd`，覆盖数据加载、伤害/治疗/AOE、冷却、MP、buff、物品和 AI。历史实现只打印汇总、不设置退出码且不自动退出；因此不能直接当作自动化测试通过的证据，也不要为了看汇总默认打开游戏。需要复用时先检查当前实现，使用能自动断言结果并正确退出的测试夹具；随机用例应固定种子或断言不变量。
 
-脚本只打印 `== 结果: N passed, M failed ==` 与 `[FAIL] ...`，**不设置退出码**；判定看日志里 failed 是否为 0。注意它会 `randomize()`，用例本身应容忍随机。
+仅场景集成无法由代码测试覆盖时，才按 `godot-debug` 启动对应场景，通过函数 / API 驱动并自动断言；读取日志必须带 `levels`，有序号后用 `since_seq` 增量读取。
 
-**托管实战**：没有 `BattleTest.tscn` 了。要跑整场战斗，按 @rules/autoplay-hosting.md 用 `main.tscn` 进战斗并开启托管（战场 JSON `"hosting": true` 最稳），观察敌方 AI 与玩家托管是否自动用技能/物品，战斗以 `[battle] 胜利！` / `[battle] 败北` 日志收尾。
+**托管实战**：按 @rules/autoplay-hosting.md 优先使用测试夹具或函数驱动开启托管，断言技能 / 物品使用与战斗结果，不以观察动画或结束日志代替验收。
 
 ## 已知坑
 

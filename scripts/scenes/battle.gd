@@ -1306,7 +1306,10 @@ func _update_hover_path(hover_cell: Vector2i) -> void:
 		var path := grid.find_path(selected_unit.position, hover_cell, selected_unit.moveType, selected_unit.stats.mov)
 		if not path.is_empty() and path.size() >= 2:
 			range_overlay.show_path(path, Color(0.25, 0.55, 1.0))   # 蓝
-			return
+		else:
+			# 当前站位也可能被敌方下回合攻击；无移动路径不能清掉威胁线。
+			range_overlay.clear_path()
+		return
 	range_overlay.clear_path()
 	range_overlay.clear_threat_arrows()
 
@@ -1314,12 +1317,14 @@ func _update_hover_path(hover_cell: Vector2i) -> void:
 ## —— 敌方危险预览与技能辅助范围（数据源 battle_threat_data.gd；钉住/全局两层） ——
 
 
-## 候选落点沿用现有攻击距离规则；每个能攻击该格的存活敌人各产生一条箭头。
+## 按敌方下回合移动后的完整射程预警，每个能攻击落点的存活敌人各产生一条线。
 func _update_threat_arrows(target: Vector2i) -> void:
 	if selected_unit.is_empty():
 		range_overlay.clear_threat_arrows()
 		return
-	var sources: Array = BattleThreatDataScript.threats_to(grid, _living_enemies(), selected_unit, target)
+	var sources: Array = BattleThreatDataScript.threats_to(
+		grid, _living_enemies(), selected_unit, target,
+		BattleThreatDataScript.DEFAULT_CRIT_THRESHOLD, true)
 	range_overlay.show_threat_arrows(sources, target)
 
 

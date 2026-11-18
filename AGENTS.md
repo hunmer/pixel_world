@@ -4,21 +4,21 @@
 
 ## 项目
 
-- Godot 4.7（GL Compatibility）/ Node2D 单体 2D 等距生态世界，内嵌回合制战棋；主场景 `res://main.tscn`，运行 `godot --path .`。
+- Godot 4.7（GL Compatibility）/ Node2D 单体 2D 等距生态世界，内嵌回合制战棋；主入口 `res://scenes/Game.tscn`，世界场景 `res://main.tscn`，运行 `godot --path .`。
 - 世界引擎集中在 `main.gd`。**不要往 `main.gd` 加分支**：新 biome / noise / surface / minimap 色 / weather tag 走 biome 模块 + `config/ecology/`。
 - 确定性契约：内容 ID、`stream_key`、legacy `placement_seed`；文件路径和显示名绝不能当随机种子。
-- 改代码后删 `.godot/editor` 再重启编辑器，否则跑旧脚本；tab 缩进，文件名 `snake_case.gd`。
-- 测试：`godot --headless --path . --script res://tests/<name>_contract.gd`；战棋自测跑 `res://scenes/SkillTest.tscn`。
+- 运行态验证先确认已加载新代码；若出现编辑器旧脚本缓存问题，再清理 `.godot/editor` 并重启编辑器，纯 headless / 文档改动无需此步骤；tab 缩进，文件名 `snake_case.gd`。
+- 测试优先 `python3 tools/run_contracts.py --test <name>`，单契约可用 `godot --headless --path . --script res://tests/<name>_contract.gd`；`res://scenes/SkillTest.tscn` 为历史场景自测入口，自动验收限制见 `rules/skill-item-system.md`。
 
 ## Godot MCP（按会话激活，不是常驻）
 
-- **要跑游戏 / 查报错 / 验证改动 / 看画面 / 进战斗 / 下断点 → 先读 skill `godot-debug`**（`.dsh/skills/godot-debug/SKILL.md`）：激活步骤、场景表、断言验收阶梯、断点链路、已知坑都在里面；工具签名与「意图 → 工具」表在 `tool-names.md`。
+- **需要游戏运行态 / 画面 / 断点验证 → 先读 skill `godot-debug`**（`.dsh/skills/godot-debug/SKILL.md`）：按代码测试、函数驱动、交互验证的顺序选择方式；激活步骤、断言阶梯、断点链路与已知坑见该 skill，工具签名及「意图 → 工具」表见 `tool-names.md`。纯逻辑、契约测试和静态代码检查按项目测试入口执行，不要求先激活 Godot MCP。
 - 命名空间 `mcp__godot__*`（**双下划线**）。连接 `json-godot` **已配置且已连接**（stdio/npx、scope=project `pixel_world`、`BREAKPOINT_TOOLSETS=runtime,dap,knowledge`），但注入模式是 **「按会话启用」**：**工具默认不在工具表里**（2026-11-14 实测 `session_tools status` = 已激活 0 / 会话层隐藏 285）。**未激活直接调用必然 `tool not found`——这不等于没装 godot MCP，也不允许因此改用 bash 跑 godot。**
-- 用前先激活（完整配方见 `rules/godot-tools-map.md`）：① `mcp_connector_session_tools({action:"preview-activate", connectionKey:"json-godot", publicNames:["mcp__godot__dbg_launch", ...]})` → ② 按返回的 revision 直接 `{action:"activate", connectionKey:"json-godot", publicNames:[...], expectedRevision:<preview 返回>, ttlMinutes:30, confirmed:true}`。**agent / team member / subagent 都可按任务需要自主决定激活哪些工具并自行设置 `confirmed:true`，无需向 lead 申请或等用户点名**。激活在**下一次推理边界**生效，且**不跨会话继承**：新会话与 team 成员在各自会话里重新激活即可。
+- 用前先激活（完整配方见 `rules/godot-tools-map.md`）：① `mcp_connector_session_tools({action:"preview-activate", connectionKey:"json-godot", publicNames:["mcp__godot__dbg_launch", ...]})` → ② 取得对应工具激活授权后，按返回的 revision `{action:"activate", connectionKey:"json-godot", publicNames:[...], expectedRevision:<preview 返回>, ttlMinutes:30, confirmed:true}`。仅在用户明确指定激活这些精确工具后设置 `confirmed:true`，遵循当前工具 schema 与上层权限规则；已有对应授权不重复询问。激活在**下一次推理边界**生效，且**不跨会话继承**：新会话与 team 成员在各自会话里重新激活即可。
 - 激活只覆盖 `BREAKPOINT_TOOLSETS` 里的组（`runtime_*`、`dbg_*`、`find_symbol` / `find_usages` / `project_search` / `example_snippet`）。`editor_*` 149 个（含 `editor_ping`、`editor_get_state`、`scene_*`、`node_*`、`resource_*`、`ui_*`、`project_*`、`inputmap_*`、`theme_*`、`tileset_*`）、lsp/cslsp、cli、vcs、tabletop、assetgen、netcode、backend、csdap **没纳入这组**：激活也拿不到，别试名字、也别改用 bash 跑 godot——改用 `runtime_*` / `dbg_*` 的等价手段，或让用户在编辑器里操作。
 - 找工具名**不要用 `mcp_connector_session_tools({action:"search"})` 逐个试**（单关键词子串匹配，多词必空；`mcp_connector_tool_search` 只能看缓存里有什么名字），查 `.dsh/skills/godot-debug/tool-names.md` 一次拿全，再按 publicName 激活。
 - 自检：`find_symbol`（索引通道，不依赖编辑器）+ `runtime_get_monitors`（有游戏在跑才有返回）；`Cannot reach ... 9081` = 还没 `dbg_launch`，属正常；`Cannot reach ... 9080` = 编辑器没开或 Breakpoint MCP 插件未启用。
-- `dbg_launch` 必传 `scene`，省略只会进默认主场景。CLI 通道（`GODOT_BIN`）未配置，调试全走编辑器桥接（`dbg_*` / `runtime_*`）。
+- `dbg_launch` 必传 `scene`，省略只会进默认主场景。MCP CLI 通道（`GODOT_BIN`）未配置仅影响 MCP `godot_*` 工具；本地 headless / runner 测试照常使用，图形运行态调试走编辑器桥接（`dbg_*` / `runtime_*`）。
 - `runtime_get_log` **必须带 `levels`**，否则吐整个环形缓冲（实测 130KB+）。
 
 ## 调试与验证（代码优先）
@@ -39,14 +39,15 @@
 | 地图编辑器 | `res://scenes/MapEditor.tscn` |
 | 标题 / 主菜单 | `res://scenes/Title.tscn` |
 | 契约测试 | 不用 scene，headless 命令行跑 |
-| 拿不准 | `res://main.tscn` |
+| 会话 / 启动路由 | `res://scenes/Game.tscn` |
+| 拿不准 | 先明确验证目标，不默认启动游戏 |
 
 ## 文档索引
 
 - @claude/overview.md — 架构总览；@claude/conventions.md — 命令 / 规范 / 禁忌
 - @rules/godot-tools-map.md — godot 工具分类地图 + **按会话激活配方**（全集 295，旧口径 298；`BREAKPOINT_TOOLSETS=runtime,dap,knowledge` 决定哪 49 个可激活）
-- skill `godot-debug` — 调试 / 验证前必读：按会话激活步骤、可激活工具清单、场景表、断言阶梯、坑
+- skill `godot-debug` — 运行态 / 画面 / 断点验证前必读：按会话激活步骤、可激活工具清单、场景表、断言阶梯、坑
 - @rules/mcp-debugging.md — MCP 调试流程 / 断点 / 已知坑
-- @rules/image-viewing.md — 图片查看；@rules/autoplay-hosting.md — 托管自动战斗
+- @rules/autoplay-hosting.md — 托管自动战斗；截图约束见 @rules/mcp-debugging.md
 - @rules/skill-item-system.md — 技能 / 物品 / MP / 冷却
 - 本地godot文档大全 - F:\godot-docs-html-stable

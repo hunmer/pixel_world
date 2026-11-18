@@ -38,8 +38,7 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 
 来自历史 HANDOFF（已删，坑仍真实存在），调试时极易踩：
 
-> `dbg_restart` **不会重新编译脚本**。改完代码后必须清 `.godot/editor` 缓存并重启编辑器，否则跑的是旧脚本。
-> 等价操作：删除项目下 `.godot/editor` 目录，然后重开 Godot 编辑器。
+> 运行态验证先确认加载了新代码；若出现编辑器仍使用旧脚本的问题，再清理项目 `.godot/editor` 并重启编辑器。`dbg_restart` 只是重启运行实例，不能作为已加载新脚本的证据。纯 headless / 文档改动不要求清缓存或重启编辑器。
 
 ## 测试
 
@@ -58,8 +57,8 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 - 已知状态（两行分列台账，历史不改写）：
   - 2026-11-15 全量基线（`tools/run_contract_baseline.sh`）：62/72 通过，`ui` 红于当日的 `map_editor.gd` 直建控件。
   - 2026-11-16 实测：`ui` 复绿（3 连过 exit=0，根因已在后续修复中消除）；`map_editor_ui` 仍红（当日实测 exit=1）。现 manifest 口径：known-fail 4（`map_editor_ui`/`battle_action_chain`/`battle_presentation_hooks`/`isometric_view`）+ environment-skip 5（`sunlight_3d_gl`/`user_asset_source_live`/`action_anim`/`immersive_battle_camera`/`world_map_overlay`）+ pass 71，详见 `testing-and-quality.md` 状态表。
-- **只跑修改过的测试，不盲目跑全量**（AGENTS.md）：`python3 tools/run_contracts.py --changed`（git 变更 → 引用闭包影响分析，映射不到就保守全选）。首跑 headless 含资源导入，耗时偏长属正常（runner 默认先 `--import` 预热）。
-- **代码测试 > 截图**：调试时优先用断言 / 日志，不擅自截图（历史 HANDOFF 明示约束）。验证等级：L1 日志 / L2 断言 / L3 断点 + `runtime_assert_*` 自动验证，不要 `print` 后肉眼判断（AGENTS.md）。
+- **只跑改动相关测试，不盲目跑全量**（AGENTS.md）：先 `python3 tools/run_contracts.py --changed --dry-run` 预览；映射不到回退全选时检查原因，改用明确的 `--test` / `--group` 缩小范围。首跑 headless 含资源导入，耗时偏长属正常（runner 默认先 `--import` 预热）。
+- **验证优先级（代码优先）**：能由单元 / 契约 / headless / CLI / 自动模拟测试覆盖时，先跑相关代码测试；其次通过函数或 API 驱动流程并自动断言；只有真实输入、焦点、命中区域或视觉表现无法由前两者覆盖时，才进行必要的游戏内交互验证。运行态诊断才走 Godot MCP；截图是可选且需用户明确要求或同意的视觉手段。测试范围限于改动相关项，勿盲目全量运行。
 
 ## 代码风格
 
@@ -110,9 +109,9 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 
 ## 调试（MCP 桥 / Panku 控制台）
 
-- **MCP 工具按会话激活**（AGENTS.md）：`mcp_connector_session_tools` preview-activate → activate `confirmed:true`（`confirmed:true` 由激活方自行设置，member 无需向 lead 申请；`connectionKey: json-godot`，ttl 1–30 分钟，下一轮推理生效，不跨会话继承）。全集 295，其中 49 个可激活。工具地图见 `rules/godot-tools-map.md`；**不要用 `search` 找工具名**，查该文或 `tool-names.md`。
-- 会话开头自检用 `find_symbol` + `runtime_get_monitors`；**不要用 `editor_ping`**（不在 `runtime,dap,knowledge` 三组内，激活也拿不到，`tool not found` 会误判成「没装」）。9080 不通 = 编辑器没开或插件未启用（由用户确认）。
-- 启动调试：`dbg_launch({scene: "res://main.tscn"})`（**必须传 scene**，省略只会进默认主场景）。场景路由表见 AGENTS.md（改哪跑哪）。
+- **MCP 工具按会话激活**（AGENTS.md）：`mcp_connector_session_tools` preview-activate → activate `confirmed:true`（仅在用户明确指定激活这些精确工具后设置 `confirmed:true`，遵循当前工具 schema 与上层权限规则；已有对应授权不重复询问；`connectionKey: json-godot`，ttl 1–30 分钟，下一轮推理生效，不跨会话继承）。全集 295，其中 49 个可激活。工具地图见 `rules/godot-tools-map.md`；**不要用 `search` 找工具名**，查该文或 `tool-names.md`。
+- 仅在需要 MCP 时按需自检用 `find_symbol` + `runtime_get_monitors`；**不要用 `editor_ping`**（不在 `runtime,dap,knowledge` 三组内，激活也拿不到，`tool not found` 会误判成「没装」）。9080 不通 = 编辑器没开或插件未启用（由用户确认）。
+- 启动调试：`dbg_launch({scene: "res://main.tscn"})`（**必须传 scene**，省略只会进默认主场景）。仅需运行态时使用，场景路由表见 AGENTS.md。
 - 编辑器桥 `127.0.0.1:9080`（`BREAKPOINT_BRIDGE_PORT` 覆盖）；运行时桥 `9081`（**单实例**，已有游戏在跑再启动会绑定失败）。
 - 游戏内 `~` 呼出 **Panku REPL**（autoload `Panku`）：`dbg.*` 命令集见 `scripts/debug_console_commands.gd`；新命令 = 对象公共方法 + `_HELP_方法名` 常量 + `Panku.gd_exprenv.register_env` 注册。
 

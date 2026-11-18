@@ -12,12 +12,12 @@ Pixel World 是一个 **Godot 4.7.2（GL Compatibility）/ Node2D** 单体 2D �
 
 - **运行**：`godot --path .`。本机（macOS）`/Applications/Godot.app/Contents/MacOS/Godot`（Windows 历史路径 `D:/Godot/Godot_v4.7.2-stable_win64.exe`；console 版 stdout 全缓冲：管道无输出 ≠ 没输出）。主场景 `res://scenes/Game.tscn`（战旗会话入口）；`config/startup.cfg` 可让 F5 直跳最近场景。
 - **测试**：默认入口 `python3 tools/run_contracts.py`（manifest 驱动 80 契约 + 2 探针；当前口径 **pass 75 / known-fail 0 / env-skip 5**——2026-11-17 五项 known-fail 全部修复清零，依据见 manifest evidence）；单契约直跑 `godot --headless --path . --script res://tests/<name>_contract.gd`；批量模拟 `tools/run_simulations.gd`（详见 `docs/test_automation.md` 与 `claude/testing-and-quality.md`）；战棋自测跑 `scenes/SkillTest.tscn`（44/44）。**地形测试用固化 SHA-256 快照检测回归** —— 改确定性会挂。素材清单生成器用 `node --test`。
-- **编辑器缓存坑**：改代码后必须删 `.godot/editor` 目录再重启编辑器，否则跑旧脚本。tab 缩进；文件名 `snake_case.gd`；顶部带 `## file.gd — 职责` 注释。
+- **编辑器缓存坑**：运行态验证先确认新代码已加载；出现旧脚本缓存问题时再清理 `.godot/editor` 并重启编辑器，纯 headless / 文档改动无需此步骤。tab 缩进；文件名 `snake_case.gd`；顶部带 `## file.gd — 职责` 注释。
 - **不要往 `main.gd` 加分支**：新 biome / noise / surface / minimap 色 / weather tag 一律走 biome 模块 + 配置 + community；新内容用 `config/ecology/`，**禁用 `legacy_bundles.json` 与 `metadata.legacy_placement_seed`**。
 - **确定性契约**：内容 ID / `stream_key` / legacy `placement_seed` 是存档/世界契约；文件路径与显示名绝不能当随机种子；重排 manifest / 改稳定 ID 需 world version 迁移。
 - **战棋双模式**：`Settings.battle_inline_mode`（默认 true）切 B1/B2；JSON 战场固定 B2。改 `main.gd` 遵守"新增不修改，分支注入"：B1 逻辑一律 `if _battle_active:` 前置短路。战斗结算与表现分离：`battle_action_resolver.gd` 是共享结算内核，勿在演出层复写结算。
 - **视角只支持 4 正交角度**（0/90/180/270，`isometric_view.gd`）：素材其余角度有拼缝，勿放开连续角度。
-- **MCP 调试按会话激活**（见 `AGENTS.md`）：godot 工具**默认不在工具表里**（注入模式「按会话启用」，实测激活 0 / 隐藏 285），先 `mcp_connector_session_tools` preview-activate → activate（`confirmed:true` 由激活方自行设置，member 无需向 lead 申请）；`tool not found` ≠ 没装 godot MCP，别改用 bash 跑 godot。自检用 `find_symbol` + `runtime_get_monitors`（`editor_ping` 不在可激活组）；`dbg_launch` 必传 `scene`；验证用 `runtime_assert_*`，不要 `print` 肉眼判断。
+- **MCP 运行态调试按会话激活**（见 `AGENTS.md`）：先选代码测试；确需运行态时再激活对应 Godot 工具。工具默认不在工具表里，按 `mcp_connector_session_tools` preview-activate → activate；`tool not found` ≠ 没装 MCP。`dbg_launch` 必传 `scene`；运行态验证通过函数/API 控制并用 `runtime_assert_*` 自动验收，不要 `print` 后肉眼判断。
 - **UI 走 DESIGN.md + 组件库**：新界面一律用 `ui/` 的 Pixel* 组件（22 个）+ `ComponentTheme` token，禁裸数字样式值 / 自建 StyleBox / 绝对定位 / 横向滚动（规范见根 `DESIGN.md`）；`tests/ui_contract.gd` 静态扫描业务脚本禁直建 `Button/CheckButton/OptionButton.new()`。
 - **`story/` 是目标态设计 bible**（13 职业/27 技能/25 道具/15 章），运行时事实是 `data/` 的 8/8/8 + 6 战场 —— 勿混用；差距与推进顺序见 `docs/roadmap.md` 与 `docs/gameplay_gap.md`。
 
