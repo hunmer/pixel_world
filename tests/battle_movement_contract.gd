@@ -131,6 +131,18 @@ func _run_b2() -> void:
 		"进入移动后行动菜单时应继续显示落点威胁")
 	var sprite: UnitSprite3D = battle._unit_sprites[player.id]
 	_expect_unit_facing_matches_last_step(sprite, "B2")
+	# 临时扩大契约单位的普攻射程，直接验证移动后落点的敌人闪烁集合与清理。
+	var original_attack_range: Array = player.attackRange
+	player.attackRange = [1, 3]
+	battle._update_attack_preview_targets(target)
+	var enemy_sprite: UnitSprite3D = battle._unit_sprites[enemy.id]
+	var second_enemy_sprite: UnitSprite3D = battle._unit_sprites[second_enemy.id]
+	_expect(enemy_sprite.is_attack_preview_active() and second_enemy_sprite.is_attack_preview_active(),
+		"移动后落点进入武器射程的敌人应启用闪烁预览")
+	battle._clear_attack_preview_targets()
+	_expect(not enemy_sprite.is_attack_preview_active() and not second_enemy_sprite.is_attack_preview_active(),
+		"落点预览清除后敌人闪烁状态必须清空")
+	player.attackRange = original_attack_range
 	# 浏览技能面板不能提交移动；Esc 必须同时恢复占位、立绘和可移动状态。
 	var skill_buttons: Array[Node] = battle.battle_ui.menu_container.find_children("*", "Button", true, false)
 	var opened_skill: bool = false

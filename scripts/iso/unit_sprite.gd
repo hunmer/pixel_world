@@ -24,6 +24,8 @@ var _head_y: float = _VISIBLE_TOP_FALLBACK
 var _hover_marker: Node3D
 var _hover_material: StandardMaterial3D
 var _hover_phase := 0.0
+var _attack_preview_active := false
+var _attack_preview_phase := 0.0
 ## 上次头顶锚点的立绘签名；换姿态后只更新伤害数字和指针位置。
 var _hp_bar_y_key := ""
 ## 常驻血条显隐：战斗中隐藏（受击改用 pixelfx 演出），退出战斗恢复。
@@ -225,6 +227,14 @@ func _build_name_label(u: Dictionary) -> String:
 func _process(delta: float) -> void:
 	_update_hp_depth()
 	_track_camera_yaw()
+	if _attack_preview_active and not bool(unit.get(&"isDead", false)):
+		_attack_preview_phase += delta * TAU * 4.0
+		var pulse := 0.5 + 0.5 * sin(_attack_preview_phase)
+		var base := 0.58 if bool(unit.get(&"hasActed", false)) else 1.0
+		portrait.modulate = Color(base, base * (0.28 + pulse * 0.48), base * (0.28 + pulse * 0.48), 1.0)
+	elif portrait != null:
+		var base := 0.58 if bool(unit.get(&"hasActed", false)) else 1.0
+		portrait.modulate = Color(base, base, base, 1.0)
 	if _hover_marker != null and _hover_marker.visible:
 		_hover_phase += delta * TAU
 		_hover_marker.position.y = _head_y + 0.32 + sin(_hover_phase) * 0.06
@@ -233,6 +243,23 @@ func _process(delta: float) -> void:
 			_hover_marker.rotation.y = camera.global_rotation.y
 		if bool(unit.get(&"isDead", false)):
 			_hover_marker.visible = false
+
+
+## 攻击预览目标的轻量红色闪烁；使用 self_modulate 与行动灰度 modulate 解耦。
+func set_attack_preview(value: bool) -> void:
+	value = value and not bool(unit.get(&"isDead", false))
+	if _attack_preview_active == value:
+		return
+	_attack_preview_active = value
+	if _attack_preview_active:
+		_attack_preview_phase = 0.0
+	elif portrait != null:
+		var base := 0.58 if bool(unit.get(&"hasActed", false)) else 1.0
+		portrait.modulate = Color(base, base, base, 1.0)
+
+
+func is_attack_preview_active() -> bool:
+	return _attack_preview_active
 
 
 ## 复用体素路径箭头，立起后尖端朝下；只在第一次悬浮时创建。

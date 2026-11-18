@@ -104,6 +104,8 @@ var mode: int = Mode.IDLE
 var selected_unit: Dictionary = {}
 var current_move_range: Dictionary = {}   # { "x,y" -> cost }
 var current_attack_tiles: Dictionary = {} # { "x,y" -> true }
+## 当前移动落点预览可攻击的敌方单位 ID。
+var _attack_preview_ids: Dictionary = {}
 var cursor_pos: Vector2i = Vector2i.ZERO
 var cursor_visible := false
 # 可撤销移动：移动完成后弹出菜单期间记录「移动前位置」，按 ESC 取消移动时把单位送回。
@@ -1336,6 +1338,7 @@ func _on_tile_click(x: int, y: int) -> void:
 # 选中 & 范围高亮
 # ============================================================
 func _select_unit(u: Dictionary) -> void:
+	_clear_attack_preview_targets()
 	selected_unit = u
 	mode = Mode.UNIT_SELECTED
 	var res: Dictionary = BattleThreatDataScript.unit_ranges(grid, u)
@@ -1349,6 +1352,43 @@ func _clear_range_highlight() -> void:
 	range_overlay.clear_range_highlight()
 	current_move_range.clear()
 	current_attack_tiles.clear()
+	_clear_attack_preview_targets()
+
+
+func _clear_attack_preview_targets() -> void:
+	for unit_id: Variant in _attack_preview_ids.keys():
+		var sprite := _unit_sprites.get(unit_id) as UnitSprite3D
+		if is_instance_valid(sprite):
+			sprite.set_attack_preview(false)
+	_attack_preview_ids.clear()
+
+
+func _update_attack_preview_targets(target: Vector2i) -> void:
+	var preview_targets: Dictionary = {}
+	if selected_unit.is_empty() or mode not in [Mode.UNIT_SELECTED, Mode.MENU]:
+		_clear_attack_preview_targets()
+		return
+	if mode == Mode.UNIT_SELECTED and not current_move_range.has("%d,%d" % [target.x, target.y]):
+		_clear_attack_preview_targets()
+		return
+	var reach: Array = ProfessionData.unit_attack_range(selected_unit)
+	for enemy: Dictionary in _living_enemies():
+		var distance: int = GridSystem.distance(target, enemy[&"position"])
+		if distance < int(reach[0]) or distance > int(reach[1]):
+			continue
+		var unit_id: Variant = enemy.get(&"id", &"")
+		preview_targets[unit_id] = true
+	for unit_id: Variant in _attack_preview_ids.keys():
+		if preview_targets.has(unit_id):
+			continue
+		var old_sprite := _unit_sprites.get(unit_id) as UnitSprite3D
+		if is_instance_valid(old_sprite):
+			old_sprite.set_attack_preview(false)
+	for unit_id: Variant in preview_targets.keys():
+		var sprite := _unit_sprites.get(unit_id) as UnitSprite3D
+		if is_instance_valid(sprite):
+			sprite.set_attack_preview(true)
+	_attack_preview_ids = preview_targets
 
 
 ## hover 路径指示：选中单位时，按 hover 格类型画路径——
@@ -1366,10 +1406,16 @@ func _update_hover_path(hover_cell: Vector2i) -> void:
 	if selected_unit.is_empty() or mode != Mode.UNIT_SELECTED:
 		range_overlay.clear_path()
 		range_overlay.clear_threat_arrows()
+		_clear_attack_preview_targets()
 		return
 	var key := "%d,%d" % [hover_cell.x, hover_cell.y]
+	if current_move_range.has(key):
+		_update_attack_preview_targets(hover_cell)
+	else:
+		_clear_attack_preview_targets()
 	var hover_unit := grid.unit_at(hover_cell.x, hover_cell.y)
 	if not hover_unit.is_empty() and hover_unit.faction != &"player":
+		_clear_attack_preview_targets()
 		var stand := _find_attack_stand(hover_cell)
 		if stand.x >= 0:
 			var atk_path := grid.find_path(selected_unit.position, stand, selected_unit.moveType, selected_unit.stats.mov)
@@ -1515,6 +1561,7 @@ func _perform_move(u: Dictionary, target: Vector2i) -> void:
 	var path := grid.find_path(u.position, target, u.moveType, u.stats.mov)
 	if path.is_empty() or path.size() <= 1:
 		battle_ui.open_unit_menu(u, target, from_pos)
+		_update_attack_preview_targets(target)
 		return
 	var us: UnitSprite3D = _unit_sprites[u.id]
 	Sfx.play_step(StringName(grid.tile_at(target.x, target.y).get(&"type", &"plain")))
@@ -1527,6 +1574,7 @@ func _perform_move(u: Dictionary, target: Vector2i) -> void:
 		u.hasMoved = true
 		us.update_state()
 		battle_ui.open_unit_menu(u, target, from_pos)
+		_update_attack_preview_targets(target)
 		_update_threat_arrows(target)
 	)
 
