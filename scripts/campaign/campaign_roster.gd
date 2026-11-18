@@ -14,6 +14,7 @@ const ItemDataScript := preload("res://scripts/core/items.gd")
 const CampaignConfigScript := preload("res://scripts/campaign/campaign_config.gd")
 const TerrainDataScript := preload("res://scripts/core/terrain.gd")
 const ProfessionDataScript := preload("res://scripts/core/professions.gd")
+const EquipmentDataScript := preload("res://scripts/core/equipment.gd")
 
 
 ## 从首关战场确定性重建初始队伍。
@@ -271,14 +272,19 @@ static func _absorb_final(unit: Dictionary, final_unit: Dictionary) -> void:
 		for sid: Variant in final_skills:
 			skills_out.append(StringName(String(sid)))
 		unit["skills"] = skills_out
+	# 装备槽随终局吸收（深拷贝，与 weapon 同口径；battle 内装备不被消耗/更换，
+	# 这里保底保证战场上发生的装卸能回流档内）。
+	var final_equipment: Variant = final_unit.get("equipment")
+	if final_equipment is Dictionary and not (final_equipment as Dictionary).is_empty():
+		unit["equipment"] = (final_equipment as Dictionary).duplicate(true)
 
 
 ## Hub 归一化（对传入单位原地生效，调用方负责传副本）：
-## 满 HP/MP、复活、清行动标记/增益/技能冷却。
+## 满 HP/MP（容量=base+装备）、复活、清行动标记/增益/技能冷却。
 static func _normalize_hub_unit(unit: Dictionary) -> void:
 	var stats: Dictionary = unit.get("stats", {})
-	unit["hp"] = int(stats.get("hp", unit.get("hp", 1)))
-	unit["mp"] = int(stats.get("mp", unit.get("mp", 0)))
+	unit["hp"] = EquipmentDataScript.capacity_hp(unit) if int(stats.get("hp", 0)) > 0 else int(unit.get("hp", 1))
+	unit["mp"] = EquipmentDataScript.capacity_mp(unit) if int(stats.get("mp", 0)) > 0 else int(unit.get("mp", 0))
 	unit["isDead"] = false
 	unit["hasMoved"] = false
 	unit["hasActed"] = false

@@ -119,7 +119,7 @@ static func preview(caster: Dictionary, target: Dictionary, skill_id: StringName
 			res[&"hp_delta"] = -_skill_damage(caster, target, sk)
 			res[&"desc"] = "伤害 ~%d" % int(res[&"hp_delta"] * -1)
 		&"heal":
-			var max_hp: int = int(target[&"stats"][&"hp"])
+			var max_hp: int = EquipmentData.capacity_hp(target)
 			var heal_amt: int = int(sk[&"power"]) + _heal_bonus(caster)
 			res[&"hp_delta"] = mini(heal_amt, max_hp - int(target[&"hp"]))
 			res[&"desc"] = "治疗 ~%d" % heal_amt
@@ -157,7 +157,7 @@ static func execute(caster: Dictionary, targets: Array, skill_id: StringName) ->
 			_apply_damage_to_targets(caster, targets, sk, result)
 		&"heal":
 			for t in targets:
-				var max_hp: int = int(t[&"stats"][&"hp"])
+				var max_hp: int = EquipmentData.capacity_hp(t)
 				var amt: int = int(sk[&"power"]) + _heal_bonus(caster)
 				var before: int = int(t[&"hp"])
 				t[&"hp"] = mini(max_hp, before + amt)

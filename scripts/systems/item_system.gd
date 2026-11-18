@@ -74,11 +74,11 @@ static func preview(user: Dictionary, target: Dictionary, item_id: StringName) -
 	var res: Dictionary = { id = item_id, name = idef[&"name"], type = idef[&"type"], effect = idef[&"effect"] }
 	match idef[&"effect"]:
 		&"heal_hp":
-			var max_hp: int = int(target[&"stats"][&"hp"])
+			var max_hp: int = EquipmentData.capacity_hp(target)
 			res[&"hp_delta"] = mini(int(idef[&"power"]), max_hp - int(target[&"hp"]))
 			res[&"desc"] = "回 HP ~%d" % int(idef[&"power"])
 		&"heal_mp":
-			var max_mp: int = int(target[&"stats"].get(&"mp", 0))
+			var max_mp: int = EquipmentData.capacity_mp(target)
 			res[&"mp_delta"] = mini(int(idef[&"power"]), max_mp - int(target.get(&"mp", 0)))
 			res[&"desc"] = "回 MP ~%d" % int(idef[&"power"])
 		&"damage":
@@ -115,12 +115,12 @@ static func execute(user: Dictionary, targets: Array, item_entry: Dictionary) ->
 			continue
 		match idef[&"effect"]:
 			&"heal_hp":
-				var max_hp: int = int(t[&"stats"][&"hp"])
+				var max_hp: int = EquipmentData.capacity_hp(t)
 				var before: int = int(t[&"hp"])
 				t[&"hp"] = mini(max_hp, before + int(idef[&"power"]))
 				result[&"hp_deltas"].append({ unit = t, delta = int(t[&"hp"]) - before })
 			&"heal_mp":
-				var max_mp: int = int(t[&"stats"].get(&"mp", 0))
+				var max_mp: int = EquipmentData.capacity_mp(t)
 				var before_m: int = int(t.get(&"mp", 0))
 				t[&"mp"] = mini(max_mp, before_m + int(idef[&"power"]))
 				result[&"mp_deltas"].append({ unit = t, delta = int(t[&"mp"]) - before_m })

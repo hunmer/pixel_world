@@ -27,6 +27,7 @@ const BattlefieldLoaderScript := preload("res://scripts/core/battlefield_loader.
 const ItemDataScript := preload("res://scripts/core/items.gd")
 const ShopCatalogScript := preload("res://scripts/campaign/shop_catalog.gd")
 const AIDifficultyScript := preload("res://scripts/systems/ai_difficulty.gd")
+const EquipmentDataScript := preload("res://scripts/core/equipment.gd")
 
 ## 存档根目录（测试可改；改动在下次访问 store 时生效）。
 var base_dir: String = DEFAULT_STORE_DIR
@@ -501,6 +502,76 @@ func buy_item(item_id: String, count: Variant = 1) -> Dictionary:
 		"gold": int(_state.gold),
 		"remaining": remaining_after,
 	}
+
+
+## 给档内单位装备一件（roster_id = 单位稳定 id）。原子语义与 buy_item 一致：
+## 校验 → 深拷贝全量 state、只改副本上目标单位的 equipment 槽 → _persist 成功
+## 才提交内存并发 changed；任何失败无副作用。出征挂起（_attempt 非空）时拒绝。
+## equip/unequip 本身不动 HP/MP：装上不补满；卸下仅在超容量时钳制（由
+## EquipmentData.unequip 完成）。返回 {ok, error, slot, prev, entry}。
+func equip_item(roster_id: String, entry_id: String) -> Dictionary:
+	if _state.is_empty():
+		return {"ok": false, "error": "尚未加载冒险档案"}
+	if not _attempt.is_empty():
+		return {"ok": false, "error": "战斗进行中，不能更换装备"}
+	var staged: Dictionary = _state.duplicate(true)
+	var unit := _find_roster_unit(staged, roster_id)
+	if unit.is_empty():
+		return {"ok": false, "error": "档内单位不存在：%s" % str(roster_id)}
+	var outcome: Dictionary = EquipmentDataScript.equip(unit, StringName(String(entry_id)))
+	if not bool(outcome.get("ok", false)):
+		return {"ok": false, "error": str(outcome.get("reason", "装备失败"))}
+	var persisted := _persist(staged)
+	if not persisted.get("ok", false):
+		return {"ok": false, "error": "装备落盘失败，未生效（可重试）：%s" % str(persisted.error)}
+	_state = staged
+	_emit_changed("equipped")
+	return {
+		"ok": true, "error": "",
+		"slot": String(outcome.get("slot", "")),
+		"prev": String(outcome.get("prev", "")),
+		"entry": String(entry_id),
+	}
+
+
+## 卸下档内单位某槽装备（slot ∈ weapon/shield/armor/accessory）。原子语义同
+## equip_item；卸下后若 HP/MP 超过新容量则就地钳制（营地单位通常已满，正常
+## 情况无变化）。返回 {ok, error, prev, hp_clamped, mp_clamped}。
+func unequip_item(roster_id: String, slot: String) -> Dictionary:
+	if _state.is_empty():
+		return {"ok": false, "error": "尚未加载冒险档案"}
+	if not _attempt.is_empty():
+		return {"ok": false, "error": "战斗进行中，不能更换装备"}
+	var staged: Dictionary = _state.duplicate(true)
+	var unit := _find_roster_unit(staged, roster_id)
+	if unit.is_empty():
+		return {"ok": false, "error": "档内单位不存在：%s" % str(roster_id)}
+	var outcome: Dictionary = EquipmentDataScript.unequip(unit, StringName(String(slot)))
+	if not bool(outcome.get("ok", false)):
+		return {"ok": false, "error": str(outcome.get("reason", "卸下失败"))}
+	var persisted := _persist(staged)
+	if not persisted.get("ok", false):
+		return {"ok": false, "error": "卸下落盘失败，未生效（可重试）：%s" % str(persisted.error)}
+	_state = staged
+	_emit_changed("unequipped")
+	return {
+		"ok": true, "error": "",
+		"slot": String(slot),
+		"prev": String(outcome.get("prev", "")),
+		"hp_clamped": bool(outcome.get("hp_clamped", false)),
+		"mp_clamped": bool(outcome.get("mp_clamped", false)),
+	}
+
+
+## 在 state 副本里按稳定 id 找档内单位（找不到返回空字典；不修改 state）。
+func _find_roster_unit(state: Dictionary, roster_id: String) -> Dictionary:
+	var roster: Variant = state.get("roster", [])
+	if roster is not Array:
+		return {}
+	for u: Variant in roster:
+		if u is Dictionary and String((u as Dictionary).get("id", "")) == String(roster_id):
+			return u
+	return {}
 
 
 ## 当前限购周期内的已购计数（周期推进则旧计数视作清零；不修改 _state）。

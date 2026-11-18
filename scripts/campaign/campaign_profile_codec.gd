@@ -20,6 +20,7 @@ const ProfessionDataScript := preload("res://scripts/core/professions.gd")
 const SkillDataScript := preload("res://scripts/core/skills.gd")
 const EnumsScript := preload("res://scripts/core/enums.gd")
 const UnitFactoryScript := preload("res://scripts/core/unit.gd")
+const EquipmentDataScript := preload("res://scripts/core/equipment.gd")
 const AIDifficultyScript := preload("res://scripts/systems/ai_difficulty.gd")
 
 const UNIT_INT_FIELDS: Array[String] = ["level", "exp", "hp", "mp"]
@@ -331,6 +332,10 @@ static func _validate_roster(roster: Array) -> String:
 				return "单位 %s 冷却 %s 无效" % [id, String(cd_skill)]
 			cd_out[cd_skill] = int(cd_val)
 		unit["skillCooldowns"] = cd_out
+		# 装备槽（可选字段）：存在时严格校验并就地归一（String 键 → StringName）。
+		var eq_err := EquipmentDataScript.normalize_unit_equipment(unit)
+		if eq_err != "":
+			return eq_err
 	return ""
 
 

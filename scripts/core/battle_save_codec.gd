@@ -12,6 +12,7 @@ const VERSION := 1
 ## 块布局归一化走既有模块，保证与编辑器保存路径同一形状
 const BlockLayoutScript = preload("res://scripts/core/block_layout.gd")
 const BuildingLayoutScript = preload("res://scripts/core/building_layout.gd")
+const EquipmentDataScript := preload("res://scripts/core/equipment.gd")
 
 const UNIT_INT_FIELDS := ["level", "exp", "hp", "mp"]
 const UNIT_BOOL_FIELDS := ["hasMoved", "hasActed", "isDead"]
@@ -447,6 +448,10 @@ static func _validate_units(units: Array, faction_key: String, width: int, heigh
 				return "单位 %s 冷却 %s 无效" % [id, String(cd_skill)]
 			cd_out[cd_skill] = int(cd_val)
 		unit["skillCooldowns"] = cd_out
+		# 装备槽（可选字段）：存在时严格校验并就地归一（String 键 → StringName）。
+		var eq_err := EquipmentDataScript.normalize_unit_equipment(unit)
+		if eq_err != "":
+			return eq_err
 	return ""
 
 
