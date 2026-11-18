@@ -2,6 +2,16 @@
 
 > 本文件记录 `CLAUDE.md` 索引本身的生成 / 更新，**不是产品 Changelog**。仅保留最近 5 条（倒序）。
 
+## 2026-11-18（第四轮增量：冒险模式 + 建筑子系统入册，103 契约基线）
+
+- **触发**：`/init-project` 增量扫描。自 2026-11-17 起 36+ commits（302 文件变更）：冒险模式（campaign 六件 + 七屏 + bridge + data）、建筑/室内子系统、背击/夹击规则、行动历史【记录】Tab、升级演出、九键成长、技能/状态图标、图鉴 SkillList、UI 组件 22→27、ui_gallery 六模块拆分、编辑器建筑摆放/角色编辑。
+- **主入口变更**：`project.godot` main_scene → `res://scenes/Campaign.tscn`；autoload 8→9（第 3 位 CampaignSession）。全部文档口径同步（Game.tscn 降为开发入口）。
+- **feature_map**：新增顶级类 campaign 🏕️（4 子节点）+ buildings 🏰（4 子节点）+ battle.icons + editor.units + ui.components +5 + ui.gallery +6 + assets.tooling +4；**收录 421/421 = 100%**（unmapped 18 条 = .tmp/ 等；`feature_map.py all` build/render/check 全过，HTML 578166 字节）。
+- **测试口径**：manifest **103 项**（campaign 4 + 建筑 3 + 战斗规则/演出/图标约 15 新增）；**macOS 全量基线 pass 98 / fail 0 / env-skip 5 / timeout 0**（Godot 4.7.1，HEAD e7ed380，`.tmp/init_baseline_2026-11-18/`）。
+- **report.md 重写**：四组自检实测——观察项 battle.gd 2186/116 函数（回涨）、campaign_session 973/38；复用计数刷新（ui_factory 38 文件、resolver 10 文件、BuildingLayout 10 文件）；新列 BattleThreatData/BattleActionHistory 为"可复用未消费"；复用守则 6 条。
+- **文档更新 13 件**：overview/entrypoints/module-responsibilities/file-map 全文重写（新数据流 C=Campaign 主链、场景表 16 tscn、scripts 791 .gd 实测地图）；data-model（+冒险档案模型/facing/buildings 层/九键）、public-interfaces（+CampaignSession 接口表/建筑素材契约/图标 ID 契约/信号表）、dependencies-and-config（+campaign.json/shop.json/battlefields 8/buildings）、testing-and-quality（103 分类表+基线行）、conventions（+冒险磁盘安全约定+建筑/图标契约）、faq（+Q27-Q29）、CLAUDE.md。
+- **环境事实**：本机 Godot 4.7.1（跨机 E:\pixel_world 同步开发）；docs/campaign_loop.md 与 docs/building_assets.md 为两新子系统权威文档。
+
 ## 2026-11-17（known-fail 清零轮：五项全部修复，基线 75/80 全绿）
 
 - **触发**：用户指令「按照优先度和收益，继续派发给团队任务」；按 收益÷风险 排序选定修 5 个 known-fail（基线干净+可能藏真 bug）优先于纯结构拆分，4 成员文件域互斥并行，先定性再修、禁为绿而绿。
@@ -41,21 +51,6 @@
 - **更新文件**：`claude/` overview / module-responsibilities / public-interfaces / dependencies-and-config / file-map / faq / report（新建，合并并取代 reusability.md〔已删〕）/ entrypoints（行号勘误：_ready@549、battle.gd 1444）/ changelog + 根 `CLAUDE.md`；conventions 与 testing-and-quality 已由前次会话更新，本轮复核未动；data-model 抽查无陈旧引用，未改。
 - **图谱**：`docs/feature_map.json` 收编 27 个新增文件、修正 3 处过期 desc、vendored 补录 gdtest/godot_autosim（4→6）；`feature_map.py all` 复核 **311/311 = 100% 覆盖**，check 全过，html 已重渲（~564KB）。
 - **缺口 / 下一步建议**：① entrypoints.md / data-model.md 本轮仅抽查（无陈旧行号命中，未全文重写）；② `AGENTS.md` 仍写「世界引擎集中在 main.gd / 78 契约」属用户指令文件未动；③ known-fail 4 契约（ui / map_editor_ui 等）修复仍在 roadmap P0。
-
-## 2026-11-15（二轮） — 增量更新（胜利/增援/交换 + 编辑器区域操作 + DESIGN.md/22 组件 + 全量基线）
-
-- **触发**：/init-project 增量更新；上次扫描提交 386508c 之后 ~25 commits（HEAD=3ba4cf5），外加补记 4 张上次未入账的前置卡（game_hud 修复 e8fda38、trade 2a501c7、victory 2ec8acb、素材源 3a08327）。
-- **重大变化**：
-  - **玩法框架三件套**：胜利条件 `victory{type:rout|defend_turns|seize}`（turn_manager.gd check_victory）+ 按回合波次增援 `reinforcements`（core/reinforcement_spawner.gd spawn_due/pending_units，敌方回合开始刷入、已消费波次移除防重刷）+ 相邻单位物品交换（systems/trade_system.gd）；JSON schema 均为可选字段、loader 静态严校验；样例战场 +ambush_reinforce/last_stand（共 6）。
-  - **世界→战场地形映射 3→7 种**：cell_context_to_terrain 现覆盖 water/mountain/snow/sand/rocky/grass/plain（契约 world_terrain_mapping 22 checks）；forest/village/fort/wall 仍不映射（roadmap）。
-  - **编辑器区域操作波**（scripts/editor/ 6→11 .gd）：区域复制/剪切/粘贴/拖动移动/方向键 nudge（region_clipboard 五层 payload）+ 命名预设库（region_preset_store，user://editor_presets/presets.json，tmp+bak 原子写）+ 取色器（Alt 临时+前后景色）+ replace 工具 + 真实材质预览 + 方块选择弹窗（4 列画廊）+ 快捷键提示弹窗；map_editor.gd 膨胀到 3285 行/150 函数。
-  - **DESIGN.md + UI 组件库成型**：根 DESIGN.md（201 行）成为 UI 设计规范单一事实来源（SPACE/CORNER/FONT/MARGIN token + 六薄容器 + 按钮六态 + 三档分辨率验收）；ui/ 16→22 组件（+6 布局容器），ui_components 契约 735→1062 checks；ui_contract 新增静态扫描：业务脚本禁直建 Button/CheckButton/OptionButton.new()。
-  - **全量测试基线落地**：docs/testing_baseline_2026-11-15.md（62/72 过：6 败 4 超时），tools/run_contract_baseline.sh 单测超时 900s；本轮新增 6 契约全过、复跑 6 受影响契约 4 过 2 红（ui/map_editor_ui 待修）。
-  - **素材源可配置**：user_asset_service 三档优先级（asset_source.cfg override > 库内 settings > DEFAULT 127.0.0.1:8076）+ 优雅降级。
-  - **规模**：scripts/ 113→122 .gd（core 14/systems 12/editor 11）、tests 71→80 .gd（78 契约+2 探针）、ui/ 23 .gd。
-- **更新文件**：`claude/` 全部 11 个文件（overview / module-responsibilities / public-interfaces / data-model / testing-and-quality / file-map / faq / conventions / entrypoints / changelog）+ 根 `CLAUDE.md` + `docs/roadmap.md` 状态标记。
-- **覆盖率**：main.gd 函数级复核（4319/176 不变）、map_editor.gd 3285/150、scripts/ 122 .gd 文件级、tests 78 契约归类 + 运行态实测（新 6 + 复跑 6）、config/data 逐文件。二进制素材仅统计。
-- **缺口 / 下一步建议**：① 契约回归红：`ui`（map_editor.gd 三处直建控件）、`map_editor_ui`（侧栏 320px/z 重建断言）→ 已进 roadmap 新 P0；② 基线余项：battle_action_chain/battle_presentation_hooks/isometric_view/sunlight_3d_gl 4 败未复跑 + 4 超时（3 个 autoload 依赖型 + user_asset_source_live）；③ map_editor.gd 单体膨胀（+~900 行）逼近 main.gd，拆分前兆；④ data/battlefields/contract_asset_map.json.bak 脏文件待清。
 
 
 

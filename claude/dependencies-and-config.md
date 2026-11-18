@@ -1,10 +1,10 @@
 # 依赖与配置
 
-> 更新：2026-11-15（新增 startup.cfg / 用户素材源 / Node 工具链；项目迁至 macOS）。
+> 更新：2026-11-18（新增 data/campaign.json + data/shop.json + 建筑 recipe.json；battlefields 6→8；professions 九键成长；Godot 本机版本实测 4.7.1）。
 
 ## 运行时依赖
 
-- **Godot 4.7+**（本项目用 **4.7.2 stable**，`project.godot` 声明 `config/features=PackedStringArray("4.7", "GL Compatibility")`）。
+- **Godot 4.7+**（`project.godot` 声明 `config/features=PackedStringArray("4.7", "GL Compatibility")`；**本机（macOS）实测 4.7.1** `/Applications/Godot.app/Contents/MacOS/Godot`；Windows 历史路径 `D:/Godot/Godot_v4.7.2-stable_win64.exe`——项目跨机同步开发，两台机器版本 4.7.1/4.7.2 混用，契约基线以 macOS 4.7.1 为准）。
   - **本机（macOS）**：`/Applications/Godot.app/Contents/MacOS/Godot`。Windows 历史路径 `D:/Godot/Godot_v4.7.2-stable_win64.exe`（console 版 `..._console.exe`，stdout 全缓冲：管道下无输出 ≠ 没输出）。
   - 项目历史路径 G:/ → E:/ → 当前 `/Users/Zhuanz/Documents/pixel_world`。
 - **Node.js（仅工具链，非游戏运行时）**：`tools/build_blocks_manifest.mjs`（用户素材清单生成）+ 其 node:test 契约；任何 ≥18 LTS 均可。
@@ -51,15 +51,18 @@
 | `config/depth_of_field.json` | 景深：`enabled_by_default, focus_half_height, focus_feather, far/near_strength, vignette_strength` |
 | `config/startup.cfg` | **（2026-11-14 新增）调试启动配置**（INI）：`[startup] auto_open_last_scene / last_scene / excluded_scenes`。编辑器调试读写 res://，导出后读写 user://；权威文档 `docs/startup_config.md` |
 
-### 战棋数据（`data/`）
+### 战棋与冒险数据（`data/`）
 
 | 文件 | 内容 |
 | --- | --- |
-| `data/professions.json` | 8 职业：`swordsman, knight, archer, mage, berserker, assassin, lancer, priest`（`defaultProfession`） |
-| `data/skills.json` | 8 技能：`fireball, smite, heal, blizzard, powerSurge, guard, weaken, haste`（`defaultSkill`） |
-| `data/items.json` | 8 物品：`hpPotion, mpPotion, antidote, shuriken, bomb, armorRing, powerRing, mightPotion`（`defaultItem`） |
-| `data/battlefields/*.json` | JSON 战场 ×4：`arena_1v1, plains_skirmish, river_crossing, mountain_pass`。schema 见 `public-interfaces.md`。用户自定义战场放 `user://battlefields/` |
-| `data/dialogue/demo_intro.json` | 分支对话演示数据（`scenes/DialogueDemo.tscn` 消费） |
+| `data/professions.json` | 8 职业：`swordsman, knight, archer, mage, berserker, assassin, lancer, priest`。**2026-11-18 九键成长**：`growths{hp,mp,str,mag,skl,spd,luk,def,res}`（旧 power→str/mag、agility→spd 由 `ProfessionData.growths_for` 归一，缺键逐键回退 `_GROWTH_FALLBACK`） |
+| `data/skills.json` | 8 技能：`fireball, smite, heal, blizzard, powerSurge, guard, weaken, haste`；每技能 `iconId`（稳定 ID，`skill_icons.gd` 解析） |
+| `data/items.json` | 8 物品：`hpPotion, mpPotion, shuriken, bomb, …` |
+| `data/campaign.json`★ | **（2026-11-18 新增）冒险模式关卡表**：6 关卡（线性解锁），每关 `first_clear`/`repeat` 奖励（gold/items）+ `loot_table`（独立 RNG，种子=战场 id+出征令牌） |
+| `data/shop.json`★ | **（2026-11-18 新增）营地商店目录**：`{id, price, limit_per_clear}`；限购上限 = `limit_per_clear × completed_levels.size()` |
+| `data/battlefields/*.json` | JSON 战场 ×8：`arena_1v1, plains_skirmish, river_crossing, mountain_pass, last_stand, ambush_reinforce, building_demo, house_interior_demo`。schema 见 `public-interfaces.md`（victory/reinforcements/**buildings** 层）。用户自定义战场放 `user://battlefields/` |
+| `assets/buildings/{medieval_watchtower,spacious_house}/recipe.json`★ | **内置建筑素材清单**（四方向 4:1 横排精灵图 + footprint + SHA-256 固化；契约见 `docs/building_assets.md`） |
+| `data/dialogue/demo_intro.json` | 分支对话演示数据 |
 
 > ⚠️ `story/` 目录是**目标态设计 bible**（13 职业 / 27 技能 / 25 道具 / 15 章），当前 `data/` 仍是 8/8/8。以 `data/` 为运行时事实，`story/` 为规划。
 
@@ -84,16 +87,11 @@
 ## 资源目录约定（`config/README.md`）
 
 ```
-meowa_tiles/            世界像素素材（165 png：terrain 10 / animals 24 / plants 39 / trees 25 / decorations 4 / generated 39 / heroes 24）
-  terrain/              地形 tile
-  animals/<species_id>/ 每种动物独立目录（actions.file 相对该目录；13 种动物）
-  plants/               活体灌木/草本/花卉/仙人掌/水生
-  trees/                乔木
-  decorations/          树桩/石块等非生长物件
-  generated/            程序生成/工具产出的贴图（tools/art 生成脚本产物）
-  heroes/               角色素材（24 png；仍待与职业映射 —— 已知待办，见 docs/roadmap.md）
+meowa_tiles/            世界像素素材（terrain 10 / animals 24 / plants 39 / trees 25 / decorations 4 /
+                       generated/ 程序生成 icon 增量 / heroes 24；heroes 仍待职业映射）
 addons/at-icons/node*/  图标库按色系分目录（项目只用 control/）
-assets/                 战棋素材：bg / markers / ui(buttons,cursors,frames,portraits) / units
+assets/                 战棋素材：bg / markers / ui(buttons,cursors,frames,portraits) / units /
+                       buildings/{medieval_watchtower,spacious_house}/（四方向建筑精灵图+recipe.json）
 ```
 
 - 所有 tile 文件与目录统一英文小写 `snake_case`。

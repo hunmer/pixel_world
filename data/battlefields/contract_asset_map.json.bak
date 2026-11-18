@@ -614,8 +614,6 @@
 			"kind": "plant",
 			"name": "flora_b",
 			"render": {
-				"back_asset_id": "",
-				"back_mode": "single",
 				"crop": null,
 				"footprint": {
 					"h": 1,
@@ -644,8 +642,6 @@
 			"kind": "terrain",
 			"name": "赤红地块",
 			"render": {
-				"back_asset_id": "",
-				"back_mode": "single",
 				"crop": {
 					"h": 2,
 					"w": 2,

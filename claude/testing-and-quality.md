@@ -1,6 +1,6 @@
 # 测试与质量
 
-> 更新：2026-11-17（**known-fail 清零：pass 75 / known-fail 0 / env-skip 5**——五项 known-fail 团队轮全部修复，定性+依据见台账表与 manifest evidence）。上一轮：2026-11-16（统一契约 runner + manifest 80 契约 + gdtest/批量模拟试点；`ui` 复绿）。
+> 更新：2026-11-18（**契约扩到 103 项**：campaign 4 + 建筑 3 + 战斗扩展〔背击/夹击/掉落/九键成长/升级演出/图标/图鉴等〕约 15 项；**macOS 全量基线 pass 98 / fail 0 / env-skip 5**〔HEAD e7ed380〕）。上一轮：2026-11-17（known-fail 清零）。
 
 ## 测试机制（契约自测 + 统一 runner）
 
@@ -27,33 +27,35 @@ python3 tools/run_contracts.py --test terrain_generation --no-warmup
 ```
 > Windows console 版 exe 的 stdout 全缓冲，管道下可能看不到输出 —— 用退出码为准。**首次 headless 运行会先做资源导入，耗时明显偏长属正常**（runner 默认先 `--import` 预热一次）。
 
-`tests/*_contract.gd` 共 **80 个**（78 原有 + `ecology_logic_bench` + `simulation`；
-另有 2 个探针 `flat_rotation_probe` / `mesh_draw_probe`，manifest 收录但不默认跑），覆盖：
+`tests/contract_manifest.json` 共 **103 项**（98 契约默认跑 + 5 environment-skip 声明；另有探针 `flat_rotation_probe` / `mesh_draw_probe` / `level_up_visual_probe` 等，manifest 收录但不默认跑），分组覆盖：
 
 | 类别 | 脚本（省略 `_contract` 后缀） |
 | --- | --- |
 | 地形 / 流式（5） | `terrain_generation`(SHA-256 快照)、`terrain_sampler`、`terrain_material_registry`、`streaming_input_latency`、`dynamic_landform` |
 | 群系模块（2） | `biome_modules`、`module_extension`（+ `tests/fixtures/` 火山 biome 扩展样例） |
-| 生态 / 群落（6） | `ecology_registry`、`ecology_resolver`、`community_runtime`、`community_spawner`、`community_state_store`、`flora_layers` |
+| 生态 / 群落（7） | `ecology_registry`、`ecology_resolver`、`community_runtime`、`community_spawner`、`community_state_store`、`flora_layers`、`ecology_logic_bench` |
 | 动物（4） | `animal_behavior_registry`、`animal_group_distribution`、`animal_animation_state`、`aquatic_fauna` |
 | 环境生物（2） | `ambient_registry`、`bird_renderer` |
 | Cell 状态（2） | `cell_state`、`cell_state_integration` |
 | 配置（2） | `config_manifest`、`startup_config` |
-| 表现层 / 世界 UI（7） | `weather_performance`、`depth_of_field`、`audio_system`、`world_map_overlay`、`game_hud`、`hint_bar`、`loading_screen` |
-| 世界 3D 渲染（5） | `isometric_3d`、`isometric_column_projection`、`isometric_view`、`sunlight_3d`、`sunlight_3d_gl` |
+| 表现层 / 世界 UI（7） | `weather_performance`、`depth_of_field`、`audio_system`、`world_map_overlay`*、`game_hud`、`hint_bar`、`loading_screen` |
+| 世界 3D 渲染（5） | `isometric_3d`、`isometric_column_projection`、`isometric_view`、`sunlight_3d`、`sunlight_3d_gl`* |
 | 世界相机/导航（1） | `world_camera_navigation` |
-| 世界→战棋（1） | `world_terrain_mapping`（cell_context_to_terrain 7 种映射快照，2026-11-15 新增） |
-| 战棋 3D / 战场 / 编辑器（12） | `battle_3d`、`battle_screen_pick`、`battlefield_render`、`battlefields`、`map_editor`、`map_editor_ui`、`battle_occluder`、`editor_selection`、`editor_block_picker`、`editor_region_clipboard`、`editor_region_preset_store`、`map_editor_region_ops`（后五个 2026-11-15 编辑器波新增） |
-| 战棋玩法逻辑（7） | `battle_action_chain`、`battle_movement`、`attack_event`、`character_sheet`、`battle_ai_difficulty`、`battle_turn_visibility`、`reinforcement`（增援刷入/防提前判胜，2026-11-15 新增） |
-| 战棋表现 / 沉浸演出（5） | `battle_presentation_hooks`、`battle_result_presentation`、`immersive_battle_camera`、`immersive_battle_integration`、`encounter_transition` |
+| 世界→战棋（1） | `world_terrain_mapping`（7 种映射快照） |
+| 战棋 3D / 战场 / 编辑器（18） | `battle_3d`、`battle_screen_pick`、`battlefield_render`、`battlefields`、`map_editor`、`map_editor_ui`、`battle_occluder`、`editor_selection`、`editor_block_picker`、`editor_region_clipboard`、`editor_region_preset_store`、`map_editor_region_ops`、**`map_editor_building`**、**`building_layout`**、**`building_interior`**、**`unit_status_badges`**、**`skill_icons`**、**`status_icons`**（后 8 个 2026-11-17/18 建筑/图标波新增） |
+| 战棋玩法逻辑（13） | `battle_action_chain`、`battle_movement`、`attack_event`、`character_sheet`、`battle_ai_difficulty`、`battle_turn_visibility`、`reinforcement`、**`backstab`**、**`backstab_save_roundtrip`**、**`pincer`**、**`pincer_marks`**、**`profession_growths`**（九键）、**`trade`**（后 7 个战斗规则波新增） |
+| 战棋表现 / 沉浸演出（9） | `battle_presentation_hooks`、`battle_result_presentation`、`immersive_battle_camera`、`immersive_battle_integration`、`encounter_transition`、**`level_up_presentation`**、**`battle_levelup_flow`**、**`battle_ui_preview`**、**`battle_ui_status`**（后 4 个升级/预览波新增） |
+| **冒险模式（4）**★ | **`campaign`**(1606 行)、**`campaign_ui`**、**`campaign_battle_integration`**、**`battle_drop`**（掉落独立 RNG + 限购 + settle 幂等；2026-11-17/18 新增） |
 | 战棋持久化 / 会话（2） | `battle_save`、`game_session` |
-| 战棋自动化 CLI（2） | `battle_automation`、`battle_cli`（+ `tests/fixtures/battle_scenarios/` 4 个场景 JSON） |
+| 战棋自动化 CLI（2） | `battle_automation`、`battle_cli`（+ `tests/fixtures/battle_scenarios/` JSON） |
 | 对话系统（1） | `dialogue_demo` |
-| 用户素材（5） | `user_asset_catalog`、`user_asset_editor`、`user_asset_pagination`、`user_asset_runtime`、`user_asset_source_live` |
-| UI 组件库（2） | `ui`（含业务脚本禁直建控件扫描）、`ui_components` |
-| 音效（1） | `game_sfx` |
-| 特效库（1） | `pixelfx` |
-| 基准 / 批量模拟（2） | `ecology_logic_bench`（纯逻辑基准，2026-11-16 新增）、`simulation`（批量模拟契约，2026-11-16 新增） |
+| 用户素材（9） | `user_asset_catalog`、`user_asset_editor`、`user_asset_pagination`、`user_asset_runtime`、`user_asset_source_live`* + 清单/渲染等扩展 |
+| UI 组件库（2） | `ui`（含业务脚本禁直建控件扫描）、`ui_components`(1404 行) |
+| 音效 / 特效（2） | `game_sfx`、`pixelfx` |
+| 图鉴（1）★ | `skill_list`（技能图鉴） |
+| 批量模拟（1） | `simulation` |
+
+（标 `*` 的为 manifest environment-skip 声明项：headless GL / 本机源依赖等，`--run-env-skip` 可强制执行。）
 
 另有 `tests/gdtest/`（gdtest 持久 worker 试点：3 文件 8 test，断言镜像
 cell_state / ecology_resolver / animal_behavior_registry 原生契约，经
@@ -101,6 +103,7 @@ cell_state / ecology_resolver / animal_behavior_registry 原生契约，经
 | **`ui` 契约（两行分列台账）** | ✅ 复绿 | 2026-11-15 基线：红（map_editor.gd 直建 `Button.new()` 等）；2026-11-16 实测：**3 连过 exit=0**，根因已在后续修复中消除（现 scripts/scenes/map_editor.gd 无直建 Button/CheckButton/OptionButton），manifest 已更新为 pass |
 | 统一 runner 交付（2026-11-16） | ✅ | `tools/run_contracts.py`（manifest 80 契约；27 单测全绿）+ `run_contract_baseline.sh` 兼容包装 + gdtest 试点 go（A→B→A 稳定）+ 批量模拟（1000 次 3.6s）。台账 `docs/test_automation_results.md`。manifest 现口径：known-fail 4 / environment-skip 5 / pass 71 |
 | **known-fail 清零（2026-11-17）** | ✅ **75/80 全绿** | 团队四任务逐项定性后五项 known-fail 全转 pass：`isometric_view`（根因=HUD 预留列致契约"焦点=窗口中心"假设失效，探针实证投影数学无回归，契约改焦点实际渲染位取样+新增舞台中心断言）、`battle_action_chain`/`battle_presentation_hooks`（断言对齐 pixelfx 呈现链与素材优先设计+密闭性修复〔本机 settings.cfg 泄漏〕+附带修 `game_sfx.gd` Nil→Array 真 bug）、`map_editor_ui`（6 项断言按实现重锚）、`user_asset_editor`（`925fe0c` 吸管功能引入的真行为回归：素材选中被 PAINT 前置检查短路、取消不回退前景槽，已修）。口径 **pass 75 / known-fail 0 / env-skip 5**，manifest evidence 全记录 |
+| **103 项扩容 + macOS 全量基线（2026-11-18）**★ | ✅ **98 pass / 0 fail / 5 env-skip / 0 timeout** | `python3 tools/run_contracts.py --all --jobs 4 --out .tmp/init_baseline_2026-11-18 --no-warmup`（本机 Godot 4.7.1，HEAD `e7ed380`）。扩容项：campaign 4（`campaign`/`campaign_ui`/`campaign_battle_integration`/`battle_drop`）、建筑 3（`building_layout`/`building_interior`/`map_editor_building`）、战斗规则/演出/图标约 15 项（backstab×2、pincer×2、`profession_growths`、`level_up_presentation`、`battle_levelup_flow`、`skill_icons`、`status_icons`、`skill_list`、`unit_status_badges`、`battle_ui_preview` 等）。manifest 无 known-fail；日志 `.tmp/init_baseline_2026-11-18/summary.tsv|json` |
 
 ## Lint / 类型检查
 
@@ -110,16 +113,13 @@ cell_state / ecology_resolver / animal_behavior_registry 原生契约，经
 
 ## 质量风险（本次扫描 + handoff 待办）
 
-- `main.gd` 单文件 **4319 行 / 176 函数**、`map_editor.gd` **3285 行 / 150 函数** —— 双单体职责高度集中，可维护性风险（拆分均为 roadmap P3 项；map_editor 增长最快）。
-- ~~**红契约待修（更新）**~~ **已清零（2026-11-17）**：`ui` 2026-11-16 复绿；`map_editor_ui` / `battle_action_chain` / `battle_presentation_hooks` / `isometric_view` / `user_asset_editor` 于 2026-11-17 团队轮全部修复转 pass（定性+依据见上表与 manifest evidence）。
+- ~~`main.gd` 4319 行双单体~~ **已拆分（2026-11-16）**：现 main.gd 2280 / map_editor.gd 1088 / battle.gd 2186（装配层形态）。**当前最大观察项**：`battle.gd` 2026-11-18 回涨到 **2186 行 / 116 函数**（+行动历史 + campaign 接线），`campaign_session.gd` **973 行 / 38 函数**（业务全在 autoload）——均未到拆分阈值红线，但新增能力继续内联会重走老路，建议下一批增量前先把 battle.gd 的记录 Tab/campaign 接线拆出（见 `claude/report.md` §1）。
+- ~~红契约~~ **已清零**（2026-11-17），2026-11-18 基线 98 pass / 0 fail 保持全绿。
 - `meowa_tiles/heroes/`（24 png）未与 `data/professions.json` 8 职业映射（已知待办）。
-- `story/` 设计 bible（13 职业/27 技能/25 道具）与 `data/` 实际（8/8/8）差距大，实现时勿把目标态当运行时事实（差距清单见 `docs/gameplay_gap.md`）。
-- 80 个契约无 CI：回归靠本地手跑；现已可用统一 runner 一键全量并输出 JUnit
-  （`python3 tools/run_contracts.py --all --run-env-skip --junit`），接入 CI 只差
-  runner 前置（manifest 口径 known-fail 0 + environment-skip 5，见
-  `docs/test_automation.md` §4）。
-- 用户素材默认源 `http://127.0.0.1:8076/blocks.json` 为本机回环；源已可配置（`asset_source.cfg`）+ 断源降级，但换机器仍需配置或自建源。
-- `data/battlefields/contract_asset_map.json.bak` 脏文件混在战场目录（loader 只扫 `*.json` 不受影响，建议清理）。
+- `story/` 设计 bible（13 职业/27 技能/25 道具/15 章）与 `data/` 实际（8/8/8 + campaign 6 关）差距大，实现时勿把目标态当运行时事实（差距清单见 `docs/gameplay_gap.md`；A2 战役结构已由 campaign 模式部分解决）。
+- 103 项契约无 CI：回归靠本地手跑；统一 runner 已可一键全量 + JUnit（`python3 tools/run_contracts.py --all --run-env-skip --junit`），接入 CI 只差 runner 前置。
+- 用户素材默认源 `http://127.0.0.1:8076/blocks.json` 为本机回环；源可配置（`asset_source.cfg`）+ 断源降级，但换机器仍需配置或自建源。
+- `data/battlefields/` 混有 `contract_asset_map.json.bak`、`building_demo.json.bak` 脏文件（loader 只扫 `*.json` 不受影响，建议清理）；`assets/ui/tmp/` 切片中转目录待清。
 
 ## 执行测试的建议命令
 

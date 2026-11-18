@@ -1,8 +1,8 @@
 {
   "project": "Pixel World",
   "description": "功能 → 文件依赖图谱：哪些功能用到哪些代码/场景/着色器/配置文件，多层级分类。文件可归属多个功能（shared）。数据来自 2026-11-15 增量扫描 + 每个文件头部『## file.gd — 职责』注释。",
-  "generated": "2026-11-17",
-  "head_commit": "0605bad",
+  "generated": "2026-11-18",
+  "head_commit": "e7ed380",
   "legend": {
     "types": {
       "gd": "GDScript 源码",
@@ -63,7 +63,7 @@
             {
               "path": "scripts/scenes/title.gd",
               "type": "gd",
-              "lines": 46,
+              "lines": 57,
               "role": "标题界面（对应 src/scenes/TitleScene.ts）"
             },
             {
@@ -122,7 +122,7 @@
             {
               "path": "scripts/game_cursor.gd",
               "type": "gd",
-              "lines": 53,
+              "lines": 158,
               "role": "全局游戏鼠标指针（autoload 单例）"
             },
             {
@@ -197,6 +197,11 @@
             {
               "path": "tests/streaming_input_latency_contract.gd",
               "note": "流式生成与输入延迟（挂在引擎整体）"
+            },
+            {
+              "path": "tests/world_key_input_contract.gd",
+              "type": "gd",
+              "note": "世界键位路由契约"
             }
           ]
         },
@@ -546,13 +551,13 @@
             {
               "path": "scripts/iso/isometric_camera_3d.gd",
               "type": "gd",
-              "lines": 183,
+              "lines": 196,
               "role": "正交 dimetric 相机（旋转只改相机）"
             },
             {
               "path": "scripts/iso/isometric_terrain_3d.gd",
               "type": "gd",
-              "lines": 747,
+              "lines": 780,
               "role": "消费 render_blocks 按 chunk/图集合批 3D 柱地形"
             },
             {
@@ -606,7 +611,7 @@
             {
               "path": "scripts/world/player_occlusion_controller.gd",
               "type": "gd",
-              "lines": 220,
+              "lines": 221,
               "role": "玩家植被遮挡：重建门控、billboard 相交收集、像素 alpha 精测。"
             },
             {
@@ -624,7 +629,7 @@
             {
               "path": "scripts/iso/isometric_column_terrain_draw.gd",
               "type": "gd",
-              "lines": 377,
+              "lines": 373,
               "role": "普通柱体/贴图/投影网格绘制（拆出）"
             },
             {
@@ -663,6 +668,11 @@
             {
               "path": "tests/mesh_draw_probe.gd",
               "note": "mesh 绘制探针"
+            },
+            {
+              "path": "tests/isometric_camera_lifecycle_contract.gd",
+              "type": "gd",
+              "note": "相机生命周期"
             }
           ]
         },
@@ -823,19 +833,19 @@
             {
               "path": "scripts/core/unit.gd",
               "type": "gd",
-              "lines": 172,
+              "lines": 174,
               "role": "UnitData 构造与默认成长率（对应 types.ts 的 UnitData + chapter1 的默认值）"
             },
             {
               "path": "scripts/core/professions.gd",
               "type": "gd",
-              "lines": 173,
+              "lines": 213,
               "role": "职业系统（对应 src/data/professions.ts）"
             },
             {
               "path": "scripts/core/skills.gd",
               "type": "gd",
-              "lines": 132,
+              "lines": 146,
               "role": "技能系统（仿 professions.gd 的 JSON + 懒加载模式）"
             },
             {
@@ -854,13 +864,13 @@
               "path": "data/professions.json",
               "type": "data",
               "role": "职业数据（8）",
-              "lines": 168
+              "lines": 176
             },
             {
               "path": "data/skills.json",
               "type": "data",
               "role": "技能数据（8）",
-              "lines": 120
+              "lines": 128
             },
             {
               "path": "data/items.json",
@@ -885,6 +895,11 @@
             {
               "path": "scenes/SkillTest.tscn",
               "note": "技能/物品自测（非 headless 契约）"
+            },
+            {
+              "path": "tests/profession_growths_contract.gd",
+              "type": "gd",
+              "note": "九键成长表/缺键回退 DEFAULT_GROWTHS"
             }
           ]
         },
@@ -896,25 +911,25 @@
             {
               "path": "scripts/systems/grid_system.gd",
               "type": "gd",
-              "lines": 206,
+              "lines": 246,
               "role": "网格世界模型（对应 src/systems/GridSystem.ts）"
             },
             {
               "path": "scripts/systems/combat_system.gd",
               "type": "gd",
-              "lines": 179,
+              "lines": 234,
               "role": "战斗结算（对应 src/systems/CombatSystem.ts）"
             },
             {
               "path": "scripts/systems/skill_system.gd",
               "type": "gd",
-              "lines": 222,
+              "lines": 228,
               "role": "技能结算（全静态）"
             },
             {
               "path": "scripts/systems/item_system.gd",
               "type": "gd",
-              "lines": 155,
+              "lines": 162,
               "role": "物品结算（全静态）"
             },
             {
@@ -944,7 +959,7 @@
             {
               "path": "scripts/systems/ai_difficulty.gd",
               "type": "gd",
-              "lines": 76,
+              "lines": 80,
               "role": "AI 难度档位：名称常量、校验与评分 profile 参数"
             },
             {
@@ -956,7 +971,7 @@
             {
               "path": "scripts/systems/attack_event.gd",
               "type": "gd",
-              "lines": 207,
+              "lines": 214,
               "role": "战斗结算后的只读演出事件快照。"
             },
             {
@@ -968,8 +983,26 @@
             {
               "path": "scripts/battle/battle_action_resolver.gd",
               "type": "gd",
-              "lines": 117,
+              "lines": 313,
               "role": "战斗行动共享结算器（单一事实源）"
+            },
+            {
+              "path": "scripts/systems/facing_rules.gd",
+              "type": "gd",
+              "lines": 102,
+              "role": "网格朝向与背击规则（全静态、零依赖）"
+            },
+            {
+              "path": "scripts/systems/pincer_rules.gd",
+              "type": "gd",
+              "lines": 76,
+              "role": "夹击追击判定（全静态、零依赖）"
+            },
+            {
+              "path": "scripts/battle/battle_threat_data.gd",
+              "type": "gd",
+              "lines": 146,
+              "role": "只读范围与敌方威胁预测，复用实际移动、射程、战斗公式。"
             }
           ],
           "tests": [
@@ -996,6 +1029,31 @@
             {
               "path": "tests/battle_turn_visibility_contract.gd",
               "note": "回合可见性"
+            },
+            {
+              "path": "tests/backstab_contract.gd",
+              "type": "gd",
+              "note": "背击判定（点积<0）/无朝向兼容"
+            },
+            {
+              "path": "tests/backstab_save_roundtrip_contract.gd",
+              "type": "gd",
+              "note": "facing 字段存档往返"
+            },
+            {
+              "path": "tests/pincer_contract.gd",
+              "type": "gd",
+              "note": "夹击追击（对侧相邻格友军）"
+            },
+            {
+              "path": "tests/pincer_marks_contract.gd",
+              "type": "gd",
+              "note": "夹击标记表现"
+            },
+            {
+              "path": "tests/battle_threat_data_contract.gd",
+              "type": "gd",
+              "note": "威胁范围预测（复用真实移动/射程/公式）"
             }
           ]
         },
@@ -1007,7 +1065,7 @@
             {
               "path": "scripts/core/reinforcement_spawner.gd",
               "type": "gd",
-              "lines": 86,
+              "lines": 93,
               "role": "按回合增援的共享刷入逻辑（FE 式波次援军）"
             },
             {
@@ -1048,7 +1106,7 @@
             {
               "path": "scripts/core/battlefield_loader.gd",
               "type": "gd",
-              "lines": 523,
+              "lines": 646,
               "role": "JSON 战场声明 → 战棋 chapter 加载器（调试用）"
             },
             {
@@ -1079,7 +1137,7 @@
               "path": "data/battlefields/plains_skirmish.json",
               "type": "data",
               "role": "平原遭遇样例",
-              "lines": 28
+              "lines": 30
             },
             {
               "path": "data/battlefields/river_crossing.json",
@@ -1108,6 +1166,11 @@
             {
               "path": "tests/world_terrain_mapping_contract.gd",
               "note": "cell→地形 7 种映射"
+            },
+            {
+              "path": "tests/battle_drop_contract.gd",
+              "type": "gd",
+              "note": "击杀掉落 9 组（seed 复现/四类致死入口/automation/campaign 入账）"
             }
           ]
         },
@@ -1119,7 +1182,7 @@
             {
               "path": "scripts/core/battle_save_codec.gd",
               "type": "gd",
-              "lines": 469,
+              "lines": 481,
               "role": "战棋存档的纯数据编码 / 解码 / 校验（版本 1）"
             },
             {
@@ -1150,7 +1213,7 @@
             {
               "path": "scripts/scenes/battle.gd",
               "type": "gd",
-              "lines": 1557,
+              "lines": 2186,
               "role": "核心战场（场景编排器）"
             },
             {
@@ -1158,12 +1221,28 @@
               "type": "tscn",
               "role": "战场场景（依赖 SceneArgs）",
               "lines": 6
+            },
+            {
+              "path": "scripts/battle/battle_action_history.gd",
+              "type": "gd",
+              "lines": 74,
+              "role": "玩家行动记录与回退（整场战斗粒度）"
             }
           ],
           "tests": [
             {
               "path": "tests/battle_action_chain_contract.gd",
               "note": "行动链集成（shared）"
+            },
+            {
+              "path": "tests/battle_action_history_contract.gd",
+              "type": "gd",
+              "note": "整场行动快照/跨回合回退"
+            },
+            {
+              "path": "tests/battle_key_input_contract.gd",
+              "type": "gd",
+              "note": "战斗键位路由契约"
             }
           ]
         },
@@ -1175,7 +1254,7 @@
             {
               "path": "scripts/iso/battlefield_renderer.gd",
               "type": "gd",
-              "lines": 830,
+              "lines": 1058,
               "role": "JSON 战场的等距方块渲染器（像素版 Minecraft 风格）"
             },
             {
@@ -1193,7 +1272,7 @@
             {
               "path": "scripts/iso/unit_sprite.gd",
               "type": "gd",
-              "lines": 394,
+              "lines": 528,
               "role": "真实 3D 等距单位立绘、HP 条与头顶文本"
             },
             {
@@ -1236,13 +1315,13 @@
             {
               "path": "scripts/battle/battle_ui.gd",
               "type": "gd",
-              "lines": 467,
+              "lines": 479,
               "role": "战场屏幕空间 UI 装配层（从 scenes/battle.gd 抽出，2026-11 再拆分）"
             },
             {
               "path": "scripts/battle/range_overlay.gd",
               "type": "gd",
-              "lines": 517,
+              "lines": 665,
               "role": "战场范围/光标可视化层（从 phaserjs 的 Node3D 版重写为 Node2D）"
             },
             {
@@ -1290,7 +1369,7 @@
             {
               "path": "scripts/ui/ui_theme.gd",
               "type": "gd",
-              "lines": 186,
+              "lines": 256,
               "role": "统一 UI 主题：配色常量 + StyleBox / 按钮 / Tab 样式工厂"
             },
             {
@@ -1302,26 +1381,38 @@
             {
               "path": "scripts/battle/battle_ui_hud.gd",
               "type": "gd",
-              "lines": 347,
+              "lines": 406,
               "role": "战场 HUD 侧栏（从 battle_ui.gd 拆出）"
             },
             {
               "path": "scripts/battle/battle_ui_unit_menu.gd",
               "type": "gd",
-              "lines": 418,
+              "lines": 439,
               "role": "单位行动菜单与目标选择器（从 battle_ui.gd 拆出）"
             },
             {
               "path": "scripts/battle/battle_ui_unit_detail.gd",
               "type": "gd",
-              "lines": 160,
-              "role": "单位详情面板（从 battle_ui.gd 拆出）"
+              "lines": 128,
+              "role": "真实单位的只读属性、技能与背包卡片。"
             },
             {
               "path": "scripts/battle/battle_ui_banner.gd",
               "type": "gd",
               "lines": 37,
               "role": "结果横幅（从 battle_ui.gd 拆出）"
+            },
+            {
+              "path": "scripts/battle/battle_ui_preview.gd",
+              "type": "gd",
+              "lines": 132,
+              "role": "使用组件库呈现真实攻守双方与技能预测。"
+            },
+            {
+              "path": "scripts/battle/battle_ui_status_widgets.gd",
+              "type": "gd",
+              "lines": 63,
+              "role": "战斗 HUD 与单位详情共用的只读组件工厂。"
             }
           ],
           "tests": [
@@ -1332,6 +1423,11 @@
             {
               "path": "tests/hint_bar_contract.gd",
               "note": "提示条"
+            },
+            {
+              "path": "tests/battle_ui_components_contract.gd",
+              "type": "gd",
+              "note": "UI 子组件装配契约"
             }
           ]
         },
@@ -1349,19 +1445,19 @@
             {
               "path": "scripts/battle/turn_director.gd",
               "type": "gd",
-              "lines": 351,
+              "lines": 361,
               "role": "敌方 AI 回合 + 玩家方托管的回合编排（从 scenes/battle.gd 抽出）"
             },
             {
               "path": "scripts/battle/action_anim.gd",
               "type": "gd",
-              "lines": 649,
+              "lines": 661,
               "role": "AttackEvent 的只读打击演出回放器。"
             },
             {
               "path": "scripts/battle/result_presentation.gd",
               "type": "gd",
-              "lines": 678,
+              "lines": 744,
               "role": "开战名牌、Boss 横幅与胜负/章节末结算演出"
             },
             {
@@ -1397,13 +1493,13 @@
             {
               "path": "scripts/battle/battle_fx.gd",
               "type": "gd",
-              "lines": 219,
+              "lines": 233,
               "role": "战斗演出特效（伤害数字 / 血条受击 / 飘字 / 抖动）+ PixelFx 预热"
             },
             {
               "path": "scripts/battle/battle_result_stage.gd",
               "type": "gd",
-              "lines": 137,
+              "lines": 141,
               "role": "结算演出视觉（欢呼/倒地/死亡淡出 + 姿态捕获与恢复）"
             },
             {
@@ -1411,6 +1507,12 @@
               "type": "gd",
               "lines": 154,
               "role": "战斗音效（出手/受击 + 结算演出 cue + 程序化回退波形）"
+            },
+            {
+              "path": "scripts/battle/level_up_presentation.gd",
+              "type": "gd",
+              "lines": 257,
+              "role": "场内升级薄演出（升级弹窗）"
             }
           ],
           "tests": [
@@ -1451,6 +1553,26 @@
             {
               "path": "tests/battle_occluder_contract.gd",
               "note": "遮挡判定"
+            },
+            {
+              "path": "tests/level_up_presentation_contract.gd",
+              "type": "gd",
+              "note": "升级弹窗纯演出契约"
+            },
+            {
+              "path": "tests/battle_levelup_flow_contract.gd",
+              "type": "gd",
+              "note": "结算→升级演出流程"
+            },
+            {
+              "path": "tests/level_up_visual_probe.gd",
+              "type": "gd",
+              "note": "升级视觉探针（场景）"
+            },
+            {
+              "path": "tests/level_up_visual_probe.tscn",
+              "type": "tscn",
+              "note": "level_up_visual 探针场景"
             }
           ]
         },
@@ -1468,7 +1590,7 @@
             {
               "path": "scripts/battle/automation/battle_runner.gd",
               "type": "gd",
-              "lines": 793,
+              "lines": 827,
               "role": "声明式战场的无表现执行器"
             },
             {
@@ -1506,6 +1628,60 @@
               "note": "CLI 端到端"
             }
           ]
+        },
+        {
+          "id": "battle.icons",
+          "name": "技能/状态图标与图鉴",
+          "desc": "SkillIcons/StatusIcons 稳定 ID→纹理目录（ID 与文件绑定永不重排，未知 ID 显式兜底不返回 null）；UnitStatusBadges 单位头顶 buff 图标行（billboard+像素偏移，相机旋转不变）；SkillList 技能图鉴场景（配置生成列表+图标+战斗信息）。",
+          "files": [
+            {
+              "path": "scripts/core/skill_icons.gd",
+              "type": "gd",
+              "lines": 121,
+              "role": "技能图标目录（稳定 ID → 纹理；不复制技能战斗定义）"
+            },
+            {
+              "path": "scripts/core/status_icons.gd",
+              "type": "gd",
+              "lines": 101,
+              "role": "状态图标目录（buff → 稳定图标 ID → 纹理）"
+            },
+            {
+              "path": "scripts/iso/unit_status_badges.gd",
+              "type": "gd",
+              "lines": 164,
+              "role": "单位头顶状态图标行（独立 Node3D 模块）"
+            },
+            {
+              "path": "scripts/scenes/skill_list.gd",
+              "type": "gd",
+              "lines": 190,
+              "role": "技能图鉴：从技能配置生成列表，选择后查看图标与战斗信息。"
+            },
+            {
+              "path": "scenes/SkillList.tscn",
+              "type": "tscn",
+              "lines": 12,
+              "role": "技能图鉴独立场景"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/skill_icons_contract.gd",
+              "type": "gd",
+              "note": "稳定 ID 映射/兜底"
+            },
+            {
+              "path": "tests/skill_list_contract.gd",
+              "type": "gd",
+              "note": "图鉴列表生成/导航"
+            },
+            {
+              "path": "tests/status_icons_contract.gd",
+              "type": "gd",
+              "note": "buff→图标推导"
+            }
+          ]
         }
       ]
     },
@@ -1523,7 +1699,7 @@
             {
               "path": "scripts/scenes/map_editor.gd",
               "type": "gd",
-              "lines": 1028,
+              "lines": 1088,
               "role": "战场地图编辑器（JSON 战场调试工具）"
             },
             {
@@ -1535,25 +1711,25 @@
             {
               "path": "scripts/editor/map_editor_block_palette.gd",
               "type": "gd",
-              "lines": 109,
+              "lines": 110,
               "role": "前景/背景方块槽与最近吸取栏的展示逻辑"
             },
             {
               "path": "scripts/editor/map_editor_file_io.gd",
               "type": "gd",
-              "lines": 123,
+              "lines": 133,
               "role": "战场 JSON 读取候选/存档素材快照/读取列表"
             },
             {
               "path": "scripts/editor/map_editor_history.gd",
               "type": "gd",
-              "lines": 73,
+              "lines": 82,
               "role": "地图编辑器历史时间线的纯逻辑内核"
             },
             {
               "path": "scripts/editor/map_editor_overlays.gd",
               "type": "gd",
-              "lines": 389,
+              "lines": 392,
               "role": "地图编辑器画布悬浮层与替换/选择弹窗构建器"
             },
             {
@@ -1565,13 +1741,13 @@
             {
               "path": "scripts/editor/map_editor_panel_tabs.gd",
               "type": "gd",
-              "lines": 470,
+              "lines": 503,
               "role": "地图编辑器右侧面板 8 个 Tab 的内容构建器与按钮工厂"
             },
             {
               "path": "scripts/editor/map_editor_generate.gd",
               "type": "gd",
-              "lines": 84,
+              "lines": 89,
               "role": "地图编辑器种子生成 / 调尺寸 / 工具切换"
             },
             {
@@ -1600,13 +1776,13 @@
             {
               "path": "scripts/editor/editor_canvas.gd",
               "type": "gd",
-              "lines": 908,
+              "lines": 838,
               "role": "编辑器画布（等距方块版，IsoBoard 3D 相机）"
             },
             {
               "path": "scripts/editor/battlefield_doc.gd",
               "type": "gd",
-              "lines": 583,
+              "lines": 879,
               "role": "战场编辑器文档模型：种子地形生成 + JSON 序列化/解析/保存"
             },
             {
@@ -1624,13 +1800,13 @@
             {
               "path": "scripts/editor/map_editor_cell_tools.gd",
               "type": "gd",
-              "lines": 285,
+              "lines": 367,
               "role": "地图编辑器画布交互路由与格子面板同步"
             },
             {
               "path": "scripts/editor/map_editor_model_ops.gd",
               "type": "gd",
-              "lines": 211,
+              "lines": 301,
               "role": "地图编辑器模型写操作原语"
             },
             {
@@ -1650,7 +1826,7 @@
             {
               "path": "scripts/editor/region_clipboard.gd",
               "type": "gd",
-              "lines": 399,
+              "lines": 370,
               "role": "区域复制/剪切/粘贴/移动的五层数据内核"
             },
             {
@@ -1668,13 +1844,13 @@
             {
               "path": "scripts/editor/map_editor_clipboard.gd",
               "type": "gd",
-              "lines": 199,
+              "lines": 345,
               "role": "地图编辑器区域剪贴板与区域移动"
             },
             {
               "path": "scripts/editor/map_editor_presets.gd",
               "type": "gd",
-              "lines": 216,
+              "lines": 224,
               "role": "地图编辑器区域预设库（预设 Tab）"
             },
             {
@@ -1742,13 +1918,13 @@
             {
               "path": "scripts/editor/asset_library_panel.gd",
               "type": "gd",
-              "lines": 919,
+              "lines": 983,
               "role": "用户素材库面板（地图编辑器「素材」Tab）"
             },
             {
               "path": "scripts/editor/map_editor_assets.gd",
               "type": "gd",
-              "lines": 168,
+              "lines": 247,
               "role": "地图编辑器用户素材选择与方块素材网格"
             }
           ],
@@ -1760,6 +1936,31 @@
             {
               "path": "tests/user_asset_pagination_contract.gd",
               "note": "翻页"
+            }
+          ]
+        },
+        {
+          "id": "editor.units",
+          "name": "角色编辑",
+          "desc": "编辑器角色选中/资料回显/可撤销编辑；接 ProfessionData 职业资料。",
+          "files": [
+            {
+              "path": "scripts/editor/map_editor_units.gd",
+              "type": "gd",
+              "lines": 97,
+              "role": "角色选中、资料回显与可撤销编辑。"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/map_editor_units_contract.gd",
+              "type": "gd",
+              "note": "角色编辑模型操作"
+            },
+            {
+              "path": "tests/map_editor_unit_edit_contract.gd",
+              "type": "gd",
+              "note": "角色资料回显/撤销"
             }
           ]
         }
@@ -1877,6 +2078,36 @@
               "type": "gd",
               "lines": 222,
               "role": "视频容器：VideoStreamPlayer + 播放/暂停/停止 + 进度"
+            },
+            {
+              "path": "ui/components/pixel_avatar_frame.gd",
+              "type": "gd",
+              "lines": 71,
+              "role": ""
+            },
+            {
+              "path": "ui/components/pixel_frame.gd",
+              "type": "gd",
+              "lines": 46,
+              "role": ""
+            },
+            {
+              "path": "ui/components/pixel_nameplate.gd",
+              "type": "gd",
+              "lines": 54,
+              "role": ""
+            },
+            {
+              "path": "ui/components/pixel_ninepatch_frame.gd",
+              "type": "gd",
+              "lines": 167,
+              "role": ""
+            },
+            {
+              "path": "ui/components/pixel_tabs_vertical.gd",
+              "type": "gd",
+              "lines": 107,
+              "role": "组件库垂直页签：左侧竖排页签条 + 右侧内容区"
             }
           ],
           "tests": []
@@ -1958,14 +2189,50 @@
             {
               "path": "scripts/scenes/ui_component_gallery.gd",
               "type": "gd",
-              "lines": 717,
-              "role": "UI 组件库演示画廊（精简版）"
+              "lines": 216,
+              "role": "UI 组件库演示画廊（装配层）"
             },
             {
               "path": "scenes/UIComponentGallery.tscn",
               "type": "tscn",
               "role": "画廊场景（F6）",
               "lines": 12
+            },
+            {
+              "path": "scripts/ui_gallery/ui_gallery_basic_pages.gd",
+              "type": "gd",
+              "lines": 486,
+              "role": "画廊基础六页（从 ui_component_gallery.gd 拆出）"
+            },
+            {
+              "path": "scripts/ui_gallery/ui_gallery_battle_page.gd",
+              "type": "gd",
+              "lines": 754,
+              "role": "画廊战棋页（从 ui_component_gallery.gd 拆出）"
+            },
+            {
+              "path": "scripts/ui_gallery/ui_gallery_cursor_page.gd",
+              "type": "gd",
+              "lines": 124,
+              "role": "画廊鼠标页（从 ui_component_gallery.gd 拆出）"
+            },
+            {
+              "path": "scripts/ui_gallery/ui_gallery_frame_pages.gd",
+              "type": "gd",
+              "lines": 397,
+              "role": "画廊框体系三页（从 ui_component_gallery.gd 拆出）"
+            },
+            {
+              "path": "scripts/ui_gallery/ui_gallery_layout_page.gd",
+              "type": "gd",
+              "lines": 109,
+              "role": "画廊布局页（从 ui_component_gallery.gd 拆出）"
+            },
+            {
+              "path": "scripts/ui_gallery/ui_gallery_widgets.gd",
+              "type": "gd",
+              "lines": 37,
+              "role": "画廊共享构建工具（从 ui_component_gallery.gd 拆出）"
             }
           ],
           "tests": [
@@ -1991,19 +2258,19 @@
             {
               "path": "scripts/assets/user_asset_service.gd",
               "type": "gd",
-              "lines": 883,
+              "lines": 909,
               "role": "用户自定义素材服务：本地导入 + 网络清单/图片按需加载"
             },
             {
               "path": "scripts/assets/user_asset_catalog.gd",
               "type": "gd",
-              "lines": 368,
+              "lines": 440,
               "role": "用户自定义素材库：v1 描述符 schema 与库 JSON 持久化"
             },
             {
               "path": "scripts/assets/user_asset_visual_adapter.gd",
               "type": "gd",
-              "lines": 381,
+              "lines": 527,
               "role": "用户素材视觉适配器"
             },
             {
@@ -2044,6 +2311,30 @@
               "type": "mjs",
               "role": "清单生成器测试（node --test）",
               "lines": 178
+            },
+            {
+              "path": "assets/ui/gen/split_cursors.py",
+              "type": "py",
+              "lines": 67,
+              "role": "光标素材切分脚本"
+            },
+            {
+              "path": "meowa_tiles/generated/skill_icons/build_bound_preview.py",
+              "type": "py",
+              "lines": 22,
+              "role": "技能图标边界预览生成"
+            },
+            {
+              "path": "meowa_tiles/generated/status_icons/gen_2x3.sh",
+              "type": "sh",
+              "lines": 17,
+              "role": "状态图标 2x3 网格生成"
+            },
+            {
+              "path": "meowa_tiles/generated/status_icons/slice_status_icons.py",
+              "type": "py",
+              "lines": 82,
+              "role": "状态图标切片"
             }
           ],
           "tests": []
@@ -2346,6 +2637,344 @@
           ]
         }
       ]
+    },
+    {
+      "id": "campaign",
+      "name": "冒险模式子系统",
+      "icon": "🏕️",
+      "desc": "默认玩家入口 Campaign.tscn：多档案冒险存档（user://campaign_saves/）、营地 Hub（金币/公共库存/固定队伍/关卡进度）、线性关卡解锁、首通/重复奖励与掉落表、敌方击杀掉落、商店原子购买与按通关数限购、出征令牌与战后结算（升级差分）。CampaignSession 为第 3 个会话型 autoload。",
+      "children": [
+        {
+          "id": "campaign.session",
+          "name": "营地会话服务",
+          "desc": "CampaignSession autoload：多档案管理、出征（prepare_battle 防重复）/结算（settle_battle win/lose/abandon，胜利 receipt 带 level_ups 升级差分）、商店购买（先落盘后内存）。磁盘契约：出征挂起落盘出征前快照+attempt 标记，重载即恢复出征前。",
+          "files": [
+            {
+              "path": "scripts/campaign/campaign_session.gd",
+              "type": "gd",
+              "lines": 973,
+              "role": "冒险模式会话服务（autoload CampaignSession）"
+            },
+            {
+              "path": "scripts/campaign/campaign_profile_store.gd",
+              "type": "gd",
+              "lines": 329,
+              "role": "冒险档案磁盘存取（BattleSaveStore 包装）"
+            },
+            {
+              "path": "scripts/campaign/campaign_profile_codec.gd",
+              "type": "gd",
+              "lines": 435,
+              "role": "冒险档案磁盘编码/解码/归一化"
+            },
+            {
+              "path": "scripts/campaign/campaign_roster.gd",
+              "type": "gd",
+              "lines": 297,
+              "role": "冒险队伍纯逻辑（初始构建 / 出征部署 / 胜利导入）"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/campaign_contract.gd",
+              "type": "gd",
+              "note": "28 组：掉落表校验/胜利掉落 seed 复现/幂等/落盘重试/商店原子购买/限购周期/模板补齐"
+            }
+          ]
+        },
+        {
+          "id": "campaign.config",
+          "name": "关卡与商店配置",
+          "desc": "data/campaign.json（6 关卡 + first_clear/repeat 奖励 + loot_table 掉落表）与 data/shop.json（货架 {id,price,limit_per_clear}）的加载与校验。",
+          "files": [
+            {
+              "path": "scripts/campaign/campaign_config.gd",
+              "type": "gd",
+              "lines": 340,
+              "role": "冒险模式配置装载与校验"
+            },
+            {
+              "path": "scripts/campaign/shop_catalog.gd",
+              "type": "gd",
+              "lines": 106,
+              "role": "商店货架数据装载与校验（纯静态，带缓存）"
+            },
+            {
+              "path": "data/campaign.json",
+              "type": "data",
+              "lines": 105,
+              "role": "冒险关卡配置：6 关 + 首通/重复奖励 + loot_table/loot_rolls"
+            },
+            {
+              "path": "data/shop.json",
+              "type": "data",
+              "lines": 9,
+              "role": "商店货架：{id,price,limit_per_clear}"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/shop_catalog_contract.gd",
+              "type": "gd",
+              "note": "真实货架 + 非法拒绝"
+            }
+          ]
+        },
+        {
+          "id": "campaign.hub",
+          "name": "营地界面",
+          "desc": "Campaign.tscn 装配层 + 存档选择/营地/世界地图关卡列表/商店/详情确认弹层；全 Pixel* 组件 + 锚点布局，三档分辨率契约。",
+          "files": [
+            {
+              "path": "scripts/scenes/campaign_main.gd",
+              "type": "gd",
+              "lines": 173,
+              "role": "冒险入口装配层"
+            },
+            {
+              "path": "scripts/scenes/campaign_hub.gd",
+              "type": "gd",
+              "lines": 416,
+              "role": "冒险 Hub 屏（只读四数据 + 保存/出征入口）"
+            },
+            {
+              "path": "scripts/scenes/campaign_format.gd",
+              "type": "gd",
+              "lines": 267,
+              "role": "冒险 UI 共享取值/格式化工具"
+            },
+            {
+              "path": "scripts/scenes/campaign_levels.gd",
+              "type": "gd",
+              "lines": 245,
+              "role": "关卡列表屏（世界地图 · 顺序挑战）"
+            },
+            {
+              "path": "scripts/scenes/campaign_modal.gd",
+              "type": "gd",
+              "lines": 214,
+              "role": "冒险 UI 模态弹层（确认/输入/通知）"
+            },
+            {
+              "path": "scripts/scenes/campaign_save_select.gd",
+              "type": "gd",
+              "lines": 437,
+              "role": "冒险存档选择屏"
+            },
+            {
+              "path": "scripts/scenes/campaign_shop.gd",
+              "type": "gd",
+              "lines": 249,
+              "role": "营地商店屏（金币购买补给）"
+            },
+            {
+              "path": "scenes/Campaign.tscn",
+              "type": "tscn",
+              "lines": 12,
+              "role": "冒险模式主场景（project.godot run/main_scene）"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/campaign_ui_contract.gd",
+              "type": "gd",
+              "note": "存档/营地/关卡/弹层/焦点/三档分辨率交互"
+            }
+          ]
+        },
+        {
+          "id": "campaign.bridge",
+          "name": "出征桥接",
+          "desc": "campaign_battle_bridge：prepare_battle → SceneArgs.battle_args（campaign_token/difficulty，save_identity 留空=不写旧逐战场存档）→ Battle.tscn → 战后 settle。不读写旧 battle_saves。",
+          "files": [
+            {
+              "path": "scripts/battle/campaign_battle_bridge.gd",
+              "type": "gd",
+              "lines": 38,
+              "role": "冒险出征与战场场景路由；不读写旧逐战场存档。"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/campaign_battle_integration_contract.gd",
+              "type": "gd",
+              "note": "真实战斗结算/旧存档隔离/重复回调/失败回退/场景切换（MCP 探针）"
+            },
+            {
+              "path": "tests/campaign_battle_integration_contract.tscn",
+              "type": "tscn",
+              "note": "campaign_battle_integration 探针场景"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "buildings",
+      "name": "建筑与室内子系统",
+      "icon": "🏰",
+      "desc": "战场地图的建筑层：4:1 横排四方向精灵图契约（direction_mode=four_directions）、footprint 占用派生与重叠校验（编辑器保存与 loader 共用 BuildingLayout）、可进入房屋室内布局（地板/门/墙/家具）、建筑遮挡淡化与玩家遮挡控制器、内置中世纪瞭望塔（2x2）与宽敞单层房屋（6x6）素材。",
+      "children": [
+        {
+          "id": "buildings.layout",
+          "name": "占用与室内纯逻辑",
+          "desc": "BuildingLayout：单实例 buildings=[{instance_id,asset_id,x,y,rotation}]，占用格由素材 footprint 派生（奇数旋转交换 w/h，缺失回退 1x1）；BuildingInterior：室内布局区分地板/门/墙/家具。",
+          "files": [
+            {
+              "path": "scripts/core/building_layout.gd",
+              "type": "gd",
+              "lines": 194,
+              "role": "建筑占用派生与文档校验（纯逻辑，编辑器保存与战场加载共用）"
+            },
+            {
+              "path": "scripts/core/building_interior.gd",
+              "type": "gd",
+              "lines": 93,
+              "role": "单层建筑室内 schema 与局部格旋转（纯逻辑）。"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/building_layout_contract.gd",
+              "type": "gd",
+              "note": "占用派生/旋转交换/重叠与界内校验/回退 1x1"
+            },
+            {
+              "path": "tests/building_interior_contract.gd",
+              "type": "gd",
+              "note": "室内布局地板/门/墙/家具语义"
+            }
+          ]
+        },
+        {
+          "id": "buildings.render",
+          "name": "建筑渲染与遮挡",
+          "desc": "建筑显示几何按 目标宽度/ground_width_px 等比缩放、最近邻采样；帧选择 posmod(camera_quadrant - rotation, 4)；BuildingOcclusionController 遮挡淡化代理；玩家进入室内时的 player_occlusion_controller 联动。",
+          "files": [
+            {
+              "path": "scripts/iso/building_interior_view.gd",
+              "type": "gd",
+              "lines": 97,
+              "role": "单层房屋剖面，真实格地板、低墙与桌子；不参与碰撞。"
+            },
+            {
+              "path": "scripts/iso/building_occlusion_controller.gd",
+              "type": "gd",
+              "lines": 89,
+              "role": "建筑 billboard 遮挡单位时淡化，离开后恢复。"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/building_occlusion_contract.gd",
+              "type": "gd",
+              "note": "遮挡淡化代理契约"
+            },
+            {
+              "path": "tests/building_interior_visual_contract.gd",
+              "type": "gd",
+              "note": "室内视图视觉契约"
+            },
+            {
+              "path": "tests/building_visual_contract.gd",
+              "type": "gd",
+              "note": "建筑显示几何/帧选择契约"
+            }
+          ]
+        },
+        {
+          "id": "buildings.assets",
+          "name": "内置建筑素材",
+          "desc": "内置 sheet 注册（编辑器启动自动注册、内容哈希去重、changed=false 零写入）；旧单图/正背建筑隔离不自动合成四向；assets/buildings/ 下 CLI 导出配方与 sheet。",
+          "files": [
+            {
+              "path": "scripts/assets/builtin_building_assets.gd",
+              "type": "gd",
+              "lines": 87,
+              "role": "内置四方向中世纪瞭望塔注册（内容寻址、幂等）"
+            },
+            {
+              "path": "scripts/assets/builtin_house_assets.gd",
+              "type": "gd",
+              "lines": 75,
+              "role": "内置6×6单层可进入房屋，源图由建筑CLI真实生成。"
+            },
+            {
+              "path": "assets/buildings/medieval_watchtower/recipe.json",
+              "type": "data",
+              "lines": 140,
+              "role": "瞭望塔 CLI 导出配方（yaw45/pitch30 正交四向）"
+            },
+            {
+              "path": "assets/buildings/spacious_house/recipe.json",
+              "type": "data",
+              "lines": 140,
+              "role": "宽敞房屋导出配方"
+            },
+            {
+              "path": "data/battlefields/building_demo.json",
+              "type": "data",
+              "lines": 699,
+              "role": "建筑示范战场（工具生成）"
+            },
+            {
+              "path": "data/battlefields/house_interior_demo.json",
+              "type": "data",
+              "lines": 954,
+              "role": "室内房屋示范战场（工具生成）"
+            },
+            {
+              "path": "tools/prepare_building_demo.gd",
+              "type": "gd",
+              "lines": 71,
+              "role": "直接构造四向建筑示例快照，不读取或写入用户素材库。"
+            },
+            {
+              "path": "tools/prepare_house_demo.gd",
+              "type": "gd",
+              "lines": 46,
+              "role": "生成独立房屋室内验收地图，不读取或修改用户素材库。"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/builtin_building_assets_contract.gd",
+              "type": "gd",
+              "note": "内置 sheet 注册/去重/changed=false"
+            },
+            {
+              "path": "tests/builtin_house_assets_contract.gd",
+              "type": "gd",
+              "note": "内置房屋素材契约"
+            }
+          ]
+        },
+        {
+          "id": "buildings.editor",
+          "name": "编辑器建筑层",
+          "desc": "编辑器建筑放置/旋转/删除与【地形→建筑】分组面板；地图文档 buildings 层保存校验。",
+          "files": [
+            {
+              "path": "scripts/editor/map_editor_buildings.gd",
+              "type": "gd",
+              "lines": 120,
+              "role": "地形页建筑素材分组、缩略图与选中回显"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/map_editor_building_contract.gd",
+              "type": "gd",
+              "note": "建筑放置/旋转/保存校验"
+            },
+            {
+              "path": "tests/map_editor_building_palette_contract.gd",
+              "type": "gd",
+              "note": "建筑分组面板"
+            }
+          ]
+        }
+      ]
     }
   ],
   "vendored": [
@@ -2418,8 +3047,52 @@
       "reason": "契约产物脏文件（roadmap P0-2 待清理）"
     },
     {
-      "path": "_lead_git_status.sh",
-      "reason": "会话辅助脚本，非游戏代码"
+      "path": ".tmp/building_scene_smoke.gd",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/check_building_palette.py",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/check_building_scripts.py",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/implement_building_palette.py",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/inspect_building_recovery.py",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/recovered/scripts/assets/user_asset_visual_adapter.gd",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/recovered/scripts/editor/asset_library_panel.gd",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/recovered/scripts/editor/editor_canvas.gd",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/recovered/scripts/iso/battlefield_renderer.gd",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/recovered/scripts/iso/isometric_terrain_3d.gd",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/spacious_house_export/house.tscn",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
+    },
+    {
+      "path": ".tmp/watchtower_p30/tower.tscn",
+      "reason": ".tmp 临时工作目录（建筑轮开发/恢复现场），非产品代码"
     }
   ]
 }

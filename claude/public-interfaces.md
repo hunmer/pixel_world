@@ -1,6 +1,6 @@
 # 对外接口
 
-> 更新：2026-11-16（新增统一契约 runner CLI、批量模拟 CLI、autosim 接入、gdtest 试点；拆分后模块 API 形态）。上一轮：表现层 autoload、用户素材服务、UI 组件库、战斗自动化 CLI。本项目是**单机游戏**，除调试桥与素材清单源外不暴露 REST API / WebSocket / SDK；本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**自动化 CLI**、**调试通道**。
+> 更新：2026-11-18（新增 **CampaignSession 冒险模式接口**、campaign_token、建筑布局契约、图标稳定 ID 契约、九键成长；组件库 27 控件）。上一轮：统一契约 runner、批量模拟 CLI、autosim 接入。本项目是**单机游戏**，除调试桥与素材清单源外不暴露 REST API / WebSocket / SDK；本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**自动化 CLI**、**调试通道**。
 
 ## 玩家输入映射（`project.godot [input]` + `main.gd._unhandled_input` @ 3608）
 
@@ -38,6 +38,14 @@
 
 battle.gd 另处理鼠标选格、键盘移动光标。B1 相机由 main.gd 处理：中键或 `Space`+左键拖拽平移、边缘滚屏、滚轮缩放（编辑器画布还支持右键拖拽平移）。**演出播放中可按键快进/跳过**（`battle_ui.gd opening_finished/result_finished/presentation_finished` 均带 `skipped` 参数）。
 
+### 冒险模式（campaign_* 屏）与标题
+
+| 输入 | 用途 |
+| --- | --- |
+| Title `SkillListButton` | 进入技能图鉴 `scenes/SkillList.tscn`（Esc 返回） |
+| Campaign 屏间导航 | 营地 Hub / 关卡列表 / 商店 / 存档选择四屏按钮切换（campaign_main 装配，鼠标驱动） |
+| 战斗中 `Tab`（【记录】页） | 查看/点选回退整场行动历史（`battle_action_history`） |
+
 ### 组件画廊 / 特效画廊（独立场景）
 
 | 场景 | 进入 | 退出 |
@@ -59,8 +67,11 @@ SceneArgs.battle_args = {
     "return_to": "res://main.tscn",   # 可选，B2 结束后回到哪
     "world": <main.gd 实例>,          # 仅 B1 注入；存在则 _b1_mode=true
     "save_identity": "bf:res/xxx",    # 可选：战旗持久化身份（GameSession 分配）；空 = 本局不存档
+                                       #   ★ campaign 出征时留空——结算走 CampaignSession，不写旧 battle_saves
     "save_state": <Dictionary>,       # 可选：恢复进度的完整状态（GameSession 从存档读出）
-    "save_notice": "..."              # 可选：一次性提示文案（重置 / 内容变更 / 损坏回退）
+    "save_notice": "...",             # 可选：一次性提示文案（重置 / 内容变更 / 损坏回退）
+    "campaign_token": "tok_..."       # ★ 可选（2026-11-18）：出征令牌；存在则战斗结束经
+                                       #   campaign_battle_bridge.settle() → CampaignSession.settle_battle
 }
 SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后回哪（默认世界）
 ```
@@ -81,6 +92,23 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 **存档落盘（`scripts/core/battle_save_store.gd` + `battle_save_codec.gd`，version=1）**：`user://battle_saves/`，文件名 = 身份清洗 + sha1 前 8；tmp+bak 两段式原子写，主档损坏回退 `.bak`，索引 `index.json` 损坏时扫描自恢复。内容 = 开局 initial 快照 + 当前 chapter（含死亡单位、冷却、buff、物品次数）+ state（回合/阶段/托管偏好/胜负）。新版本存档（version 更大）拒绝恢复且**不覆盖**，停在战场列表。测试：`tests/battle_save_contract.gd`、`tests/game_session_contract.gd`。
 
 **命令行参数**：`--battlefield=<id|路径|文件名>` 显式进入某战场（优先级最高）；`--reset-battle` / `--reset-battle=<id|路径>` 一次性重置目标档案（其余档案保留，命令行参数不持久化、天然单次生效）。
+
+### `CampaignSession`（autoload，`scripts/campaign/campaign_session.gd`）★ 冒险模式会话（2026-11-18 新增）
+
+> 权威文档 `docs/campaign_loop.md`；本表为代码契约。**磁盘安全契约**：任何改档案状态的操作**先落盘后内存**；出征 = 出征前快照落盘 + attempt 标记；`settle_battle` 一个令牌只结算一次（幂等）。
+
+| 接口 | 说明 |
+| --- | --- |
+| `signal changed(reason)` | 档案/进度/库存/商店任何变化后发出（UI 事件驱动刷新，不轮询） |
+| `DEFAULT_STORE_DIR` | `user://campaign_saves/`（与旧 `battle_saves/` 完全隔离；测试可 `configure_store_dir()` 重定向） |
+| `list_profiles()` / `create_profile(name, difficulty)` / `load_profile(id)` / `rename_profile` / `delete_profile` / `leave_profile` | 档案 CRUD（`user://campaign_saves/` 多档案，codec 校验 + `.bak` 回退层） |
+| `get_profile()` / `get_last_opened_level()` / `list_levels()` | 当前档案视图：金币 / 公共库存 / roster（固定队伍）/ 关卡进度（completed_levels 线性解锁） |
+| `list_shop()` / `buy_item(item_id, count)` | 营地商店（`data/shop.json`）：原子购买（先落盘）；限购上限 = `limit_per_clear × completed_levels.size()` |
+| `prepare_battle(level_id) -> {token, chapter, ...}` | **出征**：落盘出征前快照 + attempt 标记 → 加载关卡战场（走 BattlefieldLoader）→ 产出一次性 `campaign_token` |
+| `settle_battle(token, result, chapter) -> {outcome, gold?, items?, level_ups?}` | **结算**（幂等）：胜 → first_clear/repeat 奖励 + `loot_table` 独立 RNG 掉落（种子=战场 id+token，不触战斗随机流）+ `_diff_level_ups` 升级差分；负/弃 → `_settle_restore` 恢复出征前状态 |
+| `save_current()` / `get_last_result()` / `clear_last_result()` | 手动保存 / 战斗结果回营地展示 |
+
+数据源：`campaign_config.gd`（`data/campaign.json` 6 关卡）+ `shop_catalog.gd`（`data/shop.json`）+ `campaign_roster.gd`（固定队伍）+ `campaign_profile_codec/store`（档案编解码与原子落盘）。UI 消费者：`scripts/scenes/campaign_*.gd` 七屏（campaign_main 装配层转发 changed 信号）。测试：`tests/campaign_contract.gd`(1606 行)、`campaign_ui_contract`、`battle_drop_contract`、`campaign_battle_integration_contract`。
 
 ### `Settings`（autoload）— 用户偏好
 
@@ -113,13 +141,13 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 
 渲染侧适配：`resolve(asset_id) / resolve_many(ids)` → 视觉描述（含烘焙贴图）；`build_visual(descriptor, image)` / `bake_image(...)`；`placeholder_visual(id)`（缺图占位）；`visual_for_entries(props, tile_overrides)`（编辑器/战场批量解析）；烘焙缓存 `invalidate_baked(id)`。
 
-## UI 组件库（`ui/`，2026-11 新增）
+## UI 组件库（`ui/`）
 
-- 16 个 `@tool` 像素风组件：`PixelButton / PixelCheckButton / PixelOptionButton / PixelDropdown / PixelLineEdit / PixelTextArea / PixelSlider / PixelSpinBox / PixelProgressBar / PixelTabs / PixelPanel / PixelPopup / PixelImage / PixelIcon / PixelAudioPlayer / PixelVideoPlayer`（`ui/components/pixel_*.gd`）。
+- **27 个 `@tool` 像素风组件**（21 功能 + 6 薄布局容器）：`PixelButton / PixelCheckButton / PixelOptionButton / PixelDropdown / PixelLineEdit / PixelTextArea / PixelSlider / PixelSpinBox / PixelProgressBar / PixelTabs / PixelPanel / PixelPopup / PixelImage / PixelIcon / PixelAudioPlayer / PixelVideoPlayer` + **2026-11-18 新增 5 件**：`PixelAvatarFrame / PixelFrame / PixelNameplate / PixelNinepatchFrame / PixelTabsVertical`（`ui/components/pixel_*.gd`）。
 - 主题：`ui/theme/component_theme.gd` — `ComponentTheme.create()` 每次**新建独立 Theme**（不污染项目默认主题）。
-- 文档：`ui/README.md`（304 行：设计原则、用法、测试）。交互画廊 `scenes/UIComponentGallery.tscn`（F6）。
-- headless 契约：`tests/ui_contract.gd`（735 checks）。
-- ⚠️ **现有业务 UI（battle_ui / map_editor / HUD）尚未迁移到该库**——新旧两套并存。
+- 文档：`ui/README.md`；交互画廊 `scenes/UIComponentGallery.tscn`（F6；脚本已拆 `scripts/ui_gallery/` 6 模块）。
+- headless 契约：`tests/ui_components_contract.gd` + `tests/ui_contract.gd`（静态扫描）。
+- **业务迁移现状（2026-11-18）**：`campaign_*.gd` 七屏**全量使用 Pixel* + ComponentTheme**（首个正经业务消费者）；map_editor 已部分迁移（含新 5 组件）；battle_ui / HUD 仍是老 UI（ui_factory 38 文件消费，迁移是 roadmap 项）。
 
 ## 战斗自动化 CLI（`tools/battle_cli.gd`，2026-11 新增）
 
@@ -139,7 +167,7 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 
 ## 统一契约测试 runner（`tools/run_contracts.py`，2026-11-16 起默认入口）
 
-manifest 驱动（`tests/contract_manifest.json`：80 契约 + 2 探针），仅 Python 标准库；详见 `docs/test_automation.md` 与 `claude/testing-and-quality.md`。
+manifest 驱动（`tests/contract_manifest.json`：**103 项** = 98 契约可跑 + 5 environment-skip 声明），仅 Python 标准库；详见 `docs/test_automation.md` 与 `claude/testing-and-quality.md`。
 
 ```bash
 python3 tools/run_contracts.py --test terrain_generation --no-warmup   # 单契约
@@ -199,8 +227,21 @@ python3 tools/run_contracts.py --all --run-env-skip --junit            # 全量 
 
 - `victory: { type: "rout" | "defend_turns" | "seize", turns?: int }` — 胜利条件注入 `TurnManager.victory`，`check_victory(enemies, ctx)` 按类型判定（defend_turns 坚持到 N 回合 / seize 敌全灭或占点）。缺省 = rout（歼灭）。
 - `reinforcements: [ { turn: int(≥1), units: [同 enemyUnits 条目但无 x/y], positions: [{x,y}]（与 units 等长） } ]` — 按回合波次增援：敌方回合开始由 `ReinforcementSpawner.spawn_due(chapter, grid, turn, turn_number)` 刷入（`search_radius=3` 曼哈顿环找空位，被占丢弃 + warning，已消费波次从 chapter 移除防恢复局重刷）；未到点单位经 `pending_units(chapter)` 并入敌存活集合，防提前判胜。
+- `buildings: [ { asset: "medieval_watchtower", x, y, rotation: 0..3 } ]` — **（2026-11-18）建筑层**：占用格由 `BuildingLayout` 从素材 footprint 派生（奇数旋转交换 w/h）+ 跨建筑/单位重叠校验；渲染走 `battlefield_renderer` 四方向帧（`posmod(camera_quadrant-rotation,4)`）；室内战场（`building_interior`）另用 interior 布局。
 
 地形共 **11 种**：`plain, grass, sand, snow, rocky, forest, water, village, fort, wall, mountain`（`core/terrain.gd`）。
+
+### 建筑素材契约（`assets/buildings/*/recipe.json` + `docs/building_assets.md`）
+
+- 精灵图：**4:1 横排**（左→右 = 朝向 0,1,2,3），`direction_mode=four_directions`；帧选择公式 `posmod(camera_quadrant - rotation, 4)`。
+- footprint：1..8 格；占用格集合由 `BuildingLayout.footprint_cells()` 派生，奇数旋转交换 w/h。
+- `BuildingLayout`（`scripts/core/building_layout.gd`，class_name）是编辑器保存与 loader 共用的占用/重叠**唯一校验实现**（grep 实测 10 文件消费：loader/save_codec/grid_system/编辑器 3 件 + 3 契约）。
+- 内置素材：`medieval_watchtower`、`spacious_house`（`builtin_building_assets.gd` / `builtin_house_assets.gd` + recipe.json，sheet SHA-256 固化在 `docs/building_assets.md`）。
+
+### 图标稳定 ID 契约（`scripts/core/skill_icons.gd` + `status_icons.gd`）
+
+- `skill_icons.gd`：iconId `'01'..'53'` 与纹理文件**绑定永不重排**；未知 ID 回退 `DEFAULT_ICON_ID` + `push_warning`（**不返回 null**）。消费者：`skills.gd`（技能表）、图鉴 `skill_list.gd`。
+- `status_icons.gd`：buff 属性 → 图标 ID 推导（纯静态）；消费者：`unit_status_badges.gd`（UnitSprite3D 徽章）+ 契约。
 
 ## 战场编辑器契约（`scripts/editor/`）
 
@@ -208,8 +249,9 @@ python3 tools/run_contracts.py --all --run-env-skip --junit            # 全量 
 | --- | --- |
 | `BattlefieldDoc`（battlefield_doc.gd） | 模型 `{ id, name, description, hosting, width, height, rows, units:[{class,name,level,x,y,faction}] }`；`generate(seed)`（确定性：水域/山脊/森林/村庄/要塞）、`resize()`、`to_json_dict()`、`load_path()`、`save_model()`（保存即回读校验）、`quick_validate()` |
 | `EditorCanvas`（editor_canvas.gd） | 内嵌 `BattlefieldRenderer` 渲染；左键按下/拖动发 `cell` 信号（多高度拾取）；右键或 Space+左键平移、滚轮缩放；已放单位显示职业头像+阵营色环+等级徽标 |
-| `map_editor.gd`（场景） | 工具：画笔/填充/橡皮/角色放置/**replace 整体替换**；**区域选择→复制/剪切/粘贴/拖动移动/方向键 nudge**；取色器（Alt 临时吸取 + 前景色/背景色）；种子输入+🎲随机+🌱生成；侧栏分组折叠 + at-icons 图标；快捷键提示弹窗（?） |
+| `map_editor.gd`（场景） | 工具：画笔/填充/橡皮/角色放置/**replace 整体替换**；**区域选择→复制/剪切/粘贴/拖动移动/方向键 nudge**；取色器（Alt 临时吸取 + 前景色/背景色）；种子输入+🎲随机+🌱生成；侧栏分组折叠 + at-icons 图标；快捷键提示弹窗（?）；**建筑摆放工具（map_editor_buildings：footprint 预览/重叠校验）**；**角色编辑（map_editor_units：选中/资料回显/可撤销，接 ProfessionData）** |
 | `TilePreview`（tile_preview.gd) | 地形调色板缩略图（真实 ColumnBatch 等距方块柱渲染，4 列 GridContainer） |
+| `BuildingLayout`（core/building_layout.gd）★ | 建筑 footprint 派生 + 占用/重叠校验（编辑器保存与 loader 共用唯一实现）；`footprint_cells()` 奇数旋转交换 w/h |
 | `AssetLibraryPanel`（asset_library_panel.gd） | 用户素材库面板：浏览/选用 `user://custom_assets/` 导入的方块图（消费 UserAssetService + VisualAdapter） |
 | `EditorRegionClipboard`（region_clipboard.gd，2026-11-15） | 区域剪贴板内核（全静态）：`extract(...)` 五层 payload（rows / block_z / tile_overrides / props / units，坐标相对选区左上角）；`validate / bounds_error / write / clear_rect / paste / move / payload_size / describe`；`PAYLOAD_VERSION=1` |
 | `EditorRegionPresetStore`（region_preset_store.gd） | 区域命名预设持久化：`list/save/load/rename/delete/has/count`；单文件 `user://editor_presets/presets.json`，tmp+bak 原子写 |
@@ -222,7 +264,7 @@ python3 tools/run_contracts.py --all --run-env-skip --junit            # 全量 
 
 | 脚本 | 形态 | 主要对外接口 |
 | --- | --- | --- |
-| `core/professions.gd` | `class_name ProfessionData` | `load_data()` / `apply_profession()` / `has_profession()` |
+| `core/professions.gd` | `class_name ProfessionData` | `load_data()` / `apply_profession()`（power→str/mag、agility→spd）/ `has_profession()` / `growths_for(prof)`（**九键成长** hp,mp,str,mag,skl,spd,luk,def,res；缺键逐键回退 `_GROWTH_FALLBACK`） |
 | `core/skills.gd` / `items.gd` | 静态 | `load_data()` / 查表结算 |
 | `core/weapons.gd` | `class_name WeaponData` | 武器三角 / 经验公式 |
 | `core/terrain.gd` | `class_name TerrainData` | 地形 def/avoid/move_cost/walkable 查表（11 地形） |
@@ -249,6 +291,9 @@ python3 tools/run_contracts.py --all --run-env-skip --junit            # 全量 
 | 发出方 | 信号 | 用途 |
 | --- | --- | --- |
 | `battle.gd` | `battle_finished(result: StringName)` | 战斗结束（B1 由 main.gd._exit_battle 恢复；B2 切回场景） |
+| `campaign_session.gd`★ | `changed(reason)` | 冒险档案任何变化（UI 事件驱动刷新） |
+| `campaign_main.gd` | `battle_requested(level_id)` | 关卡列表出征请求（装配层转发给 bridge） |
+| `level_up_presentation.gd`★ | `sound_requested(cue)` | 升级演出音效请求（宿主接线 Sfx，不直连） |
 | `battle_ui.gd` | `nameplate_shown / boss_banner_shown / loot_shown / cheer_requested / collapse_requested / presentation_sound_requested(cue)` | 演出步骤请求（名字牌/横幅/战利品/欢呼/倒地/音效由宿主接线到 Sfx） |
 | `battle_ui.gd` | `opening_finished(skipped)` / `result_finished(result, skipped)` / `presentation_finished(kind, skipped)` | 演出阶段完成（支持快进） |
 | `battle_ui.gd` | `immersive_presentation_changed(enabled)` | 沉浸演出开关切换 |

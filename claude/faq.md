@@ -1,9 +1,9 @@
 # 常见问题（FAQ）与定位路径
 
-> 更新：2026-11-15（第二轮增量：+Q25 增援/胜利配置、Q26 区域预设存储；更新 Q7/Q17/Q20/Q24 与计数）。每条给出"问题 → 在哪找答案 / 在哪改"。
+> 更新：2026-11-18（+Q27 冒险模式存档/结算、Q28 建筑素材契约、Q29 技能图鉴；更新 Q1/Q10/Q16/Q17/Q19 与计数）。每条给出"问题 → 在哪找答案 / 在哪改"。
 
-### Q1：项目到底是做什么的？两个子系统什么关系？
-一个 Godot 4.7 等距像素**生态世界**（无限确定性流式生成 + 动植物/天气/昼夜/3D 阳光阴影），其中**嵌入了回合制战棋战斗**（从 phaserjs 迁移），按 P 在真实地形上战斗，或从 JSON 战场文件开战。两子系统唯一耦合是 `scripts/core/world_to_chapter.gd`；JSON 战场入口是 `battlefield_loader.gd`（产出同构 chapter）。详见 `overview.md` 与 `module-responsibilities.md`。
+### Q1：项目到底是做什么的？几个子系统什么关系？
+一个 Godot 4.7 等距像素**生态世界**（无限确定性流式生成 + 动植物/天气/昼夜/3D 阳光阴影），其中**嵌入了回合制战棋战斗**（从 phaserjs 迁移），外围再包一层**冒险模式**（营地/关卡/商店/掉落/成长，`scripts/campaign/`，**当前默认主入口 `Campaign.tscn`**）。战棋按 P 在真实地形上战斗，或从 JSON 战场文件开战；冒险模式消费战棋（出征→战斗→结算回营地）。世界↔战棋唯一耦合是 `scripts/core/world_to_chapter.gd`；JSON 战场入口是 `battlefield_loader.gd`（产出同构 chapter）。详见 `overview.md` 与 `module-responsibilities.md`。
 
 ### Q2：`main.gd` / `map_editor.gd` / `battle.gd` 还能继续拆吗？
 **2026-11-16 已完成第一轮拆分**：main.gd 4319→2283 行（能力拆入 `scripts/world/` 11 个 RefCounted 模块，`_configure_generation_services()` 装配）、map_editor.gd 3285→1031 行（拆入 `scripts/editor/` 15 个 `map_editor_*` 模块）、battle.gd 1934→1444 行（演出/存档拆入 `scripts/battle/` 6 模块）。三者现在是"装配层 + 能力模块"形态，仍可按同法继续抽（roadmap P3-13 剩余项）。**约定不变：新能力先进模块再挂装配层，主文件里只留测试直调所需的同名薄委托**；任何拆分需保持流式生成与确定性的调用顺序（拆分护栏：terrain_generation SHA-256 零漂移 + L1 埋点序列一致，见 `docs/plans/split_report_2026-11-15.md`）。哪些模块能直接复用、以及结构/重复/可读性自检见 `report.md`。
@@ -34,7 +34,7 @@
 **Godot 编辑器脚本缓存坑**：`dbg_restart` 不会重新编译脚本。改代码后必须删 `.godot/editor` 目录并重启编辑器。详见 `conventions.md`。
 
 ### Q10：怎么跑测试？
-无测试框架。契约测试：`godot --headless --path . --script res://tests/<name>_contract.gd`（**69 个**；macOS 可执行 `/Applications/Godot.app/Contents/MacOS/Godot`；Windows console 版 exe stdout 全缓冲，管道下无输出≠失败，看退出码）。战棋自测：编辑器运行 `scenes/SkillTest.tscn`（44/44）。另有 2 个探针（flat_rotation / mesh_draw）与 Node `--test`（素材清单 7 项）。地形测试用固化 SHA-256 快照检测回归。**`game_hud_contract.gd` 在 HEAD 上据旧记录已坏**（--script 模式无 autoload、引用 Settings 编译错；2026-11-15 未复验）。详见 `testing-and-quality.md`。
+**统一入口 `python3 tools/run_contracts.py`**（manifest 驱动 **103 项** = 98 默认跑 + 5 environment-skip；`--test/--group/--changed/--all/--jobs/--junit`；2026-11-18 macOS 全量基线 **pass 98 / fail 0 / env-skip 5**）。legacy 单契约：`godot --headless --path . --script res://tests/<name>_contract.gd`（macOS 可执行 `/Applications/Godot.app/Contents/MacOS/Godot`；Windows console 版 exe stdout 全缓冲，管道下无输出≠失败，看退出码）。战棋自测：编辑器运行 `scenes/SkillTest.tscn`（44/44）。另有探针（flat_rotation / mesh_draw 等）与 Node `--test`（素材清单 7 项）。地形测试用固化 SHA-256 快照检测回归。详见 `testing-and-quality.md`。
 
 ### Q11：确定性被破坏了 / 测试 SHA-256 对不上？
 检查是否动了 `DeterministicRng` / `_hash_u32` / `_cell_rand` / `_quantize` / `_seed_point`，或重排了 manifest / 改了稳定 ID / 用文件路径当种子。这些是"存档/世界契约"。详见 `conventions.md` + `data-model.md`。
@@ -52,16 +52,16 @@
 Panku REPL（autoload `Panku`），项目命令集 `dbg.*` 注册于 `scripts/debug_console_commands.gd`：`help / list_battlefields / battlefield(id) / editor / enter_battle / battle_mode / player / time_scale`。加新命令 = 对象公共方法 + `_HELP_方法名` 常量，再 `Panku.gd_exprenv.register_env(name, obj)` 注册。
 
 ### Q16：`story/` 目录的内容能直接用吗？
-**不能**。`story/` 是目标态设计 bible（13 职业/27 技能/25 道具/15 章），运行时事实是 `data/` 的 8 职业/8 技能/8 物品 + 4 个 JSON 战场。实现 story 内容时按 `story/` 规划改 `data/`，勿混用。逐项差距与推进顺序见 `docs/roadmap.md`。
+**不能**。`story/` 是目标态设计 bible（13 职业/27 技能/25 道具/15 章），运行时事实是 `data/` 的 8 职业/8 技能/8 物品 + 8 个 JSON 战场 + campaign 6 关卡。实现 story 内容时按 `story/` 规划改 `data/`，勿混用。逐项差距与推进顺序见 `docs/roadmap.md`。
 
 ### Q17：项目有数据库 / 后端 / 网络吗？
-**没有后端**。纯单机。磁盘持久化全清单：`user://settings.cfg`（偏好）、`user://battle_saves/`（战旗存档）、`user://battlefields/`（自定义战场）、`user://editor_presets/`（编辑器区域命名预设）、`user://custom_assets/`（用户素材 blob）、`user://startup.cfg`（导出后的调试启动配置）。进程间接口：breakpoint_mcp loopback 调试桥（9080 编辑器 / 9081 运行时，单实例）；**用户素材清单源**是唯一出站 HTTP（默认 `http://127.0.0.1:8076/blocks.json` 本机回环；优先级 `asset_source.cfg [asset_source] source_url` 覆盖 > 库内 settings > 默认，断源优雅降级）。
+**没有后端**。纯单机。磁盘持久化全清单：`user://settings.cfg`（偏好）、`user://campaign_saves/`（**冒险模式档案**）、`user://battle_saves/`（战旗存档）、`user://battlefields/`（自定义战场）、`user://editor_presets/`（编辑器区域命名预设）、`user://custom_assets/`（用户素材 blob）、`user://startup.cfg`（导出后的调试启动配置）。进程间接口：breakpoint_mcp loopback 调试桥（9080 编辑器 / 9081 运行时，单实例）；**用户素材清单源**是唯一出站 HTTP（默认 `http://127.0.0.1:8076/blocks.json` 本机回环；优先级 `asset_source.cfg [asset_source] source_url` 覆盖 > 库内 settings > 默认，断源优雅降级）。
 
 ### Q18：在哪能看到代码与 TS 源的对应关系？
 战棋部分脚本顶部注释普遍标注对应 TS 源（迁移自 phaserjs）。但 TS 源**不在本仓库**（外部 phaserjs 项目）。本仓库是纯 GDScript。
 
 ### Q19：UI 组件库是什么？为什么界面上有两套 UI？
-`ui/` 下 16 个 `@tool` 像素组件（PixelButton/PixelPanel/…）+ `ui/theme/component_theme.gd`，2026-11 新增。交互画廊 F6（`scenes/UIComponentGallery.tscn`，ESC 退）。**现有业务 UI（battle_ui / map_editor / HUD）尚未迁移**，新旧两套并存——迁移计划见 `docs/roadmap.md`。组件文档：`ui/README.md`。
+`ui/` 下 21 个 `@tool` 像素功能组件（PixelButton/PixelPanel/…，含 2026-11-18 新增 5 件帧框/名牌/竖 Tab）+ 6 薄布局容器 + `ui/theme/component_theme.gd`。交互画廊 F6（`scenes/UIComponentGallery.tscn`，ESC 退）。**业务迁移现状**：冒险模式 campaign 七屏是首个全 Pixel* 消费者（2026-11-18）；map_editor 已部分迁移；battle_ui / HUD 仍是老 UI——迁移计划见 `docs/roadmap.md`。组件文档：`ui/README.md`。
 
 ### Q20：用户素材（自定义方块图）怎么进游戏？
 编辑器 → 素材库面板（AssetLibraryPanel）。链路：本机 HTTP 清单源（默认 `http://127.0.0.1:8076/blocks.json`）→ `UserAssetService` 导入（sha 去重幂等）→ `user://custom_assets/` blob → `UserAssetVisualAdapter` 烘焙贴图 → 编辑器/战场渲染。**素材源已可配置**：`asset_source.cfg [asset_source] source_url` 覆盖 > 库内 settings.source_url > 默认，断源优雅降级；换机器改配置或自建源即可（`docs/user_assets.md`）。
@@ -83,3 +83,12 @@ Panku REPL（autoload `Panku`），项目命令集 `dbg.*` 注册于 `scripts/de
 
 ### Q26：编辑器的区域预设 / 复制的地形存哪？
 区域剪贴板在内存（`EditorRegionClipboard` 五层 payload）；**命名预设**落盘 `user://editor_presets/presets.json`（单文件 + tmp/bak 原子写，`EditorRegionPresetStore` 管理 list/save/load/rename/delete）。两者坐标都相对选区左上角，粘贴时平移。
+
+### Q27：冒险模式的存档和结算怎么工作的？（2026-11-18 新增）
+权威文档 `docs/campaign_loop.md`，要点：存档 `user://campaign_saves/`（与旧 `battle_saves/` 隔离，多档案）；出征 `prepare_battle` 先落盘"出征前快照 + attempt 标记"再进战斗（**磁盘永远是安全态**，重载即恢复出征前）；`settle_battle(token)` 一个令牌只结算一次（幂等），胜利 = 首通/重复奖励 + `loot_table` 掉落（**独立 RNG**，种子 = 战场 id + 令牌，不触战斗随机流）+ `level_ups` 升级差分（战斗内演出）；商店购买先落盘后内存，限购周期 = `completed_levels.size()`。旧入口 `Game.tscn` 保留为开发用途。验证：`tests/campaign_contract.gd` 等 4 个契约。
+
+### Q28：建筑素材（四方向精灵图）的契约是什么？（2026-11-18 新增）
+`docs/building_assets.md`：4:1 横排 sheet（direction_mode=four_directions），帧选择 `posmod(camera_quadrant - rotation, 4)`；footprint 1..8 格，占用格由 `BuildingLayout.footprint_cells()` 派生（奇数旋转交换 w/h），占用/重叠校验只走 `BuildingLayout`（编辑器保存与 loader 共用唯一实现）；sheet SHA-256 固化在文档。内置素材 `medieval_watchtower` / `spacious_house`（`assets/buildings/*/recipe.json`）；示例战场 `data/battlefields/building_demo.json` / `house_interior_demo.json`。
+
+### Q29：技能图鉴从哪进？（2026-11-18 新增）
+标题屏（`scenes/Title.tscn`）的技能图鉴按钮（`SkillListButton`）→ `scenes/SkillList.tscn`（`scripts/scenes/skill_list.gd`）。技能图标走 `scripts/core/skill_icons.gd` 的**稳定 iconId `'01'..'53'`**（永不重排、未知回退默认图标 + warning）；状态图标走 `status_icons.gd`（buff 属性推导）。契约 `tests/skill_icons_contract.gd` / `skill_list`。

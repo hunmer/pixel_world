@@ -1,6 +1,6 @@
 # 开发约定
 
-> 更新：2026-11-15（第二轮增量：DESIGN.md UI 规范、78 契约与基线状态、编辑器区域操作/预设约定、增援与胜利字段）。本文件收集对 Agent 与人类贡献者最实用的命令、规范与禁忌。高优先级条目同时摘要在根 `CLAUDE.md`；agent 工作约束另见根 `AGENTS.md`。
+> 更新：2026-11-18（主入口改 Campaign.tscn；契约 103 项与 macOS 基线 98/0/5；冒险模式磁盘安全约定；建筑素材与图标 ID 契约；UI 组件 27）。本文件收集对 Agent 与人类贡献者最实用的命令、规范与禁忌。高优先级条目同时摘要在根 `CLAUDE.md`；agent 工作约束另见根 `AGENTS.md`。
 
 ## 运行与启动
 
@@ -30,7 +30,7 @@ godot --headless --path . --script res://tools/battle_cli.gd -- \
 godot --path . -- --battlefield=plains_skirmish --reset-battle
 ```
 
-- **主场景**：`res://scenes/Game.tscn`（战旗会话入口：自动续玩最近战旗）。世界场景 `res://main.tscn` 由 Game 列表进入，或被 `config/startup.cfg`（`auto_open_last_scene`）直跳。
+- **主场景**：`res://scenes/Campaign.tscn`（**冒险模式**：存档选择 → 营地 → 关卡）。旧入口 `res://scenes/Game.tscn` 保留为**开发用途**（战旗会话路由：自动续玩最近战旗）；世界场景 `res://main.tscn` 由 Game 列表进入，或被 `config/startup.cfg`（`auto_open_last_scene`）直跳。`docs/campaign_loop.md` 是冒险模式权威文档。
 - **F5 直跳最近场景**：`config/startup.cfg` 记录 `last_scene`（`SkillTest` / `UIComponentGallery` 默认排除）；`--battlefield` / `--reset-battle` 优先。手册 `docs/startup_config.md`。
 - **console 版 exe 的 stdout 是全缓冲的**（Windows 历史坑）：管道下无输出 ≠ 没输出；脚本化验证用 `timeout` 包裹或看退出码。
 
@@ -43,20 +43,18 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 ## 测试
 
 - **契约本体无第三方框架依赖，入口已统一**。默认入口是 `tools/run_contracts.py`
-  （`tests/contract_manifest.json` 驱动：80 契约 = 78 原有 + `ecology_logic_bench` +
-  `simulation`；`--test/--group/--changed/--all/--jobs 1-4/--dry-run/--junit` 等，
+  （`tests/contract_manifest.json` 驱动 **103 项** = 98 契约默认跑 + 5 environment-skip 声明；
+  `--test/--group/--changed/--all/--jobs 1-4/--dry-run/--junit` 等，
   状态 `pass/fail/timeout/environment-skip/executor-error`，手册见 `docs/test_automation.md` §3）；
   legacy 单契约命令 `godot --headless --path . --script res://tests/x_contract.gd` 仍保留。
   测试形态：
-  1. `tests/*_contract.gd`（**80 个**）：`extends SceneTree`，在 `_initialize` → `call_deferred("_run")` 中跑断言，失败用 `push_error` + `quit(1)`。**地形生成测试用固化的 SHA-256 快照检测回归**（改了确定性会挂）。
+  1. `tests/*_contract.gd`（**98 个默认跑**）：`extends SceneTree`，在 `_initialize` → `call_deferred("_run")` 中跑断言，失败用 `push_error` + `quit(1)`。**地形生成测试用固化的 SHA-256 快照检测回归**（改了确定性会挂）。
   2. `scripts/tests/*.gd`：`extends Node`，`_ready` 里自跑 `_ok/_pass/_fail/_print_summary`（仿 `debug_test.gd` 框架）。
-  3. 探针 2 个：`tests/flat_rotation_probe` / `mesh_draw_probe`（manifest 收录但不默认跑）。
+  3. 探针（`flat_rotation_probe` / `mesh_draw_probe` 等，manifest 收录但不默认跑）。
   4. Node `--test`（素材清单生成器 7 项，`tools/build_blocks_manifest.test.mjs`）。
-  5. UI 组件库 headless 契约 `tests/ui_contract.gd` + `ui_components_contract.gd`（1062 checks；`ui_contract` 还静态扫描业务脚本禁直建控件）。
+  5. UI 组件库 headless 契约 `tests/ui_contract.gd` + `ui_components_contract.gd`（1400+ checks；`ui_contract` 还静态扫描业务脚本禁直建控件）。
   6. gdtest 持久 worker 试点（`tests/gdtest/` 3 文件 8 test，`--backend gdtest` 可选后端）与批量模拟（`tools/run_simulations.gd`）。
-- 已知状态（两行分列台账，历史不改写）：
-  - 2026-11-15 全量基线（`tools/run_contract_baseline.sh`）：62/72 通过，`ui` 红于当日的 `map_editor.gd` 直建控件。
-  - 2026-11-16 实测：`ui` 复绿（3 连过 exit=0，根因已在后续修复中消除）；`map_editor_ui` 仍红（当日实测 exit=1）。现 manifest 口径：known-fail 4（`map_editor_ui`/`battle_action_chain`/`battle_presentation_hooks`/`isometric_view`）+ environment-skip 5（`sunlight_3d_gl`/`user_asset_source_live`/`action_anim`/`immersive_battle_camera`/`world_map_overlay`）+ pass 71，详见 `testing-and-quality.md` 状态表。
+- 已知状态（台账，历史不改写，全表见 `testing-and-quality.md`）：**2026-11-18 macOS 全量基线 pass 98 / fail 0 / env-skip 5 / timeout 0**（HEAD `e7ed380`，`.tmp/init_baseline_2026-11-18/`）；2026-11-17 known-fail 五项清零（75/80）；更早状态见台账表。
 - **只跑改动相关测试，不盲目跑全量**（AGENTS.md）：先 `python3 tools/run_contracts.py --changed --dry-run` 预览；映射不到回退全选时检查原因，改用明确的 `--test` / `--group` 缩小范围。首跑 headless 含资源导入，耗时偏长属正常（runner 默认先 `--import` 预热）。
 - **验证优先级（代码优先）**：能由单元 / 契约 / headless / CLI / 自动模拟测试覆盖时，先跑相关代码测试；其次通过函数或 API 驱动流程并自动断言；只有真实输入、焦点、命中区域或视觉表现无法由前两者覆盖时，才进行必要的游戏内交互验证。运行态诊断才走 Godot MCP；截图是可选且需用户明确要求或同意的视觉手段。测试范围限于改动相关项，勿盲目全量运行。
 
@@ -76,7 +74,20 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 - **新内容走新版模块化配置**：`config/ecology/manifest.json` + `species/` + `communities/` + `biomes/`。**禁止给新内容加 `metadata.legacy_placement_seed` 或写进 `legacy_bundles.json`**（那是兼容旧布局专用）。
 - **确定性契约**：ID、`stream_key`、legacy `placement_seed` 是"存档/世界契约"。**文件路径、翻译后的显示名绝不能当随机种子**。重排 manifest 顺序或改稳定 ID 需要 world version 迁移。
 - 新模块用唯一命名空间的 `stream_key`（如 `volcanic/fumaroles/member`），现有流保留旧数字 salt。
-- **`story/` 是目标态设计 bible**（13 职业/27 技能/25 道具）；运行时事实是 `data/` 的 8 职业/8 技能/8 物品。实现 story 内容 = 改 `data/*.json`，勿混用两套数字。
+- **`story/` 是目标态设计 bible**（13 职业/27 技能/25 道具）；运行时事实是 `data/` 的 8 职业/8 技能/8 物品 + campaign 6 关。实现 story 内容 = 改 `data/*.json`，勿混用两套数字。
+
+## 冒险模式约定（2026-11-18 新增，权威文档 `docs/campaign_loop.md`）
+
+- **磁盘永远是安全态**：出征 = `prepare_battle` 先落盘"出征前快照 + attempt 标记"再进战斗；重载即恢复出征前。`settle_battle(token)` 一个令牌只结算一次（幂等）。
+- **购买先落盘后内存**（原子性）；限购周期 = `completed_levels.size()`，勿另造计数器。
+- **掉落用独立 RNG**（种子 = 战场 id + 出征令牌），不触战斗全局随机流；掉落表只在 `data/campaign.json` 的 `loot_table`。
+- **campaign 存档在 `user://campaign_saves/`**，与旧 `user://battle_saves/` 完全隔离；campaign 出征的 `save_identity` 留空（不写旧档、不续玩旧战旗）。
+- 关卡/商店数据只从 `data/campaign.json` + `data/shop.json` 读（`campaign_config.gd` / `shop_catalog.gd`），勿在 session 里写死。
+
+## 建筑与图标约定（2026-11-18 新增）
+
+- **建筑素材四方向契约**（`docs/building_assets.md`）：4:1 横排精灵图、`direction_mode=four_directions`、帧选择 `posmod(camera_quadrant-rotation,4)`、footprint 1..8；占用/重叠校验只走 `BuildingLayout`（勿在 loader/编辑器各写一份）；sheet SHA-256 固化在文档，改图要同步。
+- **图标稳定 ID 契约**：`skill_icons.gd` 的 iconId `'01'..'53'` 与文件绑定**永不重排**；未知 ID 回退 `DEFAULT_ICON_ID` + push_warning（不返回 null）；`status_icons.gd` 按 buff 属性推导，勿另建映射表。
 
 ## 战棋约定（B1 / B2 / JSON 战场 / 编辑器 / 会话与存档）
 
@@ -88,7 +99,7 @@ godot --path . -- --battlefield=plains_skirmish --reset-battle
 - **JSON 战场**：schema 与校验规则见 `public-interfaces.md`；`rows` 是**顶层字段**；`BattlefieldLoader` 是唯一权威校验点（编辑器 `quick_validate` 只是轻校验）。用户战场放 `user://battlefields/`（与 `res://data/battlefields/` 同名时 res 优先）。
 - **编辑器**：SpinBox 竞态用 `_syncing_boxes` 模式防；素材库面板消费 `UserAssetService`，勿绕过服务直读 blob。区域操作（复制/粘贴/移动）一律走 `EditorRegionClipboard` 五层 payload，勿自拼 Dictionary 丢层（tile_overrides/block_z/props/units 都要跟）；命名预设只经 `EditorRegionPresetStore` 落盘（原子写）。
 - **胜利条件 / 增援**：只通过战场 JSON 的 `victory` / `reinforcements` 字段声明（schema 见 `public-interfaces.md`），`BattlefieldLoader` 静态严校验；勿在 battle.gd 里写死特定战场的胜负特判。增援刷入只调 `ReinforcementSpawner`，勿在演出层自刷。
-- **UI 组件库 / 设计 token**：新 UI 一律用 `ui/` 的 Pixel* 组件（22 个，含 6 布局容器）+ `ComponentTheme`，间距/圆角/字号取值**只从 DESIGN.md token 常量取**——禁裸数字样式值、自建 StyleBox、绝对定位、横向滚动（正误例与三档分辨率验收见根 `DESIGN.md`）。`tests/ui_contract.gd` 会静态扫描业务脚本里的 `Button.new()/CheckButton.new()/OptionButton.new()` 直建控件并置 FAIL；旧业务 UI 迁移按 roadmap 渐进，不阻塞功能开发。
+- **UI 组件库 / 设计 token**：新 UI 一律用 `ui/` 的 Pixel* 组件（**27 个**，含 6 布局容器；冒险模式 campaign 七屏已是全量消费者）+ `ComponentTheme`，间距/圆角/字号取值**只从 DESIGN.md token 常量取**——禁裸数字样式值、自建 StyleBox、绝对定位、横向滚动（正误例与三档分辨率验收见根 `DESIGN.md`）。`tests/ui_contract.gd` 会静态扫描业务脚本里的 `Button.new()/CheckButton.new()/OptionButton.new()` 直建控件并置 FAIL；旧业务 UI（battle_ui/HUD）迁移按 roadmap 渐进，不阻塞功能开发。
 
 ## 视角 / 3D 渲染约定
 

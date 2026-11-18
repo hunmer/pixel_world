@@ -1,6 +1,6 @@
 # 数据模型
 
-> 更新：2026-11-15（第二轮增量：chapter +victory/+reinforcements、编辑器区域 payload 五层与命名预设；此前新增战旗存档模型、用户素材 descriptor、对话 JSON、startup.cfg）。
+> 更新：2026-11-18（新增冒险模式档案模型 + 掉落独立 RNG + 升级差分；UnitData `facing`；chapter `buildings` 层；九键成长回退；建筑占用模型）。
 
 本项目无数据库 / 无网络持久层。"数据模型"指**运行时领域对象**（多为 GDScript Dictionary，全 StringName key）、**流式生成的世界状态**与 **3D 正交渲染结构**。
 
@@ -85,10 +85,12 @@
 { id, name, classId, faction, level, exp,
   stats: { hp, mp, str, mag, skl, spd, luk, def, res, mov },  # mp 即 MP 上限
   growths: { hp, mp, str, mag, skl, spd, luk, def, res },
+  facing: Vector2i,        # 朝向（2026-11-18）：ZERO=无朝向永不判背击（兼容旧档）
   weapon: <Weapon dict>, items: [...], skills: [...] }
 ```
 - `faction`：`Enums.FACTION_PLAYER` / `FACTION_ENEMY`（`core/enums.gd`，StringName）。
 - `power` 统一表示主攻击属性，`apply_profession` 按武器类型写 `str`（物理）或 `mag`（魔法）。
+- `facing`（背击规则 `facing_rules.gd`）：受击者朝向与"指向攻击者"方向点积 < 0 → 背击加成；旧档无 facing（= `Vector2i.ZERO`）时永不判背击。
 
 ### `Weapon`（`core/weapons.gd`）
 `{ id, name, type, might, hit, crit, range:[min,max]|int, weight, uses }`
@@ -97,16 +99,22 @@
 ### `SkillData` / `ItemData` / `ProfessionData` / `TerrainData`（`core/*.gd`）
 - Skill：`type(damage/heal/aoe/buff/debuff), element, range, targetType, mpCost, cooldown, power, hitBonus, stat, buffValue, buffTurns`
 - Item：`type(consumable/throwable/equip/buff), target, effect(heal_hp/heal_mp/damage/buff/cleanse/equip), power, range, uses, ...`
-- Profession：`power, agility→spd, attack_range`（职业固有射程优先于武器）
+- Profession：`power, agility→spd, attack_range`（职业固有射程优先于武器）+ **九键成长 `growths`**（hp,mp,str,mag,skl,spd,luk,def,res；power→str/mag、agility→spd 同样适用；`growths_for(prof)` 缺键逐键回退 `_GROWTH_FALLBACK`）
 - Terrain：`{ type, def_bonus, avoid_bonus, move_cost:{foot,armor,cavalry,flying}, walkable }`，`move_cost=99` 不可通行。**11 种地形**：`plain, grass, sand, snow, rocky, forest, water, village, fort, wall, mountain`。
 
 ### `chapter`（战斗输入，见 `public-interfaces.md`）
-`{ id?, name?, width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin?, hosting?, victory?, reinforcements? }`
+`{ id?, name?, width, height, map: StringName[][], playerUnits:[], enemyUnits:[], world_origin?, hosting?, victory?, reinforcements?, buildings? }`
 
 两个来源产出同构 chapter：`world_to_chapter`（世界地形采样）与 `BattlefieldLoader.load_battlefield`（JSON 文件）。
 
 - `victory?: { type: "rout"|"defend_turns"|"seize", turns?: int }` — 胜利条件（缺省 rout）。运行时注入 `TurnManager.victory`，`check_victory` 按类型判定。
 - `reinforcements?: [ { turn:int, units:[{class,name,level}], positions:[{x,y}] } ]` — 按回合波次增援；已消费波次由 `ReinforcementSpawner.spawn_due` 从 chapter 中**移除**（防存档恢复局重刷），未到点单位经 `pending_units` 并入胜利判定敌集合。
+- `buildings?: [ { asset:String, x:int, y:int, rotation:0..3 } ]` — **（2026-11-18）建筑层**：占用格由 `BuildingLayout` 从素材 footprint 派生（奇数旋转交换 w/h）+ 重叠校验；渲染走 `battlefield_renderer` 四方向帧；室内战场用 `building_interior.gd` 布局。
+
+### 建筑占用模型（`scripts/core/building_layout.gd`，2026-11-18 新增）
+
+- `class_name BuildingLayout`：`footprint_cells(asset, x, y, rotation)` 派生占用格集合；跨建筑/与单位的重叠校验是**编辑器保存与 loader 共用的唯一实现**。
+- 素材契约见 `docs/building_assets.md`：4:1 横排精灵图（direction_mode=four_directions），帧选择 `posmod(camera_quadrant - rotation, 4)`，footprint 1..8 格，sheet SHA-256 固化。
 
 ### JSON 战场文档模型（`scripts/editor/battlefield_doc.gd`）
 
@@ -145,6 +153,15 @@
 
 场景 JSON：`{ version:1, id, battlefield:<path>, seed?, factions: { player: {mode: script|ai, ...}, enemy: {...} }, assertions: [...] }`（`BattleScenarioLoader` 归一化）。产物：`events.jsonl` / `result.json` / `summary.txt`，退出码 0–4 语义见 `public-interfaces.md`。
 
+## 冒险模式档案模型（`scripts/campaign/`，2026-11-18 新增）
+
+- **profile**（`campaign_profile_codec.gd`，version=1）：`{ id, name, created_at, updated_at, difficulty, gold, roster:[UnitData...], inventory:[{itemId,count}], completed_levels:[levelId...], purchases:{itemId:count}, pending:{ token, level_id, snapshot }?, last_result? }`。存档 `user://campaign_saves/<profile_id>.json`（tmp+bak 原子写，主/bak 双层读取自恢复——`_resolve_codec_layers`）。
+- **出征事务**：`prepare_battle(level_id)` 先落盘"出征前快照 + `pending.token`"再进战斗（磁盘永远是安全态，重载即恢复出征前）；`settle_battle(token, result, chapter)` 一个令牌**只结算一次**（幂等），胜利走 `_settle_win`（首通/重复奖励 + 掉落 + 升级差分），失败/弃权走 `_settle_restore`。
+- **掉落独立 RNG**：种子 = 战场 id + 出征令牌（`_victory_loot`），**不触战斗全局随机流**；`loot_table` 定义在 `data/campaign.json` 各关卡。
+- **level_ups**：`_diff_level_ups(before_roster, after_roster)` 比对出征前后 roster 的等级差分，写进胜利 receipt，由 `level_up_presentation` 在战斗内演出。
+- **限购计数**：`purchases` 的限购周期 = `completed_levels.size()`（通关数），购买先落盘后内存（原子性）。
+- **roster**（`campaign_roster.gd`）：固定队伍（非抽卡）；关卡配置 `campaign_config.gd` 读 `data/campaign.json`（6 关线性解锁：`_level_unlocked` = 前一关在 completed_levels）；商店目录 `shop_catalog.gd` 读 `data/shop.json`。
+
 ## 用户素材模型（`scripts/assets/`，2026-11-14 新增）
 
 - descriptor：`{ id, kind, image, sha256, render: { mode: full|pivot|scale|footprint, ... } }`；manifest = `{ blocks: [descriptor...] }`（源 `http://127.0.0.1:8076/blocks.json`）。
@@ -160,6 +177,7 @@
 | 路径 | 内容 | 写入方 |
 | --- | --- | --- |
 | `user://settings.cfg` | `[battle] inline_mode` 等用户偏好 | `Settings` autoload |
+| `user://campaign_saves/`★ | **冒险模式档案**（profile json + tmp/bak） | CampaignSession / campaign_profile_store |
 | `user://battle_saves/` | 战旗存档 + index.json | GameSession / battle_save_store |
 | `user://battlefields/` | 编辑器产出的自定义战场 JSON | map_editor |
 | `user://editor_presets/` | 编辑器区域命名预设（presets.json，tmp+bak 原子写） | EditorRegionPresetStore |
