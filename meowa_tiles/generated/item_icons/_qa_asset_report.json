@@ -1,0 +1,165 @@
+{
+  "ok": true,
+  "assets": [
+    {
+      "path": "assets/ui/items/01.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 9510,
+      "color_count": 3142,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 126,
+      "content_bounds": [
+        0,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/items/02.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 9701,
+      "color_count": 3376,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 130,
+      "content_bounds": [
+        0,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/items/03.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 9527,
+      "color_count": 2830,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 125,
+      "content_bounds": [
+        0,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/items/04.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8748,
+      "color_count": 1627,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 132,
+      "content_bounds": [
+        0,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/items/05.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 8727,
+      "color_count": 2060,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 132,
+      "content_bounds": [
+        0,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/items/06.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 9379,
+      "color_count": 1964,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 131,
+      "content_bounds": [
+        0,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/items/07.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 9356,
+      "color_count": 2211,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 197,
+      "content_bounds": [
+        1,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    },
+    {
+      "path": "assets/ui/items/08.png",
+      "format": "PNG",
+      "mode": "RGBA",
+      "width": 64,
+      "height": 64,
+      "bytes": 9676,
+      "color_count": 3220,
+      "has_alpha": true,
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "transparent_pixels": 197,
+      "content_bounds": [
+        1,
+        0,
+        63,
+        64
+      ],
+      "problems": []
+    }
+  ]
+}

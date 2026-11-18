@@ -158,6 +158,51 @@ Seedream 2K 21:9、transparent、terrain 双参考。场景模板：**上下两�
 - .import 注意：`meowa_tiles/generated/` 有 `.gdignore`，网格原稿不生成 `.png.import`（运行时不加载概念稿，属预期）；`meowa_tiles/heroes/` 下运行时锚点正常生成 `static.png.import` 且项目默认 `mipmaps/generate=false`。
 - 教训：① 请求 1:1 不保证输出 1:1，切片前先验实际尺寸能否被行列整除；② 2K 输出边缘有抗锯齿碎屑噪点连通域，切片器 MIN_COMPONENT 阈值自动丢弃即可。
 
+## 物品图标素材表（item_icons，2026-11-19 实测通过）
+
+游戏物品 64x64 图标（入场目录 `assets/ui/items/`，物品 ID 见 `data/items.json`）。
+
+直接参考节点（本轮上传的本项目 skills 实际 PNG，仅作风格参考）：`item_ref_blue_01`（i-AKbjQuvPNQ，skills/01.png）、`item_ref_green_09`（i-Wpv7IElvVU，09.png）、`item_ref_red_21`（i-ulnBon7t9N，21.png）、`item_ref_orange_25`（i-6UOeLXCJA7，25.png）。
+
+Seedream 5.5 / image2image（4 参考入边）/ ratio=3:4 / quality=2K / background=transparent → 1776x2368 原生真透明 RGBA。
+
+```bash
+libtv node --x 4000 --y 200 create "item_icons_3x4_v2" -t image \
+  --left "item_ref_blue_01" --left "item_ref_green_09" --left "item_ref_red_21" --left "item_ref_orange_25" \
+  -s "model=Seedream 5.5" \
+  -s modeType=image2image \
+  -s ratio=3:4 \
+  -s quality=2K \
+  -s background=transparent \
+  --prompt "<提示词模板，要点见下>" --run
+```
+
+提示词要点（完整 prompt 存画布节点 `item_icons_3x4_v2`，i-2TN5EzwOxg；v1 节点 `item_icons_3x4_v1`，i-ShPLqXiyuc）：
+
+- 布局与内容：「3 列 × 4 行共 12 格……每行恰好 3 个」+ 逐行清单（8 个游戏物品 + 4 张卷轴储备，卷轴不入游戏数据）。
+- **关键约束（v1 教训）**：v1 只写「图标之间留出明显均匀的透明间隔」，模型在行 1–3 图标底下画了一整块不透明背板（全表连通成一片，无法切片）。v2 写明：「12 个圆角方形底框彼此完全独立，底框轮廓之外必须 100% 全透明，底框之间绝对不要任何背板、底板、桌面、木板、纸张、板条或任何相连的背景物——绝对不要把图标放在一块板子上」，实测 39.9% 全透明像素、连通域恰好 12 个。
+- 风格锚：「深色圆角方形底框（近黑深色纹理底），框内中央高亮发光主体，边缘柔和泛光」与参考图标完全一致；「大颗粒像素点阵质感……绝不能是平滑矢量或高清插画质感」。
+- 易混物品写明区分点：守护之戒=银戒身+盾形蓝宝石 vs 力量之戒=金戒身+剑形红宝石；生命药水=圆瓶+心形高光 vs 力量药水=锥形瓶+火焰高光。
+
+切片与归一（入 64x64）：
+
+1. `python3 tools/slice_ui_sheet.py meowa_tiles/generated/item_icons/item_icons_3x4_v2.png -o meowa_tiles/generated/item_icons/sliced_v2`（连通域自动模式；实测 4 行 × 3 列 = 12 张，与逐格语义核对无误——不盲信顺序，逐格看图确认后再映射 ID）。
+2. 每张紧裁 alpha bbox → 最长边等比缩放到 64（NEAREST）→ 居中贴入 64x64 透明画布 → `assets/ui/items/01..08.png`；4 张卷轴储备切至 `meowa_tiles/generated/item_icons/reserves/`（不增游戏数据）。
+
+| 文件 | 物品 ID / 名称（data/items.json） |
+| --- | --- |
+| assets/ui/items/01.png | hpPotion 生命药剂（红瓶心形高光） |
+| assets/ui/items/02.png | mpPotion 法力药剂（蓝瓶星形高光） |
+| assets/ui/items/03.png | antidote 解毒药（绿瓶草叶标记） |
+| assets/ui/items/04.png | shuriken 手里剑（钢十字星） |
+| assets/ui/items/05.png | bomb 炸弹（黑铁圆肚火花引信） |
+| assets/ui/items/06.png | armorRing 守护之戒（银+蓝盾宝石） |
+| assets/ui/items/07.png | powerRing 力量之戒（金+红剑纹宝石） |
+| assets/ui/items/08.png | mightPotion 力量药水（橙锥形瓶） |
+| item_icons/reserves/scroll_{fire,ice,heal,thunder}.png | 卷轴储备（不入 data/items.json） |
+
+QA：`asset_report.py --expect-size 64x64 --require-alpha` exit 0（8/8 RGBA、alpha 0–255、圆角透明 125–197px、无 problems；留档 `_qa_asset_report.json`）；`_qa_compare.png` 与 `assets/ui/skills/01..08.png` 的 4x 放大 + 原尺寸并排对照，深底泛光风格一致、原尺寸可读；原始图 URL 留档 `_v1_url.txt` / `_v2_url.txt`。
+
 ## 实测产物
 
 | 文件 | 说明 |
@@ -180,5 +225,7 @@ Seedream 2K 21:9、transparent、terrain 双参考。场景模板：**上下两�
 | castle_lobby_4k.png | ✅ 中世纪城堡王座大厅 lobby 图，3808x1632，全场景不透明 |
 | castle_birdview.png | ✅ 城堡全城鸟瞰布局图（城墙+街道+空地），2048²，可作房屋摆放底图 |
 | valley_birdview.png | ✅ 山谷地形鸟瞰布局图（双山脊+河流+草甸），3136x1344，真透明 |
+| item_icons/item_icons_3x4_v1.png | ❌ 行 1–3 底部连成不透明背板，无法切片（迭代淘汰） |
+| item_icons/item_icons_3x4_v2.png | ✅ 12 格物品图标表（8 物品+4 卷轴），1776x2368，真透明，已切片入库 assets/ui/items/01..08.png |
 | professions_8grid_v1.png | ✅ 八职业人形 2x4 概念网格，2816x1584，真透明，粗像素（含三骑乘） |
 | meowa_tiles/heroes/{swordmaster,soldier,sniper,sage,bishop}/static.png | ✅ 五个非骑乘身份锚，128x128，底部中心，NN 统一缩放 k=0.1899 |
