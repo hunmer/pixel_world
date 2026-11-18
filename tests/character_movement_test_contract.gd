@@ -113,6 +113,199 @@ func _release_test_audio() -> void:
 	OS.delay_msec(100)
 
 
+func _check_terrain_flush_budget() -> void:
+	var terrain_script := load("res://scripts/scenes/character_movement_terrain_3d.gd") as Script
+	_expect(terrain_script != null, "incremental terrain test script loads")
+	if terrain_script == null:
+		return
+	var terrain := terrain_script.new() as Node3D
+	root.add_child(terrain)
+	terrain.set_process(false)
+	for index in range(25):
+		terrain.set_cell(Vector2i(index * 2, 0), [], 0.0)
+	terrain.set_incremental_flush(true, 1000000)
+	_expect(terrain.pending_chunk_count() == 25, "terrain test prepares 25 dirty chunks")
+	_expect(terrain.flush() == 12 and terrain.pending_chunk_count() == 13,
+		"terrain flush submits at most one bounded chunk batch")
+	_expect(terrain.flush() == 0 and terrain.pending_chunk_count() == 13,
+		"explicit flush and Terrain._process cannot double-submit in one frame")
+	terrain.clear()
+	terrain.queue_free()
+
+
+func _drain_character_world(world: Node) -> int:
+	var fauna: RefCounted = world.get("_fauna")
+	for frame in range(600):
+		if (
+			(world.get("_pending_stream_cells") as Dictionary).is_empty()
+			and not bool(world.get("_fauna_refresh_pending"))
+			and not bool(fauna.call("is_scan_active"))
+		):
+			return frame
+		world._process(0.025)
+	_expect(false, "incremental cells and fauna converge within 600 parent-process steps")
+	return 600
+
+
+func _cell_state_signature(state: RefCounted) -> String:
+	var context: RefCounted = state.get("context")
+	return "%s|%s|%s|%s|%d" % [
+		str(context.get("cell")),
+		String(context.call("ecology_signature")),
+		str(context.get("region_anchor")),
+		str(state.get("occupancy_tags")),
+		hash(state.get("static_objects")),
+	]
+
+
+func _active_group_signatures(world: Node) -> Dictionary:
+	var store: RefCounted = world.get("_animal_groups")
+	var result: Dictionary = {}
+	var keys: Array = store.call("keys")
+	keys.sort()
+	for key in keys:
+		if int(store.call("active_member_count", key)) <= 0:
+			continue
+		var group: Dictionary = store.call("get_value", key, {})
+		var members: Array[String] = []
+		for member: Dictionary in group.get("members", []):
+			members.append("%s:%s:%s" % [
+				str(member.get("origin", Vector2i.ZERO)),
+				String(member.get("species", "")),
+				String(member.get("role", "")),
+			])
+		members.sort()
+		result[str(key)] = "%s|%s|%s|%.6f|%s" % [
+			str(group.get("anchor", Vector2i.ZERO)),
+			String(group.get("ecosystem_id", "")),
+			String(group.get("community_id", "")),
+			float(group.get("social_radius", 0.0)),
+			";".join(members),
+		]
+	return result
+
+
+func _exercise_continuous_movement(world: Node) -> void:
+	_check_terrain_flush_budget()
+	_expect(world.get("_terrain").has_method("pending_chunk_count"),
+		"test scene owns bounded terrain without changing shared terrain")
+	_expect(world.get("_fauna").has_method("is_scan_active"),
+		"test scene owns incremental fauna without changing shared fauna")
+	# _regenerate 保留当前格；对照实验显式从同一真实出生格开始。
+	world.set("_player_cell", Vector2i.ZERO)
+	world._regenerate(20261119)
+	world.set_process(false)
+	var start_cell: Vector2i = world.get("_player_cell")
+	var camera: Camera3D = world.get("_cam")
+	var previous_smooth: Vector2 = world.get("_camera_smooth_position")
+	var previous_cell := start_cell
+	var previous_elapsed := -1.0
+	var cell_changes := 0
+	var camera_samples := 0
+	var max_pending := 0
+	var saw_idle := false
+	var frames_seen: Dictionary = {}
+	var directions_seen: Dictionary = {}
+	Input.action_press(ACTION_RIGHT)
+	for frame in range(200):
+		if cell_changes >= 10:
+			break
+		world._process(0.025)
+		var animator: RefCounted = world.get("_animator")
+		var mode: StringName = animator.get("mode")
+		saw_idle = saw_idle or mode != &"run"
+		if mode == &"run":
+			var elapsed := float(animator.get("_run_elapsed"))
+			if previous_elapsed >= 0.0:
+				_expect(elapsed + 0.00001 >= previous_elapsed,
+					"continuous parent-loop run_elapsed never resets between cells")
+			previous_elapsed = elapsed
+			frames_seen[int(animator.get("frame_index"))] = true
+			directions_seen[animator.get("direction")] = true
+		var current_cell: Vector2i = world.get("_player_cell")
+		if current_cell != previous_cell:
+			cell_changes += 1
+			previous_cell = current_cell
+		var smooth: Vector2 = world.get("_camera_smooth_position")
+		if not smooth.is_equal_approx(previous_smooth):
+			camera_samples += 1
+		previous_smooth = smooth
+		max_pending = maxi(max_pending, (world.get("_pending_stream_cells") as Dictionary).size())
+	Input.action_release(ACTION_RIGHT)
+	_expect(cell_changes == 10, "real parent loop completes ten consecutive passable cells")
+	_expect(not saw_idle, "held direction has no one-frame idle at cell boundaries")
+	_expect(frames_seen.size() == 6, "continuous parent loop renders all six run frame indices")
+	_expect(directions_seen.size() == 1, "continuous same-direction movement keeps a stable facing")
+	_expect(camera_samples >= cell_changes, "inherited camera follows a continuous smoothed trajectory")
+	_expect(max_pending <= 68, "far-edge generation queue remains bounded while moving")
+	world._process(0.2)
+	_expect((world.get("_animator") as RefCounted).get("mode") == &"idle",
+		"release after continuous movement settles to idle")
+	_drain_character_world(world)
+	var states: Dictionary = world.get("_cell_states")
+	var center: Vector2i = world.get("_player_cell")
+	var extent := int(world.get("stream_extent"))
+	_expect(states.size() == (extent * 2 + 1) * (extent * 2 + 1),
+		"drained stream has exactly the full square window")
+	var missing := 0
+	for y in range(center.y - extent, center.y + extent + 1):
+		for x in range(center.x - extent, center.x + extent + 1):
+			if not states.has(Vector2i(x, y)):
+				missing += 1
+	_expect(missing == 0, "every queued far-edge cell eventually generates")
+
+	# 同种子、同路径的父世界同步流式结果作为权威对照。
+	var reference_scene := load("res://main.tscn") as PackedScene
+	_expect(reference_scene != null, "synchronous reference world loads")
+	if reference_scene == null:
+		return
+	var reference := reference_scene.instantiate()
+	reference.seed = 20261119
+	reference.stream_extent = extent
+	reference.move_time = 0.1
+	root.add_child(reference)
+	await process_frame
+	reference.set_process(false)
+	for step in range(10):
+		reference._try_move(Vector2i.RIGHT)
+		reference._process(0.2)
+	_expect(reference.get("_player_cell") == center,
+		"incremental and synchronous worlds follow the same ten-cell path")
+	var reference_states: Dictionary = reference.get("_cell_states")
+	var mismatches := 0
+	for cell: Vector2i in states:
+		if not reference_states.has(cell):
+			mismatches += 1
+			continue
+		if _cell_state_signature(states[cell]) != _cell_state_signature(reference_states[cell]):
+			mismatches += 1
+	_expect(mismatches == 0 and states.size() == reference_states.size(),
+		"incremental CellContext/occupancy/static flora match synchronous generation")
+	var test_groups := _active_group_signatures(world)
+	var reference_groups := _active_group_signatures(reference)
+	_expect(test_groups == reference_groups,
+		"active fauna anchors/members match synchronous generation (test=%d reference=%d)" % [test_groups.size(), reference_groups.size()])
+	reference.queue_free()
+	await process_frame
+	await process_frame
+
+	# 运行中旋转四个直角只改方向帧，不退出 run；八帧计时由动画器按方向切换自理。
+	Input.action_press(ACTION_RIGHT)
+	world._process(0.025)
+	for quarter in range(4):
+		camera.rotate_step(1, false)
+		world._refresh_player_visual()
+		var animator: RefCounted = world.get("_animator")
+		var spec := Sheet.direction_spec(animator.get("direction"))
+		_expect(animator.get("mode") == &"run"
+			and int(animator.call("current_row")) == int(spec.get("row", -1))
+			and (world.get("_player") as Sprite3D).flip_h == bool(spec.get("flip_h", false)),
+			"running camera quarter %d keeps a valid directional animation" % quarter)
+	Input.action_release(ACTION_RIGHT)
+	world._process(0.2)
+	_drain_character_world(world)
+
+
 func _run() -> void:
 	# autoload 就绪后再动态加载主场景，避免顶层 preload 抢在 Settings/Sfx 前编译。
 	var test_scene := load("res://scenes/CharacterMovementTest.tscn") as PackedScene
@@ -307,6 +500,7 @@ func _run() -> void:
 	_expect(ProjectSettings.get_setting("application/run/main_scene") == "res://scenes/Campaign.tscn",
 		"default application entry remains Campaign.tscn")
 
+	await _exercise_continuous_movement(world)
 	world.queue_free()
 	await process_frame
 	await process_frame

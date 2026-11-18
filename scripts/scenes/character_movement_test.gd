@@ -4,6 +4,7 @@ extends "res://main.gd"
 const Sheet = preload("res://scripts/characters/free_character_sheet.gd")
 const Animator = preload("res://scripts/characters/free_character_animator.gd")
 const Terrain3DScript = preload("res://scripts/scenes/character_movement_terrain_3d.gd")
+const TestFaunaStreamerScript = preload("res://scripts/scenes/character_movement_fauna_streamer.gd")
 const PixelMarginScript = preload("res://ui/components/pixel_margin.gd")
 const PixelVBoxScript = preload("res://ui/components/pixel_v_box.gd")
 const PixelPanelScene = preload("res://ui/components/pixel_panel.tscn")
@@ -21,6 +22,8 @@ const ACTION_KEYS := {
 }
 const INPUT_DEADZONE := 0.2
 const DIGITAL_MOVE_THRESHOLD := 0.5
+const STREAM_CELL_BUDGET_PER_FRAME := 12
+const FAUNA_BUCKET_BUDGET_PER_FRAME := 24
 
 @export var initial_character: StringName = &"002"
 
@@ -40,6 +43,10 @@ var _blocked_entry_attempts: int = 0
 var _continue_run_pose: bool = false
 var _has_stream_center: bool = false
 var _last_stream_center: Vector2i = Vector2i.ZERO
+var _pending_stream_cells: Dictionary = {}
+var _stream_cell_order: Array[Vector2i] = []
+var _stream_cell_cursor: int = 0
+var _fauna_refresh_pending: bool = false
 
 
 func _ready() -> void:
@@ -101,6 +108,11 @@ func _release_test_actions() -> void:
 		_world_camera_navigation.cancel_drag()
 
 
+func _configure_generation_services() -> void:
+	_fauna = TestFaunaStreamerScript.new()
+	super._configure_generation_services()
+
+
 func _setup_terrain() -> void:
 	_terrain = Terrain3DScript.new()
 	_terrain.name = "IsometricTerrain3D"
@@ -109,20 +121,32 @@ func _setup_terrain() -> void:
 
 func _regenerate(new_seed: int) -> void:
 	_has_stream_center = false
+	_reset_stream_queue()
 	var test_terrain := _terrain as Terrain3DScript
 	if test_terrain != null:
 		test_terrain.set_incremental_flush(false)
+	var test_fauna := _fauna as TestFaunaStreamerScript
+	if test_fauna != null:
+		test_fauna.set_incremental_enabled(false)
 	super._regenerate(new_seed)
+	if test_fauna != null:
+		test_fauna.set_incremental_enabled(true)
 	if test_terrain != null:
 		test_terrain.set_incremental_flush(true)
 
 
-## 单格行走只替换流式窗口的一条边；完整 65×65 扫描仍用于初次生成与跳转。
-## 这与父流程生成同一 CellState/生态内容，只避免每格重复检查数千个未变化格。
+## 单格行走只替换流式窗口的一条边，远边新格分帧生成；初次生成与跳转仍走父完整流程。
+## 玩家可到达的下一格本来就在旧窗口内，因此排队不改变 _try_move/阻挡或内容种子。
 func _update_streaming() -> void:
 	var delta := _stream_center - _last_stream_center
 	if not _has_stream_center or absi(delta.x) + absi(delta.y) != 1:
+		_reset_stream_queue()
+		var test_fauna := _fauna as TestFaunaStreamerScript
+		if test_fauna != null:
+			test_fauna.set_incremental_enabled(false)
 		super._update_streaming()
+		if test_fauna != null:
+			test_fauna.set_incremental_enabled(true)
 		_last_stream_center = _stream_center
 		_has_stream_center = true
 		return
@@ -131,31 +155,78 @@ func _update_streaming() -> void:
 	if delta.x != 0:
 		var leaving_x := _last_stream_center.x - delta.x * stream_extent
 		for y in range(_last_stream_center.y - stream_extent, _last_stream_center.y + stream_extent + 1):
-			var leaving := Vector2i(leaving_x, y)
-			if _cells.has(leaving):
-				_free_cell(leaving)
+			_remove_stream_cell(Vector2i(leaving_x, y))
 		var entering_x := _stream_center.x + delta.x * stream_extent
 		for y in range(_stream_center.y - stream_extent, _stream_center.y + stream_extent + 1):
-			var entering := Vector2i(entering_x, y)
-			if not _cells.has(entering):
-				_spawn_cell(entering)
+			_queue_stream_cell(Vector2i(entering_x, y))
 	else:
 		var leaving_y := _last_stream_center.y - delta.y * stream_extent
 		for x in range(_last_stream_center.x - stream_extent, _last_stream_center.x + stream_extent + 1):
-			var leaving := Vector2i(x, leaving_y)
-			if _cells.has(leaving):
-				_free_cell(leaving)
+			_remove_stream_cell(Vector2i(x, leaving_y))
 		var entering_y := _stream_center.y + delta.y * stream_extent
 		for x in range(_stream_center.x - stream_extent, _stream_center.x + stream_extent + 1):
-			var entering := Vector2i(x, entering_y)
-			if not _cells.has(entering):
-				_spawn_cell(entering)
-	_terrain.flush()
-	_spawn_fauna_for_stream()
+			_queue_stream_cell(Vector2i(x, entering_y))
 	_cleanup_streamed_animals()
-	_ambient_registry.refresh_all()
+	_fauna_refresh_pending = true
 	_ensure_sort_origin(_player_cell)
 	_last_stream_center = _stream_center
+
+
+func _reset_stream_queue() -> void:
+	_pending_stream_cells.clear()
+	_stream_cell_order.clear()
+	_stream_cell_cursor = 0
+	_fauna_refresh_pending = false
+
+
+func _remove_stream_cell(cell: Vector2i) -> void:
+	_pending_stream_cells.erase(cell)
+	if _cells.has(cell):
+		_free_cell(cell)
+
+
+func _queue_stream_cell(cell: Vector2i) -> void:
+	if _cells.has(cell) or _pending_stream_cells.has(cell):
+		return
+	_pending_stream_cells[cell] = true
+	_stream_cell_order.append(cell)
+
+
+func _drain_stream_queue() -> void:
+	var spawned := 0
+	while _stream_cell_cursor < _stream_cell_order.size() and spawned < STREAM_CELL_BUDGET_PER_FRAME:
+		var cell := _stream_cell_order[_stream_cell_cursor]
+		_stream_cell_cursor += 1
+		if not _pending_stream_cells.has(cell):
+			continue
+		_pending_stream_cells.erase(cell)
+		if not _in_stream(cell, _stream_center) or _cells.has(cell):
+			continue
+		_spawn_cell(cell)
+		spawned += 1
+	if _stream_cell_cursor >= _stream_cell_order.size():
+		_stream_cell_order.clear()
+		_stream_cell_cursor = 0
+	_terrain.flush()
+	if _pending_stream_cells.is_empty() and _fauna_refresh_pending:
+		_spawn_fauna_for_stream()
+		_cleanup_streamed_animals()
+		_ambient_registry.refresh_all()
+		_fauna_refresh_pending = false
+	_advance_fauna_stream()
+
+
+func _advance_fauna_stream() -> void:
+	if not _pending_stream_cells.is_empty():
+		return
+	var test_fauna := _fauna as TestFaunaStreamerScript
+	if test_fauna != null:
+		test_fauna.advance(
+			_stream_center,
+			stream_extent,
+			_player_cell,
+			FAUNA_BUCKET_BUDGET_PER_FRAME
+		)
 
 
 func _setup_player() -> void:
@@ -216,6 +287,7 @@ func _process(delta: float) -> void:
 	_continue_run_pose = _input_dir() != Vector2i.ZERO
 	var previous_mode := _animator.mode
 	super._process(delta)
+	_drain_stream_queue()
 	if _player == null:
 		return
 	if _animator.advance(delta):
