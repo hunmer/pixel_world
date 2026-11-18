@@ -1,0 +1,111 @@
+{
+	"version": 1,
+	"equipment": [
+		{
+			"id": "ironSword",
+			"name": "铁剑",
+			"slot": "weapon",
+			"stats": { "str": 1 },
+			"allowed_professions": ["swordsman"],
+			"iconId": "01",
+			"acquisition": "starter_catalog",
+			"weapon_id": "ironSword"
+		},
+		{
+			"id": "steelSword",
+			"name": "钢剑",
+			"slot": "weapon",
+			"stats": { "str": 2 },
+			"allowed_professions": ["assassin"],
+			"iconId": "02",
+			"acquisition": "starter_catalog",
+			"weapon_id": "steelSword"
+		},
+		{
+			"id": "ironLance",
+			"name": "铁枪",
+			"slot": "weapon",
+			"stats": { "str": 1, "def": 1 },
+			"allowed_professions": ["knight", "lancer"],
+			"iconId": "03",
+			"acquisition": "starter_catalog",
+			"weapon_id": "ironLance"
+		},
+		{
+			"id": "ironAxe",
+			"name": "铁斧",
+			"slot": "weapon",
+			"stats": { "str": 2 },
+			"allowed_professions": ["berserker"],
+			"iconId": "04",
+			"acquisition": "starter_catalog",
+			"weapon_id": "ironAxe"
+		},
+		{
+			"id": "ironBow",
+			"name": "铁弓",
+			"slot": "weapon",
+			"stats": { "skl": 1, "spd": 1 },
+			"allowed_professions": ["archer"],
+			"iconId": "05",
+			"acquisition": "starter_catalog",
+			"weapon_id": "ironBow"
+		},
+		{
+			"id": "fire",
+			"name": "火焰",
+			"slot": "weapon",
+			"stats": { "mag": 2 },
+			"allowed_professions": ["mage"],
+			"iconId": "06",
+			"acquisition": "starter_catalog",
+			"weapon_id": "fire"
+		},
+		{
+			"id": "heal",
+			"name": "治疗杖",
+			"slot": "weapon",
+			"stats": { "mag": 1, "res": 1 },
+			"allowed_professions": ["priest"],
+			"iconId": "07",
+			"acquisition": "starter_catalog",
+			"weapon_id": "heal"
+		},
+		{
+			"id": "leatherShield",
+			"name": "皮盾",
+			"slot": "shield",
+			"stats": { "def": 1 },
+			"allowed_professions": [],
+			"iconId": "08",
+			"acquisition": "starter_catalog"
+		},
+		{
+			"id": "kiteShield",
+			"name": "鸢盾",
+			"slot": "shield",
+			"stats": { "def": 1, "res": 1 },
+			"allowed_professions": [],
+			"iconId": "09",
+			"acquisition": "starter_catalog"
+		},
+		{
+			"id": "campaignCloak",
+			"name": "远征披风",
+			"slot": "armor",
+			"stats": { "hp": 1, "res": 1 },
+			"allowed_professions": [],
+			"iconId": "10",
+			"acquisition": "starter_catalog"
+		},
+		{
+			"id": "luckyPendant",
+			"name": "幸运坠饰",
+			"slot": "accessory",
+			"stats": { "luk": 2 },
+			"allowed_professions": [],
+			"iconId": "11",
+			"acquisition": "starter_catalog"
+		}
+	]
+}
