@@ -202,7 +202,7 @@
       "known_status": "pass",
       "parallel_safe": true,
       "fast_flag_safe": true,
-      "evidence": "2026-11-19 装备图标契约：\"01\"..\"11\" 稳定 ID 显式目录（assets/ui/equipment/NN.png）、原始 equipment.json 11 件 iconId 直检锁定绑定表互异（ironSword=01…luckyPendant=11）、get_texture 资产就绪时加载本 ID 真实路径（禁兜底通过）/未入库时非 null 应急品红纹理同实例（LibTV 生成前 UI 可用）、缓存同实例、未知 ID 回退默认图标、_load_hook 隔离缝模拟全缺资产仍非 null（与 ItemIcons 同语义）；纯静态无场景依赖"
+      "evidence": "2026-11-19 装备图标契约：\"01\"..\"11\" 稳定 ID 显式目录（assets/ui/equipment/NN.png）、原始 equipment.json 11 件 iconId 直检锁定绑定表互异（ironSword=01…luckyPendant=11）、get_texture 资产就绪时加载本 ID 真实路径（禁兜底通过）且 64x64 并保留 alpha 透明像素（LibTV 入库后自动生效的资产门，与 item_icons 同标准）/未入库时非 null 应急品红纹理同实例（LibTV 生成前 UI 可用）、缓存同实例、未知 ID 回退默认图标、_load_hook 隔离缝模拟全缺资产仍非 null（与 ItemIcons 同语义）；纯静态无场景依赖"
     },
     {
       "name": "campaign_ui",

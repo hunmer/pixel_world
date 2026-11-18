@@ -1,7 +1,8 @@
 ## tests/equipment_icons_contract.gd — 装备图标目录与绑定契约
 ## 覆盖：①目录形状（"01".."11" 数字字符串稳定 ID、显式 ID→路径映射、ICON_LIST 完整）
 ## ②绑定完整性（data/equipment.json 11 件装备 iconId 与锁定绑定表一致、互异、全部在目录内）
-## ③纹理行为（资产就绪→get_texture 加载本 ID 真实路径、禁兜底通过；资产未入库→
+## ③纹理行为（资产就绪→get_texture 加载本 ID 真实路径、禁兜底通过、64x64 且保留
+##   alpha 透明像素〔LibTV 入库后自动生效〕；资产未入库→
 ##   非 null 应急品红纹理同实例，UI 照常可用；缓存同实例；未知 ID 回退默认）
 ## ④隔离缝（_load_hook 模拟全部加载失败→非 null 应急纹理、同实例、绝不返回 null）
 ## 运行：godot --headless --path . --script res://tests/equipment_icons_contract.gd
@@ -114,6 +115,22 @@ func _run_texture_behavior() -> void:
 			_expect(tex.resource_path == path,
 				"ID %s 应加载本 ID 真实路径 %s，实际 %s（禁兜底通过）" % [String(iid), path, tex.resource_path])
 			_expect(tex == EquipmentIcons.get_texture(iid), "ID %s 缓存应返回同实例" % String(iid))
+			# 素材实装资产门（LibTV 入库后自动生效，与 item_icons 同标准）：
+			# 64x64 且 PNG 切片保留 alpha 透明（至少一个透明像素）。
+			_expect(tex.get_size() == Vector2(64, 64),
+				"ID %s 纹理应为 64x64，实际 %s" % [String(iid), tex.get_size()])
+			var img: Image = tex.get_image()
+			var has_alpha := false
+			if img != null:
+				for y in img.get_height():
+					for x in img.get_width():
+						if img.get_pixel(x, y).a8 < 255:
+							has_alpha = true
+							break
+					if has_alpha:
+						break
+			_expect(has_alpha,
+				"ID %s PNG 应保留 alpha 透明像素（切片不得烘成不透明底）" % String(iid))
 		else:
 			_expect(tex == emergency,
 				"ID %s 资产未入库时应回退应急纹理（LibTV 生成前的可见占位）" % String(iid))
