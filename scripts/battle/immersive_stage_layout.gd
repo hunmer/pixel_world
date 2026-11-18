@@ -180,7 +180,7 @@ static func initial_hp_map(event: Dictionary, participants_units: Dictionary) ->
 static func strike_anim_for(event: Dictionary, unit: Dictionary) -> StringName:
 	if StringName(event.get(&"kind", &"normal")) == &"skill":
 		return StringName(event.get(&"anim", &"slash"))
-	var weapon_type := StringName(unit.get(&"weapon", {}).get(&"type", &"sword"))
+	var weapon_type := StringName(WeaponData.unit_weapon(unit).get(&"type", &"sword"))
 	match weapon_type:
 		&"bow":
 			return &"projectile:arrow"

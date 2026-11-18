@@ -39,7 +39,7 @@ func play_strike(event: Dictionary) -> void:
 		cue = &"bow_release"
 	elif anim == "slash":
 		var attacker: Dictionary = grid.units.get(StringName(event.get(&"attacker_id", &"")), {})
-		var weapon_type := StringName(attacker.get(&"weapon", {}).get(&"type", &"sword"))
+		var weapon_type := StringName(WeaponData.unit_weapon(attacker).get(&"type", &"sword"))
 		match weapon_type:
 			&"axe":
 				cue = &"swing_axe"
@@ -68,7 +68,7 @@ func play_impact(impact: Dictionary) -> void:
 	var element := StringName(impact.get(&"element", &"physical"))
 	if element == &"physical":
 		var source: Dictionary = grid.units.get(StringName(impact.get(&"source_id", &"")), {})
-		var weapon_type := StringName(source.get(&"weapon", {}).get(&"type", &"sword"))
+		var weapon_type := StringName(WeaponData.unit_weapon(source).get(&"type", &"sword"))
 		match weapon_type:
 			&"axe":
 				Sfx.play(&"hit_blunt")

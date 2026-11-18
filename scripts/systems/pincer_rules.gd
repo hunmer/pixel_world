@@ -33,7 +33,7 @@ const NO_CELL := Vector2i(-999999, -999999)
 ## weapon.type ∉ {anima, dark, staff}）。追击仅物理攻击触发；
 ## 魔法（anima/dark）与治疗杖（staff）普攻不触发。
 static func is_physical_weapon(unit: Dictionary) -> bool:
-	var weapon_type: StringName = unit.get(&"weapon", {}).get(&"type", &"sword")
+	var weapon_type: StringName = WeaponData.unit_weapon(unit).get(&"type", &"sword")
 	return not (weapon_type in [&"anima", &"dark", &"staff"])
 
 

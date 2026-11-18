@@ -27,7 +27,7 @@ static func unit_ranges(grid: GridSystem, unit: Dictionary, allow_move: bool = t
 		if not occupant.is_empty() and occupant.get(&"id") != unit.get(&"id"):
 			continue
 		tiles.merge(tiles_in_range(grid, stop, weapon_range))
-	if unit[&"weapon"][&"type"] == &"staff":
+	if WeaponData.unit_weapon(unit)[&"type"] == &"staff":
 		result[&"supportTiles"] = tiles
 	else:
 		result[&"attackTiles"] = tiles
@@ -80,7 +80,7 @@ static func threats_to(grid: GridSystem, enemies: Array, player: Dictionary, tar
 		var enemy: Dictionary = raw_enemy
 		if enemy.is_empty() or bool(enemy.get(&"isDead", false)) or enemy.get(&"faction") == player.get(&"faction"):
 			continue
-		if enemy[&"weapon"][&"type"] == &"staff":
+		if WeaponData.unit_weapon(enemy)[&"type"] == &"staff":
 			continue
 		var ranges: Dictionary = unit_ranges(snapshot, enemy, allow_enemy_move)
 		if not (ranges[&"attackTiles"] as Dictionary).has(_key(target)):
@@ -108,7 +108,7 @@ static func threats_to(grid: GridSystem, enemies: Array, player: Dictionary, tar
 				best_preview = prediction
 		if best_preview.is_empty():
 			continue
-		var triangle: Dictionary = WeaponData.triangle_modifier(enemy[&"weapon"][&"type"], defender[&"weapon"][&"type"])
+		var triangle: Dictionary = WeaponData.triangle_modifier(WeaponData.unit_weapon(enemy)[&"type"], WeaponData.unit_weapon(defender)[&"type"])
 		var advantage: bool = int(triangle[&"damage"]) > 0
 		result.append({
 			source = enemy[&"position"], target = target, enemy_id = enemy[&"id"],

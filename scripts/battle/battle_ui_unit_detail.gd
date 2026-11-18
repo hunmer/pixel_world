@@ -61,7 +61,7 @@ func open_unit_detail(u: Dictionary) -> void:
 	for pair: Array in [["力", &"str"], ["魔", &"mag"], ["技", &"skl"], ["速", &"spd"], ["防", &"def"], ["魔防", &"res"], ["运", &"luk"], ["移动", &"mov"]]:
 		grid.add_child(Widgets.label("%s %d" % [pair[0], int(stats.get(pair[1], 0))], true))
 	resources.add_child(Widgets.label("攻击射程 %s" % str(ProfessionData.unit_attack_range(u)), true))
-	var weapon = u.get(&"weapon", {})
+	var weapon = WeaponData.unit_weapon(u)
 	if weapon is Dictionary and not weapon.is_empty():
 		resources.add_child(Widgets.label("武器 · %s" % String(weapon.get(&"name", weapon.get(&"id", ""))), true, Palette.ACCENT))
 	for item_id in u.get(&"equipped", []):

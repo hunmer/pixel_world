@@ -193,7 +193,7 @@ static func unit_attack_range(unit: Dictionary) -> Array:
 	if unit.has(&"attackRange") and unit[&"attackRange"] != null:
 		var r: Array = unit[&"attackRange"]
 		return [r[0], r[1]]
-	var w: Dictionary = unit[&"weapon"]
+	var w: Dictionary = WeaponData.unit_weapon(unit)
 	var wr: Array = w[&"range"]
 	return [wr[0], wr[1]]
 

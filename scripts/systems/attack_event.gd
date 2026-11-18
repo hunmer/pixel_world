@@ -63,7 +63,7 @@ static func from_combat(
 	result: Dictionary,
 	impacts: Array
 ) -> Dictionary:
-	var weapon_type: StringName = attacker.get(&"weapon", {}).get(&"type", &"sword")
+	var weapon_type: StringName = WeaponData.unit_weapon(attacker).get(&"type", &"sword")
 	var element := &"physical"
 	if weapon_type in [&"anima", &"dark", &"staff"]:
 		element = weapon_type

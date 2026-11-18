@@ -31,7 +31,7 @@ static func preview(
 	var tri_dmg: int = tri[&"damage"]
 	var atk_hit: int = _hit_chance(attacker, defender, defender_tile_avoid) + tri_hit
 	var def_hit := 0
-	if defender[&"weapon"][&"type"] != &"staff":
+	if WeaponData.unit_weapon(defender)[&"type"] != &"staff":
 		def_hit = _hit_chance(defender, attacker, 0) - tri_hit
 	# 背击增幅在三角修正合并并钳制后统一施加于「本次总伤害」：
 	# (base + tri) × 1.25，攻击与反击同口径；execute 直接消费本结果，天然一致。
@@ -39,7 +39,7 @@ static func preview(
 		attacker[&"position"], defender,
 		maxi(0, _damage(attacker, defender, defender_tile_def) + tri_dmg))
 	var def_dmg := 0
-	if defender[&"weapon"][&"type"] != &"staff":
+	if WeaponData.unit_weapon(defender)[&"type"] != &"staff":
 		# 反击背击口径与 resolver 出手转身一致：攻击者出手时已面向防守方，防守方反击
 		# 恒打攻击者正面。这里用临时朝向快照（duplicate，不 mutate 原字典）复现该口径，
 		# 保证预览（UI/AI）与真实结算同数值 —— 反击永不触发背击增幅。
@@ -155,7 +155,7 @@ static func execute(
 				return _finish_combat(attacker, defender, result, impacts)
 		else:
 			# staff 原本就不能反击（defHit=0）；保留原 randf 消耗，但不伪造反击 MISS 演出。
-			if defender[&"weapon"][&"type"] != &"staff":
+			if WeaponData.unit_weapon(defender)[&"type"] != &"staff":
 				impacts.append(AttackEventBuilder.make_impact(
 					defender, attacker, false, 0, int(attacker[&"hp"]), int(attacker[&"hp"]),
 					false, def_effective, def_element))
@@ -189,18 +189,18 @@ static func _finish_combat(
 
 
 static func _weapon_element(unit: Dictionary) -> StringName:
-	var weapon_type: StringName = unit.get(&"weapon", {}).get(&"type", &"sword")
+	var weapon_type: StringName = WeaponData.unit_weapon(unit).get(&"type", &"sword")
 	return weapon_type if weapon_type in [&"anima", &"dark", &"staff"] else &"physical"
 
 
 # ----------- 子公式 -----------
 
 static func _triangle_modifier(attacker: Dictionary, defender: Dictionary) -> Dictionary:
-	return WeaponData.triangle_modifier(attacker[&"weapon"][&"type"], defender[&"weapon"][&"type"])
+	return WeaponData.triangle_modifier(WeaponData.unit_weapon(attacker)[&"type"], WeaponData.unit_weapon(defender)[&"type"])
 
 
 static func _hit_chance(attacker: Dictionary, defender: Dictionary, defender_tile_avoid: int) -> int:
-	var weapon_hit: int = attacker[&"weapon"][&"hit"]
+	var weapon_hit: int = WeaponData.unit_weapon(attacker)[&"hit"]
 	var skl: int = BuffSystem.effective_stat(attacker, &"skl")
 	var luk: int = BuffSystem.effective_stat(attacker, &"luk")
 	var d_spd: int = BuffSystem.effective_stat(defender, &"spd")
@@ -210,20 +210,20 @@ static func _hit_chance(attacker: Dictionary, defender: Dictionary, defender_til
 
 
 static func _damage(attacker: Dictionary, defender: Dictionary, defender_tile_def: int) -> int:
-	var is_magic := ([&"anima", &"dark", &"staff"] as Array).has(attacker[&"weapon"][&"type"])
+	var is_magic := ([&"anima", &"dark", &"staff"] as Array).has(WeaponData.unit_weapon(attacker)[&"type"])
 	var atk: int = BuffSystem.effective_stat(attacker, &"mag") if is_magic else BuffSystem.effective_stat(attacker, &"str")
 	var def: int = BuffSystem.effective_stat(defender, &"res") if is_magic else BuffSystem.effective_stat(defender, &"def")
 	# 纯基础伤害（不含三角修正与背击增幅）：三角与背击在 preview 合并后统一施加。
-	return maxi(0, atk + attacker[&"weapon"][&"might"] - def - defender_tile_def)
+	return maxi(0, atk + WeaponData.unit_weapon(attacker)[&"might"] - def - defender_tile_def)
 
 
 static func _attack_speed(u: Dictionary) -> int:
-	var burden := maxi(0, u[&"weapon"][&"weight"] - floori(BuffSystem.effective_stat(u, &"str") / 2.0))
+	var burden := maxi(0, WeaponData.unit_weapon(u)[&"weight"] - floori(BuffSystem.effective_stat(u, &"str") / 2.0))
 	return BuffSystem.effective_stat(u, &"spd") - burden
 
 
 static func _crit_chance(attacker: Dictionary, defender: Dictionary) -> int:
-	return maxi(0, floori(BuffSystem.effective_stat(attacker, &"skl") / 2.0) + attacker[&"weapon"][&"crit"] - floori(BuffSystem.effective_stat(defender, &"luk") / 2.0))
+	return maxi(0, floori(BuffSystem.effective_stat(attacker, &"skl") / 2.0) + WeaponData.unit_weapon(attacker)[&"crit"] - floori(BuffSystem.effective_stat(defender, &"luk") / 2.0))
 
 
 static func _in_range(attacker: Dictionary, defender: Dictionary) -> bool:
