@@ -971,6 +971,47 @@ func _handle_middle_click(mb: InputEventMouseButton) -> void:
 		_panning = false
 
 
+## 鼠标静止时也更新指针，保证镜头移动、死亡和演出切换后不会留下旧目标。
+func _process(_delta: float) -> void:
+	if grid == null or battle_ui == null or turn_director == null:
+		return
+	var mouse := get_viewport().get_mouse_position()
+	var candidate: UnitSprite3D = null
+	var can_hover := mode in [Mode.IDLE, Mode.UNIT_SELECTED, Mode.MENU] \
+		and not turn_director.is_hosting() and not _panning \
+		and not battle_ui.is_over_ui(mouse)
+	if can_hover:
+		var closest := INF
+		for raw_sprite in _unit_sprites.values():
+			var sprite := raw_sprite as UnitSprite3D
+			if not is_instance_valid(sprite) or not sprite.hit_test_screen(mouse):
+				continue
+			var camera := sprite._active_camera()
+			var distance := camera.global_position.distance_squared_to(sprite.global_position)
+			if distance < closest:
+				closest = distance
+				candidate = sprite
+	var menu_target := false
+	if mode == Mode.MENU and not turn_director.is_hosting():
+		var control := get_viewport().gui_get_hovered_control()
+		while control != null:
+			if control.has_meta("hover_target_id"):
+				candidate = _unit_sprites.get(control.get_meta("hover_target_id")) as UnitSprite3D
+				menu_target = true
+				break
+			control = control.get_parent_control()
+	for raw_sprite in _unit_sprites.values():
+		var sprite := raw_sprite as UnitSprite3D
+		if not is_instance_valid(sprite):
+			continue
+		var attack_target := menu_target and sprite == candidate
+		if sprite == candidate and not selected_unit.is_empty():
+			var pos: Vector2i = sprite.unit.position
+			attack_target = attack_target or (sprite.unit.faction != selected_unit.faction \
+				and current_attack_tiles.has("%d,%d" % [pos.x, pos.y]))
+		sprite.set_hovered(sprite == candidate, attack_target)
+
+
 func _handle_mouse_motion_input(mm: InputEventMouseMotion) -> void:
 	if _panning and not _b1_mode:
 		_handle_pan_motion(mm)
@@ -1289,8 +1330,6 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 	if action_anim != null and not event.is_empty():
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
-		if not await _fx.prewarm_action_fx(event, event.get(&"impacts", []), skipped):
-			return
 		_set_unit_bars_visible(false)
 		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
 		if not is_inside_tree():
@@ -1345,8 +1384,6 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 	if action_anim != null and not event.is_empty():
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
-		if not await _fx.prewarm_action_fx(event, event.get(&"impacts", []), skipped):
-			return true
 		_set_unit_bars_visible(false)
 		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
 		if not is_inside_tree():

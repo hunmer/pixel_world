@@ -19,9 +19,12 @@ var _board: IsoBoard
 var _hp_bg: Sprite3D
 var _hp_bar: Sprite3D
 var _name_label: Label3D
-var _hp_bar_y: float = _HP_BAR_Y / 32.0
-## 上次计算血条 Y 时的立绘签名（贴图 id + pixel_size + position.y），变化即重算：
-## 动画/姿态系统换贴图或缩放后血条跟随新的可见头顶，无需关心初始化顺序。
+var _hp_bar_y: float = 0.06
+var _head_y: float = _VISIBLE_TOP_FALLBACK
+var _hover_marker: Node3D
+var _hover_material: StandardMaterial3D
+var _hover_phase := 0.0
+## 上次头顶锚点的立绘签名；换姿态后只更新伤害数字和指针位置。
 var _hp_bar_y_key := ""
 ## 常驻血条显隐：战斗中隐藏（受击改用 pixelfx 演出），退出战斗恢复。
 ## update_state / fade_alpha 只动 modulate，不得让被隐藏的血条复活。
@@ -50,8 +53,8 @@ const FACTION_NAME := {
 	ally = "友军",
 	other = "中立",
 }
-const _HP_BAR_W := 40.0
-const _HP_BAR_H := 4.0
+const _HP_BAR_W := 24.0
+const _HP_BAR_H := 3.0
 ## 血条与"可见头顶"的间距（像素，32px=1 世界单位）。血条 Y 不再用整张画布高度
 ## 定位，而是按立绘 alpha 实际可见范围计算（新 288 精灵图透明留白大，按画布定位会高悬）。
 const _HP_BAR_GAP_PX := 8.0
@@ -130,7 +133,7 @@ func _build_visual() -> void:
 		_using_sheet = true
 		_configure_billboard(portrait)
 		add_child(portrait)
-		_hp_bar_y = _visible_top_world() + _HP_BAR_GAP_PX / 32.0
+		_head_y = _visible_top_world() + _HP_BAR_GAP_PX / 32.0
 	elif ProfessionVisual.portrait_exists(unit[&"classId"]):
 		portrait = Sprite3D.new()
 		portrait.texture = load(ProfessionVisual.portrait_path(unit[&"classId"]))
@@ -139,7 +142,7 @@ func _build_visual() -> void:
 			portrait.pixel_size = 1.0 / float(tex_h)
 			# offset 不改变深度位置；抬高节点本身，避免立绘陷入地形柱。
 			portrait.position = Vector3(0.0, 0.5, 0.0)
-			_hp_bar_y = _visible_top_world() + _HP_BAR_GAP_PX / 32.0
+			_head_y = _visible_top_world() + _HP_BAR_GAP_PX / 32.0
 		_configure_billboard(portrait)
 		add_child(portrait)
 	if _white_texture == null:
@@ -150,16 +153,21 @@ func _build_visual() -> void:
 	_hp_bg.texture = _white_texture
 	_hp_bg.pixel_size = 1.0 / 32.0
 	_hp_bg.scale = Vector3(_HP_BAR_W, _HP_BAR_H, 1.0)
-	_hp_bg.position = Vector3(0.0, _HP_BAR_Y / 32.0, 0.0)
+	_hp_bg.position = Vector3(0.0, _hp_bar_y, 0.0)
 	_hp_bg.modulate = Color(0.07, 0.07, 0.07, 0.85)
 	_configure_billboard(_hp_bg)
+	_hp_bg.offset.y = -4.0 / _HP_BAR_H
+	_hp_bg.no_depth_test = true
+	_hp_bg.render_priority = 1
 	add_child(_hp_bg)
 	_hp_bar = Sprite3D.new()
 	_hp_bar.texture = _white_texture
 	_hp_bar.pixel_size = 1.0 / 32.0
 	_hp_bar.scale = Vector3(_HP_BAR_W, _HP_BAR_H, 1.0)
-	_hp_bar.position = Vector3(0.0, _HP_BAR_Y / 32.0, 0.0)
+	_hp_bar.position = Vector3(0.0, _hp_bar_y, 0.0)
 	_configure_billboard(_hp_bar)
+	_hp_bar.no_depth_test = true
+	_hp_bar.render_priority = 2
 	add_child(_hp_bar)
 	_name_label = Label3D.new()
 	_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -204,12 +212,8 @@ func _visible_top_world() -> float:
 			x += 2
 	return _VISIBLE_TOP_FALLBACK
 
-func _hp_bar_color(ratio: float) -> Color:
-	if ratio <= 0.25:
-		return Color(0.973, 0.302, 0.302)
-	if ratio <= 0.5:
-		return Color(0.984, 0.749, 0.141)
-	return Color(0.290, 0.867, 0.502)
+func _hp_bar_color(_ratio: float) -> Color:
+	return FACTION_COLOR.get(unit.get(&"faction", &"other"), Color.WHITE)
 
 func _build_name_label(u: Dictionary) -> String:
 	var faction_key: StringName = u[&"faction"]
@@ -218,9 +222,62 @@ func _build_name_label(u: Dictionary) -> String:
 	var lv: int = int(u.get(&"level", 1))
 	return "%s · %s Lv.%d" % [faction_text, prof_name, lv]
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_hp_depth()
 	_track_camera_yaw()
+	if _hover_marker != null and _hover_marker.visible:
+		_hover_phase += delta * TAU
+		_hover_marker.position.y = _head_y + 0.32 + sin(_hover_phase) * 0.06
+		var camera := _active_camera()
+		if camera != null:
+			_hover_marker.rotation.y = camera.global_rotation.y
+		if bool(unit.get(&"isDead", false)):
+			_hover_marker.visible = false
+
+
+## 复用体素路径箭头，立起后尖端朝下；只在第一次悬浮时创建。
+func set_hovered(value: bool, attack_target := false) -> void:
+	value = value and not bool(unit.get(&"isDead", false))
+	if not value:
+		if _hover_marker != null:
+			_hover_marker.visible = false
+		return
+	if _hover_marker == null:
+		_hover_marker = Node3D.new()
+		_hover_marker.name = "HoverPointer"
+		_hover_marker.visible = false
+		add_child(_hover_marker)
+		var arrow := MeshInstance3D.new()
+		arrow.mesh = preload("res://assets/markers/path_marker.obj")
+		arrow.rotation.x = PI * 0.5
+		arrow.scale = Vector3.ONE * 0.16
+		arrow.position = -(arrow.transform.basis * arrow.mesh.get_aabb().get_center())
+		_hover_material = StandardMaterial3D.new()
+		_hover_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_hover_material.no_depth_test = true
+		_hover_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		arrow.material_override = _hover_material
+		arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_hover_marker.add_child(arrow)
+	if not _hover_marker.visible:
+		_hover_phase = 0.0
+		_hover_marker.position.y = _head_y + 0.32
+	_hover_material.albedo_color = FACTION_COLOR[&"enemy"] if attack_target else Color(1.0, 0.82, 0.2)
+	_hover_marker.visible = true
+
+
+## 按立绘在屏幕上的真实矩形拾取，角色身体上方也能悬浮命中。
+func hit_test_screen(screen_pos: Vector2) -> bool:
+	var camera := _active_camera()
+	if camera == null or portrait == null or not visible or bool(unit.get(&"isDead", false)):
+		return false
+	if camera.is_position_behind(global_position):
+		return false
+	var feet := camera.unproject_position(global_position)
+	var head := camera.unproject_position(global_position + Vector3.UP * _head_y)
+	var height := absf(feet.y - head.y)
+	var half_width := maxf(height * 0.3, 8.0)
+	return Rect2(Vector2(feet.x - half_width, head.y), Vector2(half_width * 2.0, height + 4.0)).has_point(screen_pos)
 
 
 ## 相机旋转后 idle 朝向的屏幕解析会变：yaw 变化时按当前世界朝向重算 front/back/side。
@@ -268,7 +325,7 @@ func _refresh_hp_bar_y() -> void:
 	if key == _hp_bar_y_key:
 		return
 	_hp_bar_y_key = key
-	_hp_bar_y = _visible_top_world() + _HP_BAR_GAP_PX / 32.0
+	_head_y = _visible_top_world() + _HP_BAR_GAP_PX / 32.0
 
 ## 常驻血条显隐开关。恢复时按当前 hp 重新推导填充条可见性（满血隐藏填充条）。
 func set_persistent_bar_visible(visible_: bool) -> void:
@@ -285,7 +342,11 @@ func set_persistent_bar_visible(visible_: bool) -> void:
 	var ratio: float = clampf(float(unit.get(&"hp", 0)) / float(max(1, int(stats.get(&"hp", 1)))), 0.0, 1.0)
 	_hp_bar.visible = _HP_BAR_W * ratio > 0.0
 
-## 血条锚点 Y（可见头顶 + 间距，世界单位）：战斗伤害特效按同一头顶定位。
+## 常驻血条位于脚底；伤害数字与指针使用独立头顶锚点。
+func get_head_y() -> float:
+	_refresh_hp_bar_y()
+	return _head_y
+
 func get_bar_y() -> float:
 	return _hp_bar_y
 
@@ -305,7 +366,7 @@ func update_state() -> void:
 	_hp_bar.visible = _persistent_bar_visible and fill_w > 0.0
 	_hp_bar.scale.x = fill_w
 	# Sprite3D.offset 也受 scale.x 影响，除回去才能保持左边缘固定。
-	_hp_bar.offset = Vector2(-(40.0 - fill_w) * 0.5 / maxf(fill_w, 0.0001), 0.0)
+	_hp_bar.offset = Vector2(-(_HP_BAR_W - fill_w) * 0.5 / maxf(fill_w, 0.0001), -4.0 / _HP_BAR_H)
 	_hp_bg.modulate.a = 1.0 if ratio < 1.0 else 0.7
 	var faction_key: StringName = unit[&"faction"]
 	_name_label.modulate = FACTION_COLOR.get(faction_key, Color.WHITE)
@@ -365,6 +426,16 @@ func move_along_path(path: Array, on_done: Callable) -> void:
 		update_state()
 		on_done.call()
 	)
+
+func get_facing_world() -> Vector3:
+	return _facing_world
+
+func set_facing_world(facing_dir: Vector3) -> void:
+	var flat := Vector3(facing_dir.x, 0.0, facing_dir.z)
+	if flat.length_squared() <= 0.0:
+		return
+	_facing_world = flat.normalized()
+	_refresh_pose_texture()
 
 ## 姿态 API：idle=三视图（front/back/side 按相机解析），run/attack/hurt/downed=单帧。
 ## facing_dir 为世界空间水平朝向；省略时保持当前 _facing_world。

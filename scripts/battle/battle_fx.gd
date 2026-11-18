@@ -188,7 +188,7 @@ func spawn_damage_fx(u: Dictionary, damage: int, hp_before: int, hp_after: int) 
 	var camera: Camera3D = camera_fn.call()
 	if camera == null:
 		return
-	var head := camera.unproject_position(us.global_position + Vector3(0.0, us.get_bar_y(), 0.0))
+	var head := camera.unproject_position(us.global_position + Vector3(0.0, us.get_head_y(), 0.0))
 	var dn: Node2D = PixelFx2DScript.new()
 	dn.effect = "ui/damage-number"
 	dn.options = {"text": "-%d" % damage}
@@ -202,9 +202,23 @@ func spawn_damage_fx(u: Dictionary, damage: int, hp_before: int, hp_after: int) 
 		"from": clampf(float(hp_before) / float(max_hp), 0.0, 1.0),
 		"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),
 	}
+	var faction_color: Color = UnitSprite3D.FACTION_COLOR.get(u.get(&"faction", &"other"), Color.WHITE)
+	hit_fx.options["palette"] = [
+		"#" + faction_color.darkened(0.9).to_html(false),
+		"#" + faction_color.darkened(0.7).to_html(false),
+		"#" + faction_color.darkened(0.4).to_html(false),
+		"#" + faction_color.darkened(0.2).to_html(false),
+		"#" + faction_color.to_html(false),
+		"#" + faction_color.lightened(0.3).to_html(false),
+		"#" + faction_color.lightened(0.65).to_html(false),
+		"#ffffff",
+	]
 	hit_fx.free_when_done = true
-	# 特效画布 origin=(80,30)：让血条中心落在头顶上方 10px。
-	hit_fx.position = head + Vector2(-80, -40)
+	# 原特效填充条宽 104px，缩至 24px 并对齐脚底血条；伤害数字保持头顶锚点。
+	var bar_scale := 24.0 / 104.0
+	hit_fx.scale = Vector2.ONE * bar_scale
+	var feet := camera.unproject_position(us.global_position + Vector3.UP * us.get_bar_y())
+	hit_fx.position = feet + Vector2(0, 4) - Vector2(84, 30) * bar_scale
 	(float_container_fn.call() as CanvasItem).add_child(hit_fx)
 
 

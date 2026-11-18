@@ -63,6 +63,23 @@ func _run() -> void:
 	for sprite in battle._unit_sprites.values():
 		_expect(sprite is Node3D, "B1 单位不是 Node3D")
 		_expect(sprite.get("portrait") is Sprite3D, "B1 单位立绘不是 Sprite3D")
+		_expect(sprite._hp_bg.scale.x == 24.0 and sprite._hp_bg.scale.y == 3.0, "血条应缩小为 24×3")
+		_expect(sprite.get_bar_y() < 0.1, "常驻血条应位于脚底")
+		_expect(sprite._hp_bar.modulate == sprite.FACTION_COLOR[sprite.unit.faction], "血条颜色应区分阵营")
+		var original_hp: int = sprite.unit.hp
+		sprite.unit.hp = 1
+		sprite.update_state()
+		_expect(sprite._hp_bar.modulate == sprite.FACTION_COLOR[sprite.unit.faction], "残血不能覆盖阵营色")
+		sprite.unit.hp = original_hp
+		sprite.update_state()
+		sprite.set_hovered(true, true)
+		_expect(sprite._hover_marker.visible and sprite._hover_marker.position.y > sprite.get_head_y(), "悬浮指针应出现在头顶")
+		_expect(sprite._hover_marker.get_child(0).mesh != null, "指针必须使用有效模型")
+		_expect(sprite._hover_material.albedo_color == sprite.FACTION_COLOR[&"enemy"], "攻击目标指针应为红色")
+		var body_screen: Vector2 = world._cam.unproject_position(sprite.global_position + Vector3.UP * sprite.get_head_y() * 0.5)
+		_expect(sprite.hit_test_screen(body_screen), "鼠标悬浮角色身体应命中")
+		sprite.set_hovered(false)
+		_expect(not sprite._hover_marker.visible, "移出角色应隐藏指针")
 	var unit: Dictionary = battle.grid.units["u_enemy_0"]
 	var unit_sprite: Node3D = battle._unit_sprites[unit.id]
 	var unit_world_before: Vector3 = unit_sprite.global_position

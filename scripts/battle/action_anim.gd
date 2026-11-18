@@ -284,6 +284,7 @@ func _capture_visual_states(event: Dictionary) -> void:
 			&"scale": sprite.scale,
 			&"modulate": sprite.portrait.modulate if sprite.portrait != null else Color.WHITE,
 			&"pose": sprite.get_pose(),
+			&"facing_world": sprite.get_facing_world(),
 		}
 
 
@@ -635,7 +636,7 @@ func _restore_visuals() -> void:
 			continue
 		sprite.global_position = state[&"position"]
 		sprite.scale = state[&"scale"]
-		sprite.set_pose(state.get(&"pose", CharacterSheet.POSE_IDLE))
+		sprite.set_pose(state.get(&"pose", CharacterSheet.POSE_IDLE), state.get(&"facing_world", Vector3(0.0, 0.0, 1.0)))
 		if sprite.portrait != null:
 			sprite.portrait.modulate = state[&"modulate"]
 

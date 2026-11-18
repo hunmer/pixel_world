@@ -36,7 +36,7 @@ var _cursor_cell := Vector2i.ZERO
 # ---- 常量（颜色与原版一致）----
 const _RANGE_COLOR_MOVABLE := Color(0.25, 0.55, 1.0)
 const _RANGE_COLOR_BLOCKED := Color(1.0, 0.25, 0.25)
-const _RANGE_COLOR_ATTACK  := Color(0.75, 0.35, 1.0)
+const _RANGE_COLOR_ATTACK  := Color(0.75, 0.35, 1.0, 0.4)
 const _CURSOR_COLOR := Color(1.0, 0.82, 0.2)
 
 # 光标浮动（像素；原版世界单位 0.40，2D 下放大到 4px 让浮动可见）
@@ -198,7 +198,7 @@ func highlight_range(move_range: Dictionary, attack_tiles: Dictionary, selected_
 		var y: int = info["y"]
 		var col: Color = info["color"]
 		col.a *= _range_alpha_for_cell(x, y, selected_unit)
-		var marker := _make_outline_block(x, y, col, 2.0)
+		var marker := _make_color_block(x, y, col)
 		_attach(marker)
 		_range_markers.append(marker)
 		# 攻击格：alpha 脉冲（2D 替代原版的绕 Y 旋转）
@@ -420,11 +420,11 @@ func _cell_top_y(_cell_key: String, fallback_y: float) -> float:
 class _ColorBlock:
 	extends Node2D
 	var color: Color = Color.WHITE
-	var corners: PackedVector2Array = PackedVector2Array()
+	var corners: Array = []
 	func _draw() -> void:
 		if corners.size() < 3:
 			return
-		draw_colored_polygon(corners, color)
+		draw_colored_polygon(PackedVector2Array(corners), color)
 
 
 ## 描边菱形（_draw 画 4 条线）。

@@ -395,6 +395,8 @@ func _open_attack_target_picker(u: Dictionary, targets: Array) -> void:
 	for t in targets:
 		var b := UIFactoryScript.button()
 		b.text = "▸ " + String(t.name)
+		# 战场从悬浮控件读取目标 id，同步显示该角色的头顶指针。
+		b.set_meta("hover_target_id", t.id)
 		b.pressed.connect(func():
 			_ui.close_menu()
 			_preview_and_attack(u, t)
