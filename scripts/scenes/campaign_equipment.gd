@@ -19,6 +19,7 @@ const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 const ComponentThemeScript = preload("res://ui/theme/component_theme.gd")
 const CampaignFormatScript = preload("res://scripts/scenes/campaign_format.gd")
 const EquipmentDataScript = preload("res://scripts/core/equipment.gd")
+const EquipmentIconsScript = preload("res://scripts/core/equipment_icons.gd")
 const ProfessionDataScript = preload("res://scripts/core/professions.gd")
 const PixelPanelScene = preload("res://ui/components/pixel_panel.tscn")
 const PixelCenterScript = preload("res://ui/components/pixel_center.gd")
@@ -229,8 +230,10 @@ func _class_id_of(unit: Dictionary) -> StringName:
 func _make_slot_row(slot: StringName, equipped: Dictionary) -> Control:
 	var row := PixelHBoxScript.new()
 	row.name = "SlotRow_%s" % String(slot)
-	var text: String = "%s · " % String(SLOT_LABELS.get(String(slot), String(slot)))
 	var entry_id := StringName(String(equipped.get(slot, "")))
+	if entry_id != &"":
+		row.add_child(_make_icon(EquipmentDataScript.get_entry(entry_id).get(&"icon_id", ""), "SlotIcon_%s" % String(slot)))
+	var text: String = "%s · " % String(SLOT_LABELS.get(String(slot), String(slot)))
 	if entry_id == &"":
 		text += "（空）"
 	else:
@@ -296,6 +299,7 @@ func _make_catalog_row(item: Dictionary, equipped: Dictionary) -> Control:
 	var entry_id := String(item.get("id", ""))
 	var row := PixelHBoxScript.new()
 	row.name = "CatalogRow_%s" % entry_id
+	row.add_child(_make_icon(item.get("icon_id", ""), "CatalogIcon_%s" % entry_id))
 	var text := String(item.get("name", entry_id))
 	var stats_text := _stat_text(item.get("stats", {}))
 	if stats_text != "":
@@ -355,6 +359,20 @@ func _resolve_pending_focus() -> void:
 			return
 	if CampaignFormatScript.can_grab_focus(_close_btn):
 		_close_btn.grab_focus()
+
+
+## 图标格：经 EquipmentIcons 取纹理（稳定 ID 目录，缺资产时应急占位纹理，
+## 绝不 null）；像素风 NEAREST 采样，边长取 SPACE_LG 保持行高一致。
+func _make_icon(icon_id: Variant, node_name: String) -> TextureRect:
+	var icon := TextureRect.new()
+	icon.name = node_name
+	icon.custom_minimum_size = Vector2(
+		ComponentThemeScript.SPACE_LG, ComponentThemeScript.SPACE_LG
+	)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture = EquipmentIconsScript.get_texture(StringName(String(icon_id)))
+	return icon
 
 
 ## 九属性固定序格式化「力+1 防+1」；未知键按字典序稳定追加（不依赖插入序）。
