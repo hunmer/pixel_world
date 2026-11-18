@@ -74,8 +74,11 @@ func _run() -> void:
 	await _settle()
 	var skill_buttons := _buttons(ui.menu_container)
 	_expect(skill_buttons.size() == 2, "技能列表必须保留所有已学技能")
-	for button in skill_buttons:
+	for index in skill_buttons.size():
+		var button: Button = skill_buttons[index]
 		_expect(button.disabled, "MP 不足或冷却技能必须禁用")
+		_expect(button.icon != null and button.icon == SkillData.skill_icon(player.skills[index]), "技能按钮必须显示对应技能图标")
+		_expect(button.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST, "技能图标保持最近邻采样")
 	_expect(_text(ui.menu_container).contains("冷却 2 回合"), "冷却原因必须来自单位状态")
 	ui.close_menu()
 	ui._menu._open_item_picker(player)
@@ -96,6 +99,8 @@ func _run() -> void:
 	await _settle()
 	_expect(ui.preview_container.get_child_count() == 1, "同帧替换预测不能残留旧卡片")
 	_expect(_text(ui.preview_container).contains("MP 6"), "技能预测读取真实MP消耗")
+	var skill_preview: PanelContainer = ui.preview_container.find_child("BattleSkillPreviewCard", true, false)
+	_expect(skill_preview != null and skill_preview.get("icon") == SkillData.skill_icon(&"fireball"), "技能预测显示当前技能图标")
 	_expect(before == [player.hp, enemy.hp, player.mp], "预测不得改动战斗数值")
 	ui.close_preview()
 	var long_loot: Array = []
@@ -126,6 +131,9 @@ func _run() -> void:
 			_expect(rect.position.x >= 0 and rect.position.y >= 0 and rect.end.x <= viewport.x + 1 and rect.end.y <= viewport.y + 1, "单位详情越界 %s：%s" % [viewport, rect])
 		var detail_hp: ProgressBar = ui.preview_container.find_child("UnitDetailHp", true, false)
 		_expect(detail_hp != null and detail_hp.value == player.hp, "详情读取真实HP")
+		for sid: StringName in player.skills:
+			var skill_card: PanelContainer = ui.preview_container.find_child("Skill_" + String(sid), true, false)
+			_expect(skill_card != null and skill_card.get("icon") == SkillData.skill_icon(sid), "单位详情显示技能图标 %s" % sid)
 		_expect(_text(ui.preview_container).contains("剩余 0/"), "详情显示耗尽物品")
 		ui.close_unit_detail()
 		await _settle()

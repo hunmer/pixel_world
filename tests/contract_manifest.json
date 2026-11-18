@@ -165,6 +165,16 @@
       "evidence": "2026-11-18 追击规则：对侧友军半伤、预览/结算一致、命中/击杀/双击/反杀/技能/掉落边界"
     },
     {
+      "name": "skill_icons",
+      "path": "tests/skill_icons_contract.gd",
+      "group": "battle-logic",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-18 技能图标契约：\"01\"..\"53\" 稳定 ID 显式目录（51/52/53→power_surge/guard/haste.png）、8 技能 iconId 绑定表锁定互异、53 文件全存在且加载本 ID 真实路径 64x64 纹理（禁兜底通过）、get_texture 缓存同实例/未知 ID 回退默认、skill_icon 未知技能 null、战斗数值基线锁定；2026-11-18 Lead 统一 runner --import 后 skill_icons / battle_ui_components / ui 三项全部 pass（Godot 4.7.2，结果留档 meowa_tiles/generated/skill_icons/contracts）"
+    },
+    {
       "name": "campaign_ui",
       "path": "tests/campaign_ui_contract.gd",
       "group": "campaign",

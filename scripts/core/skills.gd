@@ -7,6 +7,7 @@
 ##   mpCost, cooldown, power, hitBonus,
 ##   stat(str/mag/def/...), buffValue, buffTurns（buff/debuff 用）
 ##   anim（可选）：slash / projectile:<variant> / burst:<variant> / beam:<variant>
+##   iconId（可选）：SkillIcons 稳定图标 ID（数字字符串 "01".."53"，见 core/skill_icons.gd）
 
 class_name SkillData
 extends RefCounted
@@ -66,6 +67,7 @@ static func _normalize(s: Dictionary) -> Dictionary:
 		stat = StringName(g.call("stat")) if g.call("stat") != null else &"",
 		buffValue = int(g.call("buffValue")) if g.call("buffValue") != null else 0,
 		buffTurns = int(g.call("buffTurns")) if g.call("buffTurns") != null else 0,
+		iconId = StringName(g.call("iconId")) if g.call("iconId") != null else &"",
 	}
 	return d
 
@@ -88,6 +90,18 @@ static func skill_name(skill_id: StringName) -> String:
 	if _skills.has(skill_id):
 		return _skills[skill_id][&"name"]
 	return String(skill_id)
+
+
+## 技能 → 图标纹理（iconId 绑定见 skills.json；纹理解析/缓存/兜底见 core/skill_icons.gd）。
+## 未知技能返回 null（不冒充默认技能）；已知技能经 SkillIcons 取纹理，iconId 层兜底默认图标。
+static func skill_icon(skill_id: StringName) -> Texture2D:
+	_ensure_loaded()
+	if not _skills.has(skill_id):
+		return null
+	var icon_id: StringName = _skills[skill_id].get(&"iconId", &"")
+	if icon_id == &"":
+		return SkillIcons.get_texture(SkillIcons.DEFAULT_ICON_ID)
+	return SkillIcons.get_texture(icon_id)
 
 
 ## 该单位已学技能中「当前可用」的（MP 足、冷却为 0）。

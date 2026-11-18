@@ -1,0 +1,11 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+WARNING: SkillIcons: 未知技能图标 ID（not_an_icon），回退默认图标 01
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] _warn_fallback (res://scripts/core/skill_icons.gd:121)
+       [1] get_texture (res://scripts/core/skill_icons.gd:101)
+       [2] _run_textures (res://tests/skill_icons_contract.gd:114)
+       [3] _run (res://tests/skill_icons_contract.gd:40)
+SKILL_ICONS_CONTRACT_OK
+Panku Console Loaded!

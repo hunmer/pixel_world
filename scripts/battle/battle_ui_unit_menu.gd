@@ -146,6 +146,10 @@ func _open_skill_picker(u: Dictionary) -> void:
 		info += "\n" + (reason if not reason.is_empty() else ("自身" if sk[&"targetType"] == &"self" else "%d 个目标" % targets.size()))
 		var b := _button()
 		b.text = info
+		b.icon = SkillData.skill_icon(sk[&"id"])
+		b.expand_icon = true
+		b.set("icon_size", ComponentThemeScript.SPACE_LG + ComponentThemeScript.SPACE_SM)
+		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		b.disabled = not reason.is_empty()
 		b.tooltip_text = String(sk[&"desc"])
 		b.mouse_entered.connect(func(): _ui.show_support_range(u, sk[&"id"]))

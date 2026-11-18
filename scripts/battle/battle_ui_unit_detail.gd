@@ -82,7 +82,7 @@ func _build_skills(parent: Node, u: Dictionary) -> void:
 	var cooldowns: Dictionary = u.get(&"skillCooldowns", {})
 	for sid in skills:
 		var definition: Dictionary = SkillData.get_skill(StringName(sid))
-		var skill := Widgets.card(slot, SkillData.skill_name(StringName(sid)), "Skill_" + String(sid))
+		var skill := Widgets.card(slot, SkillData.skill_name(StringName(sid)), "Skill_" + String(sid), SkillData.skill_icon(StringName(sid)))
 		var remaining := int(cooldowns.get(sid, 0))
 		var cost := int(definition.get(&"mpCost", 0))
 		var availability := "冷却 %d 回合" % remaining if remaining > 0 else "MP 不足" if int(u.get(&"mp", 0)) < cost else "就绪"

@@ -19,11 +19,13 @@ static func label(text: String, caption := false, color := Palette.TEXT_MAIN) ->
 	result.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return result
 
-static func card(parent: Node, title: String, node_name: String) -> VBoxContainer:
+static func card(parent: Node, title: String, node_name: String, icon: Texture2D = null) -> VBoxContainer:
 	var panel: PanelContainer = Card.instantiate()
 	panel.name = node_name
 	panel.custom_minimum_size = Vector2.ZERO
 	panel.set("title", title)
+	panel.set("icon", icon)
+	panel.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	var heading: Label = panel.get_node("VBox/Header/TitleBox/Title")
 	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL

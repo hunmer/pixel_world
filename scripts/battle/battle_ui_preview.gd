@@ -62,7 +62,7 @@ func show_combat(attacker: Dictionary, defender: Dictionary, prev: Dictionary) -
 func show_skill(caster: Dictionary, target: Dictionary, skill_id: StringName) -> void:
 	var skill: Dictionary = SkillData.get_skill(skill_id)
 	var preview: Dictionary = SkillSystem.preview(caster, target, skill_id)
-	var slot: Container = _shell("技能预测", "BattleSkillPreviewCard")
+	var slot: Container = _shell("技能预测", "BattleSkillPreviewCard", SkillData.skill_icon(skill_id))
 	_line(slot, "%s → %s" % [String(caster.name), String(target.name)])
 	_line(slot, "%s · MP %d" % [String(skill.get(&"name", skill_id)), int(skill.get(&"mpCost", 0))], Palette.ACCENT)
 	var row: HBoxContainer = HBox.new()
@@ -74,7 +74,7 @@ func show_skill(caster: Dictionary, target: Dictionary, skill_id: StringName) ->
 	if preview.has(&"hit"):
 		_line(slot, "命中 %d%%" % int(preview[&"hit"]))
 
-func _shell(title: String, node_name: String) -> Container:
+func _shell(title: String, node_name: String, icon: Texture2D = null) -> Container:
 	_ui.close_preview()
 	var margin: MarginContainer = Margin.new()
 	margin.name = "BattlePreviewLayout"
@@ -90,6 +90,8 @@ func _shell(title: String, node_name: String) -> Container:
 	var card: PanelContainer = Card.instantiate()
 	card.name = node_name
 	card.set("title", title)
+	card.set("icon", icon)
+	card.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	card.custom_minimum_size.x = Tokens.SPACE_MD * 20
 	card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	row.add_child(card)

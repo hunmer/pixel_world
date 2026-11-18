@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "godot": "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+    "jobs": 1,
+    "timeout": 120.0,
+    "backend": "native",
+    "gdtest": null,
+    "fast_fps": null,
+    "disable_render_loop": false,
+    "run_env_skip": false,
+    "selected": 3,
+    "out_dir": "E:\\pixel_world\\meowa_tiles\\generated\\skill_icons\\contracts",
+    "total_seconds": 11.2,
+    "runner": "tools/run_contracts.py"
+  },
+  "results": [
+    {
+      "name": "skill_icons",
+      "path": "res://tests/skill_icons_contract.gd",
+      "group": "battle-logic",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 0.92,
+      "log": "E:\\pixel_world\\meowa_tiles\\generated\\skill_icons\\contracts\\skill_icons.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/skill_icons_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "battle_ui_components",
+      "path": "res://tests/battle_ui_components_contract.gd",
+      "group": "battle-presentation",
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 1.94,
+      "log": "E:\\pixel_world\\meowa_tiles\\generated\\skill_icons\\contracts\\battle_ui_components.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/battle_ui_components_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    },
+    {
+      "name": "ui",
+      "path": "res://tests/ui_contract.gd",
+      "group": "ui",
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "status": "pass",
+      "exit_code": 0,
+      "seconds": 0.91,
+      "log": "E:\\pixel_world\\meowa_tiles\\generated\\skill_icons\\contracts\\ui.log",
+      "command": [
+        "D:/Godot/Godot_v4.7.2-stable_win64_console.exe",
+        "--headless",
+        "--path",
+        ".",
+        "--script",
+        "res://tests/ui_contract.gd"
+      ],
+      "reason": null,
+      "fast_flags_applied": false
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "pass": 3,
+    "fail": 0,
+    "timeout": 0,
+    "environment-skip": 0,
+    "executor-error": 0
+  }
+}
