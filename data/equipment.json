@@ -6,7 +6,7 @@
 			"name": "铁剑",
 			"slot": "weapon",
 			"stats": { "str": 1 },
-			"allowed_professions": ["swordsman"],
+			"allowed_professions": ["swordsman", "assassin"],
 			"iconId": "01",
 			"acquisition": "starter_catalog",
 			"weapon_id": "ironSword"
@@ -16,7 +16,7 @@
 			"name": "钢剑",
 			"slot": "weapon",
 			"stats": { "str": 2 },
-			"allowed_professions": ["assassin"],
+			"allowed_professions": ["swordsman", "assassin"],
 			"iconId": "02",
 			"acquisition": "starter_catalog",
 			"weapon_id": "steelSword"
@@ -64,7 +64,7 @@
 		{
 			"id": "heal",
 			"name": "治疗杖",
-			"slot": "weapon",
+			"slot": "staff",
 			"stats": { "mag": 1, "res": 1 },
 			"allowed_professions": ["priest"],
 			"iconId": "07",
@@ -92,7 +92,7 @@
 		{
 			"id": "campaignCloak",
 			"name": "远征披风",
-			"slot": "armor",
+			"slot": "relic",
 			"stats": { "hp": 1, "res": 1 },
 			"allowed_professions": [],
 			"iconId": "10",
@@ -101,7 +101,7 @@
 		{
 			"id": "luckyPendant",
 			"name": "幸运坠饰",
-			"slot": "accessory",
+			"slot": "relic",
 			"stats": { "luk": 2 },
 			"allowed_professions": [],
 			"iconId": "11",

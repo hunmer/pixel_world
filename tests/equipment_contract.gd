@@ -1,10 +1,10 @@
 ## tests/equipment_contract.gd — 装备目录/四槽装卸/统一实际武器读取 契约
 ##
-## 覆盖：data/equipment.json 严格装载（v1/11 件/四槽）、查询与授权、
-## 事务性 equip/unequip（装上不补满、卸下超容才钳）、equipment 键可选、
-## WeaponData.unit_weapon 装备优先空装回退、BuffSystem=base+装备+buff 而
-## 容量=base+装备、normalize_unit_equipment 存档归一、坏档整体拒绝。
-## 坏档注入：user://equipment_contract_tmp/ 临时 JSON + EquipmentData.force_reload()。
+## 覆盖：data/equipment.json 严格装载（v1/11 件/四槽 weapon+shield+staff+relic）、
+## 查询与授权、事务性 equip/unequip（装上不补满、卸下超容才钳）、equipment 键可选、
+## WeaponData.unit_weapon 装备优先空装回退（weapon/staff 两武器槽）、
+## BuffSystem=base+装备+buff 而容量=base+装备、normalize_unit_equipment 存档归一、
+## 坏档整体拒绝。坏档注入：user://equipment_contract_tmp/ + force_reload()。
 
 extends SceneTree
 
@@ -79,16 +79,18 @@ func _test_catalog() -> void:
 	var st: Dictionary = EquipmentData.load_status()
 	_expect(bool(st.ok), "真实目录应装载成功，error=%s" % String(st.error))
 	_expect(int(st.count) == 11, "目录应 11 件，实际 %d" % int(st.count))
-	_expect(EquipmentData.SLOTS == [&"weapon", &"shield", &"armor", &"accessory"], "固定四槽不符")
+	_expect(EquipmentData.SLOTS == [&"weapon", &"shield", &"staff", &"relic"], "固定四槽不符")
 	var ids := [&"ironSword", &"steelSword", &"ironLance", &"ironAxe", &"ironBow", &"fire", &"heal",
 		&"leatherShield", &"kiteShield", &"campaignCloak", &"luckyPendant"]
 	for id in ids:
 		_expect(EquipmentData.has_entry(id), "缺少装备条目 %s" % String(id))
 		_expect(EquipmentData.entry_name(id) != "", "条目 %s 无 name" % String(id))
 	_expect(EquipmentData.slot_of(&"ironSword") == &"weapon", "ironSword 槽位应 weapon")
+	_expect(EquipmentData.slot_of(&"fire") == &"weapon", "mage 的 fire 应在 weapon 槽（anima 不是 staff）")
+	_expect(EquipmentData.slot_of(&"heal") == &"staff", "priest 的 heal 应在 staff 槽")
 	_expect(EquipmentData.slot_of(&"leatherShield") == &"shield", "leatherShield 槽位应 shield")
-	_expect(EquipmentData.slot_of(&"campaignCloak") == &"armor", "campaignCloak 槽位应 armor")
-	_expect(EquipmentData.slot_of(&"luckyPendant") == &"accessory", "luckyPendant 槽位应 accessory")
+	_expect(EquipmentData.slot_of(&"campaignCloak") == &"relic", "campaignCloak 槽位应 relic")
+	_expect(EquipmentData.slot_of(&"luckyPendant") == &"relic", "luckyPendant 槽位应 relic")
 	# 全条目 stats 键必须是九键子集（排除 mov）
 	var nine := {}
 	for k in UnitFactory.empty_stats():
@@ -119,12 +121,28 @@ func _test_query_and_authorize() -> void:
 		mage_ids[StringName(String(c["id"]))] = true
 	_expect(mage_ids.has(&"fire"), "mage 目录应含 fire")
 	_expect(not mage_ids.has(&"ironBow"), "mage 目录不应含 ironBow")
+	_expect(not mage_ids.has(&"heal"), "mage 目录不应含 heal（治疗杖 priest 专属）")
+	# 双剑互选：剑两款都授权 swordsman 与 assassin
+	for cls in [&"swordsman", &"assassin"]:
+		var cat: Array = EquipmentData.catalog_for(cls)
+		var cids := {}
+		for c in cat:
+			cids[StringName(String(c["id"]))] = true
+		_expect(cids.has(&"ironSword") and cids.has(&"steelSword"), "%s 目录应同时含铁剑与钢剑" % String(cls))
+	# priest：治疗杖在 staff 槽可装；fire（anima）对其 weapon 槽不可装
+	var priest := _mk_unit("eq_auth_priest", &"priest")
+	var ok_heal: Dictionary = EquipmentData.can_equip(priest, &"heal")
+	_expect(bool(ok_heal.ok) and StringName(ok_heal.slot) == &"staff", "priest 应能装 heal 到 staff 槽：%s" % String(ok_heal.reason))
+	var bad_fire: Dictionary = EquipmentData.can_equip(priest, &"fire")
+	_expect(not bool(bad_fire.ok), "priest 不应能装 fire（weapon 槽类型不符）")
 
 	var knight := _mk_unit("eq_auth_knight", &"knight")
 	var ok_lance: Dictionary = EquipmentData.can_equip(knight, &"ironLance")
 	_expect(bool(ok_lance.ok), "knight 应能装 ironLance：%s" % String(ok_lance.reason))
 	var bad_sword: Dictionary = EquipmentData.can_equip(knight, &"ironSword")
-	_expect(not bool(bad_sword.ok), "knight 不应能装 ironSword")
+	_expect(not bool(bad_sword.ok), "knight 不应能装 ironSword（weapon 槽错职业）")
+	var bad_heal: Dictionary = EquipmentData.can_equip(knight, &"heal")
+	_expect(not bool(bad_heal.ok), "knight 不应能装 heal（staff 槽错职业）")
 	var ok_shield: Dictionary = EquipmentData.can_equip(knight, &"leatherShield")
 	_expect(bool(ok_shield.ok), "通用皮盾任何职业可装")
 	var unknown: Dictionary = EquipmentData.can_equip(knight, &"ghostGear")
@@ -178,14 +196,20 @@ func _test_equip_unequip() -> void:
 	_expect(bool(r7.ok) and not bool(r7.changed), "重复卸应幂等")
 	var r8: Dictionary = EquipmentData.unequip(u, &"helm")
 	_expect(not bool(r8.ok), "未知槽位应拒绝")
-	# 卸下超容才钳：披风 hp+1
+	# 卸下超容才钳：披风（relic）hp+1
 	var v := _mk_unit("eq_clamp", &"priest")
 	var base_hp := int(v[&"stats"][&"hp"])
 	var rc: Dictionary = EquipmentData.equip(v, &"campaignCloak")
-	_expect(bool(rc.ok), "priest 应能装远征披风：%s" % String(rc.reason))
+	_expect(bool(rc.ok) and StringName(rc.slot) == &"relic", "priest 应能装远征披风（relic）：%s" % String(rc.reason))
 	_expect(EquipmentData.capacity_hp(v) == base_hp + 1, "披风 HP 容量应 +1")
 	v[&"hp"] = base_hp + 1
-	var ru: Dictionary = EquipmentData.unequip(v, &"armor")
+	# relic 同槽替换：披风 → 幸运坠饰
+	var rr: Dictionary = EquipmentData.equip(v, &"luckyPendant")
+	_expect(bool(rr.ok) and bool(rr.changed) and StringName(rr.prev) == &"campaignCloak", "relic 同槽替换应成功并返回 prev")
+	_expect(EquipmentData.equipment_of(v) == {&"relic": &"luckyPendant"}, "替换后 relic 槽应为 luckyPendant")
+	rr = EquipmentData.equip(v, &"campaignCloak")
+	_expect(bool(rr.ok) and StringName(rr.prev) == &"luckyPendant", "relic 槽换回披风")
+	var ru: Dictionary = EquipmentData.unequip(v, &"relic")
 	_expect(bool(ru.ok) and bool(ru.hp_clamped), "卸披风应触发 HP 钳制")
 	_expect(int(v[&"hp"]) == base_hp, "HP 应钳回 base")
 	# 装上高于容量不钳（装上不补满也不削）
@@ -211,6 +235,24 @@ func _test_weapon_priority() -> void:
 	EquipmentData.unequip(u, &"weapon")
 	var w2: Dictionary = WeaponData.unit_weapon(u)
 	_expect(StringName(w2[&"id"]) == &"ironSword", "卸下后应回退 unit.weapon 铁剑")
+	# swordsman 也能换钢剑（双剑互选）
+	var sw := _mk_unit("eq_weapon_sw", &"swordsman")
+	var rsw: Dictionary = EquipmentData.equip(sw, &"steelSword")
+	_expect(bool(rsw.ok) and StringName(WeaponData.unit_weapon(sw)[&"id"]) == &"steelSword", "swordsman 应能换装钢剑")
+	# priest 的 heal 在 staff 槽单独进结算：unit_weapon 解析 staff 槽
+	var pr := _mk_unit("eq_weapon_pr", &"priest")
+	var rpr: Dictionary = EquipmentData.equip(pr, &"heal")
+	_expect(bool(rpr.ok) and StringName(rpr.slot) == &"staff", "priest 装 heal 应进 staff 槽：%s" % String(rpr.reason))
+	var wp: Dictionary = WeaponData.unit_weapon(pr)
+	_expect(StringName(wp[&"id"]) == &"heal" and StringName(wp[&"type"]) == &"staff", "staff 槽装备应成为 priest 实际武器（结算 staff 判定读这里）")
+	EquipmentData.unequip(pr, &"staff")
+	_expect(EquipmentData.equipment_of(pr).is_empty(), "卸下 staff 槽后无装备")
+	# mage 的 fire 在 weapon 槽（anima 不是 staff，走 weapon 槽）
+	var mg := _mk_unit("eq_weapon_mg", &"mage")
+	var rmg: Dictionary = EquipmentData.equip(mg, &"fire")
+	_expect(bool(rmg.ok) and StringName(rmg.slot) == &"weapon", "mage 装 fire 应进 weapon 槽：%s" % String(rmg.reason))
+	var wm: Dictionary = WeaponData.unit_weapon(mg)
+	_expect(StringName(wm[&"id"]) == &"fire" and StringName(wm[&"type"]) == &"anima", "fire 应是 mage 实际武器且类型 anima")
 
 
 # ============================================================
@@ -247,7 +289,7 @@ func _test_normalize() -> void:
 	var a := _mk_unit("eq_norm_a", &"knight")
 	_expect(EquipmentData.normalize_unit_equipment(a) == "", "无 equipment 键应直接通过")
 	var b := _mk_unit("eq_norm_b", &"knight")
-	b["equipment"] = {"shield": "leatherShield", "accessory": "luckyPendant"}  # String 键（JSON 往返态）
+	b["equipment"] = {"shield": "leatherShield", "relic": "luckyPendant"}  # String 键（JSON 往返态）
 	var err_b := EquipmentData.normalize_unit_equipment(b)
 	_expect(err_b == "", "合法 String 键应归一通过：%s" % err_b)
 	var eq_b: Dictionary = EquipmentData.equipment_of(b)
@@ -264,6 +306,20 @@ func _test_normalize() -> void:
 	var f := _mk_unit("eq_norm_f", &"knight")
 	f["equipment"] = ["shield"]
 	_expect(EquipmentData.normalize_unit_equipment(f) != "", "非对象 equipment 应报错")
+	# 旧错误槽名不得绕过：armor/accessory 已不是合法槽位
+	var g := _mk_unit("eq_norm_g", &"knight")
+	g["equipment"] = {"armor": "campaignCloak"}
+	_expect(EquipmentData.normalize_unit_equipment(g) != "", "armor 槽位应拒绝（四槽=weapon/shield/staff/relic）")
+	var h := _mk_unit("eq_norm_h", &"knight")
+	h["equipment"] = {"accessory": "luckyPendant"}
+	_expect(EquipmentData.normalize_unit_equipment(h) != "", "accessory 槽位应拒绝")
+	# 治疗杖放错槽（weapon）应拒绝；fire 放 staff 槽也应拒绝
+	var i2 := _mk_unit("eq_norm_i", &"priest")
+	i2["equipment"] = {"weapon": "heal"}
+	_expect(EquipmentData.normalize_unit_equipment(i2) != "", "heal 应在 staff 槽，weapon 槽应拒绝")
+	var j2 := _mk_unit("eq_norm_j", &"mage")
+	j2["equipment"] = {"staff": "fire"}
+	_expect(EquipmentData.normalize_unit_equipment(j2) != "", "fire 应在 weapon 槽，staff 槽应拒绝")
 
 
 # ============================================================
@@ -280,6 +336,10 @@ func _test_bad_files() -> void:
 		["weapon槽通用", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"weapon","stats":{"str":1},"allowed_professions":[],"weapon_id":"ironSword","iconId":"01","acquisition":"test"}]}'],
 		["未知武器", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"weapon","stats":{"str":1},"allowed_professions":["swordsman"],"weapon_id":"excalibur","iconId":"01","acquisition":"test"}]}'],
 		["武器类型不一致", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"weapon","stats":{"str":1},"allowed_professions":["assassin"],"weapon_id":"ironLance","iconId":"01","acquisition":"test"}]}'],
+		["weapon槽收staff武器", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"weapon","stats":{"mag":1},"allowed_professions":["priest"],"weapon_id":"heal","iconId":"01","acquisition":"test"}]}'],
+		["staff槽缺weapon_id", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"staff","stats":{"mag":1},"allowed_professions":["priest"],"iconId":"01","acquisition":"test"}]}'],
+		["staff槽通用", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"staff","stats":{"mag":1},"allowed_professions":[],"weapon_id":"heal","iconId":"01","acquisition":"test"}]}'],
+		["staff槽收非staff武器", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"staff","stats":{"str":1},"allowed_professions":["swordsman"],"weapon_id":"ironSword","iconId":"01","acquisition":"test"}]}'],
 		["非weapon槽带weapon_id", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"shield","stats":{"def":1},"allowed_professions":[],"weapon_id":"ironSword","iconId":"01","acquisition":"test"}]}'],
 		["bool加成", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"shield","stats":{"def":true},"allowed_professions":[],"iconId":"01","acquisition":"test"}]}'],
 		["零加成", '{"version":1,"equipment":[{"id":"t1","name":"T1","slot":"shield","stats":{"def":0},"allowed_professions":[],"iconId":"01","acquisition":"test"}]}'],
@@ -309,7 +369,7 @@ func _test_bad_files() -> void:
 # ============================================================
 
 func _test_injected_good_file() -> void:
-	_inject('{"version":1,"equipment":[{"id":"blueRobe","name":"蓝袍","slot":"armor","stats":{"mp":2,"res":1},"allowed_professions":[],"iconId":"01","acquisition":"test"}]}', "good_mp.json")
+	_inject('{"version":1,"equipment":[{"id":"blueRobe","name":"蓝袍","slot":"relic","stats":{"mp":2,"res":1},"allowed_professions":[],"iconId":"01","acquisition":"test"}]}', "good_mp.json")
 	var st: Dictionary = EquipmentData.load_status()
 	_expect(bool(st.ok) and int(st.count) == 1, "注入蓝袍应装载 1 件：%s" % String(st.error))
 	var u := _mk_unit("eq_mp", &"mage")
@@ -319,7 +379,7 @@ func _test_injected_good_file() -> void:
 	_expect(EquipmentData.capacity_mp(u) == mp_base + 2, "MP 容量应 +2")
 	_expect(BuffSystem.effective_stat(u, &"res") == int(u[&"stats"][&"res"]) + 1, "res 有效值含装备")
 	u[&"mp"] = mp_base + 2
-	var ru: Dictionary = EquipmentData.unequip(u, &"armor")
+	var ru: Dictionary = EquipmentData.unequip(u, &"relic")
 	_expect(bool(ru.mp_clamped) and int(u[&"mp"]) == mp_base, "卸蓝袍应触发 MP 钳制")
 	# 恢复真实目录（_run 末尾统一清理）
 	_restore()

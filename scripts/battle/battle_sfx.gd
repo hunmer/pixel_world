@@ -83,7 +83,7 @@ func play_impact(impact: Dictionary) -> void:
 	if hp_after > 0:
 		var u: Dictionary = grid.units.get(StringName(impact.get(&"target_id", &"")), {})
 		if not u.is_empty() and u.get(&"faction", &"") == &"player":
-			var max_hp := int(u.get(&"stats", {}).get(&"hp", 0))
+			var max_hp := EquipmentData.capacity_hp(u)
 			if max_hp > 0 and hp_after * 4 <= max_hp:
 				Sfx.play_low_hp()
 

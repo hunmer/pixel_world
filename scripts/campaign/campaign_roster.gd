@@ -272,11 +272,8 @@ static func _absorb_final(unit: Dictionary, final_unit: Dictionary) -> void:
 		for sid: Variant in final_skills:
 			skills_out.append(StringName(String(sid)))
 		unit["skills"] = skills_out
-	# 装备槽随终局吸收（深拷贝，与 weapon 同口径；battle 内装备不被消耗/更换，
-	# 这里保底保证战场上发生的装卸能回流档内）。
-	var final_equipment: Variant = final_unit.get("equipment")
-	if final_equipment is Dictionary and not (final_equipment as Dictionary).is_empty():
-		unit["equipment"] = (final_equipment as Dictionary).duplicate(true)
+	# 装备槽不吸收：营地档是装备的唯一权威（战内不发生装卸），import_victory
+	# 保留 camp 档槽位、不从 battle snapshot 回写；成长照常吸收。
 
 
 ## Hub 归一化（对传入单位原地生效，调用方负责传副本）：

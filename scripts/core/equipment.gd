@@ -1,14 +1,17 @@
 ## core/equipment.gd — 装备目录与四槽装卸（全静态）
 ##
-## 数据源 res://data/equipment.json（v1）。固定四槽：weapon / shield / armor / accessory。
+## 数据源 res://data/equipment.json（v1）。固定四槽：weapon / shield / staff / relic。
 ## 条目形状（加载时归一）：{ id:StringName, name:String, slot:StringName,
 ##   stats:Dictionary(StringName->int 正加成，九键子集，不含 mov),
-##   allowed_professions:Array[StringName]（空 = 通用）, weapon_id:StringName（仅 weapon 槽）,
+##   allowed_professions:Array[StringName]（空 = 通用）, weapon_id:StringName（仅 weapon/staff 槽）,
 ##   icon_id:String(SkillIcons 稳定 ID), acquisition:String }。
 ##
 ## 严格校验：任何一条非法 → 整目录置空并 push_error（查询一律回退"无装备"，
 ## 游戏不崩但装备全失效）；load_status() 供契约测试取失败原因。
-## 授权 = allowed_professions（空通用）+ 已知职业 + weapon 槽与职业 weaponType 一致。
+## 授权 = allowed_professions + 已知职业 + 实际武器类型一致：
+##   weapon 槽只收非 staff 武器且与职业 weaponType 一致；staff 槽只收 WeaponData
+##   staff 类型武器且职业 weaponType 也是 staff（治疗杖单独进结算）；两者都必须
+##   声明职业（通用武器/法杖绕过类型一致性，禁止）；shield / relic 通用、无武器。
 ##
 ## 单位侧约定：unit.equipment 为「可选」槽位->装备 ID 字典（空装单位没有该键，
 ## UnitFactory 原始签名不动）；装卸事务性 = 先校验后单点写入；装上不补满 HP/MP，
@@ -23,7 +26,7 @@ extends RefCounted
 
 const VERSION: int = 1
 const EQUIPMENT_PATH: String = "res://data/equipment.json"
-const SLOTS: Array[StringName] = [&"weapon", &"shield", &"armor", &"accessory"]
+const SLOTS: Array[StringName] = [&"weapon", &"shield", &"staff", &"relic"]
 
 ## 测试可换源（坏档注入）。改后调用 force_reload()。
 static var equipment_path: String = EQUIPMENT_PATH
@@ -148,24 +151,29 @@ static func _validate_entry(raw: Variant, index: int, seen: Dictionary, stat_key
 			return "装备 %s 授权未知职业：%s" % [id_str, String(pid)]
 		if not allowed.has(pid):
 			allowed.append(pid)
-	# weapon_id：weapon 槽必有且类型与全部授权职业一致；非 weapon 槽禁止携带
+	# weapon_id：weapon/staff 槽必有且类型与槽位及全部授权职业一致；其他槽禁止携带
 	var weapon_id := &""
 	var has_weapon_key: bool = src.has("weapon_id")
-	if slot == &"weapon":
+	if slot == &"weapon" or slot == &"staff":
+		var slot_label := String(slot)
 		if not has_weapon_key:
-			return "weapon 槽装备 %s 缺少 weapon_id" % id_str
+			return "%s 槽装备 %s 缺少 weapon_id" % [slot_label, id_str]
 		weapon_id = StringName(String(src.get("weapon_id", "")))
 		if not WeaponData.WEAPONS.has(weapon_id):
-			return "weapon 槽装备 %s 引用未知武器：%s" % [id_str, String(weapon_id)]
+			return "%s 槽装备 %s 引用未知武器：%s" % [slot_label, id_str, String(weapon_id)]
 		if allowed.is_empty():
-			return "weapon 槽装备 %s 必须声明 allowed_professions（通用武器绕过类型一致性）" % id_str
+			return "%s 槽装备 %s 必须声明 allowed_professions（通用武器绕过类型一致性）" % [slot_label, id_str]
 		var wtype: StringName = WeaponData.WEAPONS[weapon_id][&"type"]
+		if slot == &"weapon" and wtype == &"staff":
+			return "weapon 槽装备 %s 不得收 staff 类型武器（治疗杖走 staff 槽）" % id_str
+		if slot == &"staff" and wtype != &"staff":
+			return "staff 槽装备 %s 的武器不是 staff 类型：%s" % [id_str, String(weapon_id)]
 		for pid in allowed:
 			var prof := ProfessionData.get_profession(pid)
 			if prof.is_empty() or StringName(prof[&"weaponType"]) != wtype:
 				return "装备 %s 授权职业 %s 的武器类型与 %s 不一致" % [id_str, String(pid), String(weapon_id)]
 	elif has_weapon_key:
-		return "非 weapon 槽装备 %s 不得携带 weapon_id" % id_str
+		return "非 weapon/staff 槽装备 %s 不得携带 weapon_id" % id_str
 	# iconId：SkillIcons 已知稳定 ID
 	var icon_id := String(src.get("iconId", ""))
 	if icon_id == "" or not SkillIcons.has_icon(StringName(icon_id)):
@@ -255,7 +263,7 @@ static func can_equip(unit: Dictionary, entry_id: StringName) -> Dictionary:
 			return { ok = false, reason = "单位职业未知：%s" % String(class_id), slot = slot }
 		if not allowed.has(class_id):
 			return { ok = false, reason = "%s 不能装备 %s（职业不符）" % [String(class_id), String(entry_id)], slot = slot }
-	if slot == &"weapon":
+	if slot == &"weapon" or slot == &"staff":
 		# 数据装载期已保证类型一致；这里兜底挡住 classId 与档内数据错配的单位。
 		var prof := ProfessionData.get_profession(class_id)
 		var wtype: StringName = WeaponData.WEAPONS[e[&"weapon_id"]][&"type"]
@@ -330,21 +338,23 @@ static func capacity_mp(unit: Dictionary) -> int:
 	return int((unit.get(&"stats", {}) as Dictionary).get(&"mp", 0)) + stat_bonus(unit, &"mp")
 
 
-## 已装备的实际武器 id（weapon 槽条目解析 weapon_id；无/失效返回 &""）。
+## 已装备的实际武器 id（weapon 槽优先，其次 staff 槽；无/失效返回 &""）。
 ## WeaponData.unit_weapon 据此做「装备优先，空装回退 unit.weapon」。
 static func equipped_weapon_id(unit: Dictionary) -> StringName:
 	var eq := equipment_of(unit)
 	if eq.is_empty():
 		return &""
-	var entry_id := _slot_load(eq, &"weapon")
-	if entry_id == &"":
-		return &""
 	if not _loaded:
 		_ensure_loaded()
-	var e: Dictionary = _entries.get(entry_id, {})
-	if e.is_empty():
-		return &""
-	return StringName(e[&"weapon_id"])
+	for slot in [&"weapon", &"staff"]:
+		var entry_id := _slot_load(eq, slot)
+		if entry_id == &"":
+			continue
+		var e: Dictionary = _entries.get(entry_id, {})
+		if e.is_empty() or StringName(e[&"weapon_id"]) == &"":
+			continue
+		return StringName(e[&"weapon_id"])
+	return &""
 
 
 # ============================================================

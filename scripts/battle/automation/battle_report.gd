@@ -64,7 +64,7 @@ static func build_summary(events: Array, result: Dictionary) -> String:
 			u.get("faction", "?"),
 			u.get("class_id", "?"),
 			int(u.get("level", 1)),
-			int(u.get("hp", 0)), int(u.get("stats", {}).get("hp", 0)),
+			int(u.get("hp", 0)), EquipmentData.capacity_hp(u),
 			int(u.get("mp", 0)),
 			int(u.get("x", -1)), int(u.get("y", -1)),
 			" [已阵亡]" if bool(u.get("is_dead", false)) else "",

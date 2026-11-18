@@ -534,7 +534,7 @@ func equip_item(roster_id: String, entry_id: String) -> Dictionary:
 	}
 
 
-## 卸下档内单位某槽装备（slot ∈ weapon/shield/armor/accessory）。原子语义同
+## 卸下档内单位某槽装备（slot ∈ weapon/shield/staff/relic）。原子语义同
 ## equip_item；卸下后若 HP/MP 超过新容量则就地钳制（营地单位通常已满，正常
 ## 情况无变化）。返回 {ok, error, prev, hp_clamped, mp_clamped}。
 func unequip_item(roster_id: String, slot: String) -> Dictionary:

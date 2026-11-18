@@ -45,6 +45,7 @@ func _run() -> void:
 	_test_battle_save_roundtrip()
 	_test_session_equip_api()
 	_test_session_attempt_rejection()
+	_test_victory_preserves_camp_slots()
 	_test_profile_json_equipment_rejected()
 	_cleanup()
 	_finish()
@@ -84,7 +85,7 @@ func _test_battle_save_roundtrip() -> void:
 		return
 	var b0: Dictionary = ((rr["chapter"]["playerUnits"] as Array)[0] as Dictionary).get(&"equipment", {})
 	_expect(String(b0.get(&"shield", "")) == "leatherShield", "快照往返后 shield 槽丢失")
-	_expect(String(b0.get(&"armor", "")) == "campaignCloak", "快照往返后 armor 槽丢失")
+	_expect(String(b0.get(&"relic", "")) == "campaignCloak", "快照往返后 relic 槽丢失")
 	_expect(b0.has(&"weapon") == false, "未装 weapon 槽不应存在")
 
 	# JSON 磁盘序列化往返（String 键 → 解码归一 StringName）
@@ -99,7 +100,7 @@ func _test_battle_save_roundtrip() -> void:
 		return
 	var j0: Dictionary = ((jr["chapter"]["playerUnits"] as Array)[0] as Dictionary).get(&"equipment", {})
 	_expect(String(j0.get(&"shield", "")) == "leatherShield", "JSON 往返后 shield 槽丢失")
-	_expect(String(j0.get(&"armor", "")) == "campaignCloak", "JSON 往返后 armor 槽丢失")
+	_expect(String(j0.get(&"relic", "")) == "campaignCloak", "JSON 往返后 relic 槽丢失")
 
 	# 坏装备：未知条目必须被拒绝
 	var bad_chapter: Dictionary = chapter.duplicate(true)
@@ -205,6 +206,41 @@ func _test_session_attempt_rejection() -> void:
 	_expect(bool(settled.get("ok", false)), "弃战结算应成功: %s" % String(settled.get("error", "")))
 	var after: Dictionary = session.equip_item(rid, "leatherShield")
 	_expect(bool(after.get("ok", false)), "结算后应恢复装备能力: %s" % String(after.get("error", "")))
+
+
+# ============================================================
+# 胜利结算：营地档槽位权威，不从 battle snapshot 回写
+# ============================================================
+func _test_victory_preserves_camp_slots() -> void:
+	_cur_dir = "%s/victory" % ROOT
+	var session := _mk_session()
+	session.create_profile("凯旋队")
+	var profile: Dictionary = session.get_profile()
+	var rid := String(((profile["roster"] as Array)[0] as Dictionary).get("id", ""))
+	# 出征前在营地装好盾+秘宝（任意职业通用）
+	_expect(bool(session.equip_item(rid, "leatherShield").get("ok", false)), "出征前装盾应成功")
+	_expect(bool(session.equip_item(rid, "campaignCloak").get("ok", false)), "出征前装秘宝应成功")
+	var prepped: Dictionary = session.prepare_battle(L0)
+	_expect(bool(prepped.get("ok", false)), "出征应成功: %s" % String(prepped.get("error", "")))
+	if not bool(prepped.get("ok", false)):
+		return
+	var token := String(prepped.get("token", ""))
+	# 终局战场数据：同 id 单位但 equipment 被清空且 stats 有成长 —— 模拟
+	# 战场快照（战内不发生装卸；即便快照缺字段/被污染，营地档也不回写吸收）。
+	var final_unit: Dictionary = ((profile["roster"] as Array)[0] as Dictionary).duplicate(true)
+	final_unit.erase(&"equipment")
+	final_unit["exp"] = int(final_unit.get("exp", 0)) + 40
+	var final_chapter := {"playerUnits": [final_unit], "enemyUnits": []}
+	var settled: Dictionary = session.settle_battle(token, "win", final_chapter)
+	_expect(bool(settled.get("ok", false)), "胜利结算应成功: %s" % String(settled.get("error", "")))
+	if not bool(settled.get("ok", false)):
+		return
+	var after: Dictionary = ((session.get_profile()["roster"] as Array)[0] as Dictionary)
+	var eq: Dictionary = after.get(&"equipment", {})
+	_expect(String(eq.get(&"shield", "")) == "leatherShield", "回营后 shield 槽应保留营地档原值")
+	_expect(String(eq.get(&"relic", "")) == "campaignCloak", "回营后 relic 槽应保留营地档原值")
+	# 成长照常吸收：exp 增加（40 落进档内）
+	_expect(int(after.get("exp", -1)) == int(final_unit["exp"]), "成长（exp）应照常吸收")
 
 
 # ============================================================

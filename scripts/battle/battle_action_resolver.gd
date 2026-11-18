@@ -308,6 +308,6 @@ static func gain_exp(u: Dictionary, amount: int) -> Dictionary:
 			if randf() * 100.0 < int(g[k]):
 				gains[k] = { from = int(s[k]), to = int(s[k]) + 1 }
 				s[k] = int(s[k]) + 1
-		u[&"hp"] = int(u[&"stats"][&"hp"])  # 升 hp 上限后回满
+		u[&"hp"] = EquipmentData.capacity_hp(u)  # 升 hp 上限后回满（容量=base+装备）
 		levels.append({ level = int(u[&"level"]), gains = gains })
 	return { amount = amount, gained = true, levels = levels }

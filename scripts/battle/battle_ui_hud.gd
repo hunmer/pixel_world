@@ -254,7 +254,7 @@ func refresh_turn_status() -> void:
 		signature += "|%s:%s:%s:%d:%d:%s:%s" % [
 			String(u.get(&"id", &"")), String(u.get(&"name", "")),
 			String(u.get(&"faction", &"")), int(u.get(&"hp", 0)),
-			int((u.get(&"stats", {}) as Dictionary).get(&"hp", 0)),
+			EquipmentData.capacity_hp(u),
 			str(bool(u.get(&"hasActed", false))), str(bool(u.get(&"isDead", false)))
 		]
 	if signature == _turn_status_signature:
@@ -273,12 +273,12 @@ func refresh_turn_status() -> void:
 			if bool(u.get(&"isDead", false)):
 				continue
 			alive += 1
-			var stats: Dictionary = u.get(&"stats", {})
 			hp += int(u.get(&"hp", 0))
-			max_hp += int(stats.get(&"hp", 0))
+			var cap_hp := EquipmentData.capacity_hp(u)
+			max_hp += cap_hp
 			parts.append("%s %s HP%d/%d" % [
 				String(u.get(&"name", "")), "已行动" if bool(u.get(&"hasActed", false)) else "未行动",
-				int(u.get(&"hp", 0)), int(stats.get(&"hp", 0))
+				int(u.get(&"hp", 0)), cap_hp
 			])
 		var label: Label = turn_status_labels[faction]
 		label.text = "%s｜%s" % [FACTION_NAME[faction], "；".join(parts)]

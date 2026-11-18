@@ -107,12 +107,13 @@ func _combatant(unit: Dictionary, role: String, node_name: String) -> VBoxContai
 	_line(column, String(unit.name))
 	var bar: ProgressBar = Bar.new()
 	bar.name = node_name + "Hp"
-	bar.max_value = maxi(1, int(unit.stats.hp))
+	var cap_hp := maxi(1, EquipmentData.capacity_hp(unit))
+	bar.max_value = cap_hp
 	bar.value = int(unit.hp)
 	bar.show_percentage = false
 	column.add_child(bar)
-	_line(column, "HP %d/%d" % [int(unit.hp), int(unit.stats.hp)])
-	_line(column, String(unit.weapon.get(&"name", "")), Palette.TEXT_DIM)
+	_line(column, "HP %d/%d" % [int(unit.hp), cap_hp])
+	_line(column, String(WeaponData.unit_weapon(unit).get(&"name", "")), Palette.TEXT_DIM)
 	return column
 
 func _line(parent: Node, text: String, color: Color = Palette.TEXT_MAIN) -> Label:

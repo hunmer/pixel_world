@@ -109,7 +109,7 @@ func prewarm_damage_fx_variants(impacts: Array) -> void:
 		if u.is_empty():
 			continue
 		var damage := int(impact.get(&"damage", 0))
-		var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
+		var max_hp: int = max(1, EquipmentData.capacity_hp(u))
 		var hp_before := int(impact.get(&"hp_before", int(u.get(&"hp", 0))))
 		var hp_after := int(impact.get(&"hp_after", int(u.get(&"hp", 0))))
 		prewarm_fx_variant("ui/damage-number", {"text": "-%d" % damage})
@@ -171,7 +171,7 @@ func prewarm_item_damage_fx(result: Dictionary) -> void:
 			continue
 		var hp_after := int(t.get(&"hp", 0))
 		var u: Dictionary = grid.units.get(StringName(t.get(&"id", &"")), t)
-		var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
+		var max_hp: int = max(1, EquipmentData.capacity_hp(u))
 		prewarm_fx_variant("ui/damage-number", {"text": "-%d" % -delta})
 		prewarm_fx_variant("ui/health-bar-hit", {
 			"from": clampf(float(hp_after - delta) / float(max_hp), 0.0, 1.0),
@@ -198,7 +198,7 @@ func spawn_damage_fx(u: Dictionary, damage: int, hp_before: int, hp_after: int) 
 	(float_container_fn.call() as CanvasItem).add_child(dn)
 	var hit_fx: Node2D = PixelFx2DScript.new()
 	hit_fx.effect = "ui/health-bar-hit"
-	var max_hp: int = max(1, int((u.get(&"stats", {}) as Dictionary).get(&"hp", 1)))
+	var max_hp: int = max(1, EquipmentData.capacity_hp(u))
 	hit_fx.options = {
 		"from": clampf(float(hp_before) / float(max_hp), 0.0, 1.0),
 		"to": clampf(float(hp_after) / float(max_hp), 0.0, 1.0),

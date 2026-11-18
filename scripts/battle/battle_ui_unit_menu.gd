@@ -68,7 +68,7 @@ func open_unit_menu(u: Dictionary, at_pos: Vector2i, _from_pos: Vector2i) -> voi
 	# 相邻 1 格带物品友军（C1 交换；自由动作）
 	var trade_targets: Array = TradeSystemScript.adjacent_trade_targets(u, _ui.grid)
 	var vbox := _menu_list("行动菜单 · " + String(u.name),
-		"HP %d/%d · MP %d/%d · Esc 撤销 / 关闭" % [int(u.hp), int(u.stats.hp), int(u.get(&"mp", 0)), int(u.stats.get(&"mp", 0))], 5)
+		"HP %d/%d · MP %d/%d · Esc 撤销 / 关闭" % [int(u.hp), EquipmentData.capacity_hp(u), int(u.get(&"mp", 0)), EquipmentData.capacity_mp(u)], 5)
 	if not targets.is_empty():
 		var b := _button()
 		b.text = "★ 攻击（%d 目标）" % targets.size()
@@ -440,4 +440,4 @@ func _button() -> Button:
 
 
 func _target_text(target: Dictionary) -> String:
-	return "%s · HP %d/%d" % [String(target.name), int(target.hp), int(target.stats.hp)]
+	return "%s · HP %d/%d" % [String(target.name), int(target.hp), EquipmentData.capacity_hp(target)]

@@ -49,8 +49,8 @@ func open_unit_detail(u: Dictionary) -> void:
 	scroll.add_child(column)
 	var stats: Dictionary = u.get(&"stats", {})
 	var resources := Widgets.card(column, "状态", "UnitResourcesCard")
-	Widgets.bar(resources, "UnitDetailHp", "HP", float(u.get(&"hp", 0)), float(stats.get(&"hp", 0)))
-	Widgets.bar(resources, "UnitDetailMp", "MP", float(u.get(&"mp", 0)), float(stats.get(&"mp", 0)))
+	Widgets.bar(resources, "UnitDetailHp", "HP", float(u.get(&"hp", 0)), float(maxi(1, EquipmentData.capacity_hp(u))))
+	Widgets.bar(resources, "UnitDetailMp", "MP", float(u.get(&"mp", 0)), float(maxi(0, EquipmentData.capacity_mp(u))))
 	Widgets.bar(resources, "UnitDetailExp", "EXP", float(u.get(&"exp", 0)), float(WeaponData.exp_to_next(int(u.get(&"level", 1)))))
 	var grid := Widgets.Grid.new()
 	grid.name = "UnitDetailStats"
