@@ -1,242 +1,79 @@
-# 沉浸式战斗演出交接
+# 沉浸式战斗演出 — 独立舞台（2026-11-19，第三版）
 
-- 日期：2026-11-14
-- 项目：`/Users/Zhuanz/Documents/pixel_world`
-- 引擎：Godot 4.7 / GL Compatibility
-- 已提交实现：`a681e53 Add battlefield settings and immersive combat camera presentation`
-- 提交范围：13 个文件，740 行新增、9 行删除；包含生产代码与两个针对性合约。
-- 当前状态：真实 B1/B2 战斗链路、设置联动、相机状态恢复和中断边界已做 headless 验证；最终渲染画面尚未做有窗口人工验收。
-- 下一阶段重点：在实际窗口中检查近平视构图、地形遮挡、角色朝向和转场平滑，再决定是否需要纯表现层调参。
+> 本文描述**现行架构**：沉浸演出 = 角色进入独立舞台场景（隔离 World3D 的 SubViewport），
+> 两阵营对角站位、按回合逐次出手。旧版「相机降到参战者近平视」（2026-11-14 第一版）
+> 的 ImmersiveBattleCamera 仍在仓库中但不再被驱动，历史细节见文末。
+> 契约入口：`python3 tools/run_contracts.py --test immersive_stage immersive_battle_integration --out <dir>`。
 
-## 用户目标与交付范围
+## 模块地图
 
-在战斗右侧现有 tabs 中增加【战场设置】，提供【沉浸式演出】开关。开启后，真实攻击和技能在实际地图中先把相机平滑降到参战角色附近，以接近平视的视角播放原有 ActionAnim；同一事件的反击、追击和多段 impacts 完整结束后，再恢复演出前的战术相机。
-
-本实现：
-
-- 复用真实 B1/B2 Camera3D 和真实单位 Sprite3D，不创建替代演示场景。
-- 不修改战斗格位、结算顺序、伤害次数或单位逻辑位置。
-- 保留默认关闭时的原战术推近、旋转和 B1/B2 kick 行为。
-- 保留常驻血条演出期隐藏/结束恢复，以及 PixelFx 预热和受伤表现。
-- 物品仍走原有短动画；沉浸式接管只覆盖攻击与技能的 `attack_event`。
-
-## 设置入口与持久化
-
-入口：战斗右侧 `InfoTabs` →【战场设置】→【沉浸式演出】。
-
-- 默认值：`false`。
-- 战斗中允许切换；新值立即作用于当前镜头的生命周期和后续动作。
-- 持久化文件：`user://settings.cfg`。
-- ConfigFile 位置：section=`battle`，key=`immersive_presentation`。
-- Settings 属性：`Settings.battle_immersive_presentation`。
-- 写入接口：`Settings.set_battle_immersive_presentation(value: bool)`。
-- UI 信号：`BattleUI.immersive_presentation_changed(enabled: bool)`。
-- 可断言控件名：`ImmersivePresentationToggle`。
-
-设置关闭时的语义是有意区分的：
-
-- `ENTERING`：先反向恢复战术相机，恢复完成后才继续普通 ActionAnim，避免两个 size tween 竞争。
-- `ACTIVE`：让当前完整动作结束，再由 `end()` 恢复。不要改成立即恢复，否则 ActionAnim 最后的相机快照写回可能留下交战中的 size。
-- 后续尚未开始的动作不再进入沉浸式演出。
-
-## 关键文件与接口
-
-| 文件 | 职责与接续点 |
+| 文件 | 职责 |
 | --- | --- |
-| `scripts/battle/immersive_camera.gd` | 核心模块 `ImmersiveBattleCamera`；状态机、参战者构图、快照、平滑进入/恢复、跳过与取消。 |
-| `scripts/battle/battle_settings_tab.gd` | 独立设置页构造器；`populate(tab, immersive_enabled, on_changed) -> CheckButton`。 |
-| `scripts/battle/battle_ui.gd` | 在现有 tabs 的【托管】和【日志】之间加入【战场设置】；转发真实开关信号。 |
-| `scripts/settings.gd` | 默认 false、`user://settings.cfg` 读写及 setter。 |
-| `scripts/scenes/battle.gd` | B1/B2 真实相机注入，以及攻击/技能的 `begin → ActionAnim.play → end` 可等待接入。 |
-| `scripts/iso/isometric_camera_3d.gd` | 新增 `presentation_distance`，让近平视演出缩短实际相机距离；默认仍为 `CAMERA_DISTANCE = 64`。 |
-| `tests/immersive_battle_camera_contract.gd` | 独立相机/设置/UI 合约，覆盖几何、状态和中断边界。 |
-| `tests/immersive_battle_integration_contract.gd` | 真实 Battle + SceneArgs + SkillSystem + ActionAnim 的集成合约。 |
-
-对应 `.tscn` 与 `.uid` 已随 `a681e53` 提交；不要重复生成另一套测试入口。
-
-## 演出生命周期
-
-### 初始化
-
-`battle.gd::_ready()` 在 ActionAnim setup 后创建名为 `ImmersiveCamera` 的节点：
-
-- B1 注入 `_world._cam`。
-- B2 注入 `board.camera`。
-- 初始 enabled 来自 `Settings.battle_immersive_presentation`。
-- `battle_ui.immersive_presentation_changed` 直接连接 `_immersive_camera.set_enabled`。
-
-`ImmersiveBattleCamera.setup()` 把 `process_priority` 设为 100，使 main/IsoBoard 的常规 advance 先执行，再由沉浸模块刷新有效焦点。
-
-### 一次完整交战
-
-攻击与技能都在结算已经生成同一个 `attack_event` 后执行：
-
-1. 保留 `_prewarm_damage_fx_variants(...)`。
-2. `_set_unit_bars_visible(false)`，隐藏常驻血条。
-3. `await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)`。
-4. `await action_anim.play(event, animation_speed, skipped or _immersive_camera.consume_skip_request())`。
-5. `await _immersive_camera.end()`。
-6. 继续原有单位刷新、死亡收尾和战斗结束检查。
-
-反击、追击、多段和 AoE 都包含在同一个 event/impacts 中，因此一次 begin/end 覆盖整个交战；不要在每个 impact 上重复接管相机。
-
-默认关闭、空 event、无有效参战点或预先 skip 时，`begin()` 不接管相机，原 ActionAnim 行为保持不变。
-
-### 状态与快照
-
-状态枚举：
-
-- `INACTIVE = 0`
-- `ENTERING = 1`
-- `ACTIVE = 2`
-- `RESTORING = 3`
-
-公开接口：
-
-- `setup(camera)`
-- `set_enabled(value)`
-- `is_engaged()`
-- `get_state()`
-- `begin(event, unit_sprites, animation_speed = 1.0, skipped = false)`
-- `end()`
-- `request_skip()`
-- `consume_skip_request()`
-- `cancel()`
-
-快照保存并恢复：有效焦点、当前/目标 yaw、当前/目标 elevation、`presentation_distance`、`presentation_offset`、正交 size、projection、near、far 和 global transform。恢复结束会清理 snapshot/current，并回到 INACTIVE。
-
-## 构图与相机所有权约定
-
-### 必须复用原 Camera3D
-
-ActionAnim、PixelFx 伤害数字、飘字和血条都引用当前真实相机做投影。不要再创建并切换到一个独立展示 Camera3D，否则这些 2D/3D 混合表现可能错位。
-
-### 焦点通过 presentation_offset 接管
-
-B1 的 main 每帧会重写 `focus_position`，B2 的 IsoBoard 也会推进相机。沉浸模块不直接锁死逻辑 focus，而是维护：
-
-`presentation_offset = 有效演出焦点 - 当前逻辑 focus_position`
-
-这样常规系统继续运行，演出焦点仍能稳定接管，结束后恢复原 offset。`process_priority = 100` 是该约定的一部分。
-
-### 近平视仍保持四正交 yaw
-
-- 进入时长：`0.45s / animation_speed`。
-- 恢复时长：`0.36s / animation_speed`。
-- 缓动：SINE / EASE_IN_OUT。
-- 演出 elevation：10°。
-- yaw 只从当前基准的 0/90/180/270 四个方向中选择，按参战双方横向分离评分；不要开放连续角度。
-- `presentation_distance` 按横向跨度取 4.8–7.5；size 取 3.4–12。
-- 取景收集 attacker、primary target，以及所有 impact 的 source/target。
-
-缩短 `presentation_distance` 是为了避免低仰角下相机仍停在 64 世界单位外、被地形遮挡。不要把该逻辑改成永久改变常规相机距离。
-
-### 不要改写 zoom 来实现演出
-
-IsoBoard 每帧会按 `_target_zoom` 更新正交 size。沉浸模块直接插值 size 和 `presentation_distance`，不接管常规 zoom。后续改动若写 zoom，必须重新处理 B2 的每帧所有权冲突。
-
-## 跳过、取消与已知竞态
-
-### 进入转场中的跳过
-
-此时 ActionAnim 尚未 play。`battle.gd::_skip_action_presentation()` 先调用 `request_skip()`，让镜头反向恢复；随后 `consume_skip_request()` 把同一次跳过传给 ActionAnim，避免镜头已经退出却仍播放完整动作。
-
-skipped ActionAnim 不捕获或推近相机，所以允许与恢复并行。
-
-### ACTIVE 中关闭的 size 竞态
-
-ActionAnim 会保存自己的相机 size，在 strike/return 中推近，并在 `_finish_play()` / `_restore_camera_immediate()` 最后写回。
-
-曾发现的风险：如果 ACTIVE 中关闭立即完成沉浸恢复，而 ActionAnim 仍在运行，它可能最后把 size 写回交战值；随后 `immersive.end()` 因已经 INACTIVE 而不再恢复。
-
-当前修复是：ACTIVE 中关闭只更新 enabled，等待当前完整动作结束，由 `end()` 统一恢复。不要用另一套并行 size tween 覆盖这个顺序。
-
-### 退出与死亡
-
-`battle.gd::_exit_tree()` 首先调用 `_immersive_camera.cancel()`，立即 kill transition 并恢复快照，然后继续原有血条恢复、结果视觉、存档和 kick 清理。`ImmersiveBattleCamera._exit_tree()` 也有 cancel 防御。
-
-真实 B1/B2 已验证败北和场景退出后没有镜头数值残留。
-
-## 血条与 PixelFx 联动
-
-- 血条仍在 ActionAnim 前隐藏，由原 finished、物品结束和 `_exit_tree` 路径恢复；沉浸模块不另建血条状态机。
-- `_prewarm_damage_fx_variants()`、`_prewarm_fx_variant()`、`_prewarm_item_damage_fx()` 必须保留在原位置，不要重复烘焙或挪回受伤帧。
-- PixelFx 继续使用同一个真实 Camera3D 的 `unproject_position`，所以复用原相机是兼容性的关键。
-- 沉浸 engaged 时，`battle.gd::_on_action_phase_started()` 跳过旧 strike/return kick；`_apply_action_camera_kick()` 不再让 B1 additive kick 或 B2 presentation_offset 覆盖演出焦点。
-- 默认关闭时旧 kick、ActionAnim size 推近和恢复行为不变。
-
-## 已实际执行的验证
-
-以下是 `a681e53` 提交前实际执行的验证结果。本次交接任务只写文档，没有重跑测试。
-
-### 独立相机与 UI 合约
-
-通过 Godot MCP 启动 `res://tests/immersive_battle_camera_contract.tscn` 的独立 headless peer，再读取：
-
-```text
-runtime_read_state(name="immersive_contract", peer="peer-25")
-```
-
-结果：`finished=true, passed=true`，59/59。
-
-覆盖：默认 distance=64、真实距离变化、ACTIVE/10°/四向 yaw、ActionAnim 推近兼容、全 impacts/AoE 构图、完整恢复、ACTIVE 关闭的 size 竞态、ENTERING 关闭与跳过、cancel、预跳过、设置页回调和真实 BattleUI 五个 tabs。
-
-### 真实 Battle 集成合约
-
-通过 Godot MCP 启动 `res://tests/immersive_battle_integration_contract.tscn`，再读取：
-
-```text
-runtime_read_state(name="immersive_integration", peer="peer-30")
-runtime_get_log(levels=["error", "warning"], peer="peer-30", since_seq=0)
-```
-
-结果：`finished=true, passed=true`，39/39；error/warning 日志为空。
-
-该合约用 BattlefieldLoader 加载 `res://data/battlefields/arena_1v1.json`，通过 SceneArgs 实例化真实 `Battle.tscn`，由真实 SkillSystem → ActionAnim → ImmersiveCamera 驱动 guard；不是单独的新相机 demo。
-
-覆盖：默认关闭时保持原相机；真实开关开启；ACTIVE 关闭在动作边界恢复 size、position、rotation、elevation、yaw、distance 和 presentation_offset；ActionAnim 快照清理；ENTERING skip 同步跳过真实动作；ENTERING 关闭只恢复镜头、不错误跳过动作。
-
-测试等待必须使用 wall-clock 超时加状态信号。早期按 1200 headless 帧计时会在真实 tween 完成前伪超时，已改为 `Time.get_ticks_msec()` 的 15 秒超时；不要退回固定帧数超时。
-
-### 真实 B1
-
-从 `res://main.tscn` 启动独立 headless peer，按 P 进入 B1；没有直启空 Battle.tscn。
-
-实测：
-
-- 真实 CheckButton、Settings 和 ImmersiveCamera enabled 联动。
-- guard、powerSurge、普通攻击以及 impacts=2/3 的反击/多段事件均只执行一次 Begin → Engaged → Restore → Restored。
-- 自动战斗到回合 5 败北并退出后，相机恢复 size=12.5、elevation=30°、presentation_distance=64。
-
-### 真实 B2
-
-通过 Settings 将 inline mode 设为 false，再从 `res://main.tscn` 按 P，经真实 SceneArgs 进入 B2。
-
-实测：
-
-- powerSurge、fireball 和真实普通攻击进入沉浸链路。
-- ACTIVE 稳定采样：ImmersiveCamera state=2、enabled=true，elevation=10°、distance=4.8、projection=正交；ActionAnim 推近时 size 会基于演出 size 再变化。
-- ACTIVE 中通过真实开关关闭，当前动作结束后恢复。
-- 败北退出回 Main 后，size=12.5、elevation=30°、yaw=45°、distance=64，presentation_offset 与 B1 kick 均为零；error/warning 为空。
-
-### 其他检查
-
-实际执行：
-
-```bash
-git diff --check
-```
-
-结果：通过。实现未修改 `scripts/battle/action_anim.gd`；测试后已还原本机偏好为 `battle_immersive_presentation=false`、`battle_inline_mode=true`，本任务启动的 peer 均已停止，未干扰用户的 9081 实例。
-
-## 真实限制与已知待办
-
-1. **最终画面未验收。** 上述测试均为 headless；它们证明真实战斗链路、状态机和相机数值恢复，不证明最终渲染构图、像素清晰度、地形遮挡、角色脚底锚点或视觉平滑已经合格。
-2. **需要窗口目视检查。** 建议分别检查 B1/B2 的普通攻击、近战/远程技能、反击、多段和 AoE；观察进入/退出是否穿地形，双方是否同时入镜，Sprite3D front/side/back 是否合理，血条和 PixelFx 是否跟住单位。
-3. **宽范围技能可能取景较远。** 当前用全部参与者包围盒和 size 上限保证覆盖，超大跨度 AoE 的“近景感”可能弱于 1v1；只能在目视后调整构图参数，不要牺牲目标覆盖。
-4. **ACTIVE 关闭不是立即切回。** 这是为避免 ActionAnim size 写回竞态的明确设计；如产品要求立即中断，必须同时改 ActionAnim 的快照所有权并补回归，不应只改 `set_enabled()`。
-5. **输入恢复依赖原战斗状态机。** 演出期间本来就只有 skip 输入；沉浸模块不另设输入锁。若后续重构 mode 或 main 的 B1 输入短路，需要重新验证退出后旋转、缩放、平移和拾取。
-
-## 后续验证入口
-
-需要运行验证时先读 `godot-debug` skill，并只跑相关测试。可使用上述两个 `.tscn` 的独立 headless peer 和 `runtime_read_state` 断言；真实 B1/B2 都从 `res://main.tscn` 按 P 进入，B2 通过 Settings 切 inline mode。不要用 bash 直启游戏，不要直启没有 SceneArgs 的空 Battle.tscn，也不要把 headless 数值通过当作画面验收。
+| `scripts/battle/immersive_stage.gd` | 舞台本体（`ImmersiveStage extends SubViewport`）：搭建代理、逐 impact 出手序列、转场、取景、信号回交 |
+| `scripts/battle/immersive_stage_layout.gd` | 纯布局逻辑（RefCounted 静态）：参战者收集、阵营对角站位、HP 初态重建、出手模板/标签 |
+| `scenes/ImmersiveStage.tscn` | 空壳场景（根节点挂 immersive_stage.gd） |
+| `scripts/scenes/battle.gd` | 接线：CanvasLayer(layer 99) + SubViewportContainer 挂舞台；`_use_immersive_stage()` 分流 |
+| `scripts/battle/action_anim.gd` | 出手循环内核：`prepare_event / run_strike / finish_event` 事件级 API（传统路径与舞台共用） |
+| `scripts/iso/unit_sprite.gd` | `setup_stage(unit, camera)` 第三初始化路径（无 board/world，位置=IsoProjection.grid_to_world） |
+| `scripts/battle/battle_fx.gd` | `grid` 参数去类型（duck-type `{units: {}}`），舞台内第二实例渲染伤害数字/血条特效/飘字 |
+| `tests/immersive_stage_contract.gd` | 契约：布局 + B1/B2 序列 + 取景自适应 |
+| `tests/immersive_battle_integration_contract.gd` | 集成契约：开关/UI 联动/演出中关闭/默认关闭传统链路 |
+
+## 数据流（一次普攻）
+
+1. `BattleActionResolver.resolve_attack` 照旧结算出 `attack_event`（impacts 顺序 = 主击 → 反击 → 连击 → 夹击）。
+2. `battle._resolve_combat_async` 调 `_use_immersive_stage(event, skipped)`：开关开、非整体 skip、有参战者 → `await _immersive_stage.present(event, _unit_sprites, anim_speed, skipped)`；否则走原 `action_anim.play(...)`（关闭开关 = 原链路，行为不变）。
+3. `present()`：
+   - 收集真实单位（只读）→ `presentation_started`（battle 侧显示 stage layer）→ `_build_stage`；
+   - 代理 = 真实单位深拷贝，HP 用各自首个作为目标的 impact `hp_before` 重建，`position` = 对角槽位格；
+   - `_play_enter` 逐帧淡入（时长 / anim_speed）；
+   - **逐 impact**（严格原顺序）：`_build_strike_event`（anim 按实际 source 武器）→ `strike_scheduled`（宿主放出手音）→ `await _anim.run_strike(pseudo)`；
+   - **命中帧推进**：`impact_presented` 信号（ActionAnim HIT 相位）先 `_apply_impact_state`（HP=hp_after、死亡置位+DOWNED+渐隐）再生成伤害数字、回交宿主（impact 音效）；出手循环返回后兜底推进仅在信号未发生（被 skip 截断）时执行一次，绝不双推；
+   - 全部 impact 后 `_anim.finish_event()` → `_reassert_deaths()`（finish 的视觉恢复会清倒地姿态，死亡单位重放 DOWNED+隐藏）→ `_play_exit` 淡出 → `presentation_finished`（battle 侧隐藏 stage layer）→ teardown。
+4. 死亡/升级/胜负演出与结算推进全部留在真实战场原位置（`present` 返回后照旧执行），舞台绝不写回真实单位/相机。
+
+## 站位（对角阵营）
+
+- 参战者 = 出手者 + 主目标 + 每 impact source/target 去重（真实夹击友军、反击方都在内）。
+- faction 固定分侧：player/ally → 左下（anchor (0,+5)，outward +y），enemy/other → 右上（anchor (0,−5)，outward −y）；**敌方先手不换侧**，治疗/buff 同阵营不造敌方。
+- 阵营内 rank：出手者 0（前排中央）、主目标 1、其余 2；**相同 rank 用原始参加下标显式决胜**（Godot `sort_custom` 是不稳定 pdqsort，不能依赖默认稳定性）。
+- 前排 3 槽（中/左(−1,+1)/右(+1,−1)），多出的沿 outward 每 2 格退一排。
+
+## 取景自适应（防裁切）
+
+`_center_camera`：focus = 全部站位包围盒水平中心；先按基准 `STAGE_ZOOM=3.6` 放好相机，再把每个站位「四向脚点（±0.35 身位）+ 头顶点（+1.45 立绘/血条）」经 `camera.unproject_position` 实际投影，与视口安全框（横 48px/纵 56px）比对；溢出则 `zoom = STAGE_ZOOM / overflow`（正交线性换算一次到位，下限 0.75）。任何窗口比例/人数组合不裁切参战者。契约 E 节以 480×800 / 640×480 / 1280×800 × 2/6/10 人矩阵断言：采样点全部在视口内、敌方均值屏幕位置严格右上/我方左下、同窗口 zoom 随人数非增。
+
+## 转场与倍速
+
+- 进入/退出转场逐帧步进，帧数 = `时长 × 60 / anim_speed`（speed 8 ≈ 1-2 帧）；`_cancelled`（cancel/退出树）立即跳出，不挂任何 await 补等待。
+- cancel()（宿主 _exit_tree）后 present 协程在下一个 await 检查点直接 return，**不补发 presentation_finished**（宿主本身在退出树）。
+- 演出中 `request_skip()`：当前出手立即收尾，剩余 impact 只推进状态不再演出；`finished.skipped=true`。
+
+## battle.gd 接线要点
+
+- `_stage_layer`（CanvasLayer layer=99）**平时 visible=false**，`presentation_started/finished` 才显示/隐藏——否则空舞台或收尾黑幕会盖住真实战场（V3 修复的真实视觉缺陷，headless 测试盲区）。
+- **独演侧栏隐藏**（V4）：同一对 started/finished handler 里 `_hide_battle_side_columns/_restore_battle_side_columns`——进入独演即隐藏「战场侧栏」（画布层 100/101 压在舞台层 99 之上）：battle_ui 右侧栏（`battle_ui.get_sidebar()`）+ B1 世界 HUD 左停靠栏/右侧栏（`GameHUD/HUDRoot/LeftRail|SidePanel`，世界侧栏在战斗侧栏下方同宽露出，只藏战斗侧栏会漏）。恢复按 `_stage_hidden_columns` 记录的**原可见性精确还原**（原本隐藏不强行打开）；`cancel()` 不补发 finished，`_exit_tree` 里兜底 `_restore_battle_side_columns()`——B1 世界 HUD 属于 main 不随战斗释放，漏恢复 = 永久隐藏。
+- 旧 `ImmersiveBattleCamera` 仍创建并接开关信号，但演出链路不再调它的 begin/end（双镜头驱动会打架）；`immersive_battle_camera` 契约因此保留旧 rig 纯逻辑断言（env-skip 基线）。
+- 舞台 `strike_scheduled → _sfx.play_strike`、`impact_presented → _sfx.play_impact`（注意不是 `_on_impact_presented`——后者会在真实战场生成特效）。
+- B1/B2/campaign 共用：B1 与 B2 都经 battle.gd 同一 `_resolve_combat_async/_resolve_skill` 分流。
+
+## 契约覆盖（tests/immersive_stage_contract.gd）
+
+- A 布局纯逻辑：参战者顺序/对角/朝向/HP 初态/dies 聚合/出手模板/标签/敌方先手不换侧/治疗不造敌方/**稳定排序**。
+- B B2（arena_1v1）：① 开启整场（含真实 HP 零写回、真实相机四元组零写入、命中帧 HP 推进、**侧栏隐藏→恢复+记录清空**）② 敌方先手 ③ 倍速可感知 ④ 演出中 skip（**侧栏恢复**）⑤ 整体 skip 走传统链路（**不动侧栏**）⑥ 关闭恢复（**侧栏保持可见**）⑦ 死亡 + 舞台层隐藏 + **原本隐藏的侧栏不被强行打开**。
+- C B2（plains_skirmish）：⑧ 治疗 ⑨ buff ⑩ AoE ⑪ 反击/连击/夹击合成链（标签/模板/逐次 HP/死亡终态 DOWNED+隐藏）⑫ 演出中销毁 battle 的退出清理（layer 显示中、侧栏隐藏中）。
+- D B1：世界内联同样进舞台、世界相机零写入；**三处侧栏（战斗+世界左栏/右侧栏）演出中隐藏、结束恢复；⑭ 演出中退出战斗经 _exit_tree 精确恢复世界侧栏**。
+- E 取景自适应矩阵（见上）。
+- `immersive_battle_integration`：默认关 guard 走传统链路（相机七元组复原）、开关开启进舞台、演出中关闭 → request_skip。
+
+## 已知盲区与待办
+
+1. **最终画面未目视验收**：headless 契约证明序列/数据/投影几何，不证明像素美感、转场手感、音画同步；需要窗口目视 B1/B2 普攻/技能/夹击各一场。
+2. 契约 StageWatcher 依赖舞台内部字段（`_stage_units/_slots/_sprites/_fade_rect`）——重构舞台内部命名需同步契约。
+3. `--script` 契约模式下 autoload 标识符（Settings/SceneArgs/LoadingScreen）编译期不可用，必须 `root.get_node("Settings")` + `.set/.call`；主脚本不得 preload battle 场景链（编译期连锁失败）。
+4. `Engine.set_meta("breakpoint_state", {...捕获 self...})` 若不在退出前 remove_meta，引擎关机时 breakpoint_mcp bridge 会触碰已析构对象 → recursive_mutex SIGABRT（契约 exit=-6）。
+5. 旧版（相机近平视）历史：见 git 历史与 `scripts/battle/immersive_camera.gd`；其「ACTIVE 关闭在动作边界恢复」「wall-clock 超时」等经验已吸收进舞台契约。
+
+## 运行态验证（如需）
+
+先读 `godot-debug` skill 并按会话激活 Godot MCP；B1 从 `res://main.tscn` 按 P、B2 关 inline mode 后按 P 或 campaign 出征；断言用 `runtime_read_state` 注册 reader 或契约 exit code。不要 bash 直启游戏、不要直启无 SceneArgs 的空 Battle.tscn、不要把 headless 数值通过当作画面验收。

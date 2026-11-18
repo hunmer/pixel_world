@@ -24,13 +24,13 @@
     "battle-anim": 1,
     "ambient": 2,
     "animals": 4,
-    "battle-logic": 12,
+    "battle-logic": 13,
     "presentation": 7,
-    "battle-3d-editor": 17,
+    "battle-3d-editor": 18,
     "battle-automation": 2,
-    "battle-presentation": 8,
+    "battle-presentation": 10,
     "battle-persistence": 2,
-    "campaign": 2,
+    "campaign": 4,
     "biome": 2,
     "cell": 2,
     "ecology": 7,
@@ -38,9 +38,9 @@
     "dialogue": 1,
     "terrain": 5,
     "sfx": 1,
-    "world-3d": 5,
+    "world-3d": 7,
     "fx": 1,
-    "ui": 2,
+    "ui": 3,
     "user-assets": 9,
     "world-camera": 1,
     "world-battle-bridge": 1,
@@ -583,6 +583,16 @@
       "evidence": "tests/character_sheet_contract.gd 无 tscn/帧等待/计时信号（纯逻辑）"
     },
     {
+      "name": "free_character_sheet",
+      "path": "tests/free_character_sheet_contract.gd",
+      "group": "world-3d",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-19 原字节 SHA-256、20 角色全行有效/空白帧、四向镜像、8fps 循环、单次 preview 回 idle；FREE_CHARACTER_SHEET_CONTRACT_OK checks=1677"
+    },
+    {
       "name": "community_runtime",
       "path": "tests/community_runtime_contract.gd",
       "group": "ecology",
@@ -841,7 +851,7 @@
       "known_status": "pass",
       "parallel_safe": false,
       "fast_flag_safe": false,
-      "evidence": "tests/immersive_battle_integration_contract.gd L5 tscn; L22 timing｜并发不安全：含计时敏感断言（tests/immersive_battle_integration_contract.gd:22）｜加速不安全（初始保守，待 A/B）：计时断言 L22"
+      "evidence": "tests/immersive_battle_integration_contract.gd 2026-11-19 重写为独立沉浸舞台路径（旧 ImmersiveCamera rig 断言退役，改为：默认关闭走传统链路+相机密闭；UI 开关开启进舞台+真实 ActionAnim 不驱动+旧 rig 待命；演出中关闭立即 request_skip 收尾）｜结构改 extends SceneTree：本机 --script 模式 Node2D 主脚本不可运行且 autoload 标识符编译期不可用（改 root.get_node），旧 Node2D 版在此环境为编译失败秒退假通过（日志证实）｜并发不安全：演出时序断言｜加速不安全：演出动画序列"
     },
     {
       "name": "isometric_3d",
@@ -855,6 +865,16 @@
       "parallel_safe": true,
       "fast_flag_safe": false,
       "evidence": "tests/isometric_3d_contract.gd L27 tscn; L29 frame｜加速不安全（初始保守，待 A/B）：相机投影帧依赖 L27"
+    },
+    {
+      "name": "immersive_stage",
+      "path": "tests/immersive_stage_contract.gd",
+      "group": "battle-presentation",
+      "tags": ["scene", "render"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "tests/immersive_stage_contract.gd 2026-11-19 新增并扩展：A 纯布局(参战者含夹击友军/对角站位(0,±5)/HP 重建/按 source 武器的出手模板/反击连击标签)；B B2 序列(整场进舞台+impact 顺序与出手者逐一一致+真实 ActionAnim/相机零写入+代理 HP 逐 impact 推进+敌方先手不换侧+倍速可感知+演出中 skip+死亡+托管 skip+关闭恢复)；C plains 技能链(治疗 HP 回升无敌方参军/buff statuses/aoe 多目标/反击连击夹击合成链出手顺序标签模板/演出中销毁 battle 清理)；D B1 内联战斗舞台路径+世界相机零写入，共 88 断言｜SceneTree 契约 autoload 一律 root.get_node(--script 标识符不可编译)；load_battlefield 返回 {ok,chapter} 包裹字典勿直传"
     },
     {
       "name": "isometric_column_projection",
@@ -1171,6 +1191,16 @@
       "parallel_safe": true,
       "fast_flag_safe": false,
       "evidence": "tests/world_camera_navigation_contract.gd L56 tscn; L60 frame｜加速不安全（初始保守，待 A/B）：相机帧时序 L60"
+    },
+    {
+      "name": "character_movement_test",
+      "path": "tests/character_movement_test_contract.gd",
+      "group": "world-3d",
+      "tags": ["scene", "render"],
+      "known_status": "pass",
+      "parallel_safe": false,
+      "fast_flag_safe": false,
+      "evidence": "2026-11-19 继承真实 main.tscn 的 headless 冒烟；移动/阻挡/四角动画/动作/切角色/模态与焦点守卫/入口隔离/InputMap 清理；完整 sheet + Sprite3D 原生 region_rect 验收源区域/帧状态，支撑面契约验收不透明像素世界 Y 不低于脚底；用户不可见根因经真实 Compatibility 同实例 A/B 确认为 foot_offset 局部 Y 符号：-31 全埋入地形、+31 可见；修复前 checks=169 failures=19、修复后 CHARACTER_MOVEMENT_TEST_CONTRACT_OK checks=169；最终代码重新 dbg_launch 后 runtime 8 项断言通过并截图 .tmp/character_movement/offset_fixed_final_live.png；场景帧与音频清理故保守不进 fast/并行"
     },
     {
       "name": "world_map_overlay",

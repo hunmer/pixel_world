@@ -1,0 +1,335 @@
+{
+  "schema_version": 1,
+  "pack_id": "free_character_pack",
+  "source_name": "剑与魔法角色包｜免费角色合集",
+  "source_notes": [
+    "README-Godot示例.md",
+    "免费包说明.txt"
+  ],
+  "upstream_example": "upstream_example/",
+  "frame": {
+    "width": 64,
+    "height": 64,
+    "columns": 6,
+    "rows": 13,
+    "sheet_width": 384,
+    "sheet_height": 832,
+    "foot_anchor_px": [
+      32,
+      63
+    ],
+    "pixel_size": 0.027777777777777776,
+    "texture_filter": "nearest",
+    "alpha_threshold": 0
+  },
+  "directions": {
+    "down": {
+      "row": 7,
+      "flip_h": false
+    },
+    "left": {
+      "row": 8,
+      "flip_h": false
+    },
+    "right": {
+      "row": 8,
+      "flip_h": true
+    },
+    "up": {
+      "row": 9,
+      "flip_h": false
+    }
+  },
+  "rows": [
+    {
+      "id": "preview_00",
+      "row": 0,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "preview_01",
+      "row": 1,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "preview_02",
+      "row": 2,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "preview_03",
+      "row": 3,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "preview_04",
+      "row": 4,
+      "valid_frames": [
+        0,
+        1,
+        2
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "preview_05",
+      "row": 5,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "preview_06",
+      "row": 6,
+      "valid_frames": [
+        0,
+        1,
+        2
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "run_down",
+      "row": 7,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    {
+      "id": "run_left",
+      "row": 8,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    {
+      "id": "run_up",
+      "row": 9,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    {
+      "id": "preview_10",
+      "row": 10,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "preview_11",
+      "row": 11,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    {
+      "id": "preview_12",
+      "row": 12,
+      "valid_frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": false
+    }
+  ],
+  "preview_order": [
+    "preview_00",
+    "preview_01",
+    "preview_02",
+    "preview_03",
+    "preview_04",
+    "preview_05",
+    "preview_06",
+    "preview_10",
+    "preview_11",
+    "preview_12"
+  ],
+  "characters": [
+    {
+      "id": "002",
+      "file": "002-1787672205983-frames64.png",
+      "sha256": "da55c8392c7e822d175f80413210cccee4cdf5aab25818a208f981657f3710c2"
+    },
+    {
+      "id": "003",
+      "file": "003-1787672287986-frames64.png",
+      "sha256": "b40d6ad68579ded3c3998390ccafc11cdcc8fce5ede1b1e8c968585492defd79"
+    },
+    {
+      "id": "004",
+      "file": "004-1787672375727-frames64.png",
+      "sha256": "f6441e3d0c6f54ab70ec59d89ff7a70cfef69a45d9ca85834330dcf04ce0cf6f"
+    },
+    {
+      "id": "005",
+      "file": "005-1787672452862-frames64.png",
+      "sha256": "acae80a6973fbf50089578548767fc595d0e79a6020dd1b5fc7057fc88048473"
+    },
+    {
+      "id": "006",
+      "file": "006-1787672535551-frames64.png",
+      "sha256": "7c148755fc9e86f857bda3a5840c8d983b3949a9f4acf6a8d436b44056408e78"
+    },
+    {
+      "id": "007",
+      "file": "007-1787672619449-frames64.png",
+      "sha256": "f5bc535b4d5d655cb93bd8f0971714bc1fa9fef85c915efa96e61bbe8945b155"
+    },
+    {
+      "id": "008",
+      "file": "008-1787672703578-frames64.png",
+      "sha256": "37e288f1ee10b395ac523684c32284380fbcf1e44b91d1d22f06f248885ccc28"
+    },
+    {
+      "id": "009",
+      "file": "009-1787672780572-frames64.png",
+      "sha256": "ddd4357a7b80f791172268ae12698b5bcdd3f3b5739301866208941aa706e847"
+    },
+    {
+      "id": "010",
+      "file": "010-1787672861551-frames64.png",
+      "sha256": "dca2a69611ed5e234d2a55c2f1b2d7c4e8625e9e144d1e74d9ebee352d0cc2c0"
+    },
+    {
+      "id": "011",
+      "file": "011-1787672949440-frames64.png",
+      "sha256": "e13ef93fdbf1ce8a190edb7b0811c5c2dc0e07c72c4ffa006c38514c0d570776"
+    },
+    {
+      "id": "012",
+      "file": "012-1787673021553-frames64.png",
+      "sha256": "72ac5a72f89d56ff62334ee5e233f300f29d8bc58b2bccacf016edd17b2acf43"
+    },
+    {
+      "id": "013",
+      "file": "013-1787673104598-frames64.png",
+      "sha256": "672058f5b81ed19fcdeb01934bb33d44020b5c83810dce303ffcb3eae31d0cfa"
+    },
+    {
+      "id": "014",
+      "file": "014-1787673211741-frames64.png",
+      "sha256": "c71a0ce9d938dfa025087ca5d20193f8838d0d337645baebd57449175242f126"
+    },
+    {
+      "id": "015",
+      "file": "015-1787673275621-frames64.png",
+      "sha256": "f656ce443e1f08c83bb265c37922a6ccf8c50866ae65b6ad21a6fb576b1ca991"
+    },
+    {
+      "id": "016",
+      "file": "016-1787673359677-frames64.png",
+      "sha256": "5daeac9023bd1a104f112e02ebe750a9c06c4a4d6b0b4ec631adc9f1723adf5e"
+    },
+    {
+      "id": "017",
+      "file": "017-1787673701973-frames64.png",
+      "sha256": "b7b2c24656805549828e12f9a9b7742435598ba23a4786d3d50854469da12db4"
+    },
+    {
+      "id": "018",
+      "file": "018-1787673865116-frames64.png",
+      "sha256": "85d8c25085f193ed8abf58d7fe38f3304d91b508cde6874e8ff8796878d337c2"
+    },
+    {
+      "id": "019",
+      "file": "019-1787673946547-frames64.png",
+      "sha256": "8c802ed75f1e09683b040d312f32d74deb560b805092c8371635598cceb9a7fd"
+    },
+    {
+      "id": "020",
+      "file": "020-1787674028085-frames64.png",
+      "sha256": "ffb510862980121a1916cc04da8c853e57ddca9a5e06b50e286f5740a14b138a"
+    },
+    {
+      "id": "021",
+      "file": "021-1787674109386-frames64.png",
+      "sha256": "5af313d71f74a4c8bff21e94124a4f92e8ccccd4fb45cd5530c475f945236bee"
+    }
+  ]
+}

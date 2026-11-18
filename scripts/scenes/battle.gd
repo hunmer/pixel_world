@@ -43,9 +43,15 @@ const BattleActionHistoryScript = preload("res://scripts/battle/battle_action_hi
 const BattleCameraKickScript = preload("res://scripts/battle/battle_camera_kick.gd")
 const LevelUpPresentationScript = preload("res://scripts/battle/level_up_presentation.gd")
 const CampaignBattleBridgeScript = preload("res://scripts/battle/campaign_battle_bridge.gd")
+const ImmersiveStageScript = preload("res://scenes/ImmersiveStage.tscn")
 
 var action_anim: Node = null
 var _immersive_camera: Node = null
+# 独立沉浸舞台（SubViewport 场景；开关开启时战斗演出整体进入舞台）。
+var _immersive_stage: ImmersiveStage = null
+var _stage_layer: CanvasLayer = null
+## 独演期间隐藏的战场侧栏 → 原可见性（演出结束/取消后精确恢复；原本隐藏的不强行打开）。
+var _stage_hidden_columns: Dictionary = {}
 # 演出助手模块（职责见各模块头注释；battle.gd 只保留编排与契约兼容委托）
 var _fx: BattleFx = null
 var _sfx: BattleSfx = null
@@ -375,6 +381,28 @@ func _configure_action_modules() -> void:
 	action_anim.finished.connect(_camera_kick.on_anim_finished)
 	# 受伤特效：impacts 带 hp_before/hp_after，比 float_text 回调信息全。
 	action_anim.impact_presented.connect(_on_impact_presented)
+	# 独立沉浸舞台：layer 99 压在 B1 世界/B2 战场之上、两侧 HUD（100/101）之下；
+	# 开关跟随沉浸设置，旧沉浸相机从此不再被驱动（模块保留，契约另测）。
+	# 平时隐藏（否则空舞台/收尾黑幕会盖住战场），演出开始才显示。
+	_stage_layer = CanvasLayer.new()
+	_stage_layer.name = "ImmersiveStageLayer"
+	_stage_layer.layer = 99
+	_stage_layer.visible = false
+	add_child(_stage_layer)
+	var stage_container := SubViewportContainer.new()
+	stage_container.name = "ImmersiveStageContainer"
+	stage_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	stage_container.stretch = true
+	stage_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stage_layer.add_child(stage_container)
+	_immersive_stage = ImmersiveStageScript.instantiate() as ImmersiveStage
+	stage_container.add_child(_immersive_stage)
+	_immersive_stage.set_enabled(Settings.battle_immersive_presentation)
+	battle_ui.immersive_presentation_changed.connect(_immersive_stage.set_enabled)
+	_immersive_stage.strike_scheduled.connect(_sfx.play_strike)
+	_immersive_stage.impact_presented.connect(_sfx.play_impact)
+	_immersive_stage.presentation_started.connect(_on_immersive_stage_started)
+	_immersive_stage.presentation_finished.connect(_on_immersive_stage_finished)
 
 
 ## _ready 拆分件⑥：回合信号 + viewport resize（仅 B2 需要重居中）。
@@ -835,11 +863,66 @@ func _is_presentation_skip_event(event: InputEvent) -> bool:
 
 
 func _skip_action_presentation() -> void:
-	# 进入期 ActionAnim 尚未 play：先记录跳过并平滑反向，随后 play 同步完成。
-	if is_instance_valid(_immersive_camera) and _immersive_camera.get_state() == ImmersiveCameraScript.State.ENTERING:
-		_immersive_camera.request_skip()
+	# 独立舞台演出中：当前出手立即收尾，剩余 impact 只推进状态。
+	if _immersive_stage != null and _immersive_stage.is_presenting():
+		_immersive_stage.request_skip()
 	if action_anim != null and action_anim.is_playing():
 		action_anim.skip()
+
+
+## 舞台路径判定（开关开启 + 事件可演出 + 舞台实例可用）。
+func _use_immersive_stage(event: Dictionary, skipped: bool) -> bool:
+	return _immersive_stage != null \
+		and _immersive_stage.should_present(event, _unit_sprites, skipped)
+
+
+## 演出开始/结束才显示舞台层：平时空舞台（或收尾黑幕）会盖住真实战场。
+## 同时隐藏左右战场侧栏（画布层 100/101 压在舞台层 99 之上），结束后按记录的
+## 原可见性精确恢复（原本隐藏的不强行打开）。
+func _on_immersive_stage_started(_event: Dictionary) -> void:
+	if _stage_layer != null and is_instance_valid(_stage_layer):
+		_stage_layer.visible = true
+	_hide_battle_side_columns()
+
+
+func _on_immersive_stage_finished(_event: Dictionary, _skipped: bool) -> void:
+	if _stage_layer != null and is_instance_valid(_stage_layer):
+		_stage_layer.visible = false
+	_restore_battle_side_columns()
+
+
+## 独演要全窗口呈现的「战场侧栏」清单：battle_ui 右侧栏（B1/B2 都有）；
+## B1 就地模式世界 HUD 仍在树上：左侧停靠栏 + 世界右侧栏（战斗侧栏下方同宽露出）。
+func _battle_side_column_nodes() -> Array:
+	var nodes: Array = []
+	if battle_ui != null and is_instance_valid(battle_ui):
+		var sidebar: Control = battle_ui.get_sidebar()
+		if sidebar != null:
+			nodes.append(sidebar)
+	if _b1_mode and _world != null and is_instance_valid(_world):
+		var world_hud: Node = _world.get_node_or_null("GameHUD")
+		if world_hud != null:
+			for column_path in ["HUDRoot/LeftRail", "HUDRoot/SidePanel"]:
+				var column: Node = world_hud.get_node_or_null(column_path)
+				if column != null:
+					nodes.append(column)
+	return nodes
+
+
+func _hide_battle_side_columns() -> void:
+	_stage_hidden_columns.clear()
+	for column in _battle_side_column_nodes():
+		var item: CanvasItem = column
+		_stage_hidden_columns[item] = item.visible
+		item.visible = false
+
+
+func _restore_battle_side_columns() -> void:
+	for column in _stage_hidden_columns.keys():
+		if column != null and is_instance_valid(column):
+			var item: CanvasItem = column
+			item.visible = _stage_hidden_columns[column]
+	_stage_hidden_columns.clear()
 
 
 ## 手势 / 空格 / 滚轮：用 _input（GUI 处理前）确保一定能收到。
@@ -1641,17 +1724,16 @@ func _resolve_combat_async(attacker: Dictionary, defender: Dictionary) -> void:
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
 		_set_unit_bars_visible(false)
-		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
-		if not is_inside_tree():
-			return
-		await action_anim.play(
-			event,
-			animation_speed,
-			skipped or _immersive_camera.consume_skip_request()
-		)
-		await _immersive_camera.end()
-		if not is_inside_tree():
-			return
+		if _use_immersive_stage(event, skipped):
+			# 独立舞台路径：隔离 World3D 内逐 impact 演出，真实战场链路不被驱动。
+			await _immersive_stage.present(event, _unit_sprites, animation_speed, skipped)
+			if not is_inside_tree():
+				return
+		else:
+			await action_anim.play(event, animation_speed, skipped)
+			if not is_inside_tree():
+				return
+		_set_unit_bars_visible(true)
 	atk_us.update_state()
 	def_us.update_state()
 	# 死亡收尾（isDead 已由 resolver 置位，这里补 grid 移除 + 演出）
@@ -1699,17 +1781,16 @@ func _resolve_skill(caster: Dictionary, targets: Array, skill_id: StringName) ->
 		var animation_speed := float(options.get(&"anim_speed", 1.0))
 		var skipped := bool(options.get(&"skip", false))
 		_set_unit_bars_visible(false)
-		await _immersive_camera.begin(event, _unit_sprites, animation_speed, skipped)
-		if not is_inside_tree():
-			return true
-		await action_anim.play(
-			event,
-			animation_speed,
-			skipped or _immersive_camera.consume_skip_request()
-		)
-		await _immersive_camera.end()
-		if not is_inside_tree():
-			return true
+		if _use_immersive_stage(event, skipped):
+			# 独立舞台路径：隔离 World3D 内逐 impact 演出，真实战场链路不被驱动。
+			await _immersive_stage.present(event, _unit_sprites, animation_speed, skipped)
+			if not is_inside_tree():
+				return true
+		else:
+			await action_anim.play(event, animation_speed, skipped)
+			if not is_inside_tree():
+				return true
+		_set_unit_bars_visible(true)
 	# 统一刷新施法者与全部目标（命中、未命中、治疗、buff 均由事件负责表现）。
 	if atk_us != null:
 		atk_us.update_state()
@@ -2165,6 +2246,12 @@ func _alive_count(faction: StringName) -> int:
 func _exit_tree() -> void:
 	if is_instance_valid(_immersive_camera):
 		_immersive_camera.cancel()
+	# 独立舞台：中止在途演出并清理代理（finished 信号不再保证顺序）。
+	if _immersive_stage != null and is_instance_valid(_immersive_stage):
+		_immersive_stage.cancel()
+	# cancel 不补发 presentation_finished：侧栏在此精确恢复——尤其 B1 世界 HUD
+	# 左栏/右侧栏属于世界场景，不随战斗释放，漏恢复会永久隐藏。
+	_restore_battle_side_columns()
 	# 升级薄演出：作废在途弹窗时间轴，避免退出战斗后残留 finished/协程。
 	if is_instance_valid(_level_up):
 		_level_up.cancel()

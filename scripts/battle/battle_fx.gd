@@ -29,7 +29,8 @@ const UIFactoryScript = preload("res://scripts/ui/ui_factory.gd")
 const PixelFx2DScript = preload("res://addons/pixelfx/nodes/pixel_fx_2d.gd")
 const PixelFxBakerScript = preload("res://addons/pixelfx/bake/baker.gd")
 
-var grid: GridSystem
+## grid 允许 duck-type：真实 GridSystem 或舞台代理网格（只需 units: {id -> unit dict}）。
+var grid
 var unit_sprites: Dictionary
 var immersive_camera: Node = null
 ## 战场局部 cell → 屏幕坐标（默认站立/可见顶面层；battle.gd 的 _float_cell_to_screen）。
@@ -41,7 +42,7 @@ var float_container_fn: Callable
 
 
 func setup(
-	p_grid: GridSystem,
+	p_grid,
 	p_unit_sprites: Dictionary,
 	p_immersive_camera: Node,
 	p_cell_screen_fn: Callable,

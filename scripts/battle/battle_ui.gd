@@ -263,6 +263,13 @@ func get_pref_panel_container() -> Control:
 	return pref_panel
 
 
+## 右侧战斗侧栏本体（battle.gd 独立沉浸演出期隐藏/恢复用；记录原可见性由调用方负责）。
+func get_sidebar() -> Control:
+	if _hud != null and _hud.sidebar != null and is_instance_valid(_hud.sidebar):
+		return _hud.sidebar
+	return null
+
+
 # ============================================================
 # 鼠标命中 UI 检测（_input 用）
 # ============================================================

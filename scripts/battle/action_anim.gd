@@ -130,11 +130,21 @@ static func template_for(event: Dictionary) -> StringName:
 
 ## 结算完成后调用。anim_speed 只压缩显示时间；skipped=true 时同步完成，不等待任何帧。
 func play(event: Dictionary, anim_speed: float = 1.0, skipped: bool = false) -> void:
+	if not await prepare_event(event, anim_speed, skipped):
+		return
+	await run_strike(event)
+	finish_event()
+
+
+## 事件级准备：等待上一场收尾、快照参与单位视觉与相机。返回 false 表示同步跳过
+## （已 emit finished 恰一次）。沉浸舞台逐次出手链路按
+## prepare_event → run_strike×N → finish_event 驱动，事件级快照只捕获一次。
+func prepare_event(event: Dictionary, anim_speed: float = 1.0, skipped: bool = false) -> bool:
 	while _playing:
 		await finished
 	if not is_inside_tree():
-		push_error("ActionAnim.play: 节点尚未加入 SceneTree")
-		return
+		push_error("ActionAnim.prepare_event: 节点尚未加入 SceneTree")
+		return false
 	_event = event
 	_speed = clampf(anim_speed, 0.1, MAX_ANIM_SPEED)
 	_skip_requested = skipped
@@ -146,17 +156,23 @@ func play(event: Dictionary, anim_speed: float = 1.0, skipped: bool = false) -> 
 		_camera = get_viewport().get_camera_3d()
 	_capture_visual_states(event)
 	if skipped:
-		_finish_play()
-		return
+		finish_event()
+		return false
+	return true
 
-	var attacker_id := StringName(event.get(&"attacker_id", &""))
-	var target_id := AttackEventScript.primary_target_id(event)
+
+## 单次出手循环（windup→step→strike→hit→return），作用于 strike_event 的
+## attacker_id / primary_target / impacts；结束不自动收尾，由调用方决定
+## 继续下一次出手或 finish_event（快照恢复以 prepare_event 捕获值为准）。
+func run_strike(strike_event: Dictionary) -> void:
+	var attacker_id := StringName(strike_event.get(&"attacker_id", &""))
+	var target_id := AttackEventScript.primary_target_id(strike_event)
 	var attacker := _sprite(attacker_id)
 	var target := _sprite(target_id)
-	var skill := StringName(event.get(&"kind", &"normal")) == &"skill"
-	var strike_seconds := float(STRIKE_SECONDS.get(template_for(event), STRIKE_SECONDS[&"slash"]))
+	var skill := StringName(strike_event.get(&"kind", &"normal")) == &"skill"
+	var strike_seconds := float(STRIKE_SECONDS.get(template_for(strike_event), STRIKE_SECONDS[&"slash"]))
 
-	phase_started.emit(PHASE_WINDUP, event)
+	phase_started.emit(PHASE_WINDUP, strike_event)
 	if attacker != null:
 		var start_scale: Vector3 = _visual_states[attacker_id][&"scale"]
 		var windup_scale := start_scale * Vector3(0.96, 1.08, 0.96)
@@ -164,10 +180,10 @@ func play(event: Dictionary, anim_speed: float = 1.0, skipped: bool = false) -> 
 	else:
 		await _wait(WINDUP_SKILL if skill else WINDUP_NORMAL)
 	if _skip_requested:
-		_finish_play()
+		finish_event()
 		return
 
-	phase_started.emit(PHASE_STEP, event)
+	phase_started.emit(PHASE_STEP, strike_event)
 	if target != null:
 		_spawn_highlight(target_id, strike_seconds + STEP_NORMAL)
 	if attacker != null and target != null and attacker != target:
@@ -181,30 +197,30 @@ func play(event: Dictionary, anim_speed: float = 1.0, skipped: bool = false) -> 
 	else:
 		await _wait(STEP_SKILL if skill else STEP_NORMAL)
 	if _skip_requested:
-		_finish_play()
+		finish_event()
 		return
 
-	phase_started.emit(PHASE_STRIKE, event)
+	phase_started.emit(PHASE_STRIKE, strike_event)
 	if attacker != null:
 		attacker.set_pose(CharacterSheet.POSE_ATTACK)
-	_spawn_template(event, attacker_id, target_id)
-	_camera_push(attacker, target, strike_seconds, bool(event.get(&"weakness", false)))
+	_spawn_template(strike_event, attacker_id, target_id)
+	_camera_push(attacker, target, strike_seconds, bool(strike_event.get(&"weakness", false)))
 	await _wait(strike_seconds)
 	if _skip_requested:
-		_finish_play()
+		finish_event()
 		return
 
-	phase_started.emit(PHASE_HIT, event)
-	_present_impacts(event)
-	if float(event.get(&"hitstop", 0.0)) > 0.0:
-		phase_started.emit(PHASE_HITSTOP, event)
-		await _wait(float(event.get(&"hitstop", 0.0)))
+	phase_started.emit(PHASE_HIT, strike_event)
+	_present_impacts(strike_event)
+	if float(strike_event.get(&"hitstop", 0.0)) > 0.0:
+		phase_started.emit(PHASE_HITSTOP, strike_event)
+		await _wait(float(strike_event.get(&"hitstop", 0.0)))
 	await _wait(REACTION_SKILL if skill else REACTION_NORMAL)
 	if _skip_requested:
-		_finish_play()
+		finish_event()
 		return
 
-	phase_started.emit(PHASE_RETURN, event)
+	phase_started.emit(PHASE_RETURN, strike_event)
 	_camera_restore(RETURN_SKILL if skill else RETURN_NORMAL)
 	if attacker != null:
 		var start: Vector3 = _visual_states[attacker_id][&"position"]
@@ -217,7 +233,19 @@ func play(event: Dictionary, anim_speed: float = 1.0, skipped: bool = false) -> 
 			_active_tween = null
 	else:
 		await _wait(RETURN_SKILL if skill else RETURN_NORMAL)
+	# 事件级收尾（恢复视觉/相机 + finished）由 finish_event 统一执行。
+
+
+## 事件级收尾：恢复参与单位视觉与相机并 emit finished 恰一次（重复调用安全）。
+## 与 prepare_event 配对；play() 内部亦走同一路径。
+func finish_event() -> void:
+	if not _playing:
+		return
 	_finish_play()
+
+
+func is_skip_requested() -> bool:
+	return _skip_requested
 
 
 ## 立即完成当前演出；强制推进活动 Tween，保证 await play() 一定返回。
@@ -643,7 +671,8 @@ func _restore_visuals() -> void:
 	for raw_state in _visual_states.values():
 		var state: Dictionary = raw_state
 		var sprite: UnitSprite3D = state.get(&"sprite")
-		if not is_instance_valid(sprite):
+		# 树外节点（宿主正在销毁）不做姿态恢复——set_pose 会触发相机 unproject 报错。
+		if not is_instance_valid(sprite) or not sprite.is_inside_tree():
 			continue
 		sprite.global_position = state[&"position"]
 		sprite.scale = state[&"scale"]

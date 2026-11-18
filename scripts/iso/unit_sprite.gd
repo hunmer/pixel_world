@@ -36,6 +36,8 @@ var _stand_level: int = 0
 var _world_origin: Vector2i = Vector2i.ZERO
 var _visual_pos: Vector3 = Vector3.ZERO
 var _level_fn: Callable = Callable()
+# 沉浸舞台模式：独立 SubViewport 相机（第三初始化路径，B1/B2 之外的纯演出代理）。
+var _stage_camera: Camera3D = null
 # 精灵图模式（8 帧单帧姿态）；旧立绘回退时 _using_sheet=false，姿态 API 退化为仅记录。
 var _using_sheet := false
 var _pose: StringName = CharacterSheet.POSE_IDLE
@@ -90,6 +92,15 @@ func setup_world(p_unit: Dictionary, p_world: Node2D, p_stand_level: int, p_worl
 	_world = p_world
 	_stand_level = p_stand_level
 	_world_origin = p_world_origin
+	_build_visual()
+
+## 沉浸舞台代理初始化：坐标走 IsoProjection.grid_to_world(level 0)，
+## 相机取舞台 SubViewport 的独立相机；unit 为舞台持有的深拷贝，不写回真实数据。
+func setup_stage(p_unit: Dictionary, p_camera: Camera3D) -> void:
+	unit = p_unit
+	_stage_camera = p_camera
+	_board = null
+	_world = null
 	_build_visual()
 
 func _b2_cell_world(pos: Vector2i) -> Vector3:
@@ -329,6 +340,8 @@ func _track_camera_yaw() -> void:
 
 
 func _active_camera() -> Camera3D:
+	if _stage_camera != null and is_instance_valid(_stage_camera):
+		return _stage_camera
 	if is_world_mode() and is_instance_valid(_world):
 		return _world._cam as Camera3D
 	if _board != null:
@@ -402,6 +415,8 @@ func get_bar_y() -> float:
 func update_state() -> void:
 	if is_world_mode():
 		_apply_render_proxy()
+	elif _stage_camera != null:
+		global_position = _b2_cell_world(unit[&"position"])
 	elif _board != null:
 		global_position = _b2_cell_world(unit[&"position"])
 	else:

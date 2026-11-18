@@ -4,6 +4,20 @@ extends SceneTree
 const WorldToChapter = preload("res://scripts/core/world_to_chapter.gd")
 
 var failures := 0
+var _immersive_saved := false
+
+
+## 本契约测传统演出链（关闭沉浸走真实 ActionAnim）；沉浸舞台路径由
+## immersive_stage 契约另行覆盖。密闭性：固定关闭 immersive_presentation，
+## 本地 user://settings.cfg 开关不再泄入（与 battle_presentation_hooks 同做法）。
+func _pin_immersive_presentation() -> void:
+	var settings: Node = root.get_node("Settings")
+	_immersive_saved = bool(settings.get("battle_immersive_presentation"))
+	settings.set("battle_immersive_presentation", false)
+
+
+func _restore_immersive_presentation() -> void:
+	root.get_node("Settings").set("battle_immersive_presentation", _immersive_saved)
 
 
 func _initialize() -> void:
@@ -137,6 +151,7 @@ func _exercise_actions(battle: Node, label: String) -> void:
 
 
 func _run() -> void:
+	_pin_immersive_presentation()
 	var world = load("res://main.tscn").instantiate()
 	if world.get_script() == null:
 		_expect(false, "main.gd 编译失败，测试不能作为通过依据")
@@ -172,6 +187,7 @@ func _run() -> void:
 	await _exercise_actions(b2, "B2")
 	b2.queue_free()
 	await process_frame
+	_restore_immersive_presentation()
 	if failures == 0:
 		print("BATTLE_ACTION_CHAIN_CONTRACT_OK")
 	quit(0 if failures == 0 else 1)
