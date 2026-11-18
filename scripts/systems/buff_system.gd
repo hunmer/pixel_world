@@ -1,4 +1,4 @@
-## systems/buff_system.gd — buff/属性修正工具（全静态，零依赖）
+## systems/buff_system.gd — buff/属性修正工具（全静态）
 ##
 ## 从 SkillSystem 抽出来的低层模块，打破 CombatSystem ↔ SkillSystem 的循环依赖：
 ##   CombatSystem 取属性时要算 buff → 依赖 SkillSystem；
@@ -6,16 +6,20 @@
 ## 解法：把 effective_stat / apply_buff / tick_buffs / cleanse 放到这里（不依赖任何战斗类），
 ##   CombatSystem 和 SkillSystem 都只单向依赖 BuffSystem。
 ##
+## 依赖：仅 core 数据目录（EquipmentData，读 data/equipment.json 的装备加成）。
+## HP/MP 容量不走这里：EquipmentData.capacity_hp/capacity_mp = base+装备（不含 buff）。
+##
 ## buff 数据结构（挂在 unit.buffs）：{ stat:StringName, value:int, turns:int, label:String }
 
 class_name BuffSystem
 extends RefCounted
 
 
-## 取单位某项属性的「实际值」= 基础 stats + 所有 buff 累计。
+## 取单位某项属性的「实际值」= 基础 stats + 装备加成 + 所有 buff 累计。
+## HP/MP 容量语义独立（base+装备，不含 buff），见 EquipmentData.capacity_hp/mp。
 static func effective_stat(unit: Dictionary, stat: StringName) -> int:
 	var base: int = int(unit[&"stats"].get(stat, 0))
-	var total: int = base
+	var total: int = base + EquipmentData.stat_bonus(unit, stat)
 	for b in unit.get(&"buffs", []):
 		if b.get(&"stat", &"") == stat:
 			total += int(b.get(&"value", 0))

@@ -71,6 +71,16 @@ static func is_physical(type_: StringName) -> bool:
 	return PHYSICAL_TYPES.has(type_)
 
 
+## 单位实际武器（结算/演出统一入口）：装备槽优先，空装回退 unit.weapon。
+## 装备命中返回 WEAPONS 模板（战斗只读 type/hit/might/weight/crit，共享安全；
+## uses 不在战斗中消耗），否则返回 UnitFactory 写入的旧 weapon 字典。
+static func unit_weapon(unit: Dictionary) -> Dictionary:
+	var equipped := EquipmentData.equipped_weapon_id(unit)
+	if equipped != &"" and WEAPONS.has(equipped):
+		return WEAPONS[equipped]
+	return unit.get(&"weapon", {})
+
+
 ## 适配某职业武器类型的所有武器（编辑器武器下拉用）。
 ## 对应 Phaser UnitFactory.weaponsForClass，返回 [{ id, name }]。
 static func weapons_for_class(class_id: StringName) -> Array:

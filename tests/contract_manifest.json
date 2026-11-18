@@ -772,6 +772,16 @@
       "evidence": "tests/encounter_transition_contract.gd L54 frame｜加速不安全（初始保守，待 A/B）：转场演出帧 L54"
     },
     {
+      "name": "equipment",
+      "path": "tests/equipment_contract.gd",
+      "group": "battle-logic",
+      "tags": ["pure"],
+      "known_status": "pass",
+      "parallel_safe": true,
+      "fast_flag_safe": true,
+      "evidence": "2026-11-19 装备契约（任务二 Commit A）：data/equipment.json v1 严格装载（11 件/固定四槽 weapon+shield+armor+accessory/九键子集正整数加成拒 bool 与 mov/weapon 槽 weapon_id 存在且与授权职业 weaponType 一致且禁通用/非 weapon 槽禁 weapon_id/iconId 走 SkillIcons.has_icon）、catalog_for 与 can_equip 授权、事务性 equip/unequip（单点写入、失败零改动、装上不补满、卸下仅超容才钳 HP/MP、空装移除 equipment 键）、UnitFactory 原始签名不动（空装无 equipment 键）、WeaponData.unit_weapon 装备优先空装回退 unit.weapon 且不覆写旧字段、BuffSystem.effective_stat=base+装备+buff 而 EquipmentData.capacity_hp/mp=base+装备不含 buff、normalize_unit_equipment String 键归一 StringName 与未知条目/槽位不符/授权失效/非对象四类拒绝、16 种坏 JSON 注入（含 JSON 数字 float 化处理）整体清空目录+可恢复真实目录（EQUIPMENT_CONTRACT_OK，Godot 4.7.1）"
+    },
+    {
       "name": "flora_layers",
       "path": "tests/flora_layers_contract.gd",
       "group": "ecology",
