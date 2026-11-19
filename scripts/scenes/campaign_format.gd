@@ -40,11 +40,12 @@ static func detach_children(container: Node) -> void:
 
 ## 安全抓焦：控件有效、可见于树、且未被打断焦点（FOCUS_NONE）才允许
 ## grab_focus，避免「This control can't grab focus」警告（弹层陷阱禁用
-## 背景焦点期间的同帧抓焦、不可见屏的 on_shown 等）。
-static func can_grab_focus(control: Control) -> bool:
+## 背景焦点期间的同帧抓焦、不可见屏的 on_shown 等）。参数用 Variant：
+## 已释放控件若传给 Control 类型参数，会在进入函数、判活之前就报类型错误。
+static func can_grab_focus(control: Variant) -> bool:
 	return (
-		control != null
-		and is_instance_valid(control)
+		is_instance_valid(control)
+		and control is Control
 		and control.is_visible_in_tree()
 		and control.focus_mode != Control.FOCUS_NONE
 	)

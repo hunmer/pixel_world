@@ -1,8 +1,8 @@
 {
   "project": "Pixel World",
   "description": "功能 → 文件依赖图谱：哪些功能用到哪些代码/场景/着色器/配置文件，多层级分类。文件可归属多个功能（shared）。数据来自 2026-11-15 增量扫描 + 每个文件头部『## file.gd — 职责』注释。",
-  "generated": "2026-11-18",
-  "head_commit": "e7ed380",
+  "generated": "2026-11-19",
+  "head_commit": "e3df43b",
   "legend": {
     "types": {
       "gd": "GDScript 源码",
@@ -816,7 +816,7 @@
         {
           "id": "battle.data",
           "name": "数据定义与规则内核（core 纯数据）",
-          "desc": "职业/技能/物品 JSON 懒加载 + 武器三角/成长率/经验公式 + 核心枚举与地形定义（对应 phaserjs 的 types.ts/staticData.ts）。运行时事实：8 职业/8 技能/8 物品（story 目标 13/27/25，差距见 gameplay_gap）。",
+          "desc": "职业/技能/物品 JSON 懒加载 + 武器三角/成长率/经验公式 + 核心枚举与地形定义（对应 phaserjs 的 types.ts/staticData.ts）+ EquipmentData 四槽装卸目录（weapon/shield/staff/relic，九键正加成，容量=base+装备）。运行时事实：8 职业/8 技能/8 物品（story 目标 13/27/25，差距见 gameplay_gap）。",
           "files": [
             {
               "path": "scripts/core/enums.gd",
@@ -851,13 +851,13 @@
             {
               "path": "scripts/core/items.gd",
               "type": "gd",
-              "lines": 126,
+              "lines": 154,
               "role": "物品系统（仿 skills.gd 的 JSON + 懒加载模式）"
             },
             {
               "path": "scripts/core/weapons.gd",
               "type": "gd",
-              "lines": 124,
+              "lines": 134,
               "role": "武器定义 + 武器三角 + 经验公式"
             },
             {
@@ -876,7 +876,7 @@
               "path": "data/items.json",
               "type": "data",
               "role": "物品数据（8）",
-              "lines": 96
+              "lines": 104
             },
             {
               "path": "scripts/tests/test_skills.gd",
@@ -889,6 +889,18 @@
               "type": "tscn",
               "role": "战棋自测场景（44/44）",
               "lines": 6
+            },
+            {
+              "path": "scripts/core/equipment.gd",
+              "type": "gd",
+              "lines": 456,
+              "role": "装备目录与四槽装卸（全静态）"
+            },
+            {
+              "path": "data/equipment.json",
+              "type": "json",
+              "lines": 111,
+              "role": "装备目录 v1：11 条目四槽（weapon6/shield2/staff1/relic2）+ iconId 绑定"
             }
           ],
           "tests": [
@@ -900,6 +912,11 @@
               "path": "tests/profession_growths_contract.gd",
               "type": "gd",
               "note": "九键成长表/缺键回退 DEFAULT_GROWTHS"
+            },
+            {
+              "path": "tests/equipment_contract.gd",
+              "type": "gd",
+              "note": "目录加载/装卸/容量钳制/职业限制契约"
             }
           ]
         },
@@ -935,8 +952,8 @@
             {
               "path": "scripts/systems/buff_system.gd",
               "type": "gd",
-              "lines": 62,
-              "role": "buff/属性修正工具（全静态，零依赖）"
+              "lines": 66,
+              "role": "buff/属性修正工具（全静态）"
             },
             {
               "path": "scripts/systems/turn_manager.gd",
@@ -1182,7 +1199,7 @@
             {
               "path": "scripts/core/battle_save_codec.gd",
               "type": "gd",
-              "lines": 481,
+              "lines": 486,
               "role": "战棋存档的纯数据编码 / 解码 / 校验（版本 1）"
             },
             {
@@ -1213,7 +1230,7 @@
             {
               "path": "scripts/scenes/battle.gd",
               "type": "gd",
-              "lines": 2186,
+              "lines": 2273,
               "role": "核心战场（场景编排器）"
             },
             {
@@ -1272,7 +1289,7 @@
             {
               "path": "scripts/iso/unit_sprite.gd",
               "type": "gd",
-              "lines": 528,
+              "lines": 543,
               "role": "真实 3D 等距单位立绘、HP 条与头顶文本"
             },
             {
@@ -1315,7 +1332,7 @@
             {
               "path": "scripts/battle/battle_ui.gd",
               "type": "gd",
-              "lines": 479,
+              "lines": 486,
               "role": "战场屏幕空间 UI 装配层（从 scenes/battle.gd 抽出，2026-11 再拆分）"
             },
             {
@@ -1387,7 +1404,7 @@
             {
               "path": "scripts/battle/battle_ui_unit_menu.gd",
               "type": "gd",
-              "lines": 439,
+              "lines": 443,
               "role": "单位行动菜单与目标选择器（从 battle_ui.gd 拆出）"
             },
             {
@@ -1405,7 +1422,7 @@
             {
               "path": "scripts/battle/battle_ui_preview.gd",
               "type": "gd",
-              "lines": 132,
+              "lines": 133,
               "role": "使用组件库呈现真实攻守双方与技能预测。"
             },
             {
@@ -1434,7 +1451,7 @@
         {
           "id": "battle.present",
           "name": "沉浸演出层",
-          "desc": "B1/B2 共用演出：开战对峙滑入、回合编排（敌方 AI + 托管）、AttackEvent 只读打击回放、名牌/Boss 横幅/胜负结算演出、可等待沉浸镜头 + 遮挡判定、遭遇转场。可开关可快进（*_finished(skipped) 信号）；结算只读事件、不复写结算。",
+          "desc": "B1/B2 共用演出：开战对峙滑入、回合编排（敌方 AI + 托管）、AttackEvent 只读打击回放、名牌/Boss 横幅/胜负结算演出、可等待沉浸镜头 + 遮挡判定、遭遇转场。可开关可快进（*_finished(skipped) 信号）；结算只读事件、不复写结算；ImmersiveStage = SubViewport 内独立 World3D 的对角阵营沉浸舞台（结算事件只读重演，阵营站位固定）。",
           "files": [
             {
               "path": "scripts/battle/battle_presentation.gd",
@@ -1451,7 +1468,7 @@
             {
               "path": "scripts/battle/action_anim.gd",
               "type": "gd",
-              "lines": 661,
+              "lines": 690,
               "role": "AttackEvent 的只读打击演出回放器。"
             },
             {
@@ -1493,7 +1510,7 @@
             {
               "path": "scripts/battle/battle_fx.gd",
               "type": "gd",
-              "lines": 233,
+              "lines": 234,
               "role": "战斗演出特效（伤害数字 / 血条受击 / 飘字 / 抖动）+ PixelFx 预热"
             },
             {
@@ -1513,6 +1530,24 @@
               "type": "gd",
               "lines": 257,
               "role": "场内升级薄演出（升级弹窗）"
+            },
+            {
+              "path": "scripts/battle/immersive_stage.gd",
+              "type": "gd",
+              "lines": 528,
+              "role": "独立沉浸战斗舞台（SubViewport 内的对角阵营演出场景）。"
+            },
+            {
+              "path": "scripts/battle/immersive_stage_layout.gd",
+              "type": "gd",
+              "lines": 208,
+              "role": "沉浸舞台的纯布局/重建逻辑（无节点、无副作用）。"
+            },
+            {
+              "path": "scenes/ImmersiveStage.tscn",
+              "type": "tscn",
+              "lines": 8,
+              "role": "沉浸舞台 SubViewport 场景（own_world_3d）"
             }
           ],
           "tests": [
@@ -1573,6 +1608,11 @@
               "path": "tests/level_up_visual_probe.tscn",
               "type": "tscn",
               "note": "level_up_visual 探针场景"
+            },
+            {
+              "path": "tests/immersive_stage_contract.gd",
+              "type": "gd",
+              "note": "参战者收集/对角站位/HP 重建/逐 impact 演出/跳过与取消契约"
             }
           ]
         },
@@ -1631,8 +1671,8 @@
         },
         {
           "id": "battle.icons",
-          "name": "技能/状态图标与图鉴",
-          "desc": "SkillIcons/StatusIcons 稳定 ID→纹理目录（ID 与文件绑定永不重排，未知 ID 显式兜底不返回 null）；UnitStatusBadges 单位头顶 buff 图标行（billboard+像素偏移，相机旋转不变）；SkillList 技能图鉴场景（配置生成列表+图标+战斗信息）。",
+          "name": "图标目录与图鉴（技能/状态/物品/装备）",
+          "desc": "SkillIcons/StatusIcons/ItemIcons/EquipmentIcons 稳定 ID→纹理目录（物品 01..08 / 装备 01..11，永不重排）（ID 与文件绑定永不重排，未知 ID 显式兜底不返回 null）；UnitStatusBadges 单位头顶 buff 图标行（billboard+像素偏移，相机旋转不变）；SkillList 技能图鉴场景（配置生成列表+图标+战斗信息）。",
           "files": [
             {
               "path": "scripts/core/skill_icons.gd",
@@ -1663,6 +1703,18 @@
               "type": "tscn",
               "lines": 12,
               "role": "技能图鉴独立场景"
+            },
+            {
+              "path": "scripts/core/item_icons.gd",
+              "type": "gd",
+              "lines": 103,
+              "role": "物品图标目录（稳定 ID → 纹理；不复制物品战斗定义）"
+            },
+            {
+              "path": "scripts/core/equipment_icons.gd",
+              "type": "gd",
+              "lines": 106,
+              "role": "装备图标目录（稳定 ID → 纹理；不复制装备定义）"
             }
           ],
           "tests": [
@@ -1680,6 +1732,16 @@
               "path": "tests/status_icons_contract.gd",
               "type": "gd",
               "note": "buff→图标推导"
+            },
+            {
+              "path": "tests/item_icons_contract.gd",
+              "type": "gd",
+              "note": "目录/绑定/纹理/应急缝/菜单接线契约"
+            },
+            {
+              "path": "tests/equipment_icons_contract.gd",
+              "type": "gd",
+              "note": "目录/绑定/64x64+alpha 实装资产门契约"
             }
           ]
         }
@@ -2506,6 +2568,24 @@
               "type": "py",
               "role": "素材伪透明清理（离线）",
               "lines": 44
+            },
+            {
+              "path": "tools/slice_profession_sheets.py",
+              "type": "py",
+              "lines": 224,
+              "role": "职业静态立绘表切片（professions_static_manifest 驱动）"
+            },
+            {
+              "path": "tools/test_slice_profession_sheets.py",
+              "type": "py",
+              "lines": 139,
+              "role": ""
+            },
+            {
+              "path": "meowa_tiles/heroes/professions_static_manifest.json",
+              "type": "json",
+              "lines": 218,
+              "role": "静态立绘表清单：sha256/网格/ID/裁剪参数（切片工具消费）"
             }
           ],
           "tests": []
@@ -2639,6 +2719,113 @@
       ]
     },
     {
+      "id": "characters",
+      "name": "角色系统与移动测试",
+      "icon": "🧍",
+      "children": [
+        {
+          "id": "characters.pack",
+          "name": "免费角色包（图集裁剪/动画器）",
+          "desc": "用户提供的免费角色包（002..021 共 20 张 64px 帧 PNG）：FreeCharacterSheet 负责 manifest 驱动的图集裁剪、朝向解析与独立缓存；FreeCharacterAnimator 维护网格移动 run/idle 与单次编号动作预览的时间状态。upstream_example/ 归档上游 Godot 示例（.gdignore 隔离，不导入不执行）。",
+          "files": [
+            {
+              "path": "scripts/characters/free_character_sheet.gd",
+              "type": "gd",
+              "lines": 169,
+              "role": "免费角色包的 64px 图集裁剪、朝向解析与独立缓存"
+            },
+            {
+              "path": "scripts/characters/free_character_animator.gd",
+              "type": "gd",
+              "lines": 124,
+              "role": "网格移动 run/idle 与单次编号预览的独立时间状态"
+            },
+            {
+              "path": "assets/characters/free_character_pack/manifest.json",
+              "type": "json",
+              "lines": 335,
+              "role": "角色包稳定 ID/SHA-256/帧规格/循环/fps/方向/脚点清单"
+            },
+            {
+              "path": "assets/characters/free_character_pack/upstream_example/main.gd",
+              "type": "gd",
+              "lines": 83,
+              "role": "上游示例归档（.gdignore 隔离）"
+            },
+            {
+              "path": "assets/characters/free_character_pack/upstream_example/player.gd",
+              "type": "gd",
+              "lines": 48,
+              "role": "上游示例归档（.gdignore 隔离）"
+            },
+            {
+              "path": "assets/characters/free_character_pack/upstream_example/main.tscn",
+              "type": "tscn",
+              "lines": 33,
+              "role": "上游示例归档（.gdignore 隔离）"
+            },
+            {
+              "path": "assets/characters/free_character_pack/upstream_example/character.tscn",
+              "type": "tscn",
+              "lines": 117,
+              "role": "上游示例归档（.gdignore 隔离）"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/free_character_sheet_contract.gd",
+              "type": "gd",
+              "note": "manifest/裁剪/朝向/动画器状态机契约"
+            }
+          ]
+        },
+        {
+          "id": "characters.movement",
+          "name": "人物网格移动测试场景",
+          "desc": "继承 main.tscn/main.gd 的独立测试入口（不改默认入口）：真实地形/流式生态/相机/插值/_cell_states 阻挡下的网格移动 + 编号动作预览；P/O/E 战斗入口在本场景隔离。terrain/fauna 两模块把流式扫描摊到连续帧（预算化 flush）。文档 docs/character_movement_test.md。",
+          "files": [
+            {
+              "path": "scenes/CharacterMovementTest.tscn",
+              "type": "tscn",
+              "lines": 8,
+              "role": ""
+            },
+            {
+              "path": "scripts/scenes/character_movement_test.gd",
+              "type": "gd",
+              "lines": 532,
+              "role": "继承真实生态世界的独立人物网格移动与逐行动作测试"
+            },
+            {
+              "path": "scripts/scenes/character_movement_terrain_3d.gd",
+              "type": "gd",
+              "lines": 52,
+              "role": "测试场景专用：把流式边缘的 chunk 重建摊到连续帧"
+            },
+            {
+              "path": "scripts/scenes/character_movement_fauna_streamer.gd",
+              "type": "gd",
+              "lines": 168,
+              "role": "测试场景的动物群落分帧扫描，保留原遍历顺序与生成规则。"
+            },
+            {
+              "path": "docs/character_movement_test.md",
+              "type": "md",
+              "lines": 99,
+              "role": "运行/键位/素材迁移说明"
+            }
+          ],
+          "tests": [
+            {
+              "path": "tests/character_movement_test_contract.gd",
+              "type": "gd",
+              "note": "移动/阻挡/动作隔离/输入注册契约（headless）"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "campaign",
       "name": "冒险模式子系统",
       "icon": "🏕️",
@@ -2647,12 +2834,12 @@
         {
           "id": "campaign.session",
           "name": "营地会话服务",
-          "desc": "CampaignSession autoload：多档案管理、出征（prepare_battle 防重复）/结算（settle_battle win/lose/abandon，胜利 receipt 带 level_ups 升级差分）、商店购买（先落盘后内存）。磁盘契约：出征挂起落盘出征前快照+attempt 标记，重载即恢复出征前。",
+          "desc": "CampaignSession autoload：多档案管理、出征（prepare_battle 防重复）/结算（settle_battle win/lose/abandon，胜利 receipt 带 level_ups 升级差分）、商店购买（先落盘后内存）。磁盘契约：出征挂起落盘出征前快照+attempt 标记，重载即恢复出征前；equip_item/unequip_item 原子落盘（出征挂起拒绝），codec 装备归一钩子 + roster 吸收/营地补满走容量口径。",
           "files": [
             {
               "path": "scripts/campaign/campaign_session.gd",
               "type": "gd",
-              "lines": 973,
+              "lines": 1044,
               "role": "冒险模式会话服务（autoload CampaignSession）"
             },
             {
@@ -2664,13 +2851,13 @@
             {
               "path": "scripts/campaign/campaign_profile_codec.gd",
               "type": "gd",
-              "lines": 435,
+              "lines": 440,
               "role": "冒险档案磁盘编码/解码/归一化"
             },
             {
               "path": "scripts/campaign/campaign_roster.gd",
               "type": "gd",
-              "lines": 297,
+              "lines": 300,
               "role": "冒险队伍纯逻辑（初始构建 / 出征部署 / 胜利导入）"
             }
           ],
@@ -2679,6 +2866,11 @@
               "path": "tests/campaign_contract.gd",
               "type": "gd",
               "note": "28 组：掉落表校验/胜利掉落 seed 复现/幂等/落盘重试/商店原子购买/限购周期/模板补齐"
+            },
+            {
+              "path": "tests/equipment_integration_contract.gd",
+              "type": "gd",
+              "note": "Session 装卸/落盘/出征拒绝/roster 吸收/codec 归一集成契约"
             }
           ]
         },
@@ -2723,18 +2915,18 @@
         {
           "id": "campaign.hub",
           "name": "营地界面",
-          "desc": "Campaign.tscn 装配层 + 存档选择/营地/世界地图关卡列表/商店/详情确认弹层；全 Pixel* 组件 + 锚点布局，三档分辨率契约。",
+          "desc": "Campaign.tscn 装配层 + 存档选择/营地/世界地图关卡列表/商店/详情确认弹层；全 Pixel* 组件 + 锚点布局，三档分辨率契约；单位详情装备装卸弹层（四槽/可装清单/合计加成/内联拒绝/焦点陷阱）。",
           "files": [
             {
               "path": "scripts/scenes/campaign_main.gd",
               "type": "gd",
-              "lines": 173,
+              "lines": 179,
               "role": "冒险入口装配层"
             },
             {
               "path": "scripts/scenes/campaign_hub.gd",
               "type": "gd",
-              "lines": 416,
+              "lines": 440,
               "role": "冒险 Hub 屏（只读四数据 + 保存/出征入口）"
             },
             {
@@ -2772,6 +2964,12 @@
               "type": "tscn",
               "lines": 12,
               "role": "冒险模式主场景（project.godot run/main_scene）"
+            },
+            {
+              "path": "scripts/scenes/campaign_equipment.gd",
+              "type": "gd",
+              "lines": 397,
+              "role": "营地单位详情装备装卸弹层"
             }
           ],
           "tests": [

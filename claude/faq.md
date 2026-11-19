@@ -1,6 +1,6 @@
 # 常见问题（FAQ）与定位路径
 
-> 更新：2026-11-18（+Q27 冒险模式存档/结算、Q28 建筑素材契约、Q29 技能图鉴；更新 Q1/Q10/Q16/Q17/Q19 与计数）。每条给出"问题 → 在哪找答案 / 在哪改"。
+> 更新：2026-11-19（+Q30 装备双口径、Q31 物品/装备图标、Q32 沉浸舞台、Q33 移动测试场景、Q34 runner 缺录告警；更新 Q10/Q13/Q19/Q21 与计数）。上一轮：+Q27 冒险模式、Q28 建筑素材、Q29 技能图鉴。每条给出"问题 → 在哪找答案 / 在哪改"。
 
 ### Q1：项目到底是做什么的？几个子系统什么关系？
 一个 Godot 4.7 等距像素**生态世界**（无限确定性流式生成 + 动植物/天气/昼夜/3D 阳光阴影），其中**嵌入了回合制战棋战斗**（从 phaserjs 迁移），外围再包一层**冒险模式**（营地/关卡/商店/掉落/成长，`scripts/campaign/`，**当前默认主入口 `Campaign.tscn`**）。战棋按 P 在真实地形上战斗，或从 JSON 战场文件开战；冒险模式消费战棋（出征→战斗→结算回营地）。世界↔战棋唯一耦合是 `scripts/core/world_to_chapter.gd`；JSON 战场入口是 `battlefield_loader.gd`（产出同构 chapter）。详见 `overview.md` 与 `module-responsibilities.md`。
@@ -34,7 +34,7 @@
 **Godot 编辑器脚本缓存坑**：`dbg_restart` 不会重新编译脚本。改代码后必须删 `.godot/editor` 目录并重启编辑器。详见 `conventions.md`。
 
 ### Q10：怎么跑测试？
-**统一入口 `python3 tools/run_contracts.py`**（manifest 驱动 **103 项** = 98 默认跑 + 5 environment-skip；`--test/--group/--changed/--all/--jobs/--junit`；2026-11-18 macOS 全量基线 **pass 98 / fail 0 / env-skip 5**）。legacy 单契约：`godot --headless --path . --script res://tests/<name>_contract.gd`（macOS 可执行 `/Applications/Godot.app/Contents/MacOS/Godot`；Windows console 版 exe stdout 全缓冲，管道下无输出≠失败，看退出码）。战棋自测：编辑器运行 `scenes/SkillTest.tscn`（44/44）。另有探针（flat_rotation / mesh_draw 等）与 Node `--test`（素材清单 7 项）。地形测试用固化 SHA-256 快照检测回归。详见 `testing-and-quality.md`。
+**统一入口 `python3 tools/run_contracts.py`**（manifest 驱动 **110 项** = 105 默认跑 + 5 environment-skip；`--test/--group/--changed/--all/--jobs/--junit`；2026-11-19 macOS 全量基线 **pass 105 / fail 0 / env-skip 5**，HEAD e3df43b）。legacy 单契约：`godot --headless --path . --script res://tests/<name>_contract.gd`（macOS 可执行 `/Applications/Godot.app/Contents/MacOS/Godot`；Windows console 版 exe stdout 全缓冲，管道下无输出≠失败，看退出码）。战棋自测：编辑器运行 `scenes/SkillTest.tscn`（44/44）。另有探针（flat_rotation / mesh_draw 等）与 Node `--test`（素材清单 7 项 + 切片工具 6 项）。地形测试用固化 SHA-256 快照检测回归。详见 `testing-and-quality.md`。
 
 ### Q11：确定性被破坏了 / 测试 SHA-256 对不上？
 检查是否动了 `DeterministicRng` / `_hash_u32` / `_cell_rand` / `_quantize` / `_seed_point`，或重排了 manifest / 改了稳定 ID / 用文件路径当种子。这些是"存档/世界契约"。详见 `conventions.md` + `data-model.md`。
@@ -42,8 +42,8 @@
 ### Q12：`config/ecosystems.json` 和 `config/ecology/manifest.json` 两套配置什么关系？
 **双轨过渡**：`ecosystems.json` 是旧版"首次匹配 ecology"（运行时实际入口）；`ecology/manifest.json` + 模块化 biome/species/communities 是新版，由 `_compile_ecosystem_config` 一起编译。`legacy_bundles.json` 仅旧布局兼容，**新内容禁用**。收尾计划见 `docs/roadmap.md`。详见 `dependencies-and-config.md`。
 
-### Q13：`meowa_tiles/heroes/` 是什么？
-角色素材目录（24 png），**尚未与 `data/professions.json` 的 8 个职业做映射**（已知待办，见 `docs/roadmap.md`）。
+### Q13：`meowa_tiles/heroes/` 是什么？和 `assets/characters/free_character_pack/` 什么关系？
+`meowa_tiles/heroes/`（24 png）是战棋职业素材目录，**尚未与 `data/professions.json` 的 8 个职业做映射**（已知待办，见 `docs/roadmap.md`；配套切片工具 `tools/slice_profession_sheets.py` + `professions_static_manifest.json`）。`assets/characters/free_character_pack/`（**2026-11-19 新增**，002..021 共 20 PNG + manifest.json）是**免费角色包**，由 `scripts/characters/free_character_sheet.gd`（FreeCharacterSheet）消费，当前只用于 CharacterMovementTest 移动测试场景——两者互不相干，勿混。
 
 ### Q14：调试用的 MCP 工具怎么用？
 按 `AGENTS.md`：godot MCP 工具**默认不在工具表里**（连接已配置、注入模式「按会话启用」，实测激活 0 / 会话层隐藏 285），用前必须 `mcp_connector_session_tools` preview-activate → activate（`connectionKey: json-godot`，ttl 1–30 分钟，`confirmed:true` 由激活方自行设置、member 无需向 lead 申请；不跨会话继承）。`tool not found` / 看不见 `mcp__godot__*` **不等于没装 godot MCP**；自检用 `find_symbol` + `runtime_get_monitors`（`editor_ping` 不在可激活的 `runtime,dap,knowledge` 三组内）。`Cannot reach ... 9080` = 编辑器没开或插件未启用。`dbg_launch` 必传 `scene`。295 个工具地图与激活配方见 `rules/godot-tools-map.md`，调试流程见 `rules/mcp-debugging.md`，插件细节见 `addons/breakpoint_mcp/CLAUDE.md`。
@@ -61,13 +61,13 @@ Panku REPL（autoload `Panku`），项目命令集 `dbg.*` 注册于 `scripts/de
 战棋部分脚本顶部注释普遍标注对应 TS 源（迁移自 phaserjs）。但 TS 源**不在本仓库**（外部 phaserjs 项目）。本仓库是纯 GDScript。
 
 ### Q19：UI 组件库是什么？为什么界面上有两套 UI？
-`ui/` 下 21 个 `@tool` 像素功能组件（PixelButton/PixelPanel/…，含 2026-11-18 新增 5 件帧框/名牌/竖 Tab）+ 6 薄布局容器 + `ui/theme/component_theme.gd`。交互画廊 F6（`scenes/UIComponentGallery.tscn`，ESC 退）。**业务迁移现状**：冒险模式 campaign 七屏是首个全 Pixel* 消费者（2026-11-18）；map_editor 已部分迁移；battle_ui / HUD 仍是老 UI——迁移计划见 `docs/roadmap.md`。组件文档：`ui/README.md`。
+`ui/` 下 27 个 `@tool` 像素功能组件（PixelButton/PixelPanel/…，含 2026-11-18 新增 5 件帧框/名牌/竖 Tab）+ 6 薄布局容器 + `ui/theme/component_theme.gd`。交互画廊 F6（`scenes/UIComponentGallery.tscn`，ESC 退）。**业务迁移现状**：冒险模式 campaign 七屏是首个全 Pixel* 消费者（2026-11-18；2026-11-19 的 `campaign_equipment` 装备弹层延续同规范）；map_editor 已部分迁移；battle_ui / HUD 仍是老 UI——迁移计划见 `docs/roadmap.md`。组件文档：`ui/README.md`。
 
 ### Q20：用户素材（自定义方块图）怎么进游戏？
 编辑器 → 素材库面板（AssetLibraryPanel）。链路：本机 HTTP 清单源（默认 `http://127.0.0.1:8076/blocks.json`）→ `UserAssetService` 导入（sha 去重幂等）→ `user://custom_assets/` blob → `UserAssetVisualAdapter` 烘焙贴图 → 编辑器/战场渲染。**素材源已可配置**：`asset_source.cfg [asset_source] source_url` 覆盖 > 库内 settings.source_url > 默认，断源优雅降级；换机器改配置或自建源即可（`docs/user_assets.md`）。
 
 ### Q21：为什么 F5 直接进了上次的场景？
-`config/startup.cfg` 的调试启动配置：`auto_open_last_scene=true` 时启动从 `Game.tscn` 直跳 `last_scene`（`SkillTest` / `UIComponentGallery` 默认排除）。`--battlefield` / `--reset-battle` 命令行优先。想每次都走正常入口就把它关掉。详见 `docs/startup_config.md`。
+`config/startup.cfg` 的调试启动配置：`auto_open_last_scene=true` 时启动从 `Game.tscn` 直跳 `last_scene`（`SkillTest` / `UIComponentGallery` 默认排除；**当前 last_scene=Campaign.tscn**，2026-11-19 实测，该值随最近运行场景漂移）。`--battlefield` / `--reset-battle` 命令行优先。想每次都走正常入口就把它关掉。详见 `docs/startup_config.md`。
 
 ### Q22：怎么无头跑一场战斗 / 做自动化回归？
 `tools/battle_cli.gd`：`godot --headless --path . --script res://tools/battle_cli.gd -- --scenario res://tests/fixtures/battle_scenarios/quick_duel.json [--seed N] [--out DIR]`。产物 events.jsonl / result.json / summary.txt；退出码 0=过 1=断言失败 2=输入错 3=僵持 4=运行错。场景 JSON 支持脚本驱动（script）与 AI 对轰（ai）两种 faction 模式 + 断言。手册：`docs/battle_automation.md`。
@@ -92,3 +92,18 @@ Panku REPL（autoload `Panku`），项目命令集 `dbg.*` 注册于 `scripts/de
 
 ### Q29：技能图鉴从哪进？（2026-11-18 新增）
 标题屏（`scenes/Title.tscn`）的技能图鉴按钮（`SkillListButton`）→ `scenes/SkillList.tscn`（`scripts/scenes/skill_list.gd`）。技能图标走 `scripts/core/skill_icons.gd` 的**稳定 iconId `'01'..'53'`**（永不重排、未知回退默认图标 + warning）；状态图标走 `status_icons.gd`（buff 属性推导）。契约 `tests/skill_icons_contract.gd` / `skill_list`。
+
+### Q30：装备加成怎么算？为什么 HP/MP 和战斗面板对不上？（2026-11-19 新增）
+**双口径约定**（`data-model.md` + `core/equipment.gd`）：战斗内 buff 加成 = `base + EquipmentData.stat_bonus`（`buff_system.gd`）；**HP/MP 容量上限 = base + 装备、不含 buff**（`capacity_hp/capacity_mp`，`campaign_roster` 吸收/补满走此口径）。装备规则只改 `core/equipment.gd`（EquipmentDataScript 单一权威），消费方各一行委托，勿复写。契约 `tests/equipment_contract.gd` / `equipment_integration_contract.gd`。
+
+### Q31：物品/装备图标怎么配？显示不出来怎么办？（2026-11-19 新增）
+沿用 skill_icons 模式：`items.json` 的 `iconId '01'..'08'` → `scripts/core/item_icons.gd` → `assets/ui/items/`；`equipment.json` 的 `icon_id '01'..'11'` → `equipment_icons.gd` → `assets/ui/equipment/`。稳定 ID 永不重排；未知 ID 回退 `DEFAULT_ICON_ID('01')` + push_warning（不返回 null）；items 的 iconId 缺/空/null 由 `_normalize_icon_id` 归一。契约 `tests/item_icons_contract.gd` / `equipment_icons_contract.gd`。
+
+### Q32：沉浸舞台（ImmersiveStage）是什么？关了会影响战斗吗？（2026-11-19 新增）
+战斗演出的**纯表现增强**：`scenes/ImmersiveStage.tscn`（SubViewport own_world_3d 独立世界）+ `scripts/battle/immersive_stage.gd`；`Settings.battle_immersive_presentation` 开关，开启时攻击演出走 `await _immersive_stage.present()`（信号 strike_scheduled/impact_presented/presentation_started/presentation_finished）。**结算永远在 `battle_action_resolver.gd`**，关舞台/关开关对结算零影响。单位入舞台走 `unit_sprite.setup_stage()`。交接文档 `handoff/immersive-battle-presentation.md`；契约 `tests/immersive_stage_contract.gd`（818 行）。
+
+### Q33：CharacterMovementTest 是什么？P/O/E 怎么没反应？（2026-11-19 新增）
+人物移动测试台（`scenes/CharacterMovementTest.tscn`，脚本 `extends main.gd` 继承真实生态装配）：WASD 网格移动（最后按轴优先、不斜穿）、Q/X 旋转、K/L 切角色包 002..021、U/I/J/H 动作预览。**P/O/E（战斗/战场/编辑器）在该场景被刻意隔离**——测试台专用，勿在此调试战斗入口。配套高预算冲刷 `character_movement_terrain_3d.gd`（FLUSH_BUDGET 8000usec/12chunks）与动物流式扩展 `character_movement_fauna_streamer.gd`。权威文档 `docs/character_movement_test.md`；契约 `tests/character_movement_test_contract.gd`。
+
+### Q34：runner 告警"盘上存在但 manifest 缺少"是怎么回事？（2026-11-19 新增）
+`tools/run_contracts.py` 的 `check_manifest_coverage` 会 diff `tests/*_contract.gd`（盘上 119 个）与 manifest `contracts[]`（110 项）名字集合。两个来源：① **campaign_battle_integration 在 probes 区**——runner 只比对 contracts 区，属**误报**（该测试实际在跑）；② **真缺录 8 项**（backstab_save_roundtrip / isometric_camera_lifecycle / battle_key_input / world_key_input / battle_threat_data / battle_action_history / map_editor_units / map_editor_unit_edit）——缺录 = 既不进默认跑也不进 `--changed` 闭包，**建议补录 manifest**（init-project 只写文档不动 manifest，待办见 roadmap）。

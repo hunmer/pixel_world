@@ -1,6 +1,6 @@
 # 入口与启动
 
-> 更新：2026-11-18（主场景改为 `scenes/Campaign.tscn`；autoload 8→9 新增 `CampaignSession`；场景表 +Campaign/SkillList）。
+> 更新：2026-11-19（场景表 +**CharacterMovementTest/ImmersiveStage** 共 15 .tscn；campaign 链 +**装备屏**；`startup.cfg` last_scene 当前为 Campaign.tscn（易变值，以文件为准）；CampaignSession 973→1044 行 + equip/unequip）。上一轮：主场景改 `scenes/Campaign.tscn`；autoload 8→9。
 
 ## 引擎入口
 
@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | 1 | `Settings` | `scripts/settings.gd` | 用户偏好（user://settings.cfg；`battle_inline_mode` 等） |
 | 2 | `SceneArgs` | `scripts/scenes/scene_args.gd` | 跨场景传参（`battle_args` 等） |
-| 3 | `CampaignSession` | `scripts/campaign/campaign_session.gd` | **（2026-11-18 新增）** 冒险模式会话：档案/关卡/商店/出征令牌（973 行） |
+| 3 | `CampaignSession` | `scripts/campaign/campaign_session.gd` | 冒险模式会话：档案/关卡/商店/出征令牌/**装备**（2026-11-19：1044 行 + `equip_item@512`/`unequip_item@540`） |
 | 4 | `Sfx` | `scripts/audio/game_sfx.gd` | UI/战斗音效池 |
 | 5 | `LoadingScreen` | `scenes/LoadingScreen.tscn` | 全局加载遮罩 |
 | 6 | `GameSession` | `scripts/scenes/game_session.gd` | 旧战旗会话路由 + 逐战场存档（user://battle_saves/） |
@@ -25,9 +25,9 @@
 ## 调试启动配置（`config/startup.cfg`）
 
 - INI：`[startup] auto_open_last_scene / last_scene / excluded_scenes`（`docs/startup_config.md`）。编辑器调试读写 res://，导出后 user://。
-- 可让 F5 直跳任意场景（含 main.tscn 世界、Battle.tscn——后者依赖 SceneArgs，建议走 Game.tscn 路由）。**当前工作树该文件有本地未提交修改**（直跳配置）。
+- 可让 F5 直跳任意场景（含 main.tscn 世界、Battle.tscn——后者依赖 SceneArgs，建议走 Game.tscn 路由）。**当前 `last_scene=Campaign.tscn`**（该值随最近运行场景漂移，2026-11-19 实测；此前曾指向 CharacterMovementTest.tscn，以文件为准）。
 
-## 场景入口表（16 .tscn 自有）
+## 场景入口表（scenes/ 15 .tscn + 根 main.tscn + ui/pixel_panel.tscn）
 
 | 场景 | 角色 | 进入方式 |
 | --- | --- | --- |
@@ -35,6 +35,8 @@
 | `scenes/Game.tscn` | 战旗会话路由（开发入口；冷启动自动续玩最近战旗） | 列表选"战旗入口" / startup.cfg |
 | `scenes/Battle.tscn` | 战棋 B2 独立场景（**依赖 `SceneArgs.battle_args`，不能无参直启**） | Game/Campaign 路由 / B1 不用它 |
 | `main.tscn` | 世界生态场景（B1 宿主） | Game 列表"生态世界" / startup.cfg |
+| `scenes/CharacterMovementTest.tscn`★ | **（2026-11-19 新增）人物移动测试场景**：继承 main.tscn 真实生态 + WASD 网格移动/切角色/动作预览（P/O/E 已隔离） | startup.cfg last_scene / Game 列表 |
+| `scenes/ImmersiveStage.tscn`★ | **（2026-11-19 新增）沉浸舞台**：SubViewport own_world_3d 独立世界，战斗演出专用（battle.gd preload 挂载，`Settings.battle_immersive_presentation` 开关） | battle.gd 内部装配，**不独立启动** |
 | `scenes/Title.tscn` | 标题屏（含 SkillListButton → 技能图鉴） | — |
 | `scenes/SkillList.tscn` | 技能图鉴（27+ 技能卡片，scripts/scenes/skill_list.gd） | Title 按钮 |
 | `scenes/MapEditor.tscn` | 战场编辑器 | 世界按 E / Game 列表 |
@@ -69,6 +71,11 @@ Campaign.tscn (campaign_main.gd 装配层, 173 行)
      │        负/弃：_settle_restore 恢复出征前状态
      ├─ 商店（campaign_shop，249 行）：data/shop.json，金币购买，
      │    limit_per_clear × completed_levels.size() 限购
+     ├─ 装备屏（campaign_equipment，397 行）★（2026-11-19）：四槽
+     │    weapon/shield/staff/relic，data/equipment.json 11 条，
+     │    CampaignSession.equip_item/unequip_item（先落盘）；
+     │    加成双口径见 data-model.md（buff 加成=base+stat_bonus；
+     │    HP/MP 容量=base+装备不含 buff）
   → changed(reason) 信号驱动 UI 刷新（不轮询）
 ```
 
@@ -96,6 +103,8 @@ main.gd._unhandled_input
 ```
 
 Game.tscn 冷启动路由（开发用途）：`StartupConfig` 读 startup.cfg → 无直跳时 `GameSession.prepare_entry()` 决策链（`--battlefield` 参数 > 最近存档 > 默认 plains_skirmish）→ 带存档恢复进 Battle / 停在列表。
+
+**战斗演出装配（2026-11-19）**：battle.gd `_ready` 预挂 `ImmersiveStage.tscn`；`_use_immersive_stage()` 命中（`Settings.battle_immersive_presentation` 开且场景可用）时攻击演出走 `await _immersive_stage.present(...)`（SubViewport 独立世界 + 代理相机，单位经 `unit_sprite.setup_stage()` 入舞台），信号 `strike_scheduled / impact_presented / presentation_started / presentation_finished`；**舞台纯表现**，结算仍走 `battle_action_resolver`，关闭开关零影响。权威交接 `handoff/immersive-battle-presentation.md`。
 
 ## 构建导出
 

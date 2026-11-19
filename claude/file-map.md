@@ -1,6 +1,6 @@
 # 文件清单与目录地图
 
-> 更新：2026-11-18（第四轮增量：scripts +campaign 6/建筑 4/战斗扩展 5/图标 2/编辑器 2/skill_list、ui 组件 22→27、scenes 11→13、tests 86→115、data +campaign.json+shop.json+battlefields 6→8、docs +campaign_loop+building_assets）。
+> 更新：2026-11-19（第五轮增量：**装备系统**〔core/equipment×3 + campaign_equipment〕、**ImmersiveStage 沉浸舞台**、**免费角色包 + 人物移动测试场景**〔scripts/characters/ 新子域〕、图标两目录；scripts 191→206、scenes 13→15、tests 115→122、契约 manifest 103→110）。
 
 ## 顶层结构
 
@@ -15,18 +15,19 @@ pixel_world/  (本机 /Users/Zhuanz/Documents/pixel_world；历史路径 G:/ →
 ├── DESIGN.md              ★ UI 设计规范单一事实来源（token 体系 + 六薄容器 + 禁忌 + 验收）
 ├── ASSET_LICENSE.md / LICENSE / .editorconfig / .gitignore / .gitattributes
 │
-├── scripts/               ★ 全部项目 GDScript（~191 .gd，见下）
+├── scripts/               ★ 全部项目 GDScript（206 .gd，见下）
 ├── ui/                    ★ 共享 UI 组件库（27 个 Pixel* @tool 控件 + ComponentTheme + README）
-├── scenes/                13 个 .tscn：Battle / Campaign★ / DialogueDemo / Game / HomeEntry /
-│                          Isometric3DTest / LoadingScreen / MapEditor / PixelFxGallery / SkillList /
-│                          SkillTest / Title / UIComponentGallery
-├── tests/                 115 .gd（103 项 manifest 契约 + gdtest 试点 3 + benches）+ 5 .tscn（探针/集成）
-│                          + fixtures/（模块扩展夹具 + battle_scenarios/ JSON + simulations/）
+├── scenes/                15 个 .tscn：Battle / Campaign★ / CharacterMovementTest★ / DialogueDemo /
+│                          Game / HomeEntry / ImmersiveStage★ / Isometric3DTest / LoadingScreen /
+│                          MapEditor / PixelFxGallery / SkillList / SkillTest / Title / UIComponentGallery
+├── tests/                 122 .gd（盘上 119 个 *_contract.gd〔manifest 录入 110〕+ gdtest 试点 3）
+│                          + 5 .tscn（探针/集成）+ fixtures/（模块扩展夹具 + battle_scenarios/ JSON + simulations/）
 ├── config/                JSON 配置（生态 + 表现层 + sunlight.json + startup.cfg 调试启动配置）
-├── data/                  战棋 JSON：professions/skills/items + campaign.json★ + shop.json★
-│                          + battlefields/(8) + dialogue/(demo_intro)
-├── docs/                  campaign_loop★ / building_assets★ / battle_automation / test_automation /
-│                          startup_config / user_assets / gameplay_gap / roadmap / testing_baseline
+├── data/                  战棋 JSON：professions/skills/items + equipment.json★ + campaign.json★
+│                          + shop.json★ + battlefields/(8) + dialogue/(demo_intro)
+├── docs/                  campaign_loop★ / building_assets★ / character_movement_test★ /
+│                          battle_automation / test_automation / startup_config / user_assets /
+│                          gameplay_gap / roadmap / testing_baseline
 │                          + feature_map.json/.html（功能依赖图谱）+ screenshots/
 ├── rules/                 4 篇 agent 规则文档（godot-tools-map、mcp-debugging、autoplay-hosting、skill-item-system）
 ├── story/                 19 篇设计 bible（目标态：13 职业/27 技能/25 道具；当前 data/ 仅 8/8/8 + campaign 6 关）
@@ -39,7 +40,9 @@ pixel_world/  (本机 /Users/Zhuanz/Documents/pixel_world；历史路径 G:/ →
 ├── addons/                6 个 vendored 插件：breakpoint_mcp / panku_console / at-icons / pixelfx / gdtest / godot_autosim
 ├── assets/                素材：audio(bgm/sfx/ambience/voice) / bg / markers / ui / units / video /
 │                          buildings/{medieval_watchtower,spacious_house}/recipe.json★ /
-│                          character_art_registry.json / pixelfx_export /（ui/tmp/ 切片中转，可清）
+│                          ui/items(8)★ / ui/equipment(11)★ / characters/free_character_pack/
+│                          (002..021 共 20 PNG+manifest.json★) / character_art_registry.json /
+│                          pixelfx_export /（ui/tmp/ 切片中转，可清）
 ├── meowa_tiles/           世界像素素材：terrain/animals(24)/plants(39)/trees(25)/decorations/
 │                          generated(增量 icon 产物)/heroes(24)
 ├── music/ sound_effect/   .mp3 ×8
@@ -51,16 +54,19 @@ pixel_world/  (本机 /Users/Zhuanz/Documents/pixel_world；历史路径 G:/ →
 
 ```
 scripts/
-├── core/                      【战棋纯逻辑，零渲染依赖】18 .gd
+├── core/                      【战棋纯逻辑，零渲染依赖】21 .gd
 │   ├── enums.gd               class_name Enums（Faction/Mode 等，StringName）
 │   ├── unit.gd                UnitData 构造 + 默认成长率
 │   ├── professions.gd         class_name ProfessionData：8 职业 + 九键成长 growths_for()
 │   │                          （hp,mp,str,mag,skl,spd,luk,def,res；缺键回退 _GROWTH_FALLBACK；
 │   │                          power→str/mag、agility→spd 映射）
 │   ├── skills.gd              技能系统（懒加载 data/skills.json；图标走 skill_icons）
-│   ├── items.gd               物品系统（懒加载 data/items.json）
-│   ├── weapons.gd             class_name WeaponData（武器三角 + 经验公式）
+│   ├── items.gd               物品系统（懒加载 data/items.json；iconId 归一 + item_icon()）
+│   ├── weapons.gd             class_name WeaponData（武器三角 + 经验公式；static unit_weapon()
+│   │                          装备槽优先，空装回退 unit.weapon）
 │   ├── terrain.gd             class_name TerrainData（11 地形查表）
+│   ├── equipment.gd★          class_name EquipmentDataScript：装备四槽系统（456 行；静态目录/
+│   │                          装备校验/加成/容量/装备归一；data/equipment.json 11 条）
 │   ├── cmd_args.gd            启动命令行解析（纯静态，零依赖）
 │   ├── world_to_chapter.gd    ★ 世界 cell → 战棋 chapter 适配层（两子系统唯一耦合；7/11 地形）
 │   ├── battlefield_loader.gd  ★ JSON 战场加载 + 唯一权威校验（victory/reinforcements/buildings）
@@ -70,6 +76,9 @@ scripts/
 │   ├── reinforcement_spawner.gd 按回合波次增援刷入（演出/无头两链路共用）
 │   ├── skill_icons.gd         ★ 技能图标稳定 ID（'01'..'53'→纹理；未知回退+push_warning）
 │   ├── status_icons.gd        状态图标（buff 属性→图标 ID 推导）
+│   ├── item_icons.gd★         物品图标目录（items iconId '01'..'08'→assets/ui/items/；
+│   │                          模式同 skill_icons：稳定 ID+缓存+DEFAULT_ICON_ID 兜底）
+│   ├── equipment_icons.gd★    装备图标目录（equipment icon_id '01'..'11'→assets/ui/equipment/）
 │   ├── building_layout.gd     ★ class_name BuildingLayout：建筑占用格派生（奇旋转换 w/h）
 │   │                          + 重叠校验（编辑器保存与 loader 共用唯一实现，194 行）
 │   └── building_interior.gd   室内战场布局（建筑内格子/出生点，93 行）
@@ -102,7 +111,7 @@ scripts/
 │   ├── building_occlusion_controller.gd 建筑遮挡控制（89 行）
 │   └── world_camera_navigation.gd  世界相机漫游导航
 │
-├── battle/                    【战棋场景助手，setup()+Callable 注入】26 .gd + automation/
+├── battle/                    【战棋场景助手，setup()+Callable 注入】28 .gd + automation/
 │   ├── battle_action_resolver.gd ★ 行动结算内核（battle.gd/automation/契约测试三方共享；
 │   │                          背击/夹击/击杀掉落判定在内）
 │   ├── battle_ui.gd           屏幕 UI 装配层（HUD/菜单/详情/横幅/预览/状态徽章已拆出）
@@ -114,6 +123,9 @@ scripts/
 │   ├── battle_settings_tab.gd / battle_pref_panel.gd
 │   ├── action_anim.gd / encounter_transition.gd / result_presentation.gd
 │   ├── immersive_camera.gd    沉浸式战斗相机
+│   ├── immersive_stage.gd★    沉浸舞台（SubViewport 独立世界+代理相机；present() 驱动
+│   │                          strike/impact 演出；Settings.battle_immersive_presentation 开关）
+│   ├── immersive_stage_layout.gd★ 舞台布局（镜头/单位站位编排）
 │   ├── battle_camera_kick.gd / battle_fx.gd / battle_result_stage.gd / battle_sfx.gd / battle_save.gd
 │   ├── battle_threat_data.gd  ★ class_name BattleThreatData（只读威胁预测，AI/预览消费）
 │   ├── battle_action_history.gd ★ class_name BattleActionHistory（整场行动快照/跨回合回退）
@@ -121,9 +133,16 @@ scripts/
 │   ├── campaign_battle_bridge.gd ★ 冒险出征桥接（SceneArgs.campaign_token ⇄ settle）
 │   └── automation/            battle_scenario_loader / battle_runner / battle_report
 │
-├── campaign/                  【冒险模式核心，2026-11-18 新增】6 .gd
-│   ├── campaign_session.gd    ★ autoload CampaignSession（973 行）：档案/关卡/商店/出征令牌/
-│   │                          settle 幂等结算/掉落独立 RNG/升级差分；signal changed(reason)
+├── characters/                【免费角色包（2026-11-19 新增）】2 .gd
+│   ├── free_character_sheet.gd ★ class_name FreeCharacterSheet：res://assets/characters/
+│   │                          free_character_pack/ 20 角色（002..021，64×64 帧）帧表加载/
+│   │                          帧解析（idle/walk/… 动作行）
+│   └── free_character_animator.gd  帧动画驱动（移动测试场景消费）
+│
+├── campaign/                  【冒险模式核心】6 .gd
+│   ├── campaign_session.gd    ★ autoload CampaignSession（1044 行）：档案/关卡/商店/出征令牌/
+│   │                          settle 幂等结算/掉落独立 RNG/升级差分 + equip/unequip 装备接口；
+│   │                          signal changed(reason)
 │   ├── campaign_config.gd     data/campaign.json 加载与校验（6 关卡+奖励+loot_table，340 行）
 │   ├── campaign_profile_codec.gd 档案编解码 + 校验（435 行）
 │   ├── campaign_profile_store.gd 档案原子落盘（user://campaign_saves/，329 行）
@@ -143,16 +162,24 @@ scripts/
 │   ├── map_editor_buildings.gd ★ 建筑摆放工具（footprint 预览/校验，120 行）
 │   └── map_editor_units.gd    ★ 角色选中/资料回显/可撤销编辑（接 ProfessionData）
 │
-├── scenes/                    【场景脚本】20 .gd
-│   ├── battle.gd              ★ 战斗场景编排器（2186 行装配层：状态机/输入/胜负/行动历史/
-│   │                          campaign 结算接线；记录 Tab@619,651）
+├── scenes/                    【场景脚本】24 .gd
+│   ├── battle.gd              ★ 战斗场景编排器（2273 行装配层：状态机/输入/胜负/行动历史/
+│   │                          campaign 结算/ImmersiveStage 接线；记录 Tab@619,651）
 │   ├── campaign_main.gd       ★ Campaign.tscn 装配层（173 行；battle_requested 信号）
 │   ├── campaign_save_select.gd 存档选择屏（437 行）
 │   ├── campaign_hub.gd        营地 Hub（416 行：金币/库存/roster/进度）
 │   ├── campaign_levels.gd     关卡列表（245 行）
 │   ├── campaign_shop.gd       营地商店（249 行）
+│   ├── campaign_equipment.gd★ 装备弹层（397 行：四槽装备/加成预览/职业过滤，
+│   │                          消费 EquipmentDataScript）
 │   ├── campaign_format.gd     屏格式化基类（267 行）
 │   ├── campaign_modal.gd      模态层（214 行）
+│   ├── character_movement_test.gd★ 人物移动测试（532 行，extends main.gd：WASD 网格移动/
+│   │                          Q/X 旋转/K/L 切角色 002..021/U/I/J/H 动作预览；文档
+│   │                          docs/character_movement_test.md）
+│   ├── character_movement_terrain_3d.gd★ 测试地形（52 行，extends isometric_terrain_3d；
+│   │                          FLUSH_BUDGET 8000usec/12 chunks）
+│   ├── character_movement_fauna_streamer.gd★ 测试动物流式（168 行，extends fauna_streamer）
 │   ├── title.gd               标题屏（SkillListButton → 图鉴）
 │   ├── skill_list.gd          技能图鉴（190 行）
 │   ├── map_editor.gd          编辑器装配层（1088 行）
@@ -218,7 +245,7 @@ ui/
 | `battle_cli.gd` | 声明式战场 CLI（--scenario/--seed/--out） |
 | `build_blocks_manifest.mjs`(+`.test.mjs` 7 test) | 用户素材清单生成/校验 |
 | `prepare_building_demo.gd` / `prepare_house_demo.gd`★ | 建筑/房屋演示战场生成（产出 data/battlefields/*_demo.json） |
-| `slice_class_sheets.py` / `slice_ui_sheet.py` | 素材图集切片 |
+| `slice_class_sheets.py` / `slice_ui_sheet.py` / `slice_profession_sheets.py`★(+`.test.py` 6 test) | 素材图集切片（profession 版从免费角色包切职业精灵，产物清单 professions_static_manifest.json） |
 
 ## 关键文件快速索引
 
@@ -227,6 +254,9 @@ ui/
 | 理解世界生成 | `main.gd` 函数簇分区表 + `scripts/world/` 20 模块（装配点 `_configure_generation_services`@485） |
 | 理解冒险模式 | `docs/campaign_loop.md`（权威）+ `scripts/campaign/` + `campaign_session.gd` API |
 | 改职业/成长 | `scripts/core/professions.gd`（九键 growths_for）+ `data/professions.json` |
+| 加装备/装备图标 | `scripts/core/equipment.gd`（EquipmentDataScript 四槽）+ `data/equipment.json` + `equipment_icons.gd`（icon_id '01'..'11' 勿重排） |
+| 加物品图标 | `scripts/core/item_icons.gd`（items iconId '01'..'08' 勿重排）+ `data/items.json` |
+| 用免费角色包 | `scripts/characters/free_character_sheet.gd`（20 角色 002..021）+ `assets/characters/free_character_pack/manifest.json` |
 | 加技能图标 | `scripts/core/skill_icons.gd`（稳定 ID '01'..'53'，**勿重排**） |
 | 加建筑素材 | `docs/building_assets.md`（四方向 4:1 sheet 契约）+ `builtin_*_assets.gd` + recipe.json |
 | 改编辑器 | `scripts/scenes/map_editor.gd`（1088 行装配层）+ `scripts/editor/` 28 模块 |
@@ -241,12 +271,12 @@ ui/
 
 | 类型 | 数量 | 说明 |
 | --- | --- | --- |
-| 总文件 | **12318** | 含 addons vendored 与全部素材 |
-| `.gd` | **~791**（自有） | scripts ~191 / tests 115 / ui 28 / addons ~430 / tools 等 |
-| `.tscn` | 自有 18 | main + scenes/13 + ui/pixel_panel + tests 5（探针/集成） |
-| `.json` | 45+（不含 addons） | config + data（+campaign/shop）+ fixtures |
-| `.md` | 230+ | story 19 + rules 4 + claude/ + docs/ + handoff/ |
-| `.png` | 600+ | meowa_tiles + assets + docs/screenshots |
+| 总文件 | **12495** | 含 addons vendored 与全部素材 |
+| `.gd` | **~810**（自有） | scripts 206 / tests 122 / ui 28 / addons ~430 / tools 等 |
+| `.tscn` | 自有 20 | main + scenes/15 + ui/pixel_panel + tests 5（探针/集成） |
+| `.json` | 48+（不含 addons） | config + data（+equipment/campaign/shop）+ fixtures |
+| `.md` | 235+ | story 19 + rules 4 + claude/ + docs/ + handoff/ |
+| `.png` | 640+ | meowa_tiles + assets（+items/equipment 图标、free_character_pack 20）+ docs/screenshots |
 | `.gdshader` | 自有 6 | day_night_overlay / encounter_warp / isometric_terrain_rotate / tilt_shift_dof / underwater_animal / weather_overlay |
 
 ## 生成物 / 已忽略

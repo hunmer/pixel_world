@@ -1,8 +1,9 @@
-[gd_scene type="PackedScene" load_steps=3 format=3]
+[gd_scene format=3 uid="uid://d47x1vab1bmx"]
 
-[ext_resource type="PackedScene" path="res://main.tscn" id="1_main"]
-[ext_resource type="Script" path="res://scripts/scenes/character_movement_test.gd" id="2_test"]
+[ext_resource type="PackedScene" uid="uid://la10esoiottk" path="res://main.tscn" id="1_main"]
+[ext_resource type="Script" uid="uid://dpuwayagd8h1u" path="res://scripts/scenes/character_movement_test.gd" id="2_test"]
 
-[node name="CharacterMovementTest" instance=ExtResource("1_main")]
+[node name="CharacterMovementTest" unique_id=1585339878 instance=ExtResource("1_main")]
 script = ExtResource("2_test")
+initial_character = &"002"
 seed = 20261119

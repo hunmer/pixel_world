@@ -1,6 +1,6 @@
 # 对外接口
 
-> 更新：2026-11-18（新增 **CampaignSession 冒险模式接口**、campaign_token、建筑布局契约、图标稳定 ID 契约、九键成长；组件库 27 控件）。上一轮：统一契约 runner、批量模拟 CLI、autosim 接入。本项目是**单机游戏**，除调试桥与素材清单源外不暴露 REST API / WebSocket / SDK；本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**自动化 CLI**、**调试通道**。
+> 更新：2026-11-19（新增 **EquipmentDataScript 装备接口**、CampaignSession equip/unequip、物品/装备图标目录、ImmersiveStage 信号、移动测试键位；`Settings.battle_immersive_presentation`）。上一轮：CampaignSession 接口、campaign_token、建筑布局契约、图标稳定 ID、九键成长；组件库 27 控件。本项目是**单机游戏**，除调试桥与素材清单源外不暴露 REST API / WebSocket / SDK；本文件列出"接口"的现实形态：**玩家输入映射**、**跨场景 / 跨模块的代码契约**、**JSON 战场文件格式**、**自动化 CLI**、**调试通道**。
 
 ## 玩家输入映射（`project.godot [input]` + `main.gd._unhandled_input` @ 3608）
 
@@ -57,6 +57,17 @@ battle.gd 另处理鼠标选格、键盘移动光标。B1 相机由 main.gd 处�
 
 F5 直跑时若 `auto_open_last_scene=true`，自动从 `Game.tscn` 中转进 `last_scene`；`--battlefield` / `--reset-battle` 命令行优先级更高。详见 `docs/startup_config.md`。
 
+### 人物移动测试场景（`scenes/CharacterMovementTest.tscn`，2026-11-19 新增）
+
+| 键 | 用途 |
+| --- | --- |
+| `WASD` | 网格移动（最后按轴优先、不斜穿；动态注册 `character_test_left/right/up/down` 动作） |
+| `Q` / `X` | 视角逆/顺时针旋转 90° |
+| `K` / `L` | 切换角色 002..021（FreeCharacterSheet 20 角色） |
+| `U` / `I` / `J` / `H` | 动作预览（idle/walk 等帧动画） |
+
+> 该场景 `extends main.gd` 继承真实生态，但 **P/O/E（战斗/战场列表/编辑器）入口已隔离**不可用；场景导出 `initial_character`（默认 `&"002"`）指定初始角色。权威文档 `docs/character_movement_test.md`。
+
 ## 跨场景代码契约
 
 ### `SceneArgs`（autoload）— 唯一的跨场景传参通道
@@ -104,6 +115,7 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 | `list_profiles()` / `create_profile(name, difficulty)` / `load_profile(id)` / `rename_profile` / `delete_profile` / `leave_profile` | 档案 CRUD（`user://campaign_saves/` 多档案，codec 校验 + `.bak` 回退层） |
 | `get_profile()` / `get_last_opened_level()` / `list_levels()` | 当前档案视图：金币 / 公共库存 / roster（固定队伍）/ 关卡进度（completed_levels 线性解锁） |
 | `list_shop()` / `buy_item(item_id, count)` | 营地商店（`data/shop.json`）：原子购买（先落盘）；限购上限 = `limit_per_clear × completed_levels.size()` |
+| `equip_item(unit_id, entry_id)` / `unequip_item(unit_id, slot)`★ | **（2026-11-19）装备四槽操作**（@512/@540）：先落盘后内存；`can_equip` 校验 + `_clamp_vitals`；roster HP/MP 按 `capacity_hp/capacity_mp` 补满口径 |
 | `prepare_battle(level_id) -> {token, chapter, ...}` | **出征**：落盘出征前快照 + attempt 标记 → 加载关卡战场（走 BattlefieldLoader）→ 产出一次性 `campaign_token` |
 | `settle_battle(token, result, chapter) -> {outcome, gold?, items?, level_ups?}` | **结算**（幂等）：胜 → first_clear/repeat 奖励 + `loot_table` 独立 RNG 掉落（种子=战场 id+token，不触战斗随机流）+ `_diff_level_ups` 升级差分；负/弃 → `_settle_restore` 恢复出征前状态 |
 | `save_current()` / `get_last_result()` / `clear_last_result()` | 手动保存 / 战斗结果回营地展示 |
@@ -115,6 +127,7 @@ SceneArgs.map_editor_return_to = "res://main.tscn"  # 编辑器保存退出后�
 | 成员 | 类型 | 默认 | 含义 |
 | --- | --- | --- | --- |
 | `battle_inline_mode` | bool | true | true=就地战斗(B1) / false=独立场景(B2) |
+| `battle_immersive_presentation`★ | bool | — | **（2026-11-19）沉浸舞台演出开关**：开启且场景可用时战斗结算演出走 `ImmersiveStage`（SubViewport 独立世界），关闭走常规演出层；纯表现，不影响结算 |
 | `set_battle_inline_mode(v)` / `save()` | 方法 | — | 持久化到 `user://settings.cfg` |
 
 ### 表现层 autoload（2026-11 新增三个）
@@ -238,10 +251,12 @@ python3 tools/run_contracts.py --all --run-env-skip --junit            # 全量 
 - `BuildingLayout`（`scripts/core/building_layout.gd`，class_name）是编辑器保存与 loader 共用的占用/重叠**唯一校验实现**（grep 实测 10 文件消费：loader/save_codec/grid_system/编辑器 3 件 + 3 契约）。
 - 内置素材：`medieval_watchtower`、`spacious_house`（`builtin_building_assets.gd` / `builtin_house_assets.gd` + recipe.json，sheet SHA-256 固化在 `docs/building_assets.md`）。
 
-### 图标稳定 ID 契约（`scripts/core/skill_icons.gd` + `status_icons.gd`）
+### 图标稳定 ID 契约（`scripts/core/skill_icons.gd` + `status_icons.gd` + `item_icons.gd` + `equipment_icons.gd`）
 
 - `skill_icons.gd`：iconId `'01'..'53'` 与纹理文件**绑定永不重排**；未知 ID 回退 `DEFAULT_ICON_ID` + `push_warning`（**不返回 null**）。消费者：`skills.gd`（技能表）、图鉴 `skill_list.gd`。
 - `status_icons.gd`：buff 属性 → 图标 ID 推导（纯静态）；消费者：`unit_status_badges.gd`（UnitSprite3D 徽章）+ 契约。
+- `item_icons.gd`★（2026-11-19）：物品 iconId `'01'..'08'` → `assets/ui/items/`，模式同 skill_icons（稳定 ID + 缓存 + DEFAULT_ICON_ID='01' 兜底）；`items.gd` 的 iconId 缺/空/null 由 `_normalize_icon_id` 归一，`item_icon()` 解析。
+- `equipment_icons.gd`★（2026-11-19）：装备 icon_id `'01'..'11'` → `assets/ui/equipment/`，同上模式；消费者：`equipment.gd` / campaign_equipment 弹层。
 
 ## 战场编辑器契约（`scripts/editor/`）
 
@@ -265,7 +280,9 @@ python3 tools/run_contracts.py --all --run-env-skip --junit            # 全量 
 | 脚本 | 形态 | 主要对外接口 |
 | --- | --- | --- |
 | `core/professions.gd` | `class_name ProfessionData` | `load_data()` / `apply_profession()`（power→str/mag、agility→spd）/ `has_profession()` / `growths_for(prof)`（**九键成长** hp,mp,str,mag,skl,spd,luk,def,res；缺键逐键回退 `_GROWTH_FALLBACK`） |
-| `core/skills.gd` / `items.gd` | 静态 | `load_data()` / 查表结算 |
+| `core/equipment.gd`★ | `class_name EquipmentDataScript`（全静态，2026-11-19） | `SLOTS=[weapon,shield,staff,relic]`；`catalog_for(class_id)`（职业+通用过滤）/ `can_equip(unit,entry_id)` / `equipment_of(unit)` / `stat_bonus(unit,key)` / `stat_bonuses(unit)` / **`capacity_hp/capacity_mp(unit)`（容量口径=base+装备、不含 buff）** / `equipped_weapon_id(unit)` / `equip(unit,entry_id)` / `unequip(unit,slot)`（含 `_clamp_vitals`）/ `normalize_unit_equipment(d)`（codec 落盘归一）/ `load_status()/has_entry()/get_entry()/slot_of(id)`；数据源 `data/equipment.json`（11 条） |
+| `core/weapons.gd` | `class_name WeaponData` | 武器三角 / 经验公式 / **`static unit_weapon(unit)`（装备槽优先，空装回退 unit.weapon）** |
+| `core/skills.gd` / `items.gd` | 静态 | `load_data()` / 查表结算；items 另有 `_normalize_icon_id`（缺/空/null→DEFAULT_ICON_ID）+ `item_icon(id)`（item_icons 目录） |
 | `core/weapons.gd` | `class_name WeaponData` | 武器三角 / 经验公式 |
 | `core/terrain.gd` | `class_name TerrainData` | 地形 def/avoid/move_cost/walkable 查表（11 地形） |
 | `core/unit.gd` | 静态 | UnitData 构造 + 默认成长率 |
@@ -300,6 +317,7 @@ python3 tools/run_contracts.py --all --run-env-skip --junit            # 全量 
 | `action_anim.gd` | `phase_started(phase, event)` / `impact_presented(impact)` / `float_text_requested(uid, text, color, size)` / `flash_requested(color, dur)` / `finished(event, skipped)` | 行动动画各阶段（回合导演 turn_director 驱动） |
 | `result_presentation.gd` | `nameplate_shown / boss_banner_shown / loot_shown / cheer_requested` | 结算演出同款钩子 |
 | `immersive_camera.gd` | `state_changed` | 沉浸相机状态 |
+| `immersive_stage.gd`★ | `strike_scheduled` / `impact_presented` / `presentation_started` / `presentation_finished`（2026-11-19） | 沉浸舞台演出阶段（battle.gd `await _immersive_stage.present()` 驱动；`Settings.battle_immersive_presentation` 开关） |
 | `editor_canvas.gd` | `cell`（左键/拖动） | 编辑器画笔/填充/橡皮/放置工具解释 |
 
 ## 给 AI / 调试进程的接口（非游戏内）

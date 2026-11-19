@@ -1,6 +1,6 @@
 # 依赖与配置
 
-> 更新：2026-11-18（新增 data/campaign.json + data/shop.json + 建筑 recipe.json；battlefields 6→8；professions 九键成长；Godot 本机版本实测 4.7.1）。
+> 更新：2026-11-19（新增 **data/equipment.json**（装备 11 条）+ `assets/ui/items|equipment/` 图标目录 + `assets/characters/free_character_pack/`；Godot 4.7.1）。上一轮：2026-11-18（campaign.json + shop.json + 建筑 recipe.json；battlefields 6→8；九键成长）。
 
 ## 运行时依赖
 
@@ -57,7 +57,8 @@
 | --- | --- |
 | `data/professions.json` | 8 职业：`swordsman, knight, archer, mage, berserker, assassin, lancer, priest`。**2026-11-18 九键成长**：`growths{hp,mp,str,mag,skl,spd,luk,def,res}`（旧 power→str/mag、agility→spd 由 `ProfessionData.growths_for` 归一，缺键逐键回退 `_GROWTH_FALLBACK`） |
 | `data/skills.json` | 8 技能：`fireball, smite, heal, blizzard, powerSurge, guard, weaken, haste`；每技能 `iconId`（稳定 ID，`skill_icons.gd` 解析） |
-| `data/items.json` | 8 物品：`hpPotion, mpPotion, shuriken, bomb, …` |
+| `data/items.json` | 8 物品：`hpPotion, mpPotion, shuriken, bomb, …`；每物品 `iconId`（稳定 ID '01'..'08'，`item_icons.gd` 解析，缺/空归一 DEFAULT_ICON_ID） |
+| `data/equipment.json`★ | **（2026-11-19 新增）装备目录**：11 条（weapon 6 / shield 2 / staff 1 / relic 2），条目 `{id, name, slot(weapon/shield/staff/relic), stats(九键子集正加成), allowed_professions(空=通用), weapon_id(仅 weapon/staff), icon_id('01'..'11'), acquisition}`；消费方 `EquipmentDataScript`（core/equipment.gd） |
 | `data/campaign.json`★ | **（2026-11-18 新增）冒险模式关卡表**：6 关卡（线性解锁），每关 `first_clear`/`repeat` 奖励（gold/items）+ `loot_table`（独立 RNG，种子=战场 id+出征令牌） |
 | `data/shop.json`★ | **（2026-11-18 新增）营地商店目录**：`{id, price, limit_per_clear}`；限购上限 = `limit_per_clear × completed_levels.size()` |
 | `data/battlefields/*.json` | JSON 战场 ×8：`arena_1v1, plains_skirmish, river_crossing, mountain_pass, last_stand, ambush_reinforce, building_demo, house_interior_demo`。schema 见 `public-interfaces.md`（victory/reinforcements/**buildings** 层）。用户自定义战场放 `user://battlefields/` |
@@ -88,10 +89,14 @@
 
 ```
 meowa_tiles/            世界像素素材（terrain 10 / animals 24 / plants 39 / trees 25 / decorations 4 /
-                       generated/ 程序生成 icon 增量 / heroes 24；heroes 仍待职业映射）
+                       generated/ 程序生成 icon 增量 / heroes 24 + professions_static_manifest.json
+                       （职业切片产物清单，仅 tools/slice_profession_sheets.py 消费）；heroes 仍待职业映射）
 addons/at-icons/node*/  图标库按色系分目录（项目只用 control/）
-assets/                 战棋素材：bg / markers / ui(buttons,cursors,frames,portraits) / units /
-                       buildings/{medieval_watchtower,spacious_house}/（四方向建筑精灵图+recipe.json）
+assets/                 战棋素材：bg / markers / ui(buttons,cursors,frames,portraits + items 8★ +
+                       equipment 11★ 图标) / units / buildings/{medieval_watchtower,spacious_house}/
+                       （四方向建筑精灵图+recipe.json）/ characters/free_character_pack/★
+                       （免费角色包：002..021 共 20 PNG + manifest.json；upstream_example/ 带
+                       .gdignore 归档不参与导入；消费方 scripts/characters/free_character_sheet.gd）
 ```
 
 - 所有 tile 文件与目录统一英文小写 `snake_case`。

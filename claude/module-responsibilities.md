@@ -1,6 +1,6 @@
 # 模块职责
 
-> 更新：2026-11-18（第四轮增量：新增 `scripts/campaign/` 6 .gd 冒险模式子域 + 建筑模块横跨 core/iso/editor/assets + 战斗扩展 facing/pincer/threat/action_history/level_up + 图标契约模块 + map_editor_buildings/units + ui_gallery 拆分 + skill_list；battle.gd 1557→2186、map_editor.gd 1028→1088；scripts 166→173 .gd〔不含根脚本〕）。
+> 更新：2026-11-19（第五轮增量：新增 `scripts/characters/` 角色包子域 + `core/equipment.gd` 装备单一权威 + 物品/装备图标目录 + `battle/immersive_stage*` 沉浸舞台 + 移动测试场景三件 + campaign 装备屏；scripts 173→206 .gd〔含 characters 2〕；battle.gd 2186→2273、campaign_session.gd 973→1044；契约 103→110）。上一轮：2026-11-18（campaign 子域 + 建筑模块 + 战斗扩展 + 图标契约）。
 
 本仓库是**单体 Godot 游戏**。带 `plugin.cfg` 的独立模块只有 `addons/` 下 6 个 vendored 插件（breakpoint_mcp / panku_console / at-icons / pixelfx / gdtest / godot_autosim，中间两者插件未启用）。下表按**源码子域**划分职责，全部归属同一个 Godot 项目。
 
@@ -12,11 +12,12 @@
 | 世界生成 | `scripts/world/`（20 .gd） | 噪声 / Voronoi / 地形采样 / 群系模块 / cell 上下文与状态 / 确定性 RNG / 材质 / 小地图 / 植被放置 / 动物流式 / 生态区匹配 / 物种选择 / 配置校验编译 / 表现装配 / 世界查询 | `terrain_sampler.gd`, `flora_spawner.gd`, `fauna_streamer.gd`, `ecosystem_match.gd`, `presentation_stage.gd` 等 |
 | 生态 | `scripts/ecology/`（8 .gd） | 群落解析、注册表、成员组合、运行时/状态存储、legacy 解码、环境生物 | `ecology_registry.gd`(984), `ecology_resolver.gd`, `community_runtime.gd`(943) |
 | 动物行为 | `scripts/animals/`（1 .gd） | 行为栈（水域/避雪/嗜雪/群体/避人）可组合注册表 | `animal_behavior_registry.gd` |
-| **冒险模式** | `scripts/campaign/`（6 .gd）+ `scripts/scenes/campaign_*.gd`（7 .gd） | **（2026-11-18 新增）** 档案/进度/商店/出征结算会话 + 四屏一层的营地 UI；磁盘安全契约（出征前快照、settle 幂等、掉落独立 RNG） | `campaign_session.gd`(973, autoload), `campaign_profile_codec.gd`(435), `campaign_profile_store.gd`(329), `campaign_config.gd`(340), `campaign_roster.gd`(297), `shop_catalog.gd`(106)；scenes 侧 `campaign_main`(173 装配层)/`campaign_save_select`(437)/`campaign_hub`(416)/`campaign_format`(267)/`campaign_shop`(249)/`campaign_levels`(245)/`campaign_modal`(214) |
-| 战棋核心（纯逻辑） | `scripts/core/`（18 .gd） | 战棋数据 / 规则 / 职业九键成长 / **技能与状态图标** / 世界→chapter 适配 / JSON 战场加载（含 victory/reinforcements/**buildings**）/ 存档编解码与落盘 / 增援刷入 / **建筑布局与室内布局** | `enums.gd`, `unit.gd`, `professions.gd`(九键 growths), `skill_icons.gd`(稳定 ID), `status_icons.gd`, `world_to_chapter.gd`, `battlefield_loader.gd`, `battle_save_codec.gd`, `battle_save_store.gd`, `block_layout.gd`, `building_layout.gd`(194), `building_interior.gd`(93), `reinforcement_spawner.gd` |
+| **冒险模式** | `scripts/campaign/`（6 .gd）+ `scripts/scenes/campaign_*.gd`（8 .gd） | 档案/进度/商店/出征结算/**装备四槽**会话 + 营地 UI；磁盘安全契约（出征前快照、settle 幂等、掉落独立 RNG） | `campaign_session.gd`(1044, autoload, +equip/unequip), `campaign_profile_codec.gd`(435, +equipment 归一), `campaign_profile_store.gd`(329), `campaign_config.gd`(340), `campaign_roster.gd`(297, 容量走 capacity_hp/mp), `shop_catalog.gd`(106)；scenes 侧 `campaign_main`(173 装配层)/`campaign_save_select`(437)/`campaign_hub`(416)/`campaign_format`(267)/`campaign_shop`(249)/`campaign_levels`(245)/`campaign_equipment`(397)★装备弹层/`campaign_modal`(214) |
+| **角色包**★ | `scripts/characters/`（2 .gd） | **（2026-11-19 新增）**免费角色包（20 角色 002..021，64×64 sheet）的切片表与帧动画驱动 | `free_character_sheet.gd`(169, class_name FreeCharacterSheet, PACK_PATH=res://assets/characters/free_character_pack/), `free_character_animator.gd`(124) |
+| 战棋核心（纯逻辑） | `scripts/core/`（21 .gd） | 战棋数据 / 规则 / 职业九键成长 / **技能·状态·物品·装备四图标目录** / **装备四槽（EquipmentDataScript 单一权威）** / 世界→chapter 适配 / JSON 战场加载（含 victory/reinforcements/**buildings**）/ 存档编解码与落盘 / 增援刷入 / **建筑布局与室内布局** | `enums.gd`, `unit.gd`, `professions.gd`(九键 growths), `skill_icons.gd`(稳定 ID), `status_icons.gd`, `item_icons.gd`★, `equipment_icons.gd`★, `equipment.gd`(456)★, `world_to_chapter.gd`, `battlefield_loader.gd`, `battle_save_codec.gd`, `battle_save_store.gd`, `block_layout.gd`, `building_layout.gd`(194), `building_interior.gd`(93), `reinforcement_spawner.gd` |
 | 战棋系统 | `scripts/systems/`（14 .gd） | 战斗结算各子系统（全静态或独立 Node）+ AI 难度 + 攻击事件 + 注入式胜利判定 + 相邻交换 + **背击/夹击规则** + **威胁预测数据** | `grid_system.gd`, `combat_system.gd`, `skill_system.gd`, `item_system.gd`, `buff_system.gd`, `turn_manager.gd`, `enemy_ai.gd`, `player_ai.gd`, `ai_difficulty*.gd`, `attack_event.gd`, `trade_system.gd`, `facing_rules.gd`(背击), `pincer_rules.gd`(夹击追击), `battle_threat_data.gd`(只读威胁) |
 | 等距/3D 渲染层 | `scripts/iso/`（17 .gd） | 主世界 3D 投影/相机/柱地形 + 战棋等距坐标 + JSON 战场方块渲染 + **建筑视图/室内/遮挡** + **单位状态徽章** + 角色面板 | `iso_projection_3d.gd`, `isometric_camera_3d.gd`, `isometric_terrain_3d.gd`, `battlefield_renderer.gd`(1058), `building_interior_view.gd`(97), `building_occlusion_controller.gd`(89), `unit_status_badges.gd` |
-| 战棋场景编排 | `scripts/scenes/`（20 .gd）+ `scripts/battle/`（26 .gd 含 automation 3） | 战斗/标题/编辑器/会话/campaign 入口场景生命周期；UI / 范围层 / 回合编排 / 沉浸演出 / **行动历史** / **升级演出** / **出征桥接** / 声明式自动化；battle.gd 2026-11-18 扩到 **2186 行**（+行动历史【记录】Tab@619,651、campaign 结算接线） | `scenes/battle.gd`, `scenes/game_entry.gd`, `scenes/game_session.gd`, `battle/battle_ui.gd`, `battle/turn_director.gd`, `battle/battle_action_resolver.gd`★共享结算内核, `battle/battle_action_history.gd`, `battle/level_up_presentation.gd`, `battle/campaign_battle_bridge.gd`, `battle/automation/` |
+| 战棋场景编排 | `scripts/scenes/`（24 .gd）+ `scripts/battle/`（28 .gd 含 automation 3） | 战斗/标题/编辑器/会话/campaign/移动测试入口场景生命周期；UI / 范围层 / 回合编排 / 沉浸演出 / **沉浸舞台（ImmersiveStage）** / **行动历史** / **升级演出** / **出征桥接** / 声明式自动化；battle.gd 2026-11-19 扩到 **2273 行**（+ImmersiveStage 接线 `_use_immersive_stage()`/`await present()`/4 信号） | `scenes/battle.gd`, `scenes/game_entry.gd`, `scenes/game_session.gd`, `battle/battle_ui.gd`, `battle/turn_director.gd`, `battle/battle_action_resolver.gd`★共享结算内核, `battle/immersive_stage.gd`(528)★SubViewport 独立世界演出, `battle/immersive_stage_layout.gd`(208)★, `battle/battle_action_history.gd`, `battle/level_up_presentation.gd`, `battle/campaign_battle_bridge.gd`, `battle/automation/`, `scenes/campaign_equipment.gd`(397)★, `scenes/character_movement_test.gd`(532, extends main.gd)★+配套 `character_movement_terrain_3d.gd`(52)/`character_movement_fauna_streamer.gd`(168) |
 | **战场编辑器** | `scripts/editor/`（28 .gd） | 编辑器文档模型 + 画布 + 用户素材面板 + 区域剪贴板/预设 + **建筑摆放** + **角色编辑（map_editor_units）** | `battlefield_doc.gd`, `editor_canvas.gd`, `asset_library_panel.gd`(983), `region_clipboard.gd`, `map_editor_buildings.gd`(120), `map_editor_units.gd` 等 15 `map_editor_*` 模块 |
 | **用户素材系统** | `scripts/assets/`（5 .gd） | 本地导入（sha 去重 blob）/ 网络清单 / 素材→渲染适配 / **内置建筑素材目录**（watchtower/house） | `user_asset_service.gd`, `user_asset_catalog.gd`, `user_asset_visual_adapter.gd`, `builtin_building_assets.gd`, `builtin_house_assets.gd` |
 | 音效 | `scripts/audio/game_sfx.gd` | autoload `Sfx`（UI/战斗/回合/胜负/脚步；`level_up_presentation` 经 `sound_requested` 信号接入不直连） | `game_sfx.gd` |
@@ -26,7 +27,7 @@
 | 对话系统（演示） | `scripts/scenes/dialogue_demo.gd` + `data/dialogue/` | 分支对话 JSON 演示 | `dialogue_demo.gd` |
 | 技能图鉴 | `scripts/scenes/skill_list.gd`（190 行）+ `scenes/SkillList.tscn` | 27+ 技能卡片浏览（Title 按钮进入） | `skill_list.gd` |
 | 调试命令 | `scripts/debug_console_commands.gd` | Panku `dbg.*` 命令集 | — |
-| 自测 | `tests/`（115 .gd + 5 探针）+ `scripts/tests/` | headless 契约测试（**103 项 manifest 驱动**）+ gdtest 试点 + 基准/批量模拟 + Node 契约 | 见 `testing-and-quality.md` |
+| 自测 | `tests/`（122 .gd + 5 探针）+ `scripts/tests/` | headless 契约测试（**110 项 manifest 驱动**）+ gdtest 试点 + 基准/批量模拟 + Node 契约 | 见 `testing-and-quality.md` |
 | vendored ×6 | `addons/` | breakpoint_mcp（调试桥）/ panku_console（REPL）/ at-icons（SVG）/ pixelfx（特效）/ gdtest（Rust CLI 运行时）/ godot_autosim（对局模拟） | 独立 README/CLAUDE.md |
 
 ## 三条数据流（理解全局必读）
@@ -61,6 +62,9 @@ battle.gd._ready 读 SceneArgs.battle_args
   → 状态机 Mode(...) → TurnDirector 编排 AI（threat 数据辅助）
   → 攻击结算出 AttackEvent（facing_rules 背击 / pincer_rules 夹击追击判定在 resolver 内）
     → BattlePresentation 驱动动画/特效(PixelFx)/音效(Sfx)
+    → 【可选】Settings.battle_immersive_presentation 开启时
+       攻击演出改走 ImmersiveStage.present()（SubViewport 独立世界，
+       纯表现不影响 resolver 结算；2026-11-19）
   → BattleActionHistory 记录整场行动（【记录】Tab 查看/回退，跨回合）
   → 升级时机 → LevelUpPresentation 演出（sound_requested → Sfx）
   → 回合结束 check_victory(enemies+未到点增援, ctx) 判 rout/defend_turns/seize
@@ -116,4 +120,4 @@ main.gd._enter_battle* / CampaignSession.prepare_battle  （世界侧/冒险侧�
 
 `world_to_chapter.gd` 是**世界 ↔ 战棋的唯一耦合点**（读 TerrainSampler/CellContext，输出 chapter Dictionary）。`battlefield_loader.gd` 是 JSON 战场侧的平行入口（campaign 关卡也走它加载 data/battlefields/*.json），二者互不依赖。`scripts/battle/automation/`、`battle.gd` 与 8 个战斗契约测试共享 `battle_action_resolver.gd` 结算内核（同一套规则做无表现回放，含背击/夹击/掉落）。
 
-**模块契约（2026-11-16 拆分定形，2026-11-18 延续）**：`scripts/world/`、`scripts/editor/map_editor_*`、`scripts/battle/` 演出/UI 模块、`scripts/iso/` 绘制通道、**2026-11-18 新增的 `scripts/campaign/` 与 `campaign_*` 屏**均为 `class_name + extends RefCounted`（少量 static，或无 class_name 纯 preload），依赖只进不出（Callable 注入回调，无反向依赖 main.gd / 场景节点）。行为护栏：拆分期间 `terrain_generation` SHA-256 每批零漂移、`map_editor_region_ops` L1 埋点序列逐行一致。**继续拆分的规则**：新能力先进模块再挂装配层；装配层里保留的是测试直调所需的同名薄委托，不要内联回逻辑。
+**模块契约（2026-11-16 拆分定形，2026-11-19 延续）**：`scripts/world/`、`scripts/editor/map_editor_*`、`scripts/battle/` 演出/UI 模块（含 immersive_stage*）、`scripts/iso/` 绘制通道、`scripts/campaign/` 与 `campaign_*` 屏、**`scripts/characters/`（FreeCharacterSheet/Animator，2026-11-19）**均为 `class_name + extends RefCounted`（少量 static，或无 class_name 纯 preload），依赖只进不出（Callable 注入回调，无反向依赖 main.gd / 场景节点）。行为护栏：拆分期间 `terrain_generation` SHA-256 每批零漂移、`map_editor_region_ops` L1 埋点序列逐行一致。**继续拆分的规则**：新能力先进模块再挂装配层；装配层里保留的是测试直调所需的同名薄委托，不要内联回逻辑。装备规则同理：**只改 `core/equipment.gd`，消费方（buff_system 加成口径 / weapons unit_weapon / campaign_roster 容量口径）各一行委托，勿在演出或 UI 层复写装备规则**。

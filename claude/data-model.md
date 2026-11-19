@@ -1,6 +1,6 @@
 # 数据模型
 
-> 更新：2026-11-18（新增冒险模式档案模型 + 掉落独立 RNG + 升级差分；UnitData `facing`；chapter `buildings` 层；九键成长回退；建筑占用模型）。
+> 更新：2026-11-19（新增**装备系统模型**：unit.equipment 四槽 + data/equipment.json 条目 + 加成/容量双口径；items iconId 归一；ImmersiveStage 舞台态）。上一轮：2026-11-18（冒险档案 + 掉落独立 RNG + 升级差分 + facing + buildings + 九键成长）。
 
 本项目无数据库 / 无网络持久层。"数据模型"指**运行时领域对象**（多为 GDScript Dictionary，全 StringName key）、**流式生成的世界状态**与 **3D 正交渲染结构**。
 
@@ -86,19 +86,29 @@
   stats: { hp, mp, str, mag, skl, spd, luk, def, res, mov },  # mp 即 MP 上限
   growths: { hp, mp, str, mag, skl, spd, luk, def, res },
   facing: Vector2i,        # 朝向（2026-11-18）：ZERO=无朝向永不判背击（兼容旧档）
-  weapon: <Weapon dict>, items: [...], skills: [...] }
+  weapon: <Weapon dict>, items: [...], skills: [...],
+  equipment: { weapon?, shield?, staff?, relic? } }  # 装备槽→条目 id（2026-11-19；缺省=空）
 ```
 - `faction`：`Enums.FACTION_PLAYER` / `FACTION_ENEMY`（`core/enums.gd`，StringName）。
 - `power` 统一表示主攻击属性，`apply_profession` 按武器类型写 `str`（物理）或 `mag`（魔法）。
 - `facing`（背击规则 `facing_rules.gd`）：受击者朝向与"指向攻击者"方向点积 < 0 → 背击加成；旧档无 facing（= `Vector2i.ZERO`）时永不判背击。
+- `equipment`（2026-11-19）：四槽 `weapon/shield/staff/relic` → `data/equipment.json` 条目 id；档案权威实现 `EquipmentDataScript.equipment_of(unit)`（旧档无 equipment 键视作空装，归一由 `normalize_unit_equipment` 落盘时钩入 codec）。**实际武器 = `WeaponData.unit_weapon(unit)`（装备 weapon/staff 槽优先，空装回退 `unit.weapon`）**。
 
 ### `Weapon`（`core/weapons.gd`）
 `{ id, name, type, might, hit, crit, range:[min,max]|int, weight, uses }`
 - 武器三角（`WEAPON_TRIANGLE`）+ 三角修正（`TRIANGLE_MODIFIER`）+ 经验公式。
+- `static unit_weapon(unit)`（2026-11-19）：装备槽优先解析实际武器（weapon/staff 槽的 `weapon_id`），空装回退 `unit.weapon`。
+
+### 装备条目模型（`core/equipment.gd` + `data/equipment.json`，2026-11-19 新增）
+
+- **SLOTS**：`[weapon, shield, staff, relic]`；条目 `{ id, name, slot, stats(九键子集，不含 mov，正加成), allowed_professions(空=通用), weapon_id(仅 weapon/staff 槽，指向 weapons.json), icon_id, acquisition }`。
+- `data/equipment.json` v1 共 **11 条**（weapon 6 / shield 2 / staff 1 / relic 2；icon_id '01'(ironSword)..'11'(luckyPendant)）。
+- `EquipmentDataScript`（class_name，全静态）单一权威：`catalog_for(class_id)`（职业过滤+通用）/ `can_equip(unit, entry_id)` / `equipment_of(unit)` / `stat_bonuses / stat_bonus(unit, key)` / `capacity_hp / capacity_mp`（**容量口径：base+装备、不含 buff**）/ `equipped_weapon_id` / `equip / unequip`（含 `_clamp_vitals` 防降装压死）/ `normalize_unit_equipment`（codec 落盘归一钩子）/ `load_status / has_entry / get_entry / slot_of`。
+- **双口径约定**：战斗内 buff 加成 = `base + EquipmentData.stat_bonus`（`buff_system.gd`）；HP/MP 容量上限 = `base + 装备`（不含 buff）——两处勿混用。
 
 ### `SkillData` / `ItemData` / `ProfessionData` / `TerrainData`（`core/*.gd`）
 - Skill：`type(damage/heal/aoe/buff/debuff), element, range, targetType, mpCost, cooldown, power, hitBonus, stat, buffValue, buffTurns`
-- Item：`type(consumable/throwable/equip/buff), target, effect(heal_hp/heal_mp/damage/buff/cleanse/equip), power, range, uses, ...`
+- Item：`type(consumable/throwable/equip/buff), target, effect(heal_hp/heal_mp/damage/buff/cleanse/equip), power, range, uses, iconId('01'..'08'→item_icons)`（2026-11-19 起 iconId 缺/空/null 归一为 DEFAULT_ICON_ID，`items.gd item_icon()` 解析）
 - Profession：`power, agility→spd, attack_range`（职业固有射程优先于武器）+ **九键成长 `growths`**（hp,mp,str,mag,skl,spd,luk,def,res；power→str/mag、agility→spd 同样适用；`growths_for(prof)` 缺键逐键回退 `_GROWTH_FALLBACK`）
 - Terrain：`{ type, def_bonus, avoid_bonus, move_cost:{foot,armor,cavalry,flying}, walkable }`，`move_cost=99` 不可通行。**11 种地形**：`plain, grass, sand, snow, rocky, forest, water, village, fort, wall, mountain`。
 
@@ -137,6 +147,11 @@
 - 状态机 `Mode`：`IDLE | UNIT_SELECTED | MOVING | MENU | ENEMY_TURN | ANIMATING`。
 - `_unit_sprites`、`current_move_range`、`current_attack_tiles`、`cursor_pos`、`_pending_move_undo`。
 - `TurnDirector`：敌方 AI 回合 + 玩家托管编排 + 偏好数据（`key=unitId → {priorityTargetId, strategy}`）。
+- **沉浸舞台态（2026-11-19）**：`Settings.battle_immersive_presentation` 开启且 `_use_immersive_stage()` 命中时，battle.gd 挂 `ImmersiveStage.tscn`（SubViewport own_world_3d 独立世界 + 代理相机），`await _immersive_stage.present(...)` 驱动 strike/impact 演出（信号 `strike_scheduled / impact_presented / presentation_started / presentation_finished`）；单位精灵经 `unit_sprite.gd setup_stage()` 第三初始化路径进舞台。**舞台是纯表现**：结算仍走 resolver，关舞台零影响。
+
+### 人物移动测试场景状态（scenes/CharacterMovementTest.tscn，2026-11-19 新增）
+- `character_movement_test.gd` **extends main.gd**：继承真实世界装配（流式生成/生态/昼夜/天气），叠加测试台——WASD 网格移动（最后按轴优先、不斜穿）、Q/X 旋转、K/L 切换角色 002..021（FreeCharacterSheet）、U/I/J/H 动作预览；`P/O/E` 战斗/战场/编辑器入口在该场景已隔离；动态注册 `character_test_left/right/up/down` 输入动作。
+- 配套子类：`character_movement_terrain_3d.gd`（FLUSH_BUDGET 8000usec/12 chunks 高预算冲刷）+ `character_movement_fauna_streamer.gd`（动物流式扩展）。权威文档 `docs/character_movement_test.md`。
 
 ### 战场地形高度规则（`battlefield_renderer.gd`）
 
@@ -155,7 +170,8 @@
 
 ## 冒险模式档案模型（`scripts/campaign/`，2026-11-18 新增）
 
-- **profile**（`campaign_profile_codec.gd`，version=1）：`{ id, name, created_at, updated_at, difficulty, gold, roster:[UnitData...], inventory:[{itemId,count}], completed_levels:[levelId...], purchases:{itemId:count}, pending:{ token, level_id, snapshot }?, last_result? }`。存档 `user://campaign_saves/<profile_id>.json`（tmp+bak 原子写，主/bak 双层读取自恢复——`_resolve_codec_layers`）。
+- **profile**（`campaign_profile_codec.gd`，version=1）：`{ id, name, created_at, updated_at, difficulty, gold, roster:[UnitData...（含 equipment 四槽，落盘经 EquipmentDataScript.normalize_unit_equipment 归一）], inventory:[{itemId,count}], completed_levels:[levelId...], purchases:{itemId:count}, pending:{ token, level_id, snapshot }?, last_result? }`。存档 `user://campaign_saves/<profile_id>.json`（tmp+bak 原子写，主/bak 双层读取自恢复——`_resolve_codec_layers`）。
+- **装备操作**（2026-11-19，`CampaignSession.equip_item@512 / unequip_item@540`）：走先落盘后内存，幂等校验 `can_equip`；roster 吸收/补满的 HP/MP 上限按 `capacity_hp/capacity_mp`（base+装备）。
 - **出征事务**：`prepare_battle(level_id)` 先落盘"出征前快照 + `pending.token`"再进战斗（磁盘永远是安全态，重载即恢复出征前）；`settle_battle(token, result, chapter)` 一个令牌**只结算一次**（幂等），胜利走 `_settle_win`（首通/重复奖励 + 掉落 + 升级差分），失败/弃权走 `_settle_restore`。
 - **掉落独立 RNG**：种子 = 战场 id + 出征令牌（`_victory_loot`），**不触战斗全局随机流**；`loot_table` 定义在 `data/campaign.json` 各关卡。
 - **level_ups**：`_diff_level_ups(before_roster, after_roster)` 比对出征前后 roster 的等级差分，写进胜利 receipt，由 `level_up_presentation` 在战斗内演出。

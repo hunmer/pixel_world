@@ -172,6 +172,21 @@ func _run() -> void:
 	)
 	check(load_b.focus_mode == Control.FOCUS_ALL, "03 其余背景控件焦点仍恢复")
 
+	# ③c 原焦点已释放：必须能进入共享判活函数并完成 close/chosen。
+	var previous_focus := Control.new()
+	previous_focus.focus_mode = Control.FOCUS_ALL
+	root.add_child(previous_focus)
+	previous_focus.grab_focus()
+	rename_btn.pressed.emit()
+	await process_frame
+	modal = campaign.find_child("CampaignModal", true, false)
+	check(modal.get("_previous_focus") == previous_focus, "03 弹窗记录打开前焦点")
+	previous_focus.free()
+	(modal.find_child("Action_cancel", true, false) as Button).pressed.emit()
+	await process_frame
+	check(campaign.find_child("CampaignModal", true, false) == null, "03 原焦点已释放仍完成弹窗关闭")
+	check(not bool(campaign.call("modal_open")), "03 原焦点已释放仍清除模态状态")
+
 	# ④ 重命名流程。
 	rename_btn.pressed.emit()
 	await process_frame
@@ -345,6 +360,21 @@ func _run() -> void:
 	check(campaign.find_child("CampaignEquipment", true, false) == null, "09 关闭后弹层移除")
 	var equip_restored: Control = root.gui_get_focus_owner()
 	check(equip_restored != null and equip_restored.name == "SaveNowBtn", "09 关闭后焦点还原 Hub")
+	# 真实角色行持有焦点后打开弹层；背景刷新释放原行，复现关闭时报 freed 类型错误。
+	var previous_unit_row: Button = campaign.find_child("UnitRow_0", true, false) as Button
+	previous_unit_row.grab_focus()
+	previous_unit_row.pressed.emit()
+	await process_frame
+	equip_panel = campaign.find_child("CampaignEquipment", true, false)
+	check(equip_panel.get("_previous_focus") == previous_unit_row, "09 装备弹层记录角色行焦点")
+	hub.call("refresh")
+	await process_frame
+	await process_frame
+	check(not is_instance_valid(previous_unit_row), "09 背景刷新已释放原焦点角色行")
+	(equip_panel.find_child("EquipCloseBtn", true, false) as Button).pressed.emit()
+	await process_frame
+	check(campaign.find_child("CampaignEquipment", true, false) == null, "09 原焦点已释放仍完成装备弹层关闭")
+	check(not bool(campaign.call("modal_open")), "09 原焦点已释放仍清除装备模态状态")
 	(campaign.find_child("ItemRow_0", true, false) as Button).pressed.emit()
 	await process_frame
 	modal = campaign.find_child("CampaignModal", true, false)

@@ -2,6 +2,16 @@
 
 > 本文件记录 `CLAUDE.md` 索引本身的生成 / 更新，**不是产品 Changelog**。仅保留最近 5 条（倒序）。
 
+## 2026-11-19（第五轮增量：装备系统 + 免费角色包/移动测试 + 沉浸舞台，110 契约基线）
+
+- **触发**：`/init-project` 增量扫描。自 11-18 基线（e7ed380）以来 253 文件 +11770/−1275，四大主题：①装备系统（四槽 + campaign 装备屏）②免费角色包与职业切片工具 ③人物移动测试场景 ④ImmersiveStage 沉浸舞台 + 物品/装备图标两目录。
+- **代码事实**：`core/equipment.gd`(456, EquipmentDataScript 全静态单一权威) + `data/equipment.json`(11 条) + `campaign_equipment.gd`(397 弹层)；`scripts/characters/`（FreeCharacterSheet 169 + Animator 124，20 角色 002..021）+ `tools/slice_profession_sheets.py`(+test)；`scenes/CharacterMovementTest.tscn`（extends main.gd 测试台 + terrain_3d/fauna_streamer 两个子类）；`battle/immersive_stage.gd`(528)+`layout`(208)+`ImmersiveStage.tscn`（SubViewport own_world_3d，battle.gd 2186→2273 接线，`Settings.battle_immersive_presentation` 开关）；图标 `item_icons`(01..08)/`equipment_icons`(01..11) 沿用 skill_icons 模式；campaign_session 973→1044（equip_item@512/unequip_item@540）。
+- **feature_map**：新增顶级类 **characters 🧍**（pack + movement）；battle.present/battle.data/battle.icons/campaign.hub/campaign.session/debug.pipeline 扩容；**收录 447/447 = 100%**（`feature_map.py all` check 全过，HTML 582305 字节）。
+- **测试口径**：manifest **103→110 项**（+equipment/equipment_integration/equipment_icons/item_icons/free_character_sheet/immersive_stage/character_movement_test，全过）；**macOS 全量基线 pass 105 / fail 0 / env-skip 5 / timeout 0**（Godot 4.7.1，HEAD e3df43b，`.tmp/init_baseline_2026-11-19/`）。**发现：盘上 119 个契约中 8 个未录 manifest**（清单见 faq.md Q34，runner 每次告警；campaign_battle_integration 在 probes 区属误报）。
+- **report.md 重写**：装备单一权威零复写（8 文件消费）、新代码无 ≥100 行函数（最长 present 60）；观察项 battle.gd 2273/122 函数（连续两轮 +100 行级）、campaign_session 1044/_settle_win 93 建议抽 campaign_settlement；复用计数刷新（ui_factory 40、resolver 10、BuildingLayout 9、EquipmentDataScript 8、FreeCharacterSheet 5）。
+- **文档更新 12 件**：file-map / testing-and-quality / report / data-model / public-interfaces / dependencies-and-config / entrypoints / module-responsibilities / overview / faq(+Q30-Q34) / conventions / CLAUDE.md；feature_map.json+.html。
+- **环境事实**：`config/startup.cfg` last_scene=CharacterMovementTest.tscn；`handoff/immersive-battle-presentation.md` 已重写为舞台权威交接；`docs/roadmap.md` 11-19 清理版（P0-1/3、P1-3/4 前半、P3-13 第一波归档）。
+
 ## 2026-11-18（第四轮增量：冒险模式 + 建筑子系统入册，103 契约基线）
 
 - **触发**：自上轮（11-17）起 36+ commits / 302 文件变更，最大两项=冒险模式子系统落地（主入口改 `Campaign.tscn`、autoload 8→9）与建筑/室内子系统。
@@ -41,19 +51,3 @@
 - **验收**：全量 80 契约 **70 pass / 5 known-fail / 5 env-skip，0 新增红**；terrain_generation SHA-256 逐字节一致（`0c3f713b…` samples=16641）；`user_asset_editor` 经 worktree 在改动前 HEAD 复现同 7 失败 → 判定**既有红**（预设 Tab 落地后契约未跟上），manifest 登记 known-fail，Tab 数断言修正 7→8 后余 6 条待核对（断言陈旧 vs 预设功能回归，见 manifest evidence）。
 - **文档**：report.md 覆盖更新（违例标注 ✅/仍开放：main.gd `_unhandled_input`≥4、game_hud 多面板）；file-map（scripts 154→164）、CLAUDE.md（行数/口径 70/5/5/mermaid）、feature_map 收编 10 新文件 + 刷新 7 处行数（scan 新增/消失=0、check 全过、html 已重渲）；changelog 本条。
 - **坑（成员实测）**：GDScript 4.7 调用点不支持命名参数；untyped 宿主上 `:=` 推断会 Parse Error；`run_contracts.py` 并行期必须显式 `--out`。
-
-## 2026-11-16 — 增量更新（三单体拆分 + 测试自动化 + 代码自检 report.md + 图谱刷新）
-
-- **触发**：/init-project 增量更新（上次 2026-11-15 二轮，HEAD=3ba4cf5 → 本轮 dc0b9eb）；用户新增自检项，随后扩展为四组规则并落到 **`claude/report.md`**（init-project skill 已同步加「代码自检」硬性交付物节）。
-- **重大变化**：
-  - **三单体拆分落地**（docs/plans/split_report_2026-11-15.md，SHA-256 零漂移）：main.gd 4319→2283 行/176→128 函数（+11 模块入 scripts/world/，全 RefCounted/静态 + Callable 注入，`_configure_generation_services()@594` 装配）；map_editor.gd 3285→1031 行（+15 个 map_editor_* 模块入 scripts/editor/）；battle.gd 1934→1444 行（+6 模块入 scripts/battle/：camera_kick/fx/pref_panel/result_stage/save/sfx）。
-  - **测试自动化**：`tools/run_contracts.py` 统一契约 runner（manifest 80 契约+2 探针，pass 71/known-fail 4/env-skip 5，自带 27 单测）；`tools/run_simulations.gd`+`simulation_batch.gd` 批量模拟（1000 局 3.6s）；`tests/gdtest/` 试点 3 文件 8 test；`tests/benches/ecology_logic_bench.gd`；手册 `docs/test_automation.md`。
-  - **vendored 4→6**：+`addons/gdtest`（Rust CLI 运行时侧）、+`addons/godot_autosim`（adapter+bot+runner+report 模拟框架）。
-  - **规模**：scripts/ 122→154 .gd（world 12→23 / editor 11→26 / battle 10→16）、tests 80→86 .gd、addons 4→6。
-- **自检交付物 `claude/report.md`**（四组，替代同日早先的 reusability.md——内容已并入 §4）：§1 结构与职责（⚠ isometric_column_batch 1323 / battle_ui 1211 / ecology_registry 1150 / terrain_material_registry 1047 / _compile_ecosystem_config 185 行等违例表）；§2 重复（⚠ ecology legacy 双轨、PixelButton 直用 2 处）；§3 可读性（⚠ _validate_legacy_rules 嵌套≥7、battle._unhandled_input ≥6 等实测清单）；§4 可复用资产 A–F（UI 三层链 17 业务文件 / 共享内核 6 件 / world 11 模块 14 测试直 preload / 编辑器组件 / 测试基础设施 / autoload 8 个）+ 复用守则 6 条。
-- **更新文件**：`claude/` overview / module-responsibilities / public-interfaces / dependencies-and-config / file-map / faq / report（新建，合并并取代 reusability.md〔已删〕）/ entrypoints（行号勘误：_ready@549、battle.gd 1444）/ changelog + 根 `CLAUDE.md`；conventions 与 testing-and-quality 已由前次会话更新，本轮复核未动；data-model 抽查无陈旧引用，未改。
-- **图谱**：`docs/feature_map.json` 收编 27 个新增文件、修正 3 处过期 desc、vendored 补录 gdtest/godot_autosim（4→6）；`feature_map.py all` 复核 **311/311 = 100% 覆盖**，check 全过，html 已重渲（~564KB）。
-- **缺口 / 下一步建议**：① entrypoints.md / data-model.md 本轮仅抽查（无陈旧行号命中，未全文重写）；② `AGENTS.md` 仍写「世界引擎集中在 main.gd / 78 契约」属用户指令文件未动；③ known-fail 4 契约（ui / map_editor_ui 等）修复仍在 roadmap P0。
-
-
-

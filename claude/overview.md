@@ -1,6 +1,6 @@
 # 架构总览
 
-> 更新：2026-11-18（第四轮增量：**冒险模式子系统 + 建筑与室内子系统**；主入口改为 `Campaign.tscn`；autoload 8→9；技能/状态图标契约；测试口径 103 项）。
+> 更新：2026-11-19（第五轮增量：**装备系统**（四槽+双口径）+ **免费角色包/移动测试场景** + **ImmersiveStage 沉浸舞台** + 物品/装备图标目录；契约 110 项）。上一轮：冒险模式 + 建筑室内子系统；主入口 `Campaign.tscn`。
 
 ## 一句话定位
 
@@ -14,6 +14,8 @@ scenes/Campaign.tscn（project.godot 主场景）
   ├─ 营地 Hub：金币 / 公共库存 / 固定队伍（roster）/ 关卡进度
   ├─ 关卡列表（data/campaign.json 6 关，线性解锁）
   ├─ 营地商店（data/shop.json；金币购买，按通关数限购）
+  ├─ 装备屏（campaign_equipment）★：四槽 weapon/shield/staff/relic，
+  │   data/equipment.json 11 条；equip/unequip 先落盘（2026-11-19）
   └─ 出征 → campaign_battle_bridge → SceneArgs.battle_args{campaign_token}
         → scenes/Battle.tscn（战棋 B2）→ 胜/负/弃 → CampaignSession.settle_battle
         → 首通/重复奖励 + loot_table 掉落 + 升级差分 level_ups → 回营地
@@ -21,13 +23,16 @@ scenes/Campaign.tscn（project.godot 主场景）
 世界场景 main.tscn（旧探索入口，Game.tscn 列表进入 / startup.cfg 直跳）
   ├─ TerrainSampler 采样 + 生态群落 → CellState → chunk 3D 柱地形
   ├─ Camera3D 4 正交视角旋转 / 昼夜 / 天气 / 阳光阴影 / 萤火虫 / 音效
-  └─ P → B1 就地战斗（world_to_chapter）｜O → JSON 战场（B2）｜E → 编辑器
+  ├─ P → B1 就地战斗（world_to_chapter）｜O → JSON 战场（B2）｜E → 编辑器
+  └─ CharacterMovementTest.tscn★（2026-11-19）：extends main.gd 的移动测试台
+     （WASD 网格移动 + K/L 切角色包 20 角色 + 动作预览；P/O/E 隔离）
 
 战棋战斗（battle.gd 装配层 + scripts/battle/ 演出/自动化）
   ├─ core/systems 纯逻辑：GridSystem / TurnManager / CombatSystem / 增援 / 胜利条件
-  │   + facing_rules（背击）+ pincer_rules（夹击追击）
+  │   + facing_rules（背击）+ pincer_rules（夹击追击）+ EquipmentDataScript（装备四槽）
   ├─ 演出层：battle_presentation + turn_director + action_anim + immersive_camera
   │          + result_presentation + level_up_presentation（升级弹窗）
+  │          + ImmersiveStage★（SubViewport 独立世界沉浸演出，可开关，纯表现）
   ├─ 行动历史 BattleActionHistory（【记录】Tab，跨回合回退）
   ├─ battle_save.gd（行动边界快照）+ GameSession.commit()（旧逐战场存档）
   └─ 战场渲染：BattlefieldRenderer + 建筑层（BuildingLayout/室内/遮挡）
@@ -36,7 +41,7 @@ scenes/Campaign.tscn（project.godot 主场景）
 ## 三条并行子系统 + 一份设计 bible
 
 1. **世界 / 生态子系统（原 pixel_world）**：`main.gd` 是**装配层与主循环**（2026-11-16 拆分后 2280 行）；`scripts/world/`（20 .gd）、`scripts/ecology/`、`scripts/animals/` 是它装配的能力模块（RefCounted、Callable 注入、无反向依赖）。设计原则是"**新增内容走配置/模块，不要往 main.gd 里加分支**"（见 `config/ecology/README.md`）。
-2. **战棋战斗子系统（从 phaserjs 迁移）**：`scripts/core/`（纯逻辑 + 存档 codec/store + 增援刷入 + 建筑/室内布局）+ `scripts/systems/`（战斗结算 + AI 难度 + 交换 + 背击/夹击规则）+ `scripts/iso/`（等距/3D 渲染层）+ `scripts/battle/`（演出/UI/自动化/出征桥接）+ `scripts/editor/`（战场编辑器模型/画布/区域剪贴板/预设存储/素材面板/建筑/角色编辑）。与世界的唯一耦合点是 `scripts/core/world_to_chapter.gd`。
+2. **战棋战斗子系统（从 phaserjs 迁移）**：`scripts/core/`（纯逻辑 + 存档 codec/store + 增援刷入 + 建筑/室内布局 + **装备四槽 EquipmentDataScript** + **技能/状态/物品/装备四图标目录**）+ `scripts/systems/`（战斗结算 + AI 难度 + 交换 + 背击/夹击规则）+ `scripts/iso/`（等距/3D 渲染层）+ `scripts/battle/`（演出/UI/自动化/出征桥接/**沉浸舞台**）+ `scripts/editor/`（战场编辑器模型/画布/区域剪贴板/预设存储/素材面板/建筑/角色编辑）+ `scripts/characters/`（**免费角色包**切片表与帧动画，2026-11-19）。与世界的唯一耦合点是 `scripts/core/world_to_chapter.gd`。
 3. **冒险模式子系统（2026-11-17/18 新增，当前默认入口）**：`scripts/campaign/`（CampaignSession autoload + 档案 codec/store + 关卡配置 + 队伍 + 商店目录）+ `scripts/scenes/campaign_*.gd`（四屏一层的营地 UI）。权威文档 `docs/campaign_loop.md`：出征令牌 settle 一次、磁盘永远是安全态、掉落独立 RNG、限购周期=通关数。
 4. **`story/`（19 个 .md）**：完整的"古代魔法 + 多国争霸"战旗**设计 bible**（世界観/4 国/13 职业/8 角色/15 章/27 技能/25 道具/UI/音频/成就/新手引导）。注意它是**目标态设计**——当前 `data/` 实现 8 职业/8 技能/8 物品/8 JSON 战场 + campaign 6 关卡，扩张时以 story 文档为准绳（差距清单见 `docs/roadmap.md` 与 `docs/gameplay_gap.md`）。
 
@@ -49,7 +54,9 @@ scenes/Campaign.tscn（project.godot 主场景）
 - **战场渲染统一**：B2 战场与编辑器画布共用 `BattlefieldRenderer`（等距方块柱），地形高度规则：water h1 / plain・forest・village h2 / fort h3 / wall h4 / mountain h5。世界就地战斗的地形映射 `cell_context_to_terrain` 覆盖 11 种中的 **7 种**（roadmap P1-4）。
 - **冒险模式的磁盘安全契约（2026-11-18）**：出征 = 先落盘"出征前快照 + attempt 标记"再进战斗；重载即恢复出征前。`settle_battle(token)` 一个令牌只结算一次（幂等），胜利 receipt 带 `level_ups` 升级差分。商店购买**先落盘后内存**（原子性），限购周期 = `completed_levels.size()`。掉落用**独立 RNG**（种子 = 战场 id + 出征令牌），不触战斗全局随机流。存档在 `user://campaign_saves/`，与旧 `battle_saves/` 完全隔离（campaign 出征 `save_identity` 留空，不写旧档）。
 - **建筑四方向精灵图契约（2026-11-18）**：4:1 横排 sheet（`direction_mode=four_directions`），帧选择 `posmod(camera_quadrant - rotation, 4)`；footprint 1..8，占用格由素材派生（奇数旋转交换 w/h）；`BuildingLayout` 是编辑器保存与 loader 共用的占用/重叠唯一校验实现；sheet 内容 SHA-256 固化在 `docs/building_assets.md`。
-- **图标稳定 ID 契约（2026-11-18）**：`skill_icons.gd` 的 iconId `'01'..'53'` 与文件**绑定永不重排**，未知 ID 显式回退 `DEFAULT_ICON_ID` + push_warning（不返回 null）；`status_icons.gd` 由 buff 属性推导图标 ID。
+- **图标稳定 ID 契约（2026-11-18，2026-11-19 扩到四目录）**：`skill_icons.gd` 的 iconId `'01'..'53'` 与文件**绑定永不重排**，未知 ID 显式回退 `DEFAULT_ICON_ID` + push_warning（不返回 null）；`status_icons.gd` 由 buff 属性推导图标 ID；**物品 `item_icons.gd`（'01'..'08'→assets/ui/items/）与装备 `equipment_icons.gd`（'01'..'11'→assets/ui/equipment/）沿用同一模式**（稳定 ID→显式路径映射 + 缓存 + DEFAULT 兜底）。
+- **装备四槽与双口径（2026-11-19）**：`data/equipment.json`（11 条）+ `core/equipment.gd`（EquipmentDataScript 全静态，**单一权威**：catalog/can_equip/stat_bonus/capacity/equip/unequip/normalize）。三消费方三种口径各一行委托：战斗 buff 加成 = base+stat_bonus（buff_system）、实际武器 = unit_weapon 装备槽优先回退（weapons）、HP/MP 容量 = base+装备不含 buff（campaign_roster）。**勿在演出/UI 层复写装备规则**。
+- **沉浸舞台是纯表现（2026-11-19）**：`ImmersiveStage.tscn`（SubViewport own_world_3d 独立世界）挂 battle.gd，`Settings.battle_immersive_presentation` 可开关；演出走 `await _immersive_stage.present()`，但**结算永远在 battle_action_resolver**，关舞台/关开关对结算零影响。单位入舞台走 `unit_sprite.setup_stage()` 第三初始化路径。交接 `handoff/immersive-battle-presentation.md`。
 - **批量绘制优先**：水、岸浪、天气、飞鸟等高密度元素走批量绘制/受限呈现槽位，避免每格一个 `_process` 节点。
 - **三单体拆分（2026-11-16）**：main.gd（4319→2280 行）、map_editor.gd（3285→1088 行）、battle.gd 从"功能全塞主文件"改为"**装配层 + RefCounted 能力模块**"（模块 Callable 注入、无反向依赖；主文件保留测试直调所需的同名薄委托）。行为护栏：拆分期间 `terrain_generation` SHA-256 每批零漂移、`map_editor_region_ops` L1 埋点序列逐行一致（`docs/plans/split_report_2026-11-15.md`）。
 - **结算内核与表现分离（2026-11）**：`battle_action_resolver.gd` 是 battle.gd、无头自动化（`battle/automation/` + `tools/battle_cli.gd`）与战斗契约测试**共享的行动结算内核**（背击/夹击/掉落判定都进 resolver）。增援刷入同样双链路共用 `reinforcement_spawner.gd`。
