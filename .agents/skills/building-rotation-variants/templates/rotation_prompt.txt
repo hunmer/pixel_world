@@ -1,0 +1,11 @@
+{REF} is a 4-frame rotation sprite sheet of ONE building: the same building rendered 4 times, left to right, each frame rotated 90 degrees clockwise (seen from above) relative to the previous one. Camera is a fixed top-down ORTHOGRAPHIC isometric view (about 30 degree pitch, 45 degree yaw, no perspective, all parallel edges stay parallel), identical in all 4 frames.
+
+Create a NEW VARIANT of this building as the same kind of 4-frame sheet. Keep EXACTLY the same building geometry, footprint size, roof shape, scale, camera angle, frame layout, spacing and position of the building in each frame as the reference. Only change the materials/style: {STYLE}
+
+{EXTRA_RULES}Rotation must match the reference frame by frame (do not mirror, do not reorder):
+- Frame 1: the gable end WITH the front door faces the viewer on the LEFT side; a long eave wall faces the viewer on the right.
+- Frame 2: a long eave wall (no door) on the left; the back gable end WITHOUT door on the right.
+- Frame 3: the back gable end WITHOUT door on the left; the other long eave wall on the right.
+- Frame 4: a long eave wall on the left; the gable end WITH the front door on the RIGHT side.
+
+Pixel-art game sprite style, crisp clean edges, flat even lighting, no cast shadow on ground, no ground tiles, no text, no labels, transparent or pure white background, the 4 buildings evenly spaced in one horizontal row, all the same size.

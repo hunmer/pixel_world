@@ -1,0 +1,142 @@
+﻿{
+  "mode": "create-and-connect",
+  "nodeType": "image",
+  "projectUuid": "8f05da05e6c942508e62ce7b4fd35806",
+  "newNodeKey": "i-SzbvBAEeWh",
+  "reactFlowNode": {
+    "id": "i-SzbvBAEeWh",
+    "type": "image",
+    "data": {
+      "type": "image",
+      "name": "terrain_gen_lib_v1",
+      "url": [],
+      "alt": "图片",
+      "action": "image_generate",
+      "generatorType": "default",
+      "params": {
+        "prompt": "{{Image 1}} is a 3x3 reference sheet of 9 isometric pixel-art TERRAIN BLOCK tiles for a 2D game. Each tile is a small cube-like ground block seen from a fixed isometric camera (2:1 diamond top face, the left and right side faces visible, the top face takes about the upper half of the block), with a chunky low-resolution pixel grid (each tile is only about 32 pixels wide), a limited palette, crisp hard pixel edges, no anti-aliasing, simple soft top-left lighting: the top face is the brightest, the left face is medium and the right face is the darkest, with a slightly darker outline color of the same hue.\n\nCreate a NEW 3x3 sheet in EXACTLY the same style, camera angle, block shape, proportions, pixel size, palette softness and layout: 9 separate blocks, 3 rows by 3 columns, each block centered in its own equal cell with the same size as the reference blocks, and empty space between blocks. The 9 new terrain blocks, in reading order (left to right, top to bottom):\n1. lava rock: dark basalt block with glowing orange lava cracks on top\n2. cracked blue ice\n3. wet mud with small water puddles\n4. grey cobblestone pavement\n5. red clay\n6. loose grey gravel\n7. grass covered with orange autumn leaves\n8. murky green swamp water with lily pads on a dark soil block\n9. purple amethyst crystal rock\n\nEvery block must have the same silhouette and size as the reference blocks. No text, no labels, no numbers, no grid lines, no ground shadow, transparent or pure white background.",
+        "model": "lib-image-2.6-s",
+        "count": 1,
+        "modeType": "image2image",
+        "settings": {
+          "ratio": "1:1",
+          "quality": "high",
+          "resolution": "2K",
+          "frame_size": "512x512"
+        },
+        "advancedSettings": {},
+        "imageListOrder": [
+          "i-2iYCifQ4hq"
+        ],
+        "textList": [],
+        "imageList": [
+          {
+            "nodeId": "i-2iYCifQ4hq",
+            "url": "https://libtv-res.liblib.art/upload-images/0da50723360b4f9cbaaa5fd54e8eb04b/700580f04e5c7180f5c2ac33e338130cdc84e1de.png",
+            "label": "ref_ref_3x3_700580",
+            "width": 960,
+            "height": 960
+          }
+        ],
+        "videoList": [],
+        "audioList": [],
+        "mixedListOrder": [
+          "i-2iYCifQ4hq"
+        ],
+        "background": "transparent"
+      }
+    },
+    "position": {
+      "x": 1200,
+      "y": 14000
+    },
+    "sourcePosition": "right",
+    "targetPosition": "left"
+  },
+  "count": 1,
+  "deletedCount": 0,
+  "createdCount": 1,
+  "deleted": [],
+  "connections": [
+    {
+      "connectionId": "e-id26Y3eEin",
+      "source": "i-2iYCifQ4hq",
+      "target": "i-SzbvBAEeWh"
+    }
+  ],
+  "incomingRecalcNodeKeys": [
+    "i-SzbvBAEeWh"
+  ]
+}
+{
+  "nodeKey": "i-SzbvBAEeWh",
+  "nodeType": "image",
+  "taskId": "20261124152003306092737",
+  "status": 2,
+  "data": {
+    "type": "image",
+    "name": "terrain_gen_lib_v1",
+    "url": [
+      "https://libtv-res.liblib.art/sd-gen-save-img/genius_playground/image/0da50723360b4f9cbaaa5fd54e8eb04b/1039949543_22bc44a87f6149e7bf21351981e04768.png"
+    ],
+    "alt": "图片",
+    "action": "image_generate",
+    "generatorType": "default",
+    "params": {
+      "prompt": "{{Node i-2iYCifQ4hq}} is a 3x3 reference sheet of 9 isometric pixel-art TERRAIN BLOCK tiles for a 2D game. Each tile is a small cube-like ground block seen from a fixed isometric camera (2:1 diamond top face, the left and right side faces visible, the top face takes about the upper half of the block), with a chunky low-resolution pixel grid (each tile is only about 32 pixels wide), a limited palette, crisp hard pixel edges, no anti-aliasing, simple soft top-left lighting: the top face is the brightest, the left face is medium and the right face is the darkest, with a slightly darker outline color of the same hue.\n\nCreate a NEW 3x3 sheet in EXACTLY the same style, camera angle, block shape, proportions, pixel size, palette softness and layout: 9 separate blocks, 3 rows by 3 columns, each block centered in its own equal cell with the same size as the reference blocks, and empty space between blocks. The 9 new terrain blocks, in reading order (left to right, top to bottom):\n1. lava rock: dark basalt block with glowing orange lava cracks on top\n2. cracked blue ice\n3. wet mud with small water puddles\n4. grey cobblestone pavement\n5. red clay\n6. loose grey gravel\n7. grass covered with orange autumn leaves\n8. murky green swamp water with lily pads on a dark soil block\n9. purple amethyst crystal rock\n\nEvery block must have the same silhouette and size as the reference blocks. No text, no labels, no numbers, no grid lines, no ground shadow, transparent or pure white background.",
+      "model": "Lib Image 2.6 Pro",
+      "count": 1,
+      "modeType": "image2image",
+      "settings": {
+        "ratio": "1:1",
+        "quality": "high",
+        "resolution": "2K",
+        "frame_size": "512x512"
+      },
+      "imageListOrder": [
+        "i-2iYCifQ4hq"
+      ],
+      "textList": [],
+      "imageList": [
+        {
+          "nodeId": "i-2iYCifQ4hq",
+          "url": "https://libtv-res.liblib.art/upload-images/0da50723360b4f9cbaaa5fd54e8eb04b/700580f04e5c7180f5c2ac33e338130cdc84e1de.png",
+          "label": "ref_ref_3x3_700580",
+          "width": 960,
+          "height": 960
+        }
+      ],
+      "videoList": [],
+      "audioList": [],
+      "mixedListOrder": [
+        "i-2iYCifQ4hq"
+      ],
+      "background": "transparent"
+    },
+    "taskInfo": {
+      "taskId": "20261124152003306092737",
+      "loading": false,
+      "status": 2,
+      "progressPercent": 100
+    },
+    "resourceMeta": {
+      "items": [
+        {
+          "kind": "image",
+          "width": 2048,
+          "height": 2048
+        }
+      ]
+    },
+    "_resourceMeta": {
+      "items": [
+        {
+          "kind": "image",
+          "width": 2048,
+          "height": 2048
+        }
+      ]
+    }
+  }
+}
+

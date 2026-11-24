@@ -1,0 +1,142 @@
+﻿{
+  "mode": "create-and-connect",
+  "nodeType": "image",
+  "projectUuid": "8f05da05e6c942508e62ce7b4fd35806",
+  "newNodeKey": "i-4JVyikwUqP",
+  "reactFlowNode": {
+    "id": "i-4JVyikwUqP",
+    "type": "image",
+    "data": {
+      "type": "image",
+      "name": "plants_gen_lib_v1",
+      "url": [],
+      "alt": "图片",
+      "action": "image_generate",
+      "generatorType": "default",
+      "params": {
+        "prompt": "{{Image 1}} is a 3x3 reference sheet of 9 small pixel-art PLANT sprites for a cozy 2D top-down / 3/4-view game. Style details: chunky low-resolution pixel art (each plant is only about 15-45 pixels tall), every pixel is a crisp hard square, no anti-aliasing, no blur, limited soft palette, a slightly darker same-hue outline around each plant, simple soft lighting from the top-left (lighter leaf tips and upper-left edges, darker lower-right), plants viewed from a slight 3/4 front angle and standing on an invisible ground line at the bottom of their cell, a few have a tiny patch of sand or soil at the base.\n\nCreate a NEW 3x3 sheet in EXACTLY the same pixel-art style, pixel size, outline, palette softness, viewing angle and layout: 9 separate plants, 3 rows by 3 columns, each plant bottom-centered in its own equal cell with plenty of empty space around it, no plant touching another or the cell border. Keep the plants at a similar pixel scale to the reference (small plants small, tall plants at most like the tallest reference plant). The 9 new plants, in reading order (left to right, top to bottom):\n1. a lush green fern with arching fronds\n2. cattail reeds: a tall clump of thin green reeds with brown cattail heads\n3. a small round blueberry bush with blue berries\n4. a single tall sunflower with a big yellow flower head\n5. a cluster of three red tulips\n6. a cluster of glowing cyan-blue fantasy mushrooms\n7. a tiny young pine tree sapling\n8. a clump of white daisies with yellow centers\n9. an aloe vera plant with thick spiky pale green leaves\n\nNo text, no labels, no numbers, no grid lines, no ground tiles, no drop shadows, transparent or pure white background.",
+        "model": "lib-image-2.6-s",
+        "count": 1,
+        "modeType": "image2image",
+        "settings": {
+          "ratio": "1:1",
+          "quality": "high",
+          "resolution": "2K",
+          "frame_size": "512x512"
+        },
+        "advancedSettings": {},
+        "imageListOrder": [
+          "i-ysyONfzGWL"
+        ],
+        "textList": [],
+        "imageList": [
+          {
+            "nodeId": "i-ysyONfzGWL",
+            "url": "https://libtv-res.liblib.art/upload-images/0da50723360b4f9cbaaa5fd54e8eb04b/b3b326533f873fb99ef0cad4c2058cc705fc572c.png",
+            "label": "ref_ref_3x3_B3B326",
+            "width": 1056,
+            "height": 1056
+          }
+        ],
+        "videoList": [],
+        "audioList": [],
+        "mixedListOrder": [
+          "i-ysyONfzGWL"
+        ],
+        "background": "transparent"
+      }
+    },
+    "position": {
+      "x": 1200,
+      "y": 16000
+    },
+    "sourcePosition": "right",
+    "targetPosition": "left"
+  },
+  "count": 1,
+  "deletedCount": 0,
+  "createdCount": 1,
+  "deleted": [],
+  "connections": [
+    {
+      "connectionId": "e-A8B2U6GYry",
+      "source": "i-ysyONfzGWL",
+      "target": "i-4JVyikwUqP"
+    }
+  ],
+  "incomingRecalcNodeKeys": [
+    "i-4JVyikwUqP"
+  ]
+}
+{
+  "nodeKey": "i-4JVyikwUqP",
+  "nodeType": "image",
+  "taskId": "20261124155603287702737",
+  "status": 2,
+  "data": {
+    "type": "image",
+    "name": "plants_gen_lib_v1",
+    "url": [
+      "https://libtv-res.liblib.art/sd-gen-save-img/genius_playground/image/0da50723360b4f9cbaaa5fd54e8eb04b/1040100493_8926d9b6ddf643ef800c0e9a954e7904.png"
+    ],
+    "alt": "图片",
+    "action": "image_generate",
+    "generatorType": "default",
+    "params": {
+      "prompt": "{{Node i-ysyONfzGWL}} is a 3x3 reference sheet of 9 small pixel-art PLANT sprites for a cozy 2D top-down / 3/4-view game. Style details: chunky low-resolution pixel art (each plant is only about 15-45 pixels tall), every pixel is a crisp hard square, no anti-aliasing, no blur, limited soft palette, a slightly darker same-hue outline around each plant, simple soft lighting from the top-left (lighter leaf tips and upper-left edges, darker lower-right), plants viewed from a slight 3/4 front angle and standing on an invisible ground line at the bottom of their cell, a few have a tiny patch of sand or soil at the base.\n\nCreate a NEW 3x3 sheet in EXACTLY the same pixel-art style, pixel size, outline, palette softness, viewing angle and layout: 9 separate plants, 3 rows by 3 columns, each plant bottom-centered in its own equal cell with plenty of empty space around it, no plant touching another or the cell border. Keep the plants at a similar pixel scale to the reference (small plants small, tall plants at most like the tallest reference plant). The 9 new plants, in reading order (left to right, top to bottom):\n1. a lush green fern with arching fronds\n2. cattail reeds: a tall clump of thin green reeds with brown cattail heads\n3. a small round blueberry bush with blue berries\n4. a single tall sunflower with a big yellow flower head\n5. a cluster of three red tulips\n6. a cluster of glowing cyan-blue fantasy mushrooms\n7. a tiny young pine tree sapling\n8. a clump of white daisies with yellow centers\n9. an aloe vera plant with thick spiky pale green leaves\n\nNo text, no labels, no numbers, no grid lines, no ground tiles, no drop shadows, transparent or pure white background.",
+      "model": "Lib Image 2.6 Pro",
+      "count": 1,
+      "modeType": "image2image",
+      "settings": {
+        "ratio": "1:1",
+        "quality": "high",
+        "resolution": "2K",
+        "frame_size": "512x512"
+      },
+      "imageListOrder": [
+        "i-ysyONfzGWL"
+      ],
+      "textList": [],
+      "imageList": [
+        {
+          "nodeId": "i-ysyONfzGWL",
+          "url": "https://libtv-res.liblib.art/upload-images/0da50723360b4f9cbaaa5fd54e8eb04b/b3b326533f873fb99ef0cad4c2058cc705fc572c.png",
+          "label": "ref_ref_3x3_B3B326",
+          "width": 1056,
+          "height": 1056
+        }
+      ],
+      "videoList": [],
+      "audioList": [],
+      "mixedListOrder": [
+        "i-ysyONfzGWL"
+      ],
+      "background": "transparent"
+    },
+    "taskInfo": {
+      "taskId": "20261124155603287702737",
+      "loading": false,
+      "status": 2,
+      "progressPercent": 100
+    },
+    "resourceMeta": {
+      "items": [
+        {
+          "kind": "image",
+          "width": 2048,
+          "height": 2048
+        }
+      ]
+    },
+    "_resourceMeta": {
+      "items": [
+        {
+          "kind": "image",
+          "width": 2048,
+          "height": 2048
+        }
+      ]
+    }
+  }
+}
+

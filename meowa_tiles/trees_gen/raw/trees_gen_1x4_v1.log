@@ -1,0 +1,175 @@
+﻿{
+  "mode": "create-and-connect",
+  "nodeType": "image",
+  "projectUuid": "8f05da05e6c942508e62ce7b4fd35806",
+  "newNodeKey": "i-qpFaK9ylBF",
+  "reactFlowNode": {
+    "id": "i-qpFaK9ylBF",
+    "type": "image",
+    "data": {
+      "type": "image",
+      "name": "trees_gen_1x4_v1",
+      "url": [],
+      "alt": "图片",
+      "action": "image_generate",
+      "generatorType": "default",
+      "params": {
+        "prompt": "{{Image 1}} is a reference sheet of 4 pixel-art TREE sprites (a single horizontal row of 4 trees side by side, 1 row by 4 columns) for a cozy 2D top-down / 3/4-view game. Style details: chunky low-resolution pixel art (each tree is only about 50-65 pixels tall), every pixel is a crisp hard square, no anti-aliasing, no blur, limited soft palette, a slightly darker same-hue outline around the canopy and trunk, canopies built from a few rounded clumps with lighter highlights on the upper-left and darker shading on the lower-right, a short visible trunk with a small flared base and roots, trees seen from a slight 3/4 front angle and standing on an invisible ground line at the bottom of their cell.\n\nCreate a NEW sheet in EXACTLY the same pixel-art style, pixel size, outline, palette softness, viewing angle and layout: 4 separate trees, a single horizontal row of 4 trees side by side, 1 row by 4 columns, the image divided into 4 equal cells, each tree bottom-centered in its own cell (trunk base on the cell's ground line), with empty space around it, no tree touching another tree or the cell border. All 4 trees at a similar size to the reference trees (about the same height; bushy trees a bit wider, slender trees narrower), with rich pixel detail in leaves, bark and highlights. The 4 new trees, in reading order (left to right, top to bottom):\n1. a big old oak tree with a wide clumpy canopy\n2. a tall snowy fir tree\n3. a pear tree with small green pears\n4. a weeping cherry tree with drooping pink blossom branches\n\nNo text, no labels, no numbers, no grid lines, no ground tiles, no grass patches, no drop shadows, transparent or pure white background.",
+        "model": "lib-image-2.6-s",
+        "count": 4,
+        "modeType": "image2image",
+        "settings": {
+          "ratio": "21:9",
+          "quality": "high",
+          "resolution": "2K",
+          "frame_size": "512x512"
+        },
+        "advancedSettings": {},
+        "imageListOrder": [
+          "i-v9lFUOidcI"
+        ],
+        "textList": [],
+        "imageList": [
+          {
+            "nodeId": "i-v9lFUOidcI",
+            "url": "https://libtv-res.liblib.art/upload-images/0da50723360b4f9cbaaa5fd54e8eb04b/ddb17a4225b8394396c5f33118bb401ab0a97171.png",
+            "label": "ref_ref_1x4_DDB17A",
+            "width": 1984,
+            "height": 856
+          }
+        ],
+        "videoList": [],
+        "audioList": [],
+        "mixedListOrder": [
+          "i-v9lFUOidcI"
+        ],
+        "background": "transparent"
+      }
+    },
+    "position": {
+      "x": 1200,
+      "y": 18000
+    },
+    "sourcePosition": "right",
+    "targetPosition": "left"
+  },
+  "count": 1,
+  "deletedCount": 0,
+  "createdCount": 1,
+  "deleted": [],
+  "connections": [
+    {
+      "connectionId": "e-yWpJHIuH2j",
+      "source": "i-v9lFUOidcI",
+      "target": "i-qpFaK9ylBF"
+    }
+  ],
+  "incomingRecalcNodeKeys": [
+    "i-qpFaK9ylBF"
+  ]
+}
+{
+  "nodeKey": "i-qpFaK9ylBF",
+  "nodeType": "image",
+  "taskId": "20261124163703972652737",
+  "status": 2,
+  "data": {
+    "type": "image",
+    "name": "trees_gen_1x4_v1",
+    "url": [
+      "https://libtv-res.liblib.art/sd-gen-save-img/genius_playground/image/0da50723360b4f9cbaaa5fd54e8eb04b/1040272096_2578dd1d98994ad49e94187f2ebac294.png",
+      "https://libtv-res.liblib.art/sd-gen-save-img/genius_playground/image/0da50723360b4f9cbaaa5fd54e8eb04b/1040272096_e9d1bb74c7904221ba26c613b54b865e.png",
+      "https://libtv-res.liblib.art/sd-gen-save-img/genius_playground/image/0da50723360b4f9cbaaa5fd54e8eb04b/1040272096_49052a4bc3b5450390ea434b2d914230.png",
+      "https://libtv-res.liblib.art/sd-gen-save-img/genius_playground/image/0da50723360b4f9cbaaa5fd54e8eb04b/1040272096_cca241a662fd41c59fc7e2453883da2c.png"
+    ],
+    "alt": "图片",
+    "action": "image_generate",
+    "generatorType": "default",
+    "params": {
+      "prompt": "{{Node i-v9lFUOidcI}} is a reference sheet of 4 pixel-art TREE sprites (a single horizontal row of 4 trees side by side, 1 row by 4 columns) for a cozy 2D top-down / 3/4-view game. Style details: chunky low-resolution pixel art (each tree is only about 50-65 pixels tall), every pixel is a crisp hard square, no anti-aliasing, no blur, limited soft palette, a slightly darker same-hue outline around the canopy and trunk, canopies built from a few rounded clumps with lighter highlights on the upper-left and darker shading on the lower-right, a short visible trunk with a small flared base and roots, trees seen from a slight 3/4 front angle and standing on an invisible ground line at the bottom of their cell.\n\nCreate a NEW sheet in EXACTLY the same pixel-art style, pixel size, outline, palette softness, viewing angle and layout: 4 separate trees, a single horizontal row of 4 trees side by side, 1 row by 4 columns, the image divided into 4 equal cells, each tree bottom-centered in its own cell (trunk base on the cell's ground line), with empty space around it, no tree touching another tree or the cell border. All 4 trees at a similar size to the reference trees (about the same height; bushy trees a bit wider, slender trees narrower), with rich pixel detail in leaves, bark and highlights. The 4 new trees, in reading order (left to right, top to bottom):\n1. a big old oak tree with a wide clumpy canopy\n2. a tall snowy fir tree\n3. a pear tree with small green pears\n4. a weeping cherry tree with drooping pink blossom branches\n\nNo text, no labels, no numbers, no grid lines, no ground tiles, no grass patches, no drop shadows, transparent or pure white background.",
+      "model": "Lib Image 2.6 Pro",
+      "count": 4,
+      "modeType": "image2image",
+      "settings": {
+        "ratio": "21:9",
+        "quality": "high",
+        "resolution": "2K",
+        "frame_size": "512x512"
+      },
+      "imageListOrder": [
+        "i-v9lFUOidcI"
+      ],
+      "textList": [],
+      "imageList": [
+        {
+          "nodeId": "i-v9lFUOidcI",
+          "url": "https://libtv-res.liblib.art/upload-images/0da50723360b4f9cbaaa5fd54e8eb04b/ddb17a4225b8394396c5f33118bb401ab0a97171.png",
+          "label": "ref_ref_1x4_DDB17A",
+          "width": 1984,
+          "height": 856
+        }
+      ],
+      "videoList": [],
+      "audioList": [],
+      "mixedListOrder": [
+        "i-v9lFUOidcI"
+      ],
+      "background": "transparent"
+    },
+    "taskInfo": {
+      "taskId": "20261124163703972652737",
+      "loading": false,
+      "status": 2,
+      "progressPercent": 100
+    },
+    "resourceMeta": {
+      "items": [
+        {
+          "kind": "image",
+          "width": 2016,
+          "height": 864
+        },
+        {
+          "kind": "image",
+          "width": 2016,
+          "height": 864
+        },
+        {
+          "kind": "image",
+          "width": 2016,
+          "height": 864
+        },
+        {
+          "kind": "image",
+          "width": 2016,
+          "height": 864
+        }
+      ]
+    },
+    "_resourceMeta": {
+      "items": [
+        {
+          "kind": "image",
+          "width": 2016,
+          "height": 864
+        },
+        {
+          "kind": "image",
+          "width": 2016,
+          "height": 864
+        },
+        {
+          "kind": "image",
+          "width": 2016,
+          "height": 864
+        },
+        {
+          "kind": "image",
+          "width": 2016,
+          "height": 864
+        }
+      ]
+    }
+  }
+}
+

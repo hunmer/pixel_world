@@ -1,0 +1,142 @@
+﻿{
+  "mode": "create-and-connect",
+  "nodeType": "image",
+  "projectUuid": "8f05da05e6c942508e62ce7b4fd35806",
+  "newNodeKey": "i-TOFsKSbLsc",
+  "reactFlowNode": {
+    "id": "i-TOFsKSbLsc",
+    "type": "image",
+    "data": {
+      "type": "image",
+      "name": "trees_gen_lib_v2",
+      "url": [],
+      "alt": "图片",
+      "action": "image_generate",
+      "generatorType": "default",
+      "params": {
+        "prompt": "{{Image 1}} is a 3x3 reference sheet of 9 small pixel-art TREE sprites for a cozy 2D top-down / 3/4-view game. Style details: chunky low-resolution pixel art (each tree is only about 50-65 pixels tall), every pixel is a crisp hard square, no anti-aliasing, no blur, limited soft palette, a slightly darker same-hue outline around the canopy and trunk, canopies built from a few rounded clumps with lighter highlights on the upper-left and darker shading on the lower-right, a short visible trunk with a small flared base and roots, trees seen from a slight 3/4 front angle and standing on an invisible ground line at the bottom of their cell.\n\nCreate a NEW 3x3 sheet in EXACTLY the same pixel-art style, pixel size, outline, palette softness, viewing angle and layout: 9 separate trees, 3 rows by 3 columns, each tree bottom-centered in its own equal cell (trunk base on the cell's ground line), with empty space around it, no tree touching another tree or the cell border. All 9 trees at a similar size to the reference trees (about the same height; bushy trees a bit wider, slender trees narrower). The 9 new trees, in reading order (left to right, top to bottom):\n1. a lemon tree with small yellow lemons\n2. a snowy birch tree with white trunk and snow-covered round canopy\n3. a coconut palm tree with brown coconuts under the fronds\n4. a small young oak sapling with a thin trunk\n5. a tall dark red-leaved autumn tree\n6. a mossy old stump with a few new green shoots\n7. a round light-green poplar tree\n8. a peach tree with pink blossoms and peaches\n9. a spooky purple-leaved twisted fantasy tree\n\nNo text, no labels, no numbers, no grid lines, no ground tiles, no grass patches, no drop shadows, transparent or pure white background.",
+        "model": "lib-image-2.6-s",
+        "count": 1,
+        "modeType": "image2image",
+        "settings": {
+          "ratio": "1:1",
+          "quality": "high",
+          "resolution": "2K",
+          "frame_size": "512x512"
+        },
+        "advancedSettings": {},
+        "imageListOrder": [
+          "i-lGDrBawh7k"
+        ],
+        "textList": [],
+        "imageList": [
+          {
+            "nodeId": "i-lGDrBawh7k",
+            "url": "https://libtv-res.liblib.art/upload-images/0da50723360b4f9cbaaa5fd54e8eb04b/64c914b384ab8b1f9a6576c6b2d8d6d30b2f1f60.png",
+            "label": "ref_ref_3x3_64C914",
+            "width": 1752,
+            "height": 1752
+          }
+        ],
+        "videoList": [],
+        "audioList": [],
+        "mixedListOrder": [
+          "i-lGDrBawh7k"
+        ],
+        "background": "transparent"
+      }
+    },
+    "position": {
+      "x": 1200,
+      "y": 18000
+    },
+    "sourcePosition": "right",
+    "targetPosition": "left"
+  },
+  "count": 1,
+  "deletedCount": 0,
+  "createdCount": 1,
+  "deleted": [],
+  "connections": [
+    {
+      "connectionId": "e-OxAhHWC0au",
+      "source": "i-lGDrBawh7k",
+      "target": "i-TOFsKSbLsc"
+    }
+  ],
+  "incomingRecalcNodeKeys": [
+    "i-TOFsKSbLsc"
+  ]
+}
+{
+  "nodeKey": "i-TOFsKSbLsc",
+  "nodeType": "image",
+  "taskId": "20261124162503755022737",
+  "status": 2,
+  "data": {
+    "type": "image",
+    "name": "trees_gen_lib_v2",
+    "url": [
+      "https://libtv-res.liblib.art/sd-gen-save-img/genius_playground/image/0da50723360b4f9cbaaa5fd54e8eb04b/1040220576_932b2d7dfc1f4021a5f132196ca655b2.png"
+    ],
+    "alt": "图片",
+    "action": "image_generate",
+    "generatorType": "default",
+    "params": {
+      "prompt": "{{Node i-lGDrBawh7k}} is a 3x3 reference sheet of 9 small pixel-art TREE sprites for a cozy 2D top-down / 3/4-view game. Style details: chunky low-resolution pixel art (each tree is only about 50-65 pixels tall), every pixel is a crisp hard square, no anti-aliasing, no blur, limited soft palette, a slightly darker same-hue outline around the canopy and trunk, canopies built from a few rounded clumps with lighter highlights on the upper-left and darker shading on the lower-right, a short visible trunk with a small flared base and roots, trees seen from a slight 3/4 front angle and standing on an invisible ground line at the bottom of their cell.\n\nCreate a NEW 3x3 sheet in EXACTLY the same pixel-art style, pixel size, outline, palette softness, viewing angle and layout: 9 separate trees, 3 rows by 3 columns, each tree bottom-centered in its own equal cell (trunk base on the cell's ground line), with empty space around it, no tree touching another tree or the cell border. All 9 trees at a similar size to the reference trees (about the same height; bushy trees a bit wider, slender trees narrower). The 9 new trees, in reading order (left to right, top to bottom):\n1. a lemon tree with small yellow lemons\n2. a snowy birch tree with white trunk and snow-covered round canopy\n3. a coconut palm tree with brown coconuts under the fronds\n4. a small young oak sapling with a thin trunk\n5. a tall dark red-leaved autumn tree\n6. a mossy old stump with a few new green shoots\n7. a round light-green poplar tree\n8. a peach tree with pink blossoms and peaches\n9. a spooky purple-leaved twisted fantasy tree\n\nNo text, no labels, no numbers, no grid lines, no ground tiles, no grass patches, no drop shadows, transparent or pure white background.",
+      "model": "Lib Image 2.6 Pro",
+      "count": 1,
+      "modeType": "image2image",
+      "settings": {
+        "ratio": "1:1",
+        "quality": "high",
+        "resolution": "2K",
+        "frame_size": "512x512"
+      },
+      "imageListOrder": [
+        "i-lGDrBawh7k"
+      ],
+      "textList": [],
+      "imageList": [
+        {
+          "nodeId": "i-lGDrBawh7k",
+          "url": "https://libtv-res.liblib.art/upload-images/0da50723360b4f9cbaaa5fd54e8eb04b/64c914b384ab8b1f9a6576c6b2d8d6d30b2f1f60.png",
+          "label": "ref_ref_3x3_64C914",
+          "width": 1752,
+          "height": 1752
+        }
+      ],
+      "videoList": [],
+      "audioList": [],
+      "mixedListOrder": [
+        "i-lGDrBawh7k"
+      ],
+      "background": "transparent"
+    },
+    "taskInfo": {
+      "taskId": "20261124162503755022737",
+      "loading": false,
+      "status": 2,
+      "progressPercent": 100
+    },
+    "resourceMeta": {
+      "items": [
+        {
+          "kind": "image",
+          "width": 2048,
+          "height": 2048
+        }
+      ]
+    },
+    "_resourceMeta": {
+      "items": [
+        {
+          "kind": "image",
+          "width": 2048,
+          "height": 2048
+        }
+      ]
+    }
+  }
+}
+

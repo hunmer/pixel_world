@@ -1,0 +1,6 @@
+{REF} is a 3x3 reference sheet of 9 isometric pixel-art TERRAIN BLOCK tiles for a 2D game. Each tile is a small cube-like ground block seen from a fixed isometric camera (2:1 diamond top face, the left and right side faces visible, the top face takes about the upper half of the block), with a chunky low-resolution pixel grid (each tile is only about 32 pixels wide), a limited palette, crisp hard pixel edges, no anti-aliasing, simple soft top-left lighting: the top face is the brightest, the left face is medium and the right face is the darkest, with a slightly darker outline color of the same hue.
+
+Create a NEW 3x3 sheet in EXACTLY the same style, camera angle, block shape, proportions, pixel size, palette softness and layout: 9 separate blocks, 3 rows by 3 columns, each block centered in its own equal cell with the same size as the reference blocks, and empty space between blocks. The 9 new terrain blocks, in reading order (left to right, top to bottom):
+{STYLE}
+
+{EXTRA_RULES}Every block must have the same silhouette and size as the reference blocks. No text, no labels, no numbers, no grid lines, no ground shadow, transparent or pure white background.
