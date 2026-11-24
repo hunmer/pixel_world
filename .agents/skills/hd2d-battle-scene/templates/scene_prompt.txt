@@ -1,0 +1,15 @@
+Create an EMPTY side-view battle background for a 2D pixel-art JRPG, in the style of Octopath Traveler (HD-2D).
+
+{STYLE_REF} is the STYLE reference only: copy its rendering (pixel-art textures and sprite-like props in a 3D diorama, tilt-shift depth of field, volumetric light shafts, bloom, film grain, soft vignette) and its low side-view camera. Do NOT copy its scenery or its ground/foreground proportions.
+
+{LAYOUT_REF} is the LAYOUT guide (flat colour blocks, not to be drawn literally): light blue = sky, dark green band = backdrop scenery, tan = flat walkable battle ground, dark brown strip at the very bottom = foreground.
+
+Stage layout rules (most important):
+- A wide, FLAT, open walkable ground fills roughly the lower half of the frame (from about {GROUND_PCT}% to {FG_PCT}% of the image height), lit and in focus, with nothing standing on it, so two groups of character sprites can stand on the left and right.
+- The foreground is only a thin, low, blurred strip in the bottom {FG_STRIP_PCT}% of the image (low grass / pebbles / ground edge). NO tall ledge, NO raised cliff edge, NO wall, NO large rocks, NO rubble piles and NO plants in the lower part of the frame.
+- Tall scenery (trees, cliffs, buildings, crystals, towers) stays in the backdrop band behind the ground and at the far left/right edges only.
+- Horizon / backdrop around {HORIZON_PCT}% of the image height.
+
+New location: {SCENE}
+
+{EXTRA_RULES}No characters, no people, no monsters, no animals, no weapons lying on the ground, no text, no UI, no HUD, no watermark. Widescreen 16:9.
